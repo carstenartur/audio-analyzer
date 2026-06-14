@@ -1,8 +1,13 @@
 package org.hammer.audio.experimental.acoustic.simulation;
 
+import java.util.ArrayList;
 import java.util.List;
 import org.hammer.audio.acquisition.Microphone;
 import org.hammer.audio.acquisition.MicrophoneArray;
+import org.hammer.audio.experimental.acoustic.scenario.AcousticGroundTruth;
+import org.hammer.audio.experimental.acoustic.scenario.ScenarioEnvironment;
+import org.hammer.audio.experimental.acoustic.scenario.ScenarioSource;
+import org.hammer.audio.experimental.acoustic.scenario.ScenarioTrajectory;
 import org.hammer.audio.geometry.Vector2;
 
 /**
@@ -191,6 +196,36 @@ public final class SimulationScenarios {
     public SimulatedMicrophoneArraySource newSource() {
       return new SimulatedMicrophoneArraySource(
           room, array, emitters, sampleRate, durationSeconds, randomSeed);
+    }
+
+    /**
+     * Build the ground-truth {@link org.hammer.audio.experimental.acoustic.scenario.Scenario} for
+     * this simulation scenario.
+     *
+     * <p>Each {@link SoundEmitter2D} is mapped to a {@link ScenarioSource} with a linear {@link
+     * ScenarioTrajectory} and an {@link AcousticGroundTruth} holding the emitter's fundamental
+     * frequency.
+     */
+    public org.hammer.audio.experimental.acoustic.scenario.Scenario groundTruth() {
+      List<ScenarioSource> sources = new ArrayList<>(emitters.size());
+      for (int i = 0; i < emitters.size(); i++) {
+        SoundEmitter2D emitter = emitters.get(i);
+        ScenarioTrajectory trajectory =
+            ScenarioTrajectory.linear(
+                emitter.startMeters(), emitter.velocityMetersPerSecond(), durationSeconds, 2);
+        AcousticGroundTruth acoustic = AcousticGroundTruth.ofFrequency(emitter.frequencyHz());
+        sources.add(
+            ScenarioSource.builder("source-" + i, "emitter")
+                .trajectory(trajectory)
+                .acousticProperties(acoustic)
+                .build());
+      }
+      ScenarioEnvironment environment =
+          new ScenarioEnvironment(
+              SimulatedMicrophoneArraySource.DEFAULT_SPEED_OF_SOUND_METERS_PER_SECOND,
+              "Simulated air");
+      return new org.hammer.audio.experimental.acoustic.scenario.Scenario(
+          name, "Simulated scenario: " + name, sources, environment);
     }
   }
 }
