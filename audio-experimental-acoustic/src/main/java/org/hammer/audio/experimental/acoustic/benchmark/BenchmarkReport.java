@@ -166,7 +166,8 @@ public record BenchmarkReport(
 
   /** Render a human-friendly markdown summary suitable for benchmark reports. */
   public String toMarkdownSummary() {
-    return "| Scenario | Median position error (m) | Mean frequency error (Hz) | Track continuity | ID stability | False+ | False- | Mean processing (ns) |\n"
+    return "| Scenario | Median position error (m) | Mean frequency error (Hz) | Track continuity |"
+        + " ID stability | False+ | False- | Mean processing (ns) |\n"
         + "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n"
         + "| "
         + scenarioId

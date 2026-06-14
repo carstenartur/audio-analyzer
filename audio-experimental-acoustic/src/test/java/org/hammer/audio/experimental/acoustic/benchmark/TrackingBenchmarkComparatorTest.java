@@ -40,11 +40,7 @@ class TrackingBenchmarkComparatorTest {
     List<TrackingSnapshot> snapshots =
         List.of(
             new TrackingSnapshot(
-                0,
-                0L,
-                List.of(),
-                List.of(track(7, 630.0, new Vector2(1.2, 0.0), 0L)),
-                100L),
+                0, 0L, List.of(), List.of(track(7, 630.0, new Vector2(1.2, 0.0), 0L)), 100L),
             new TrackingSnapshot(
                 1,
                 1_000_000_000L,
@@ -94,7 +90,8 @@ class TrackingBenchmarkComparatorTest {
 
     assertEquals(SimulationScenarios.all().size(), reports.size());
     for (BenchmarkReport report : reports) {
-      assertTrue(report.snapshotCount() > 0, () -> report.scenarioId() + " should produce snapshots");
+      assertTrue(
+          report.snapshotCount() > 0, () -> report.scenarioId() + " should produce snapshots");
       assertTrue(
           report.expectedSourceCount() > 0,
           () -> report.scenarioId() + " should expose expected sources");
@@ -104,7 +101,8 @@ class TrackingBenchmarkComparatorTest {
     }
   }
 
-  private static TrackedSource track(int id, double frequencyHz, Vector2 positionMeters, long frameIndex) {
+  private static TrackedSource track(
+      int id, double frequencyHz, Vector2 positionMeters, long frameIndex) {
     return new TrackedSource(
         id,
         frequencyHz,

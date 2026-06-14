@@ -37,7 +37,10 @@ public final class SnapshotGroundTruthAligner {
       matchedTrackIndexes.add(pair.trackIndex);
       matchedSources.add(
           new AlignedSourceObservation(
-              sample.source(), sample.expectedPositionMeters(), sample.expectedVelocityMetersPerSecond(), track));
+              sample.source(),
+              sample.expectedPositionMeters(),
+              sample.expectedVelocityMetersPerSecond(),
+              track));
     }
 
     List<ScenarioSource> missingSources = new ArrayList<>();
@@ -61,7 +64,10 @@ public final class SnapshotGroundTruthAligner {
     List<TruthSample> samples = new ArrayList<>(scenario.sources().size());
     for (ScenarioSource source : scenario.sources()) {
       ScenarioTrajectory trajectory = source.trajectory();
-      Vector2 expectedPosition = trajectory != null ? interpolate(trajectory.positions(), trajectory.timestamps(), timestampSeconds) : null;
+      Vector2 expectedPosition =
+          trajectory != null
+              ? interpolate(trajectory.positions(), trajectory.timestamps(), timestampSeconds)
+              : null;
       Vector2 expectedVelocity =
           trajectory != null && trajectory.velocities() != null
               ? interpolate(trajectory.velocities(), trajectory.timestamps(), timestampSeconds)
@@ -73,7 +79,8 @@ public final class SnapshotGroundTruthAligner {
     return samples;
   }
 
-  private static Vector2 interpolate(List<Vector2> values, List<Double> timestamps, double timestampSeconds) {
+  private static Vector2 interpolate(
+      List<Vector2> values, List<Double> timestamps, double timestampSeconds) {
     if (timestampSeconds <= timestamps.get(0)) {
       return values.get(0);
     }
@@ -94,8 +101,16 @@ public final class SnapshotGroundTruthAligner {
     return values.get(lastIndex);
   }
 
-  private static Assignment bestAssignment(List<TruthSample> truthSamples, List<TrackedSource> tracks) {
-    return searchAssignments(truthSamples, tracks, 0, new boolean[tracks.size()], new ArrayList<>(), 0.0, new Assignment(List.of(), 0, Double.POSITIVE_INFINITY));
+  private static Assignment bestAssignment(
+      List<TruthSample> truthSamples, List<TrackedSource> tracks) {
+    return searchAssignments(
+        truthSamples,
+        tracks,
+        0,
+        new boolean[tracks.size()],
+        new ArrayList<>(),
+        0.0,
+        new Assignment(List.of(), 0, Double.POSITIVE_INFINITY));
   }
 
   private static Assignment searchAssignments(
@@ -107,11 +122,14 @@ public final class SnapshotGroundTruthAligner {
       double currentCost,
       Assignment best) {
     if (truthIndex >= truthSamples.size()) {
-      Assignment candidate = new Assignment(List.copyOf(currentPairs), currentPairs.size(), currentCost);
+      Assignment candidate =
+          new Assignment(List.copyOf(currentPairs), currentPairs.size(), currentCost);
       return betterOf(best, candidate);
     }
 
-    best = searchAssignments(truthSamples, tracks, truthIndex + 1, usedTracks, currentPairs, currentCost, best);
+    best =
+        searchAssignments(
+            truthSamples, tracks, truthIndex + 1, usedTracks, currentPairs, currentCost, best);
     TruthSample truth = truthSamples.get(truthIndex);
     for (int trackIndex = 0; trackIndex < tracks.size(); trackIndex++) {
       if (usedTracks[trackIndex]) {

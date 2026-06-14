@@ -54,12 +54,12 @@ public final class TrackingScenarioBenchmarkRunner {
 
   /** Benchmark one scenario with optional per-source classification outputs. */
   public BenchmarkReport run(
-      SimulationScenario scenario, Map<String, ClassificationPrediction> classificationPredictions) {
+      SimulationScenario scenario,
+      Map<String, ClassificationPrediction> classificationPredictions) {
     Scenario truth = scenario.groundTruth();
     List<TrackingSnapshot> snapshots = runSnapshots(scenario);
     return comparator.compare(
-        truth,
-        new BenchmarkMeasurements(scenario.array(), snapshots, classificationPredictions));
+        truth, new BenchmarkMeasurements(scenario.array(), snapshots, classificationPredictions));
   }
 
   private List<TrackingSnapshot> runSnapshots(SimulationScenario scenario) {

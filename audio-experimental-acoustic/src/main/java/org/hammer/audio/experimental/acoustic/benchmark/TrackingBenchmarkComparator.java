@@ -63,9 +63,11 @@ public final class TrackingBenchmarkComparator
         TrackedSource track = observation.trackedSource();
         ScenarioSource source = observation.groundTruth();
         if (observation.expectedPositionMeters() != null) {
-          distanceErrorsMeters.add(observation.expectedPositionMeters().distanceTo(track.positionMeters()));
+          distanceErrorsMeters.add(
+              observation.expectedPositionMeters().distanceTo(track.positionMeters()));
           angularErrorsDegrees.add(
-              angularErrorDegrees(arrayCenter, observation.expectedPositionMeters(), track.positionMeters()));
+              angularErrorDegrees(
+                  arrayCenter, observation.expectedPositionMeters(), track.positionMeters()));
           trackCountsBySource
               .computeIfAbsent(source.sourceId(), ignored -> new HashMap<>())
               .merge(track.id(), 1, Integer::sum);
@@ -76,9 +78,13 @@ public final class TrackingBenchmarkComparator
           absoluteFrequencyErrorsHz.add(absoluteErrorHz);
           relativeFrequencyErrors.add(absoluteErrorHz / trueFrequency);
         }
-        if (observation.expectedPositionMeters() != null && observation.expectedVelocityMetersPerSecond() != null) {
+        if (observation.expectedPositionMeters() != null
+            && observation.expectedVelocityMetersPerSecond() != null) {
           double trueRadialVelocity =
-              radialVelocityToward(arrayCenter, observation.expectedPositionMeters(), observation.expectedVelocityMetersPerSecond());
+              radialVelocityToward(
+                  arrayCenter,
+                  observation.expectedPositionMeters(),
+                  observation.expectedVelocityMetersPerSecond());
           absoluteDopplerErrorsMetersPerSecond.add(
               Math.abs(track.radialVelocityMetersPerSecond() - trueRadialVelocity));
         }
@@ -89,7 +95,8 @@ public final class TrackingBenchmarkComparator
     int classificationCompared = 0;
     for (ScenarioSource source : truth.sources()) {
       ClassificationGroundTruth labels = source.labels();
-      ClassificationPrediction prediction = measurements.classificationPredictions().get(source.sourceId());
+      ClassificationPrediction prediction =
+          measurements.classificationPredictions().get(source.sourceId());
       if (labels == null || prediction == null || !hasComparableClassification(labels)) {
         continue;
       }
@@ -102,7 +109,8 @@ public final class TrackingBenchmarkComparator
     double trackContinuity =
         totalExpectedObservations == 0L
             ? 0.0
-            : (totalExpectedObservations - totalMissingSources) / (double) totalExpectedObservations;
+            : (totalExpectedObservations - totalMissingSources)
+                / (double) totalExpectedObservations;
     double idStability = idStability(truth, trackCountsBySource);
     double sourceCountAccuracy =
         measurements.snapshots().isEmpty()
@@ -113,9 +121,13 @@ public final class TrackingBenchmarkComparator
             ? 0.0
             : absoluteSourceCountError / (double) measurements.snapshots().size();
     double falsePositiveRate =
-        totalMeasuredObservations == 0L ? 0.0 : totalSpuriousTracks / (double) totalMeasuredObservations;
+        totalMeasuredObservations == 0L
+            ? 0.0
+            : totalSpuriousTracks / (double) totalMeasuredObservations;
     double falseNegativeRate =
-        totalExpectedObservations == 0L ? 0.0 : totalMissingSources / (double) totalExpectedObservations;
+        totalExpectedObservations == 0L
+            ? 0.0
+            : totalMissingSources / (double) totalExpectedObservations;
 
     return new BenchmarkReport(
         truth.id(),
@@ -155,7 +167,8 @@ public final class TrackingBenchmarkComparator
     if (truth.age() != null && !truth.age().equals(prediction.age())) {
       return false;
     }
-    if (truth.feedingStatus() != null && !truth.feedingStatus().equals(prediction.feedingStatus())) {
+    if (truth.feedingStatus() != null
+        && !truth.feedingStatus().equals(prediction.feedingStatus())) {
       return false;
     }
     for (Map.Entry<String, String> entry : truth.labels().entrySet()) {

@@ -45,7 +45,10 @@ public record FrequencyErrorMetric(
       return empty();
     }
     return new FrequencyErrorMetric(
-        mean(absoluteErrorsHz), median(absoluteErrorsHz), mean(relativeErrors), absoluteErrorsHz.size());
+        mean(absoluteErrorsHz),
+        median(absoluteErrorsHz),
+        mean(relativeErrors),
+        absoluteErrorsHz.size());
   }
 
   private static double mean(List<Double> values) {
