@@ -18,9 +18,7 @@ public record DopplerErrorMetric(
     validateMetric(
         meanAbsoluteErrorMetersPerSecond, evaluatedCount, "meanAbsoluteErrorMetersPerSecond");
     validateMetric(
-        medianAbsoluteErrorMetersPerSecond,
-        evaluatedCount,
-        "medianAbsoluteErrorMetersPerSecond");
+        medianAbsoluteErrorMetersPerSecond, evaluatedCount, "medianAbsoluteErrorMetersPerSecond");
   }
 
   /** Build a summary metric from per-sample absolute errors. */

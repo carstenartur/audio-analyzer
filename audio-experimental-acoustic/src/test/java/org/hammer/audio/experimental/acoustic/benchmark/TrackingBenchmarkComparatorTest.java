@@ -156,7 +156,9 @@ class TrackingBenchmarkComparatorTest {
     SnapshotAlignment alignment = new SnapshotGroundTruthAligner().align(scenario, snapshot);
 
     assertEquals(Map.of("alpha", 1), sourceToTrackIds(alignment));
-    assertEquals(List.of("beta"), alignment.missingSources().stream().map(o -> o.source().sourceId()).toList());
+    assertEquals(
+        List.of("beta"),
+        alignment.missingSources().stream().map(o -> o.source().sourceId()).toList());
     assertEquals(List.of(9), alignment.spuriousTracks().stream().map(TrackedSource::id).toList());
   }
 
@@ -266,7 +268,8 @@ class TrackingBenchmarkComparatorTest {
         scenario("empty-run", source("alpha", new Vector2(1.0, 0.0), Vector2.ZERO, 400.0, null));
 
     BenchmarkReport report =
-        new TrackingBenchmarkComparator().compare(scenario, BenchmarkMeasurements.of(ARRAY, List.of()));
+        new TrackingBenchmarkComparator()
+            .compare(scenario, BenchmarkMeasurements.of(ARRAY, List.of()));
 
     assertNull(report.trackContinuity());
     assertEquals(0, report.trackContinuitySampleCount());
@@ -370,7 +373,8 @@ class TrackingBenchmarkComparatorTest {
                 observation -> observation.trackedSource().id()));
   }
 
-  private static TrackedSource track(int id, double frequencyHz, Vector2 positionMeters, long frameIndex) {
+  private static TrackedSource track(
+      int id, double frequencyHz, Vector2 positionMeters, long frameIndex) {
     return new TrackedSource(
         id,
         frequencyHz,

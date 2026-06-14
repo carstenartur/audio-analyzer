@@ -20,8 +20,7 @@ public final class SnapshotGroundTruthAligner {
   private static final Comparator<GroundTruthObservation> TRUTH_ORDER =
       Comparator.comparing((GroundTruthObservation observation) -> observation.source().sourceId())
           .thenComparing(
-              GroundTruthObservation::expectedFrequencyHz,
-              Comparator.nullsLast(Double::compareTo))
+              GroundTruthObservation::expectedFrequencyHz, Comparator.nullsLast(Double::compareTo))
           .thenComparing(
               observation ->
                   observation.expectedPositionMeters() != null
@@ -78,7 +77,8 @@ public final class SnapshotGroundTruthAligner {
     return new SnapshotAlignment(timestampSeconds, matchedSources, missingSources, spuriousTracks);
   }
 
-  private static List<GroundTruthObservation> truthSamplesAt(Scenario scenario, double timestampSeconds) {
+  private static List<GroundTruthObservation> truthSamplesAt(
+      Scenario scenario, double timestampSeconds) {
     List<GroundTruthObservation> samples = new ArrayList<>(scenario.sources().size());
     for (ScenarioSource source : scenario.sources()) {
       ScenarioTrajectory trajectory = source.trajectory();
@@ -92,7 +92,9 @@ public final class SnapshotGroundTruthAligner {
               : null;
       AcousticGroundTruth acoustic = source.acousticProperties();
       Double expectedFrequency = acoustic != null ? acoustic.fundamentalFrequencyHz() : null;
-      samples.add(new GroundTruthObservation(source, expectedPosition, expectedVelocity, expectedFrequency));
+      samples.add(
+          new GroundTruthObservation(
+              source, expectedPosition, expectedVelocity, expectedFrequency));
     }
     samples.sort(TRUTH_ORDER);
     return samples;
