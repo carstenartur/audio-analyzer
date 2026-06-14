@@ -244,8 +244,10 @@ public final class SnapshotGroundTruthAligner {
     List<MatchPair> pairs = new ArrayList<>(matchedCount);
     for (List<Edge> edges : graph) {
       for (Edge edge : edges) {
-        if (edge.truthIndex() >= 0 && edge.trackIndex() >= 0 && edge.remainingCapacity() == 0) {
-          pairs.add(new MatchPair(edge.truthIndex(), edge.trackIndex()));
+        if (edge.truthIndexValue() >= 0
+            && edge.trackIndexValue() >= 0
+            && edge.remainingCapacityValue() == 0) {
+          pairs.add(new MatchPair(edge.truthIndexValue(), edge.trackIndexValue()));
         }
       }
     }
@@ -300,22 +302,23 @@ public final class SnapshotGroundTruthAligner {
     inQueue[source] = true;
     int queueIndex = 0;
     while (queueIndex < queue.size()) {
-      int node = queue.get(queueIndex++);
+      int node = queue.get(queueIndex);
+      queueIndex++;
       inQueue[node] = false;
       List<Edge> edges = graph.get(node);
       for (int edgeIndex = 0; edgeIndex < edges.size(); edgeIndex++) {
         Edge edge = edges.get(edgeIndex);
-        if (edge.remainingCapacity() <= 0) {
+        if (edge.remainingCapacityValue() <= 0) {
           continue;
         }
-        long nextDistance = distance[node] + edge.edgeCost();
-        if (nextDistance < distance[edge.targetNode()]) {
-          distance[edge.targetNode()] = nextDistance;
-          previousNode[edge.targetNode()] = node;
-          previousEdge[edge.targetNode()] = edgeIndex;
-          if (!inQueue[edge.targetNode()]) {
-            queue.add(edge.targetNode());
-            inQueue[edge.targetNode()] = true;
+        long nextDistance = distance[node] + edge.edgeCostValue();
+        if (nextDistance < distance[edge.targetNodeValue()]) {
+          distance[edge.targetNodeValue()] = nextDistance;
+          previousNode[edge.targetNodeValue()] = node;
+          previousEdge[edge.targetNodeValue()] = edgeIndex;
+          if (!inQueue[edge.targetNodeValue()]) {
+            queue.add(edge.targetNodeValue());
+            inQueue[edge.targetNodeValue()] = true;
           }
         }
       }
@@ -328,9 +331,9 @@ public final class SnapshotGroundTruthAligner {
     for (int node = sink; path.previousNode()[node] >= 0; node = path.previousNode()[node]) {
       int previousNode = path.previousNode()[node];
       Edge forward = graph.get(previousNode).get(path.previousEdge()[node]);
-      Edge reverse = graph.get(node).get(forward.reverseEdgeIndex());
-      forward.remainingCapacity(forward.remainingCapacity() - 1);
-      reverse.remainingCapacity(reverse.remainingCapacity() + 1);
+      Edge reverse = graph.get(node).get(forward.reverseEdgeIndexValue());
+      forward.remainingCapacityValue(forward.remainingCapacityValue() - 1);
+      reverse.remainingCapacityValue(reverse.remainingCapacityValue() + 1);
     }
   }
 
@@ -403,31 +406,31 @@ public final class SnapshotGroundTruthAligner {
       this.trackIndex = trackIndex;
     }
 
-    private int targetNode() {
+    private int targetNodeValue() {
       return targetNode;
     }
 
-    private int reverseEdgeIndex() {
+    private int reverseEdgeIndexValue() {
       return reverseEdgeIndex;
     }
 
-    private int remainingCapacity() {
+    private int remainingCapacityValue() {
       return remainingCapacity;
     }
 
-    private void remainingCapacity(int capacity) {
+    private void remainingCapacityValue(int capacity) {
       this.remainingCapacity = capacity;
     }
 
-    private long edgeCost() {
+    private long edgeCostValue() {
       return edgeCost;
     }
 
-    private int truthIndex() {
+    private int truthIndexValue() {
       return truthIndex;
     }
 
-    private int trackIndex() {
+    private int trackIndexValue() {
       return trackIndex;
     }
   }

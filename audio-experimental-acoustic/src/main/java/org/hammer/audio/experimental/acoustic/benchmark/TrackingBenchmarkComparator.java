@@ -2,11 +2,11 @@ package org.hammer.audio.experimental.acoustic.benchmark;
 
 import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import org.hammer.audio.acquisition.Microphone;
 import org.hammer.audio.experimental.acoustic.scenario.ClassificationGroundTruth;
 import org.hammer.audio.experimental.acoustic.scenario.Scenario;
@@ -224,7 +224,8 @@ public final class TrackingBenchmarkComparator
     private final List<Double> relativeFrequencyErrors = new ArrayList<>();
     private final List<Double> absoluteDopplerErrorsMetersPerSecond = new ArrayList<>();
     private final List<Long> processingTimes;
-    private final Map<String, Map<Integer, Integer>> trackCountsBySource = new LinkedHashMap<>();
+    private final Map<String, Map<Integer, Integer>> trackCountsBySource =
+        new ConcurrentHashMap<>();
     private final Set<String> continuityEvaluableSources = new HashSet<>();
     private long totalMeasuredObservations;
     private long totalSpuriousTracks;
@@ -269,7 +270,7 @@ public final class TrackingBenchmarkComparator
         continuityEvaluableSources.add(sourceId);
         continuityEvaluatedCount++;
         trackCountsBySource
-            .computeIfAbsent(sourceId, ignored -> new LinkedHashMap<>())
+            .computeIfAbsent(sourceId, ignored -> new ConcurrentHashMap<>())
             .merge(trackId, 1, Integer::sum);
       } else {
         continuityUnavailableTruthCount++;
