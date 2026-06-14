@@ -163,7 +163,17 @@ public final class SimulationScenarios {
             new Microphone("m3", new Vector2(1.65, 0.3), 3)));
   }
 
-  /** One reproducible scenario. */
+  /**
+   * One reproducible simulation scenario.
+   *
+   * @param name scenario name
+   * @param room room geometry and acoustic parameters
+   * @param array microphone array definition
+   * @param emitters emitters active in the scenario
+   * @param sampleRate sample rate in Hz
+   * @param durationSeconds simulation duration in seconds
+   * @param randomSeed deterministic seed for generated noise
+   */
   public record SimulationScenario(
       String name,
       Room2D room,
@@ -173,7 +183,7 @@ public final class SimulationScenarios {
       double durationSeconds,
       long randomSeed) {
 
-    /** Validate and defensively copy emitters. */
+    /* Validate and defensively copy emitters. */
     public SimulationScenario {
       if (name == null || name.isBlank()) {
         throw new IllegalArgumentException("name must not be blank");
@@ -184,10 +194,10 @@ public final class SimulationScenarios {
       if (emitters == null || emitters.isEmpty()) {
         throw new IllegalArgumentException("emitters must not be empty");
       }
-      if (!(sampleRate > 0.0f)) {
+      if (sampleRate <= 0.0f) {
         throw new IllegalArgumentException("sampleRate must be > 0");
       }
-      if (!(durationSeconds > 0.0)) {
+      if (durationSeconds <= 0.0) {
         throw new IllegalArgumentException("durationSeconds must be > 0");
       }
       emitters = List.copyOf(emitters);

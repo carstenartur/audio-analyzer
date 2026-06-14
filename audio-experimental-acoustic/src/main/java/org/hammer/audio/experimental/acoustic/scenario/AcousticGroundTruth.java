@@ -10,6 +10,13 @@ import java.util.List;
  * real-world recording).
  *
  * <p>Use {@link #ofFrequency(double)} when only the fundamental frequency is known.
+ *
+ * @param fundamentalFrequencyHz emitted fundamental frequency in Hz
+ * @param harmonics optional harmonic frequencies or amplitudes
+ * @param modulation optional modulation parameter
+ * @param jitter optional jitter parameter
+ * @param drift optional frequency drift parameter
+ * @param signalPower optional signal power parameter
  */
 public record AcousticGroundTruth(
     double fundamentalFrequencyHz,
@@ -19,9 +26,9 @@ public record AcousticGroundTruth(
     Double drift,
     Double signalPower) {
 
-  /** Validate required fields and defensively copy {@link #harmonics()} when provided. */
+  /* Validate required fields and defensively copy {@link #harmonics()} when provided. */
   public AcousticGroundTruth {
-    if (!(fundamentalFrequencyHz > 0.0) || !Double.isFinite(fundamentalFrequencyHz)) {
+    if (fundamentalFrequencyHz <= 0.0 || !Double.isFinite(fundamentalFrequencyHz)) {
       throw new IllegalArgumentException("fundamentalFrequencyHz must be finite and > 0");
     }
     harmonics = harmonics != null ? List.copyOf(harmonics) : null;

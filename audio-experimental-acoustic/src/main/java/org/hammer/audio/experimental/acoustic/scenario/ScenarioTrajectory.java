@@ -14,6 +14,11 @@ import org.hammer.audio.geometry.Vector2;
  *
  * <p>Use {@link #linear(Vector2, Vector2, double, int)} to construct a uniformly sampled linear
  * trajectory from a start position and constant velocity.
+ *
+ * @param timestamps strictly increasing timestamp sequence in seconds
+ * @param positions source positions aligned to {@code timestamps}
+ * @param velocities optional source velocities aligned to {@code timestamps}
+ * @param orientations optional source orientations aligned to {@code timestamps}
  */
 public record ScenarioTrajectory(
     List<Double> timestamps,
@@ -21,7 +26,7 @@ public record ScenarioTrajectory(
     List<Vector2> velocities,
     List<Double> orientations) {
 
-  /** Validate sizes and defensively copy all provided lists. */
+  /* Validate sizes and defensively copy all provided lists. */
   public ScenarioTrajectory {
     Objects.requireNonNull(timestamps, "timestamps");
     Objects.requireNonNull(positions, "positions");
@@ -86,7 +91,7 @@ public record ScenarioTrajectory(
       int sampleCount) {
     Objects.requireNonNull(startPositionMeters, "startPositionMeters");
     Objects.requireNonNull(velocityMetersPerSecond, "velocityMetersPerSecond");
-    if (!(durationSeconds > 0.0) || !Double.isFinite(durationSeconds)) {
+    if (durationSeconds <= 0.0 || !Double.isFinite(durationSeconds)) {
       throw new IllegalArgumentException("durationSeconds must be finite and > 0");
     }
     if (sampleCount < 2) {

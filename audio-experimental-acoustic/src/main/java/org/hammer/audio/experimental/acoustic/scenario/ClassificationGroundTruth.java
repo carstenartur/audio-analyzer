@@ -13,11 +13,17 @@ import java.util.Objects;
  *
  * <p>Use {@link #ofSpecies(String)} to create a minimal instance, or {@link #unknown()} when no
  * classification is available.
+ *
+ * @param species optional species label
+ * @param sex optional sex label
+ * @param age optional age label
+ * @param feedingStatus optional feeding-status label
+ * @param labels arbitrary additional classification labels (never {@code null})
  */
 public record ClassificationGroundTruth(
     String species, String sex, String age, String feedingStatus, Map<String, String> labels) {
 
-  /** Validate and defensively copy the custom label map. */
+  /* Validate and defensively copy the custom label map. */
   public ClassificationGroundTruth {
     Objects.requireNonNull(labels, "labels");
     labels = Map.copyOf(labels);

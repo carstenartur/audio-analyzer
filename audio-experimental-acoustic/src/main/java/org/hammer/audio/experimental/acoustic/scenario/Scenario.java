@@ -20,11 +20,16 @@ import java.util.Objects;
  * output against the ground truth carried by this model. The same representation supports synthetic
  * scenarios, public datasets and real-world recordings; some source fields may be {@code null} when
  * the truth is not known.
+ *
+ * @param id unique scenario identifier
+ * @param description human-readable scenario description
+ * @param sources per-source ground truth entries
+ * @param environment environmental context shared by all sources
  */
 public record Scenario(
     String id, String description, List<ScenarioSource> sources, ScenarioEnvironment environment) {
 
-  /** Validate and defensively copy the source list. */
+  /* Validate and defensively copy the source list. */
   public Scenario {
     Objects.requireNonNull(id, "id");
     Objects.requireNonNull(description, "description");
