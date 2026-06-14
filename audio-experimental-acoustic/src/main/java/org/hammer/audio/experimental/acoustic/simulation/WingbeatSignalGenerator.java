@@ -1,6 +1,8 @@
 package org.hammer.audio.experimental.acoustic.simulation;
 
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import org.hammer.audio.core.AudioBlock;
 import org.hammer.audio.core.AudioFormatDescriptor;
 import org.hammer.audio.signal.SignalGenerator;
@@ -38,6 +40,8 @@ import org.hammer.audio.signal.SignalGenerator;
 public final class WingbeatSignalGenerator implements SignalGenerator {
 
   private static final double TWO_PI = 2.0 * Math.PI;
+  private static final Map<PhaseCacheKey, PhaseAccumulatorCache> PHASE_CACHES =
+      new ConcurrentHashMap<>();
 
   private final AudioFormatDescriptor format;
   private final WingbeatSignalParameters params;
@@ -197,29 +201,10 @@ public final class WingbeatSignalGenerator implements SignalGenerator {
       double sampleRate,
       long frameIndex,
       double frequencyScale) {
-    double phase = 0.0;
-    if (frameIndex >= 0L) {
-      for (long frame = 0L; frame <= frameIndex; frame++) {
-        phase =
-            wrapPhase(
-                phase
-                    + phaseIncrement(
-                        instantaneousFrequency(params, frame, sampleRate, randomSeed)
-                            * frequencyScale,
-                        sampleRate));
-      }
-      return phase;
-    }
-    for (long frame = -1L; frame >= frameIndex; frame--) {
-      phase =
-          wrapPhase(
-              phase
-                  - phaseIncrement(
-                      instantaneousFrequency(params, frame, sampleRate, randomSeed)
-                          * frequencyScale,
-                      sampleRate));
-    }
-    return phase;
+    PhaseCacheKey key = new PhaseCacheKey(params, randomSeed, sampleRate, frequencyScale);
+    return PHASE_CACHES
+        .computeIfAbsent(key, unused -> new PhaseAccumulatorCache(params, randomSeed, sampleRate))
+        .phaseAt(frameIndex, frequencyScale);
   }
 
   private static double instantaneousFrequency(
@@ -250,6 +235,74 @@ public final class WingbeatSignalGenerator implements SignalGenerator {
   private static double wrapPhase(double phase) {
     double wrapped = phase % TWO_PI;
     return wrapped >= 0.0 ? wrapped : wrapped + TWO_PI;
+  }
+
+  private record PhaseCacheKey(
+      WingbeatSignalParameters params, long randomSeed, double sampleRate, double frequencyScale) {}
+
+  private static final class PhaseAccumulatorCache {
+
+    private final WingbeatSignalParameters params;
+    private final long randomSeed;
+    private final double sampleRate;
+    private final Map<Long, Double> phaseByFrame = new ConcurrentHashMap<>();
+
+    private long maxComputedPositiveFrame = -1L;
+    private double phaseAtMaxComputedPositiveFrame = 0.0;
+    private long minComputedNegativeFrame = 0L;
+    private double phaseAtMinComputedNegativeFrame = 0.0;
+
+    private PhaseAccumulatorCache(
+        WingbeatSignalParameters params, long randomSeed, double sampleRate) {
+      this.params = params;
+      this.randomSeed = randomSeed;
+      this.sampleRate = sampleRate;
+    }
+
+    private synchronized double phaseAt(long frameIndex, double frequencyScale) {
+      Double cachedPhase = phaseByFrame.get(frameIndex);
+      if (cachedPhase != null) {
+        return cachedPhase;
+      }
+      if (frameIndex >= 0L) {
+        return extendPositive(frameIndex, frequencyScale);
+      }
+      return extendNegative(frameIndex, frequencyScale);
+    }
+
+    private double extendPositive(long targetFrame, double frequencyScale) {
+      double phase = phaseAtMaxComputedPositiveFrame;
+      for (long frame = maxComputedPositiveFrame + 1L; frame <= targetFrame; frame++) {
+        phase =
+            wrapPhase(
+                phase
+                    + phaseIncrement(
+                        instantaneousFrequency(params, frame, sampleRate, randomSeed)
+                            * frequencyScale,
+                        sampleRate));
+        phaseByFrame.put(frame, phase);
+      }
+      maxComputedPositiveFrame = targetFrame;
+      phaseAtMaxComputedPositiveFrame = phase;
+      return phase;
+    }
+
+    private double extendNegative(long targetFrame, double frequencyScale) {
+      double phase = phaseAtMinComputedNegativeFrame;
+      for (long frame = minComputedNegativeFrame - 1L; frame >= targetFrame; frame--) {
+        phase =
+            wrapPhase(
+                phase
+                    - phaseIncrement(
+                        instantaneousFrequency(params, frame, sampleRate, randomSeed)
+                            * frequencyScale,
+                        sampleRate));
+        phaseByFrame.put(frame, phase);
+      }
+      minComputedNegativeFrame = targetFrame;
+      phaseAtMinComputedNegativeFrame = phase;
+      return phase;
+    }
   }
 
   /**
