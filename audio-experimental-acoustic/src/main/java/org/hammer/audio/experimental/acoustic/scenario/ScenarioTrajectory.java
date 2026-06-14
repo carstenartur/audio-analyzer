@@ -43,6 +43,24 @@ public record ScenarioTrajectory(
       throw new IllegalArgumentException(
           "orientations must have the same size as timestamps when provided");
     }
+    double previousTimestamp = Double.NEGATIVE_INFINITY;
+    for (int i = 0; i < timestamps.size(); i++) {
+      Double timestamp = timestamps.get(i);
+      if (timestamp == null || !Double.isFinite(timestamp)) {
+        throw new IllegalArgumentException("timestamps must contain only finite values");
+      }
+      if (i > 0 && timestamp <= previousTimestamp) {
+        throw new IllegalArgumentException("timestamps must be strictly increasing");
+      }
+      previousTimestamp = timestamp;
+    }
+    if (orientations != null) {
+      for (Double orientation : orientations) {
+        if (orientation == null || !Double.isFinite(orientation)) {
+          throw new IllegalArgumentException("orientations must contain only finite values");
+        }
+      }
+    }
     timestamps = List.copyOf(timestamps);
     positions = List.copyOf(positions);
     velocities = velocities != null ? List.copyOf(velocities) : null;

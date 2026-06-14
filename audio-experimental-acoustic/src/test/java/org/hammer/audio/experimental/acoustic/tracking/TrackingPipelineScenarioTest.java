@@ -12,7 +12,7 @@ import org.hammer.audio.experimental.acoustic.FrequencyBand;
 import org.hammer.audio.experimental.acoustic.GccPhatTdoaEstimator;
 import org.hammer.audio.experimental.acoustic.simulation.SimulatedMicrophoneArraySource;
 import org.hammer.audio.experimental.acoustic.simulation.SimulationScenarios;
-import org.hammer.audio.experimental.acoustic.simulation.SimulationScenarios.Scenario;
+import org.hammer.audio.experimental.acoustic.simulation.SimulationScenarios.SimulationScenario;
 import org.hammer.audio.geometry.Vector2;
 import org.junit.jupiter.api.Test;
 
@@ -34,7 +34,7 @@ class TrackingPipelineScenarioTest {
 
   @Test
   void singleSourceProducesOneStableTrack() {
-    Scenario scenario = SimulationScenarios.singleSource();
+    SimulationScenario scenario = SimulationScenarios.singleSource();
     List<TrackingSnapshot> snapshots = run(scenario, 1024);
 
     assertTrue(!snapshots.isEmpty(), "expected at least one processed block");
@@ -73,7 +73,7 @@ class TrackingPipelineScenarioTest {
 
   @Test
   void twoCloseFrequenciesProduceTwoDistinctTracks() {
-    Scenario scenario = SimulationScenarios.twoCloseFrequencies();
+    SimulationScenario scenario = SimulationScenarios.twoCloseFrequencies();
     List<TrackingSnapshot> snapshots = run(scenario, 2048);
 
     int maxTracks = 0;
@@ -86,7 +86,7 @@ class TrackingPipelineScenarioTest {
 
   @Test
   void deterministicForFixedSeed() {
-    Scenario scenario = SimulationScenarios.singleSource();
+    SimulationScenario scenario = SimulationScenarios.singleSource();
     List<TrackingSnapshot> first = run(scenario, 1024);
     List<TrackingSnapshot> second = run(scenario, 1024);
     assertEquals(first.size(), second.size());
@@ -98,7 +98,7 @@ class TrackingPipelineScenarioTest {
 
   @Test
   void processingFitsInRealtimeBudget() {
-    Scenario scenario = SimulationScenarios.singleSource();
+    SimulationScenario scenario = SimulationScenarios.singleSource();
     int blockFrames = 1024;
     FrameSchedule schedule = new FrameSchedule(scenario.sampleRate(), blockFrames, 0.8);
     List<TrackingSnapshot> snapshots = run(scenario, blockFrames);
@@ -115,7 +115,7 @@ class TrackingPipelineScenarioTest {
 
   @Test
   void noisyAndReflectedScenariosKeepDetectingTheSource() {
-    for (Scenario scenario :
+    for (SimulationScenario scenario :
         List.of(SimulationScenarios.noisyRoom(), SimulationScenarios.reflectedEnvironment())) {
       List<TrackingSnapshot> snapshots = run(scenario, 2048);
       int framesWithTrack = 0;
@@ -136,7 +136,7 @@ class TrackingPipelineScenarioTest {
 
   @Test
   void movingSourceUpdatesPositionEstimateOverTime() {
-    Scenario scenario = SimulationScenarios.movingSource();
+    SimulationScenario scenario = SimulationScenarios.movingSource();
     List<TrackingSnapshot> snapshots = run(scenario, 2048);
 
     Vector2 firstPosition = null;
@@ -160,7 +160,7 @@ class TrackingPipelineScenarioTest {
             + lastPosition);
   }
 
-  private static List<TrackingSnapshot> run(Scenario scenario, int blockFrames) {
+  private static List<TrackingSnapshot> run(SimulationScenario scenario, int blockFrames) {
     SimulatedMicrophoneArraySource source = scenario.newSource();
     MicrophoneArray array = source.microphoneArray();
     MultiPeakDetector detector =
@@ -186,7 +186,7 @@ class TrackingPipelineScenarioTest {
     return snapshots;
   }
 
-  private static List<Vector2> candidateGrid(Scenario scenario) {
+  private static List<Vector2> candidateGrid(SimulationScenario scenario) {
     List<Vector2> grid = new ArrayList<>();
     double width = scenario.room().widthMeters();
     double height = scenario.room().heightMeters();

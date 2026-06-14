@@ -89,10 +89,13 @@ for (int i = 0; i < traj.timestamps().size(); i++) {
 ### Frequency / acoustic evaluation
 
 ```java
+ScenarioSource source = scenario.sources().get(0);
 AcousticGroundTruth acoustic = source.acousticProperties();
-double trueFrequency = acoustic.fundamentalFrequencyHz();
-double estimatedFrequency = tracker.dominantFrequencyHz();
-double frequencyErrorHz = Math.abs(trueFrequency - estimatedFrequency);
+if (acoustic != null) {
+    double trueFrequency = acoustic.fundamentalFrequencyHz();
+    double estimatedFrequency = tracker.dominantFrequencyHz();
+    double frequencyErrorHz = Math.abs(trueFrequency - estimatedFrequency);
+}
 ```
 
 ### Classification evaluation
@@ -108,10 +111,10 @@ if (labels != null && labels.species() != null) {
 
 ## Synthetic scenario integration
 
-`SimulationScenarios.Scenario` exposes ground truth directly:
+`SimulationScenarios.SimulationScenario` exposes ground truth directly:
 
 ```java
-SimulationScenarios.Scenario sim = SimulationScenarios.movingSource();
+SimulationScenarios.SimulationScenario sim = SimulationScenarios.movingSource();
 Scenario truth = sim.groundTruth();
 // truth.sources() contains one ScenarioSource with a linear trajectory
 // and AcousticGroundTruth holding the emitter's fundamental frequency

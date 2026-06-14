@@ -139,6 +139,29 @@ class ScenarioModelTest {
   }
 
   @Test
+  void trajectoryRejectsNonFiniteOrNonMonotonicTimestamps() {
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            new ScenarioTrajectory(
+                List.of(0.0, Double.NaN), List.of(Vector2.ZERO, Vector2.ZERO), null, null));
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            new ScenarioTrajectory(
+                List.of(0.0, 0.0), List.of(Vector2.ZERO, Vector2.ZERO), null, null));
+  }
+
+  @Test
+  void trajectoryRejectsNonFiniteOrientations() {
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            new ScenarioTrajectory(
+                List.of(0.0), List.of(Vector2.ZERO), null, List.of(Double.POSITIVE_INFINITY)));
+  }
+
+  @Test
   void trajectoryPartialTruthPermitsNullVelocities() {
     ScenarioTrajectory traj =
         new ScenarioTrajectory(List.of(0.0), List.of(Vector2.ZERO), null, null);
@@ -267,7 +290,7 @@ class ScenarioModelTest {
 
   @Test
   void allSimulationScenariosExposeGroundTruth() {
-    for (SimulationScenarios.Scenario scenario : SimulationScenarios.all()) {
+    for (SimulationScenarios.SimulationScenario scenario : SimulationScenarios.all()) {
       Scenario truth = scenario.groundTruth();
       assertNotNull(truth);
       assertFalse(truth.sources().isEmpty());
