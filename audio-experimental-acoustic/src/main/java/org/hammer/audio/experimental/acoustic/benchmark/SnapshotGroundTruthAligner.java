@@ -69,13 +69,13 @@ public final class SnapshotGroundTruthAligner {
     List<IndexedTrack> indexedTracks = sortedTracks(snapshot.tracks());
     Assignment assignment = bestAssignment(truthSamples, indexedTracks);
 
-    List<AlignedSourceObservation> matchedSources = new ArrayList<>(assignment.pairs.size());
+    List<AlignedSourceObservation> matchedSources = new ArrayList<>(assignment.pairs().size());
     boolean[] matchedTruthIndexes = new boolean[truthSamples.size()];
     boolean[] matchedTrackIndexes = new boolean[snapshot.tracks().size()];
-    for (MatchPair pair : assignment.pairs) {
-      GroundTruthObservation sample = truthSamples.get(pair.truthIndex);
-      IndexedTrack track = indexedTracks.get(pair.trackIndex);
-      matchedTruthIndexes[pair.truthIndex] = true;
+    for (MatchPair pair : assignment.pairs()) {
+      GroundTruthObservation sample = truthSamples.get(pair.truthIndex());
+      IndexedTrack track = indexedTracks.get(pair.trackIndex());
+      matchedTruthIndexes[pair.truthIndex()] = true;
       matchedTrackIndexes[track.originalIndex()] = true;
       matchedSources.add(new AlignedSourceObservation(sample, track.trackedSource()));
     }
@@ -156,7 +156,7 @@ public final class SnapshotGroundTruthAligner {
     int truthCount = truthSamples.size();
     int trackCount = tracks.size();
     if (truthCount == 0 || trackCount == 0) {
-      return new Assignment(List.of(), 0, 0.0);
+      return new Assignment(List.of());
     }
 
     int nodeCount = 2 + truthCount + trackCount;
@@ -178,10 +178,7 @@ public final class SnapshotGroundTruthAligner {
       totalScaledCost += path.distanceToSink();
       matchedCount++;
     }
-    return new Assignment(
-        collectMatchedPairs(graph, matchedCount),
-        matchedCount,
-        totalScaledCost / (double) COST_SCALE);
+    return new Assignment(collectMatchedPairs(graph, matchedCount));
   }
 
   private static List<List<Edge>> emptyGraph(int nodeCount) {
@@ -371,21 +368,83 @@ public final class SnapshotGroundTruthAligner {
     return cost;
   }
 
-  private record IndexedTrack(int originalIndex, TrackedSource trackedSource) {
-    private static final boolean RECORD_BODY_PRESENT = true;
+  private static final class IndexedTrack {
+    private final int originalIndexValue;
+    private final TrackedSource trackedSourceValue;
+
+    private IndexedTrack(int originalIndex, TrackedSource trackedSource) {
+      this.originalIndexValue = originalIndex;
+      this.trackedSourceValue = trackedSource;
+    }
+
+    private int originalIndex() {
+      return originalIndexValue;
+    }
+
+    private TrackedSource trackedSource() {
+      return trackedSourceValue;
+    }
   }
 
-  private record MatchPair(int truthIndex, int trackIndex) {
-    private static final boolean RECORD_BODY_PRESENT = true;
+  private static final class MatchPair {
+    private final int truthIndexValue;
+    private final int trackIndexValue;
+
+    private MatchPair(int truthIndex, int trackIndex) {
+      this.truthIndexValue = truthIndex;
+      this.trackIndexValue = trackIndex;
+    }
+
+    private int truthIndex() {
+      return truthIndexValue;
+    }
+
+    private int trackIndex() {
+      return trackIndexValue;
+    }
   }
 
-  private record Assignment(List<MatchPair> pairs, int matchedCount, double totalCost) {
-    private static final boolean RECORD_BODY_PRESENT = true;
+  private static final class Assignment {
+    private final List<MatchPair> pairsValue;
+
+    private Assignment(List<MatchPair> pairs) {
+      this.pairsValue = pairs;
+    }
+
+    private List<MatchPair> pairs() {
+      return pairsValue;
+    }
   }
 
-  private record PathResult(
-      boolean reachable, long distanceToSink, int[] previousNode, int[] previousEdge) {
-    private static final boolean RECORD_BODY_PRESENT = true;
+  private static final class PathResult {
+    private final boolean reachableValue;
+    private final long distanceToSinkValue;
+    private final int[] previousNodeValue;
+    private final int[] previousEdgeValue;
+
+    private PathResult(
+        boolean reachable, long distanceToSink, int[] previousNode, int[] previousEdge) {
+      this.reachableValue = reachable;
+      this.distanceToSinkValue = distanceToSink;
+      this.previousNodeValue = previousNode;
+      this.previousEdgeValue = previousEdge;
+    }
+
+    private boolean reachable() {
+      return reachableValue;
+    }
+
+    private long distanceToSink() {
+      return distanceToSinkValue;
+    }
+
+    private int[] previousNode() {
+      return previousNodeValue;
+    }
+
+    private int[] previousEdge() {
+      return previousEdgeValue;
+    }
   }
 
   /**
