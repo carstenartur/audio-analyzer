@@ -31,8 +31,8 @@ import org.hammer.audio.geometry.Vector2;
  *   <li>{@link #movingAcrossArray()} — one source travelling laterally across the array.
  *   <li>{@link #twoMovingSources()} — two tones with distinct velocities.
  *   <li>{@link #reflectedEnvironment()} — single source with wall reflections enabled.
- *   <li>{@link #twoMosquitoWingbeats()} — two stationary pure-tone sources at close mosquito
- *       wingbeat frequencies for separation tests, paired with richer benchmark metadata via {@link
+ *   <li>{@link #twoMosquitoWingbeats()} — two stationary deterministic wingbeat emitters at close
+ *       mosquito frequencies, paired with matching benchmark metadata via {@link
  *       #twoMosquitoWingbeatsGroundTruth()}.
  * </ul>
  */
@@ -133,16 +133,12 @@ public final class SimulationScenarios {
   }
 
   /**
-   * Two stationary pure-tone sources at 600 Hz and 640 Hz.
+   * Two stationary deterministic wingbeat sources at 600 Hz and 640 Hz.
    *
-   * <p>Both sources are placed at distinct positions in an anechoic room. Their frequencies are
+   * <p>Both sources are placed at distinct positions in an anechoic room. Their fundamentals are
    * intentionally close (40 Hz apart) to exercise the ability of narrow-band trackers to separate
-   * overlapping tonal content.
-   *
-   * <p>The emitted waveform remains a pair of pure tones via {@link SoundEmitter2D}. For a
-   * benchmark-oriented ground-truth {@link Scenario} that additionally includes synthetic
-   * mosquito-like harmonic amplitudes, jitter, drift and fixture metadata, use {@link
-   * #twoMosquitoWingbeatsGroundTruth()}.
+   * overlapping tonal content, while the emitted waveforms reuse the mosquito-like harmonic, drift,
+   * jitter and noise parameters exported through ground truth.
    */
   public static SimulationScenario twoMosquitoWingbeats() {
     List<WingbeatSignalParameters> params = mosquitoWingbeatParameters();
@@ -151,10 +147,8 @@ public final class SimulationScenarios {
         new Room2D(3.0, 2.0, 0.0, 0.0),
         defaultArray(),
         List.of(
-            new SoundEmitter2D(
-                new Vector2(1.0, 1.0), Vector2.ZERO, params.get(0).fundamentalFrequencyHz(), 0.5),
-            new SoundEmitter2D(
-                new Vector2(2.0, 1.0), Vector2.ZERO, params.get(1).fundamentalFrequencyHz(), 0.5)),
+            new WingbeatEmitter2D(new Vector2(1.0, 1.0), Vector2.ZERO, 0.5, params.get(0), SAMPLE_RATE, 9L),
+            new WingbeatEmitter2D(new Vector2(2.0, 1.0), Vector2.ZERO, 0.5, params.get(1), SAMPLE_RATE, 10L)),
         SAMPLE_RATE,
         0.5,
         9L);
@@ -164,34 +158,22 @@ public final class SimulationScenarios {
    * Build a rich benchmark ground-truth {@link Scenario} for the {@link #twoMosquitoWingbeats()}
    * scenario.
    *
-   * <p>Unlike the generic {@link SimulationScenario#groundTruth()} implementation, this method
-   * populates each source with synthetic mosquito-like metadata in addition to the simulation
-   * geometry:
-   *
-   * <ul>
-   *   <li>harmonic amplitude profile, harmonic count, modulation, jitter, drift and noise from
-   *       {@link WingbeatSignalParameters#mosquitoLike(double)};
-   *   <li>a {@link ClassificationGroundTruth} that marks the fixture as synthetic without
-   *       overloading the species field.
-   * </ul>
-   *
    * <p>This richer ground-truth record is intended for benchmark comparison of frequency-extraction
-   * and classification algorithms; it does not change the pure-tone audio emitted by {@link
-   * #twoMosquitoWingbeats()}.
+   * and classification algorithms. Its acoustic metadata is derived from the same emitter
+   * parameters used by {@link #twoMosquitoWingbeats()}.
    */
   public static Scenario twoMosquitoWingbeatsGroundTruth() {
     SimulationScenario scenario = twoMosquitoWingbeats();
-    List<WingbeatSignalParameters> params = mosquitoWingbeatParameters();
     List<ScenarioSource> sources = new ArrayList<>(scenario.emitters().size());
     for (int i = 0; i < scenario.emitters().size(); i++) {
-      SoundEmitter2D emitter = scenario.emitters().get(i);
+      AcousticEmitter2D emitter = scenario.emitters().get(i);
       ScenarioTrajectory trajectory =
           ScenarioTrajectory.linear(
               emitter.startMeters(),
               emitter.velocityMetersPerSecond(),
               scenario.durationSeconds(),
               2);
-      AcousticGroundTruth acoustic = params.get(i).toGroundTruth();
+      AcousticGroundTruth acoustic = emitter.acousticGroundTruth();
       ClassificationGroundTruth labels = ClassificationGroundTruth.synthetic("synthetic-wingbeat");
       sources.add(
           ScenarioSource.builder("source-" + i, "mosquito")
@@ -209,9 +191,6 @@ public final class SimulationScenarios {
   }
 
   private static List<WingbeatSignalParameters> mosquitoWingbeatParameters() {
-    // TODO(#137): Replace the pure-tone SoundEmitter2D instances with a WingbeatEmitter2D or
-    // ParameterizedEmitter2D that consumes these parameters directly, so the emitted waveform and
-    // benchmark ground truth stay fully identical instead of only sharing the same fundamentals.
     return List.of(
         WingbeatSignalParameters.mosquitoLike(600.0), WingbeatSignalParameters.mosquitoLike(640.0));
   }
@@ -267,7 +246,7 @@ public final class SimulationScenarios {
       String name,
       Room2D room,
       MicrophoneArray array,
-      List<SoundEmitter2D> emitters,
+      List<AcousticEmitter2D> emitters,
       float sampleRate,
       double durationSeconds,
       long randomSeed) {
@@ -302,18 +281,17 @@ public final class SimulationScenarios {
      * Build the ground-truth {@link org.hammer.audio.experimental.acoustic.scenario.Scenario} for
      * this simulation scenario.
      *
-     * <p>Each {@link SoundEmitter2D} is mapped to a {@link ScenarioSource} with a linear {@link
-     * ScenarioTrajectory} and an {@link AcousticGroundTruth} holding the emitter's fundamental
-     * frequency.
+     * <p>Each emitter is mapped to a {@link ScenarioSource} with a linear {@link
+     * ScenarioTrajectory} and the emitter-provided {@link AcousticGroundTruth}.
      */
     public Scenario groundTruth() {
       List<ScenarioSource> sources = new ArrayList<>(emitters.size());
       for (int i = 0; i < emitters.size(); i++) {
-        SoundEmitter2D emitter = emitters.get(i);
+        AcousticEmitter2D emitter = emitters.get(i);
         ScenarioTrajectory trajectory =
             ScenarioTrajectory.linear(
                 emitter.startMeters(), emitter.velocityMetersPerSecond(), durationSeconds, 2);
-        AcousticGroundTruth acoustic = AcousticGroundTruth.ofFrequency(emitter.frequencyHz());
+        AcousticGroundTruth acoustic = emitter.acousticGroundTruth();
         sources.add(
             ScenarioSource.builder("source-" + i, "emitter")
                 .trajectory(trajectory)

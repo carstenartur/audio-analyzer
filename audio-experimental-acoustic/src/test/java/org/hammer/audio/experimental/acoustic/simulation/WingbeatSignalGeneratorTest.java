@@ -2,6 +2,7 @@ package org.hammer.audio.experimental.acoustic.simulation;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertIterableEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -195,19 +196,27 @@ class WingbeatSignalGeneratorTest {
     assertThrows(
         IllegalArgumentException.class,
         () -> new WingbeatSignalParameters(440.0, 2, List.of(1.0), 0.0, 0.0, 0.0, 0.0, 0.0));
-    assertThrows(
-        IllegalArgumentException.class,
-        () ->
-            new WingbeatSignalParameters(
-                440.0, 2, Arrays.asList(1.0, null), 0.0, 0.0, 0.0, 0.0, 0.0));
-    assertThrows(
-        IllegalArgumentException.class,
-        () -> new WingbeatSignalParameters(440.0, 1, List.of(Double.NaN), 0.0, 0.0, 0.0, 0.0, 0.0));
-    assertThrows(
-        IllegalArgumentException.class,
-        () ->
-            new WingbeatSignalParameters(
-                440.0, 1, List.of(Double.POSITIVE_INFINITY), 0.0, 0.0, 0.0, 0.0, 0.0));
+    IllegalArgumentException nullEntry =
+        assertThrows(
+            IllegalArgumentException.class,
+            () ->
+                new WingbeatSignalParameters(
+                    440.0, 2, Arrays.asList(1.0, null), 0.0, 0.0, 0.0, 0.0, 0.0));
+    assertTrue(nullEntry.getMessage().contains("harmonicAmplitudes[1] must not be null"));
+    IllegalArgumentException nanEntry =
+        assertThrows(
+            IllegalArgumentException.class,
+            () ->
+                new WingbeatSignalParameters(
+                    440.0, 1, List.of(Double.NaN), 0.0, 0.0, 0.0, 0.0, 0.0));
+    assertTrue(nanEntry.getMessage().contains("harmonicAmplitudes[0] must not be NaN"));
+    IllegalArgumentException infiniteEntry =
+        assertThrows(
+            IllegalArgumentException.class,
+            () ->
+                new WingbeatSignalParameters(
+                    440.0, 1, List.of(Double.POSITIVE_INFINITY), 0.0, 0.0, 0.0, 0.0, 0.0));
+    assertTrue(infiniteEntry.getMessage().contains("harmonicAmplitudes[0] must be finite"));
     assertThrows(
         IllegalArgumentException.class,
         () -> new WingbeatSignalParameters(440.0, 1, null, -1.0, 0.0, 0.0, 0.0, 0.0));
@@ -264,6 +273,8 @@ class WingbeatSignalGeneratorTest {
     assertEquals(2, scenario.emitters().size());
     assertEquals(600.0, scenario.emitters().get(0).frequencyHz());
     assertEquals(640.0, scenario.emitters().get(1).frequencyHz());
+    assertInstanceOf(WingbeatEmitter2D.class, scenario.emitters().get(0));
+    assertInstanceOf(WingbeatEmitter2D.class, scenario.emitters().get(1));
   }
 
   @Test
@@ -302,5 +313,25 @@ class WingbeatSignalGeneratorTest {
 
     assertEquals(600.0, truth.sources().get(0).acousticProperties().fundamentalFrequencyHz());
     assertEquals(640.0, truth.sources().get(1).acousticProperties().fundamentalFrequencyHz());
+  }
+
+  @Test
+  void twoMosquitoWingbeatsScenarioAndGroundTruthUseSameSignalParameters() {
+    SimulationScenarios.SimulationScenario scenario = SimulationScenarios.twoMosquitoWingbeats();
+    Scenario truth = SimulationScenarios.twoMosquitoWingbeatsGroundTruth();
+
+    for (int i = 0; i < scenario.emitters().size(); i++) {
+      AcousticGroundTruth emitterTruth = scenario.emitters().get(i).acousticGroundTruth();
+      AcousticGroundTruth scenarioTruth = truth.sources().get(i).acousticProperties();
+
+      assertEquals(emitterTruth.fundamentalFrequencyHz(), scenarioTruth.fundamentalFrequencyHz());
+      assertEquals(emitterTruth.harmonicCount(), scenarioTruth.harmonicCount());
+      assertIterableEquals(emitterTruth.harmonics(), scenarioTruth.harmonics());
+      assertEquals(emitterTruth.modulationFrequencyHz(), scenarioTruth.modulationFrequencyHz());
+      assertEquals(emitterTruth.modulationDepth(), scenarioTruth.modulationDepth());
+      assertEquals(emitterTruth.jitter(), scenarioTruth.jitter());
+      assertEquals(emitterTruth.drift(), scenarioTruth.drift());
+      assertEquals(emitterTruth.noiseAmplitude(), scenarioTruth.noiseAmplitude());
+    }
   }
 }

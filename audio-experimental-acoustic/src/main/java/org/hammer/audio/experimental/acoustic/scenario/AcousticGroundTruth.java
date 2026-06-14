@@ -16,7 +16,7 @@ import java.util.List;
  * @param harmonics optional harmonic amplitude profile
  * @param modulationFrequencyHz optional modulation frequency in Hz
  * @param modulationDepth optional modulation depth in [0, 1]
- * @param jitter optional jitter parameter
+ * @param jitter optional maximum signed per-sample frequency deviation in Hz
  * @param drift optional frequency drift parameter
  * @param noiseAmplitude optional additive white-noise amplitude in [0, 1]
  * @param signalPower optional signal power parameter

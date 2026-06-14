@@ -27,7 +27,8 @@ import org.hammer.audio.signal.SignalGenerator;
  *
  * <p>where {@code noise_j} and {@code noise_w} are deterministic hash sequences derived from the
  * sample index and {@code randomSeed}. The phase accumulator is wrapped modulo {@code 2π} each
- * sample to preserve floating-point precision over long runs.
+ * sample, even for arbitrarily large phase increments, to preserve floating-point precision over
+ * long runs.
  *
  * <p>The generated signal does not model real mosquito aerodynamics. It is intended solely as a
  * controlled test fixture for algorithm development and CI verification.
@@ -89,23 +90,13 @@ public final class WingbeatSignalGenerator implements SignalGenerator {
       double t = absoluteFrame / sampleRate;
 
       // Instantaneous frequency with drift and jitter.
-      double instFreq = params.fundamentalFrequencyHz() + params.driftHzPerSecond() * t;
-      if (params.jitterHz() > 0.0) {
-        instFreq += params.jitterHz() * hashNoise(absoluteFrame, randomSeed);
-      }
-      instFreq = Math.max(1.0, instFreq);
+      double instFreq = instantaneousFrequency(params, absoluteFrame, sampleRate, randomSeed);
 
       // Advance the fundamental phase accumulator and keep it in [0, 2π).
-      fundamentalPhase += TWO_PI * instFreq / sampleRate;
-      if (fundamentalPhase >= TWO_PI) {
-        fundamentalPhase %= TWO_PI;
-      }
+      fundamentalPhase = wrapPhase(fundamentalPhase + phaseIncrement(instFreq, sampleRate));
 
       // Amplitude modulation envelope.
-      double am = 1.0;
-      if (params.modulationHz() > 0.0 && params.modulationDepth() > 0.0) {
-        am = 1.0 + params.modulationDepth() * Math.sin(TWO_PI * params.modulationHz() * t);
-      }
+      double am = modulationEnvelope(params, t);
 
       // Sum harmonics.
       double signal = 0.0;
@@ -152,6 +143,116 @@ public final class WingbeatSignalGenerator implements SignalGenerator {
 
   private double harmonicAmplitude(int harmonicIndex) {
     return harmonicAmplitudes.get(harmonicIndex);
+  }
+
+  static double sampleAtTime(
+      WingbeatSignalParameters params, long randomSeed, double sampleRate, double seconds) {
+    return sampleAtTime(params, randomSeed, sampleRate, seconds, 1.0);
+  }
+
+  static double sampleAtTime(
+      WingbeatSignalParameters params,
+      long randomSeed,
+      double sampleRate,
+      double seconds,
+      double frequencyScale) {
+    if (params == null) {
+      throw new IllegalArgumentException("params must not be null");
+    }
+    if (!(sampleRate > 0.0) || !Double.isFinite(sampleRate)) {
+      throw new IllegalArgumentException("sampleRate must be finite and > 0");
+    }
+    if (!Double.isFinite(seconds)) {
+      throw new IllegalArgumentException("seconds must be finite");
+    }
+    if (!(frequencyScale > 0.0) || !Double.isFinite(frequencyScale)) {
+      throw new IllegalArgumentException("frequencyScale must be finite and > 0");
+    }
+
+    double samplePosition = seconds * sampleRate;
+    long wholeFrames = (long) Math.floor(samplePosition);
+    double fractionalFrame = samplePosition - wholeFrames;
+    double phase = phaseAtFrame(params, randomSeed, sampleRate, wholeFrames, frequencyScale);
+    if (fractionalFrame > 0.0) {
+      double instFreqAtTime =
+          instantaneousFrequencyAtTime(params, seconds, wholeFrames, randomSeed) * frequencyScale;
+      phase = wrapPhase(phase + fractionalFrame * phaseIncrement(instFreqAtTime, sampleRate));
+    }
+
+    double signal = 0.0;
+    List<Double> harmonicAmplitudes = params.resolvedHarmonicAmplitudes();
+    for (int k = 0; k < params.harmonicCount(); k++) {
+      signal += harmonicAmplitudes.get(k) * Math.sin((k + 1) * phase);
+    }
+    signal *= modulationEnvelope(params, seconds);
+    if (params.noiseAmplitude() > 0.0) {
+      signal += params.noiseAmplitude() * hashNoise(wholeFrames ^ 0xA5A5A5A5L, randomSeed);
+    }
+    return Math.max(-1.0, Math.min(1.0, signal));
+  }
+
+  private static double phaseAtFrame(
+      WingbeatSignalParameters params,
+      long randomSeed,
+      double sampleRate,
+      long frameIndex,
+      double frequencyScale) {
+    double phase = 0.0;
+    if (frameIndex >= 0L) {
+      for (long frame = 0L; frame <= frameIndex; frame++) {
+        phase =
+            wrapPhase(
+                phase
+                    + phaseIncrement(
+                        instantaneousFrequency(params, frame, sampleRate, randomSeed)
+                            * frequencyScale,
+                        sampleRate));
+      }
+      return phase;
+    }
+    for (long frame = -1L; frame >= frameIndex; frame--) {
+      phase =
+          wrapPhase(
+              phase
+                  - phaseIncrement(
+                      instantaneousFrequency(params, frame, sampleRate, randomSeed)
+                          * frequencyScale,
+                      sampleRate));
+    }
+    return phase;
+  }
+
+  private static double instantaneousFrequency(
+      WingbeatSignalParameters params, long frameIndex, double sampleRate, long randomSeed) {
+    return instantaneousFrequencyAtTime(params, frameIndex / sampleRate, frameIndex, randomSeed);
+  }
+
+  private static double instantaneousFrequencyAtTime(
+      WingbeatSignalParameters params,
+      double seconds,
+      long noiseFrameIndex,
+      long randomSeed) {
+    double instFreq = params.fundamentalFrequencyHz() + params.driftHzPerSecond() * seconds;
+    if (params.jitterHz() > 0.0) {
+      instFreq += params.jitterHz() * hashNoise(noiseFrameIndex, randomSeed);
+    }
+    return Math.max(1.0, instFreq);
+  }
+
+  private static double phaseIncrement(double instantaneousFrequencyHz, double sampleRate) {
+    return TWO_PI * instantaneousFrequencyHz / sampleRate;
+  }
+
+  private static double modulationEnvelope(WingbeatSignalParameters params, double seconds) {
+    if (params.modulationHz() <= 0.0 || params.modulationDepth() <= 0.0) {
+      return 1.0;
+    }
+    return 1.0 + params.modulationDepth() * Math.sin(TWO_PI * params.modulationHz() * seconds);
+  }
+
+  private static double wrapPhase(double phase) {
+    double wrapped = phase % TWO_PI;
+    return wrapped >= 0.0 ? wrapped : wrapped + TWO_PI;
   }
 
   /**
