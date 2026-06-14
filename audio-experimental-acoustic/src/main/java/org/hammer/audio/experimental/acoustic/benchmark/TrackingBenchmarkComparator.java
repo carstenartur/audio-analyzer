@@ -12,6 +12,7 @@ import org.hammer.audio.experimental.acoustic.scenario.ClassificationGroundTruth
 import org.hammer.audio.experimental.acoustic.scenario.Scenario;
 import org.hammer.audio.experimental.acoustic.scenario.ScenarioSource;
 import org.hammer.audio.experimental.acoustic.tracking.TrackedSource;
+import org.hammer.audio.experimental.acoustic.tracking.TrackingSnapshot;
 import org.hammer.audio.geometry.Vector2;
 
 /** Compare tracking/classification measurements against scenario ground truth. */
@@ -40,7 +41,9 @@ public final class TrackingBenchmarkComparator
       processSnapshot(truth, snapshot, scenarioStartTimestampNanos, arrayCenter, accumulator);
     }
     return accumulator.toReport(
-        truth, measurements, summarizeClassification(truth, measurements.classificationPredictions()));
+        truth,
+        measurements,
+        summarizeClassification(truth, measurements.classificationPredictions()));
   }
 
   private void processSnapshot(
