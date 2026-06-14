@@ -44,13 +44,14 @@ class WorkbenchScenarioRunnerTest {
   }
 
   @Test
-  void twoCloseFrequenciesCanProduceTwoTracks() {
+  void twoCloseFrequenciesRunTracksAtLeastOneSource() {
     SimulationScenario scenario = SimulationScenarios.twoCloseFrequencies();
     WorkbenchRunResult result =
         WorkbenchScenarioRunner.run(
             scenario, WorkbenchParameters.defaults().blockSize(2048).fftSize(2048).build());
 
-    // Pipeline should find two distinct tracks at some point
+    // Two-close-frequencies is a hard case; the pipeline may detect one or both sources.
+    // We verify at least one track is produced.
     assertTrue(
         result.maxTracksInAnyFrame() >= 1,
         "should track at least one source; max was " + result.maxTracksInAnyFrame());

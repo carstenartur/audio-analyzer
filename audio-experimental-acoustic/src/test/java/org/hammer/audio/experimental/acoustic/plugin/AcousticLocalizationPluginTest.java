@@ -2,12 +2,14 @@ package org.hammer.audio.experimental.acoustic.plugin;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.ServiceLoader;
 import javax.swing.JComponent;
+import org.hammer.audio.experimental.acoustic.workbench.AcousticLocalizationWorkbenchPanel;
 import org.hammer.audio.plugin.AudioAnalyzerPlugin;
 import org.hammer.audio.plugin.MenuContribution;
 import org.hammer.audio.plugin.ViewContribution;
@@ -75,10 +77,10 @@ class AcousticLocalizationPluginTest {
             .orElseThrow();
     JComponent component = workbench.componentFactory().get();
     assertNotNull(component);
-    assertTrue(
-        component.getClass().getSimpleName().equals("AcousticLocalizationWorkbenchPanel"),
-        "workbench view should produce AcousticLocalizationWorkbenchPanel, got "
-            + component.getClass().getSimpleName());
+    assertInstanceOf(
+        AcousticLocalizationWorkbenchPanel.class,
+        component,
+        "workbench view should produce AcousticLocalizationWorkbenchPanel");
   }
 
   @Test

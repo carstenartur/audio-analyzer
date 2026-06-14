@@ -84,6 +84,9 @@ public final class WorkbenchScenarioRunner {
     int blockIndex = 0;
 
     while (true) {
+      if (Thread.currentThread().isInterrupted()) {
+        break;
+      }
       AudioBlock block = source.readBlock(parameters.blockSize()).orElse(null);
       if (block == null || block.frames() < parameters.blockSize()) {
         break;
@@ -140,6 +143,9 @@ public final class WorkbenchScenarioRunner {
   }
 
   private static List<Vector2> buildCandidateGrid(SimulationScenario scenario, int steps) {
+    if (steps <= 0) {
+      throw new IllegalArgumentException("candidateGridSteps must be positive, got " + steps);
+    }
     List<Vector2> grid = new ArrayList<>((steps + 1) * (steps + 1));
     double width = scenario.room().widthMeters();
     double height = scenario.room().heightMeters();

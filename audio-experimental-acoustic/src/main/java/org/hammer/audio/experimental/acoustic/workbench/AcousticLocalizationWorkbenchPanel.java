@@ -31,6 +31,7 @@ import javax.swing.JSpinner;
 import javax.swing.JSplitPane;
 import javax.swing.JTabbedPane;
 import javax.swing.JTextArea;
+import javax.swing.SpinnerListModel;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingUtilities;
 import javax.swing.SwingWorker;
@@ -109,7 +110,8 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
 
     // --- parameter spinners ---
     blockSizeSpinner = new JSpinner(new SpinnerNumberModel(1024, 256, 8192, 256));
-    fftSizeSpinner = new JSpinner(new SpinnerNumberModel(1024, 256, 8192, 256));
+    fftSizeSpinner = new JSpinner(new SpinnerListModel(List.of(256, 512, 1024, 2048, 4096, 8192)));
+    fftSizeSpinner.setValue(1024);
     maxPeaksSpinner = new JSpinner(new SpinnerNumberModel(3, 1, 10, 1));
     minSnrSpinner = new JSpinner(new SpinnerNumberModel(2.0, 0.0, 20.0, 0.5));
     bandMinSpinner = new JSpinner(new SpinnerNumberModel(150.0, 50.0, 20000.0, 50.0));
@@ -247,8 +249,19 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
     if (running.get()) {
       return;
     }
-    SimulationScenario scenario = ((ScenarioItem) scenarioCombo.getSelectedItem()).scenario;
-    WorkbenchParameters params = readParameters();
+    ScenarioItem selected = (ScenarioItem) scenarioCombo.getSelectedItem();
+    if (selected == null) {
+      updateStatus("No scenario selected.");
+      return;
+    }
+    SimulationScenario scenario = selected.scenario;
+    WorkbenchParameters params;
+    try {
+      params = readParameters();
+    } catch (IllegalArgumentException ex) {
+      updateStatus("Invalid parameters: " + ex.getMessage());
+      return;
+    }
 
     logArea.setText("");
     markdownArea.setText("");
@@ -279,7 +292,7 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
   private void stopRun() {
     SwingWorker<WorkbenchRunResult, String> w = currentWorker;
     if (w != null) {
-      w.cancel(false);
+      w.cancel(true);
     }
   }
 

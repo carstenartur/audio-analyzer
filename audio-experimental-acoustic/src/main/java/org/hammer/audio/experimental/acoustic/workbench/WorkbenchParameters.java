@@ -138,11 +138,15 @@ public final class WorkbenchParameters {
     /** Set block size (and default FFT size). */
     public Builder blockSize(int v) {
       this.blockSize = v;
+      this.fftSize = v;
       return this;
     }
 
-    /** Set FFT size explicitly (must be a power of two). */
+    /** Set FFT size explicitly (must be a positive power of two). */
     public Builder fftSize(int v) {
+      if (v <= 0 || (v & (v - 1)) != 0) {
+        throw new IllegalArgumentException("fftSize must be a positive power of two, got " + v);
+      }
       this.fftSize = v;
       return this;
     }
@@ -179,6 +183,9 @@ public final class WorkbenchParameters {
 
     /** Set number of candidate grid steps. */
     public Builder candidateGridSteps(int v) {
+      if (v <= 0) {
+        throw new IllegalArgumentException("candidateGridSteps must be positive, got " + v);
+      }
       this.candidateGridSteps = v;
       return this;
     }
@@ -215,6 +222,16 @@ public final class WorkbenchParameters {
 
     /** Build the parameter object. */
     public WorkbenchParameters build() {
+      if (!Double.isFinite(minSnr)) {
+        throw new IllegalArgumentException("minSnr must be finite, got " + minSnr);
+      }
+      if (!Double.isFinite(bandMinHz) || !Double.isFinite(bandMaxHz)) {
+        throw new IllegalArgumentException("frequency band bounds must be finite");
+      }
+      if (bandMinHz >= bandMaxHz) {
+        throw new IllegalArgumentException(
+            "bandMinHz (" + bandMinHz + ") must be less than bandMaxHz (" + bandMaxHz + ")");
+      }
       return new WorkbenchParameters(this);
     }
   }
