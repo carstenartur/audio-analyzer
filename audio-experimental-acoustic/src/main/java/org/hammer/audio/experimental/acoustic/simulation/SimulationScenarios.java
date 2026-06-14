@@ -1,17 +1,23 @@
 package org.hammer.audio.experimental.acoustic.simulation;
 
+import java.util.ArrayList;
 import java.util.List;
 import org.hammer.audio.acquisition.Microphone;
 import org.hammer.audio.acquisition.MicrophoneArray;
+import org.hammer.audio.experimental.acoustic.scenario.AcousticGroundTruth;
+import org.hammer.audio.experimental.acoustic.scenario.Scenario;
+import org.hammer.audio.experimental.acoustic.scenario.ScenarioEnvironment;
+import org.hammer.audio.experimental.acoustic.scenario.ScenarioSource;
+import org.hammer.audio.experimental.acoustic.scenario.ScenarioTrajectory;
 import org.hammer.audio.geometry.Vector2;
 
 /**
  * Catalog of reproducible localization scenarios used by validation tests and demos.
  *
- * <p>Every scenario is a self-contained, deterministic {@link Scenario} record bundling a {@link
- * Room2D}, a {@link MicrophoneArray}, a list of {@link SoundEmitter2D}s, a sample rate, a duration
- * in seconds and a random seed. Two calls with identical scenario parameters produce bit-identical
- * signals via {@link SimulatedMicrophoneArraySource}.
+ * <p>Every scenario is a self-contained, deterministic {@link SimulationScenario} record bundling a
+ * {@link Room2D}, a {@link MicrophoneArray}, a list of {@link SoundEmitter2D}s, a sample rate, a
+ * duration in seconds and a random seed. Two calls with identical scenario parameters produce
+ * bit-identical signals via {@link SimulatedMicrophoneArraySource}.
  *
  * <p>The provided scenarios mirror the canonical research situations:
  *
@@ -35,8 +41,8 @@ public final class SimulationScenarios {
   }
 
   /** One stationary 600 Hz tone at (1.5, 1.0) in an anechoic 3x2 m room. */
-  public static Scenario singleSource() {
-    return new Scenario(
+  public static SimulationScenario singleSource() {
+    return new SimulationScenario(
         "single-source",
         new Room2D(3.0, 2.0, 0.0, 0.0),
         defaultArray(),
@@ -47,8 +53,8 @@ public final class SimulationScenarios {
   }
 
   /** Two stationary tones at 600 and 640 Hz, located at distinct positions in an anechoic room. */
-  public static Scenario twoCloseFrequencies() {
-    return new Scenario(
+  public static SimulationScenario twoCloseFrequencies() {
+    return new SimulationScenario(
         "two-close-frequencies",
         new Room2D(3.0, 2.0, 0.0, 0.0),
         defaultArray(),
@@ -61,8 +67,8 @@ public final class SimulationScenarios {
   }
 
   /** Single source plus broadband room noise; tests robustness of peak detection. */
-  public static Scenario noisyRoom() {
-    return new Scenario(
+  public static SimulationScenario noisyRoom() {
+    return new SimulationScenario(
         "noisy-room",
         new Room2D(3.0, 2.0, 0.0, 0.05),
         defaultArray(),
@@ -73,8 +79,8 @@ public final class SimulationScenarios {
   }
 
   /** One source travelling from (0.5, 1.0) to (2.5, 1.0) over the scenario duration. */
-  public static Scenario movingSource() {
-    return new Scenario(
+  public static SimulationScenario movingSource() {
+    return new SimulationScenario(
         "moving-source",
         new Room2D(3.0, 2.0, 0.0, 0.0),
         defaultArray(),
@@ -85,8 +91,8 @@ public final class SimulationScenarios {
   }
 
   /** One source moving primarily toward the array for Doppler validation. */
-  public static Scenario movingTowardArray() {
-    return new Scenario(
+  public static SimulationScenario movingTowardArray() {
+    return new SimulationScenario(
         "moving-toward-array",
         new Room2D(3.0, 2.0, 0.0, 0.0),
         defaultArray(),
@@ -97,8 +103,8 @@ public final class SimulationScenarios {
   }
 
   /** One source moving laterally across the array. */
-  public static Scenario movingAcrossArray() {
-    return new Scenario(
+  public static SimulationScenario movingAcrossArray() {
+    return new SimulationScenario(
         "moving-across-array",
         new Room2D(3.0, 2.0, 0.0, 0.0),
         defaultArray(),
@@ -109,8 +115,8 @@ public final class SimulationScenarios {
   }
 
   /** Two moving sources with different frequencies and velocities. */
-  public static Scenario twoMovingSources() {
-    return new Scenario(
+  public static SimulationScenario twoMovingSources() {
+    return new SimulationScenario(
         "two-moving-sources",
         new Room2D(3.0, 2.0, 0.0, 0.0),
         defaultArray(),
@@ -123,8 +129,8 @@ public final class SimulationScenarios {
   }
 
   /** Single source with reflective walls (specular x-axis reflection in the simulator). */
-  public static Scenario reflectedEnvironment() {
-    return new Scenario(
+  public static SimulationScenario reflectedEnvironment() {
+    return new SimulationScenario(
         "reflected-environment",
         new Room2D(3.0, 2.0, 0.35, 0.01),
         defaultArray(),
@@ -135,7 +141,7 @@ public final class SimulationScenarios {
   }
 
   /** All bundled scenarios in canonical order. */
-  public static List<Scenario> all() {
+  public static List<SimulationScenario> all() {
     return List.of(
         singleSource(),
         twoCloseFrequencies(),
@@ -157,8 +163,18 @@ public final class SimulationScenarios {
             new Microphone("m3", new Vector2(1.65, 0.3), 3)));
   }
 
-  /** One reproducible scenario. */
-  public record Scenario(
+  /**
+   * One reproducible simulation scenario.
+   *
+   * @param name scenario name
+   * @param room room geometry and acoustic parameters
+   * @param array microphone array definition
+   * @param emitters emitters active in the scenario
+   * @param sampleRate sample rate in Hz
+   * @param durationSeconds simulation duration in seconds
+   * @param randomSeed deterministic seed for generated noise
+   */
+  public record SimulationScenario(
       String name,
       Room2D room,
       MicrophoneArray array,
@@ -167,8 +183,8 @@ public final class SimulationScenarios {
       double durationSeconds,
       long randomSeed) {
 
-    /** Validate and defensively copy emitters. */
-    public Scenario {
+    /* Validate and defensively copy emitters. */
+    public SimulationScenario {
       if (name == null || name.isBlank()) {
         throw new IllegalArgumentException("name must not be blank");
       }
@@ -178,10 +194,10 @@ public final class SimulationScenarios {
       if (emitters == null || emitters.isEmpty()) {
         throw new IllegalArgumentException("emitters must not be empty");
       }
-      if (!(sampleRate > 0.0f)) {
+      if (sampleRate <= 0.0f) {
         throw new IllegalArgumentException("sampleRate must be > 0");
       }
-      if (!(durationSeconds > 0.0)) {
+      if (durationSeconds <= 0.0) {
         throw new IllegalArgumentException("durationSeconds must be > 0");
       }
       emitters = List.copyOf(emitters);
@@ -191,6 +207,35 @@ public final class SimulationScenarios {
     public SimulatedMicrophoneArraySource newSource() {
       return new SimulatedMicrophoneArraySource(
           room, array, emitters, sampleRate, durationSeconds, randomSeed);
+    }
+
+    /**
+     * Build the ground-truth {@link org.hammer.audio.experimental.acoustic.scenario.Scenario} for
+     * this simulation scenario.
+     *
+     * <p>Each {@link SoundEmitter2D} is mapped to a {@link ScenarioSource} with a linear {@link
+     * ScenarioTrajectory} and an {@link AcousticGroundTruth} holding the emitter's fundamental
+     * frequency.
+     */
+    public Scenario groundTruth() {
+      List<ScenarioSource> sources = new ArrayList<>(emitters.size());
+      for (int i = 0; i < emitters.size(); i++) {
+        SoundEmitter2D emitter = emitters.get(i);
+        ScenarioTrajectory trajectory =
+            ScenarioTrajectory.linear(
+                emitter.startMeters(), emitter.velocityMetersPerSecond(), durationSeconds, 2);
+        AcousticGroundTruth acoustic = AcousticGroundTruth.ofFrequency(emitter.frequencyHz());
+        sources.add(
+            ScenarioSource.builder("source-" + i, "emitter")
+                .trajectory(trajectory)
+                .acousticProperties(acoustic)
+                .build());
+      }
+      ScenarioEnvironment environment =
+          new ScenarioEnvironment(
+              SimulatedMicrophoneArraySource.DEFAULT_SPEED_OF_SOUND_METERS_PER_SECOND,
+              "Simulated air");
+      return new Scenario(name, "Simulated scenario: " + name, sources, environment);
     }
   }
 }
