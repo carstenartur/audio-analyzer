@@ -1,8 +1,6 @@
 package org.hammer.audio.experimental.acoustic.simulation;
 
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import org.hammer.audio.core.AudioBlock;
 import org.hammer.audio.core.AudioFormatDescriptor;
 import org.hammer.audio.signal.SignalGenerator;
@@ -40,8 +38,7 @@ import org.hammer.audio.signal.SignalGenerator;
 public final class WingbeatSignalGenerator implements SignalGenerator {
 
   private static final double TWO_PI = 2.0 * Math.PI;
-  private static final Map<PhaseCacheKey, PhaseAccumulatorCache> PHASE_CACHES =
-      new ConcurrentHashMap<>();
+  private static final long ADDITIVE_NOISE_HASH_LANE = 0xA5A5A5A5L;
 
   private final AudioFormatDescriptor format;
   private final WingbeatSignalParameters params;
@@ -97,7 +94,7 @@ public final class WingbeatSignalGenerator implements SignalGenerator {
       double instFreq = instantaneousFrequency(params, absoluteFrame, sampleRate, randomSeed);
 
       // Advance the fundamental phase accumulator and keep it in [0, 2π).
-      fundamentalPhase = wrapPhase(fundamentalPhase + phaseIncrement(instFreq, sampleRate));
+      fundamentalPhase = wrapPhaseIfNeeded(fundamentalPhase + phaseIncrement(instFreq, sampleRate));
 
       // Amplitude modulation envelope.
       double am = modulationEnvelope(params, t);
@@ -112,7 +109,9 @@ public final class WingbeatSignalGenerator implements SignalGenerator {
 
       // Additive noise (use a different hash lane from jitter).
       if (params.noiseAmplitude() > 0.0) {
-        signal += params.noiseAmplitude() * hashNoise(absoluteFrame ^ 0xA5A5A5A5L, randomSeed);
+        signal +=
+            params.noiseAmplitude()
+                * hashNoise(absoluteFrame ^ ADDITIVE_NOISE_HASH_LANE, randomSeed);
       }
 
       float sample = (float) Math.max(-1.0, Math.min(1.0, signal));
@@ -160,6 +159,16 @@ public final class WingbeatSignalGenerator implements SignalGenerator {
       double sampleRate,
       double seconds,
       double frequencyScale) {
+    return sampleAtTime(params, randomSeed, sampleRate, seconds, frequencyScale, null);
+  }
+
+  static double sampleAtTime(
+      WingbeatSignalParameters params,
+      long randomSeed,
+      double sampleRate,
+      double seconds,
+      double frequencyScale,
+      PhaseAccumulatorCache phaseCache) {
     if (params == null) {
       throw new IllegalArgumentException("params must not be null");
     }
@@ -176,11 +185,13 @@ public final class WingbeatSignalGenerator implements SignalGenerator {
     double samplePosition = seconds * sampleRate;
     long wholeFrames = (long) Math.floor(samplePosition);
     double fractionalFrame = samplePosition - wholeFrames;
-    double phase = phaseAtFrame(params, randomSeed, sampleRate, wholeFrames, frequencyScale);
+    double phase =
+        phaseAtFrame(params, randomSeed, sampleRate, wholeFrames, frequencyScale, phaseCache);
     if (fractionalFrame > 0.0) {
       double instFreqAtTime =
           instantaneousFrequencyAtTime(params, seconds, wholeFrames, randomSeed) * frequencyScale;
-      phase = wrapPhase(phase + fractionalFrame * phaseIncrement(instFreqAtTime, sampleRate));
+      phase =
+          wrapPhaseIfNeeded(phase + fractionalFrame * phaseIncrement(instFreqAtTime, sampleRate));
     }
 
     double signal = 0.0;
@@ -190,9 +201,15 @@ public final class WingbeatSignalGenerator implements SignalGenerator {
     }
     signal *= modulationEnvelope(params, seconds);
     if (params.noiseAmplitude() > 0.0) {
-      signal += params.noiseAmplitude() * hashNoise(wholeFrames ^ 0xA5A5A5A5L, randomSeed);
+      signal +=
+          params.noiseAmplitude() * hashNoise(wholeFrames ^ ADDITIVE_NOISE_HASH_LANE, randomSeed);
     }
     return Math.max(-1.0, Math.min(1.0, signal));
+  }
+
+  static PhaseAccumulatorCache newPhaseAccumulatorCache(
+      WingbeatSignalParameters params, long randomSeed, double sampleRate) {
+    return new PhaseAccumulatorCache(params, randomSeed, sampleRate);
   }
 
   private static double phaseAtFrame(
@@ -200,11 +217,43 @@ public final class WingbeatSignalGenerator implements SignalGenerator {
       long randomSeed,
       double sampleRate,
       long frameIndex,
+      double frequencyScale,
+      PhaseAccumulatorCache phaseCache) {
+    if (phaseCache != null && Double.compare(frequencyScale, 1.0) == 0) {
+      return phaseCache.phaseAt(frameIndex);
+    }
+    return uncachedPhaseAtFrame(params, randomSeed, sampleRate, frameIndex, frequencyScale);
+  }
+
+  private static double uncachedPhaseAtFrame(
+      WingbeatSignalParameters params,
+      long randomSeed,
+      double sampleRate,
+      long frameIndex,
       double frequencyScale) {
-    PhaseCacheKey key = new PhaseCacheKey(params, randomSeed, sampleRate, frequencyScale);
-    return PHASE_CACHES
-        .computeIfAbsent(key, unused -> new PhaseAccumulatorCache(params, randomSeed, sampleRate))
-        .phaseAt(frameIndex, frequencyScale);
+    double phase = 0.0;
+    if (frameIndex >= 0L) {
+      for (long frame = 0L; frame <= frameIndex; frame++) {
+        phase =
+            wrapPhaseIfNeeded(
+                phase
+                    + phaseIncrement(
+                        instantaneousFrequency(params, frame, sampleRate, randomSeed)
+                            * frequencyScale,
+                        sampleRate));
+      }
+      return phase;
+    }
+    for (long frame = -1L; frame >= frameIndex; frame--) {
+      phase =
+          wrapPhaseIfNeeded(
+              phase
+                  - phaseIncrement(
+                      instantaneousFrequency(params, frame, sampleRate, randomSeed)
+                          * frequencyScale,
+                      sampleRate));
+    }
+    return phase;
   }
 
   private static double instantaneousFrequency(
@@ -237,15 +286,15 @@ public final class WingbeatSignalGenerator implements SignalGenerator {
     return wrapped >= 0.0 ? wrapped : wrapped + TWO_PI;
   }
 
-  private record PhaseCacheKey(
-      WingbeatSignalParameters params, long randomSeed, double sampleRate, double frequencyScale) {}
+  private static double wrapPhaseIfNeeded(double phase) {
+    return phase >= 0.0 && phase < TWO_PI ? phase : wrapPhase(phase);
+  }
 
-  private static final class PhaseAccumulatorCache {
+  static final class PhaseAccumulatorCache {
 
     private final WingbeatSignalParameters params;
     private final long randomSeed;
     private final double sampleRate;
-    private final Map<Long, Double> phaseByFrame = new ConcurrentHashMap<>();
 
     private long maxComputedPositiveFrame = -1L;
     private double phaseAtMaxComputedPositiveFrame = 0.0;
@@ -259,45 +308,41 @@ public final class WingbeatSignalGenerator implements SignalGenerator {
       this.sampleRate = sampleRate;
     }
 
-    private synchronized double phaseAt(long frameIndex, double frequencyScale) {
-      Double cachedPhase = phaseByFrame.get(frameIndex);
-      if (cachedPhase != null) {
-        return cachedPhase;
-      }
+    private synchronized double phaseAt(long frameIndex) {
       if (frameIndex >= 0L) {
-        return extendPositive(frameIndex, frequencyScale);
+        return extendPositive(frameIndex);
       }
-      return extendNegative(frameIndex, frequencyScale);
+      return extendNegative(frameIndex);
     }
 
-    private double extendPositive(long targetFrame, double frequencyScale) {
+    private double extendPositive(long targetFrame) {
+      if (targetFrame <= maxComputedPositiveFrame) {
+        return uncachedPhaseAtFrame(params, randomSeed, sampleRate, targetFrame, 1.0);
+      }
       double phase = phaseAtMaxComputedPositiveFrame;
       for (long frame = maxComputedPositiveFrame + 1L; frame <= targetFrame; frame++) {
         phase =
-            wrapPhase(
+            wrapPhaseIfNeeded(
                 phase
                     + phaseIncrement(
-                        instantaneousFrequency(params, frame, sampleRate, randomSeed)
-                            * frequencyScale,
-                        sampleRate));
-        phaseByFrame.put(frame, phase);
+                        instantaneousFrequency(params, frame, sampleRate, randomSeed), sampleRate));
       }
       maxComputedPositiveFrame = targetFrame;
       phaseAtMaxComputedPositiveFrame = phase;
       return phase;
     }
 
-    private double extendNegative(long targetFrame, double frequencyScale) {
+    private double extendNegative(long targetFrame) {
+      if (targetFrame >= minComputedNegativeFrame) {
+        return uncachedPhaseAtFrame(params, randomSeed, sampleRate, targetFrame, 1.0);
+      }
       double phase = phaseAtMinComputedNegativeFrame;
       for (long frame = minComputedNegativeFrame - 1L; frame >= targetFrame; frame--) {
         phase =
-            wrapPhase(
+            wrapPhaseIfNeeded(
                 phase
                     - phaseIncrement(
-                        instantaneousFrequency(params, frame, sampleRate, randomSeed)
-                            * frequencyScale,
-                        sampleRate));
-        phaseByFrame.put(frame, phase);
+                        instantaneousFrequency(params, frame, sampleRate, randomSeed), sampleRate));
       }
       minComputedNegativeFrame = targetFrame;
       phaseAtMinComputedNegativeFrame = phase;
