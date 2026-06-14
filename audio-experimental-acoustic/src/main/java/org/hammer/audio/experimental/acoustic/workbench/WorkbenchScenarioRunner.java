@@ -75,32 +75,35 @@ public final class WorkbenchScenarioRunner {
     Objects.requireNonNull(scenario, "scenario");
     Objects.requireNonNull(parameters, "parameters");
 
-    SimulatedMicrophoneArraySource source = scenario.newSource();
-    MicrophoneArray array = source.microphoneArray();
-    TrackingPipeline pipeline = buildPipeline(scenario, parameters);
+    try (SimulatedMicrophoneArraySource source = scenario.newSource()) {
+      MicrophoneArray array = source.microphoneArray();
+      TrackingPipeline pipeline = buildPipeline(scenario, parameters);
 
-    List<TrackingSnapshot> snapshots = new ArrayList<>();
-    long totalProcessingNanos = 0L;
-    int blockIndex = 0;
+      List<TrackingSnapshot> snapshots = new ArrayList<>();
+      long totalProcessingNanos = 0L;
+      int blockIndex = 0;
 
-    while (true) {
-      if (Thread.currentThread().isInterrupted()) {
-        break;
+      while (true) {
+        if (Thread.currentThread().isInterrupted()) {
+          break;
+        }
+        AudioBlock block = source.readBlock(parameters.blockSize()).orElse(null);
+        if (block == null || block.frames() < parameters.blockSize()) {
+          break;
+        }
+        TrackingSnapshot snapshot = pipeline.process(block, array);
+        snapshots.add(snapshot);
+        totalProcessingNanos += snapshot.processingNanos();
+        if (callback != null) {
+          callback.onBlock(snapshot, blockIndex);
+        }
+        blockIndex++;
       }
-      AudioBlock block = source.readBlock(parameters.blockSize()).orElse(null);
-      if (block == null || block.frames() < parameters.blockSize()) {
-        break;
-      }
-      TrackingSnapshot snapshot = pipeline.process(block, array);
-      snapshots.add(snapshot);
-      totalProcessingNanos += snapshot.processingNanos();
-      if (callback != null) {
-        callback.onBlock(snapshot, blockIndex);
-      }
-      blockIndex++;
+
+      return new WorkbenchRunResult(scenario, parameters, snapshots, totalProcessingNanos);
+    } catch (java.io.IOException e) {
+      throw new IllegalStateException("Unexpected close failure on simulation source", e);
     }
-
-    return new WorkbenchRunResult(scenario, parameters, snapshots, totalProcessingNanos);
   }
 
   /**

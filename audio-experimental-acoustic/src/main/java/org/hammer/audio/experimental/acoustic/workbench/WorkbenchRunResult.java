@@ -3,6 +3,7 @@ package org.hammer.audio.experimental.acoustic.workbench;
 import java.util.List;
 import java.util.Objects;
 import org.hammer.audio.experimental.acoustic.simulation.SimulationScenarios.SimulationScenario;
+import org.hammer.audio.experimental.acoustic.tracking.TrackedSource;
 import org.hammer.audio.experimental.acoustic.tracking.TrackingSnapshot;
 
 /**
@@ -19,7 +20,7 @@ public record WorkbenchRunResult(
     List<TrackingSnapshot> snapshots,
     long totalProcessingNanos) {
 
-  /** Validate and defensively copy. */
+  // Validates and defensively copies the snapshots list.
   public WorkbenchRunResult {
     Objects.requireNonNull(scenario, "scenario");
     Objects.requireNonNull(parameters, "parameters");
@@ -70,7 +71,7 @@ public record WorkbenchRunResult(
   public long distinctTrackCount() {
     return snapshots.stream()
         .flatMap(s -> s.tracks().stream())
-        .mapToInt(t -> t.id())
+        .mapToInt(TrackedSource::id)
         .distinct()
         .count();
   }

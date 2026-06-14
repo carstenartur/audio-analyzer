@@ -1,9 +1,11 @@
 package org.hammer.audio.experimental.acoustic.workbench;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.Set;
 import org.hammer.audio.experimental.acoustic.tracking.FrequencyCluster;
 import org.hammer.audio.experimental.acoustic.tracking.TrackedSource;
 import org.hammer.audio.experimental.acoustic.tracking.TrackingSnapshot;
@@ -15,6 +17,10 @@ import org.hammer.audio.experimental.acoustic.tracking.TrackingSnapshot;
  * caller is responsible for writing the result to disk or a UI component.
  */
 public final class WorkbenchRunExporter {
+
+  private static final String FMT_4F = "%.4f";
+  private static final String PIPE_SEP = " | ";
+  private static final String PARAM_RESULT = "result";
 
   private WorkbenchRunExporter() {
     // utility class
@@ -30,34 +36,31 @@ public final class WorkbenchRunExporter {
    * @return a Markdown-formatted summary string
    */
   public static String toMarkdown(WorkbenchRunResult result) {
-    Objects.requireNonNull(result, "result");
-    StringBuilder sb = new StringBuilder();
-    sb.append("# Acoustic Localization Workbench — Run Summary\n\n");
-    sb.append("> **Experimental research output.** ")
-        .append("This is not a production localization result.\n\n");
-
-    sb.append("## Scenario\n\n");
-    sb.append("- **Name:** ").append(result.scenario().name()).append('\n');
-    sb.append("- **Room:** ")
+    Objects.requireNonNull(result, PARAM_RESULT);
+    StringBuilder sb = new StringBuilder(2048);
+    sb.append(
+            "# Acoustic Localization Workbench — Run Summary\n\n"
+                + "> **Experimental research output.** "
+                + "This is not a production localization result.\n\n"
+                + "## Scenario\n\n"
+                + "- **Name:** ")
+        .append(result.scenario().name())
+        .append("\n- **Room:** ")
         .append(
             String.format(
                 Locale.ROOT,
                 "%.1f × %.1f m",
                 result.scenario().room().widthMeters(),
                 result.scenario().room().heightMeters()))
-        .append('\n');
-    sb.append("- **Emitters:** ").append(result.scenario().emitters().size()).append('\n');
-    sb.append("- **Sample rate:** ")
+        .append("\n- **Emitters:** ")
+        .append(result.scenario().emitters().size())
+        .append("\n- **Sample rate:** ")
         .append(String.format(Locale.ROOT, "%.0f Hz", (double) result.scenario().sampleRate()))
-        .append('\n');
-    sb.append("- **Duration:** ")
+        .append("\n- **Duration:** ")
         .append(String.format(Locale.ROOT, "%.2f s", result.scenario().durationSeconds()))
-        .append('\n');
-    sb.append('\n');
+        .append("\n\n## Parameters\n\n| Parameter | Value |\n|---|---|\n");
 
-    sb.append("## Parameters\n\n");
     WorkbenchParameters p = result.parameters();
-    sb.append("| Parameter | Value |\n|---|---|\n");
     appendRow(sb, "Block size", p.blockSize());
     appendRow(sb, "FFT size", p.fftSize());
     appendRow(sb, "Max peaks", p.maxPeaks());
@@ -74,10 +77,8 @@ public final class WorkbenchRunExporter {
         sb,
         "Tracker freq. match",
         String.format(Locale.ROOT, "%.0f Hz", p.trackerFrequencyMatchHz()));
-    sb.append('\n');
 
-    sb.append("## Statistics\n\n");
-    sb.append("| Metric | Value |\n|---|---|\n");
+    sb.append("\n## Statistics\n\n| Metric | Value |\n|---|---|\n");
     appendRow(sb, "Blocks processed", result.blockCount());
     appendRow(sb, "Any tracked", result.anyTracked());
     appendRow(sb, "Max tracks in a frame", result.maxTracksInAnyFrame());
@@ -90,21 +91,21 @@ public final class WorkbenchRunExporter {
         sb,
         "Max processing / block",
         String.format(Locale.ROOT, "%.2f µs", result.maxProcessingNanosPerBlock() / 1_000.0));
-    sb.append('\n');
 
-    sb.append("## Frame-by-frame summary\n\n");
-    sb.append("| Frame | Time (ms) | Clusters | Tracks | Proc. (µs) |\n");
-    sb.append("|---|---|---|---|---|\n");
+    sb.append(
+        "\n## Frame-by-frame summary\n\n"
+            + "| Frame | Time (ms) | Clusters | Tracks | Proc. (µs) |\n"
+            + "|---|---|---|---|---|\n");
     for (TrackingSnapshot snap : result.snapshots()) {
       sb.append("| ")
           .append(snap.sourceFrameIndex())
-          .append(" | ")
+          .append(PIPE_SEP)
           .append(String.format(Locale.ROOT, "%.1f", snap.sourceTimestampNanos() / 1_000_000.0))
-          .append(" | ")
+          .append(PIPE_SEP)
           .append(snap.clusters().size())
-          .append(" | ")
+          .append(PIPE_SEP)
           .append(snap.tracks().size())
-          .append(" | ")
+          .append(PIPE_SEP)
           .append(String.format(Locale.ROOT, "%.1f", snap.processingNanos() / 1_000.0))
           .append(" |\n");
     }
@@ -121,10 +122,11 @@ public final class WorkbenchRunExporter {
    * @return a CSV-formatted string
    */
   public static String toCsv(WorkbenchRunResult result) {
-    Objects.requireNonNull(result, "result");
-    StringBuilder sb = new StringBuilder();
-    sb.append("frameIndex,timestampNs,trackId,frequencyHz,observedFrequencyHz,")
-        .append("posX,posY,velX,velY,confidence,observations,processingNs\n");
+    Objects.requireNonNull(result, PARAM_RESULT);
+    StringBuilder sb = new StringBuilder(1024);
+    sb.append(
+        "frameIndex,timestampNs,trackId,frequencyHz,observedFrequencyHz,"
+            + "posX,posY,velX,velY,confidence,observations,processingNs\n");
     for (TrackingSnapshot snap : result.snapshots()) {
       for (TrackedSource track : snap.tracks()) {
         sb.append(snap.sourceFrameIndex())
@@ -137,15 +139,15 @@ public final class WorkbenchRunExporter {
             .append(',')
             .append(String.format(Locale.ROOT, "%.3f", track.observedFrequencyHz()))
             .append(',')
-            .append(String.format(Locale.ROOT, "%.4f", track.positionMeters().x()))
+            .append(String.format(Locale.ROOT, FMT_4F, track.positionMeters().x()))
             .append(',')
-            .append(String.format(Locale.ROOT, "%.4f", track.positionMeters().y()))
+            .append(String.format(Locale.ROOT, FMT_4F, track.positionMeters().y()))
             .append(',')
-            .append(String.format(Locale.ROOT, "%.4f", track.velocityMetersPerSecond().x()))
+            .append(String.format(Locale.ROOT, FMT_4F, track.velocityMetersPerSecond().x()))
             .append(',')
-            .append(String.format(Locale.ROOT, "%.4f", track.velocityMetersPerSecond().y()))
+            .append(String.format(Locale.ROOT, FMT_4F, track.velocityMetersPerSecond().y()))
             .append(',')
-            .append(String.format(Locale.ROOT, "%.4f", track.confidence()))
+            .append(String.format(Locale.ROOT, FMT_4F, track.confidence()))
             .append(',')
             .append(track.observationCount())
             .append(',')
@@ -167,8 +169,8 @@ public final class WorkbenchRunExporter {
    * @return a JSON-lines formatted string
    */
   public static String toJsonLines(WorkbenchRunResult result) {
-    Objects.requireNonNull(result, "result");
-    StringBuilder sb = new StringBuilder();
+    Objects.requireNonNull(result, PARAM_RESULT);
+    StringBuilder sb = new StringBuilder(512);
     for (TrackingSnapshot snap : result.snapshots()) {
       sb.append("{\"frameIndex\":")
           .append(snap.sourceFrameIndex())
@@ -228,8 +230,8 @@ public final class WorkbenchRunExporter {
    * @return list of track IDs in first-seen order
    */
   public static List<Integer> observedTrackIds(WorkbenchRunResult result) {
-    Objects.requireNonNull(result, "result");
-    java.util.LinkedHashSet<Integer> seen = new java.util.LinkedHashSet<>();
+    Objects.requireNonNull(result, PARAM_RESULT);
+    Set<Integer> seen = new LinkedHashSet<>();
     for (TrackingSnapshot snap : result.snapshots()) {
       for (TrackedSource track : snap.tracks()) {
         seen.add(track.id());
@@ -239,6 +241,6 @@ public final class WorkbenchRunExporter {
   }
 
   private static void appendRow(StringBuilder sb, String label, Object value) {
-    sb.append("| ").append(label).append(" | ").append(value).append(" |\n");
+    sb.append("| ").append(label).append(PIPE_SEP).append(value).append(" |\n");
   }
 }

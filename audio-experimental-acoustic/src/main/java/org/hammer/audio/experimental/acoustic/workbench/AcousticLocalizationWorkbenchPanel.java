@@ -35,6 +35,7 @@ import javax.swing.SpinnerListModel;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingUtilities;
 import javax.swing.SwingWorker;
+import org.hammer.audio.acquisition.Microphone;
 import org.hammer.audio.experimental.acoustic.simulation.AcousticEmitter2D;
 import org.hammer.audio.experimental.acoustic.simulation.SimulationScenarios;
 import org.hammer.audio.experimental.acoustic.simulation.SimulationScenarios.SimulationScenario;
@@ -91,7 +92,7 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
   private final RoomMapPanel roomMapPanel;
 
   // --- state ---
-  private volatile WorkbenchRunResult lastResult;
+  private transient volatile WorkbenchRunResult lastRunResult;
   private final AtomicBoolean running = new AtomicBoolean(false);
   private volatile SwingWorker<WorkbenchRunResult, String> currentWorker;
 
@@ -174,14 +175,17 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
     vc.insets = new Insets(2, 0, 2, 8);
 
     int row = 0;
-    addParam(p, lc, vc, row++, 0, "Block size:", blockSizeSpinner);
-    addParam(p, lc, vc, row - 1, 3, "FFT size:", fftSizeSpinner);
-    addParam(p, lc, vc, row++, 0, "Max peaks:", maxPeaksSpinner);
-    addParam(p, lc, vc, row - 1, 3, "Min SNR:", minSnrSpinner);
-    addParam(p, lc, vc, row++, 0, "Band min (Hz):", bandMinSpinner);
-    addParam(p, lc, vc, row - 1, 3, "Band max (Hz):", bandMaxSpinner);
-    addParam(p, lc, vc, row++, 0, "Grid steps:", gridStepsSpinner);
-    addParam(p, lc, vc, row - 1, 3, "TDOA estimator:", tdoaCombo);
+    addParam(p, lc, vc, row, 0, "Block size:", blockSizeSpinner);
+    addParam(p, lc, vc, row, 3, "FFT size:", fftSizeSpinner);
+    row++;
+    addParam(p, lc, vc, row, 0, "Max peaks:", maxPeaksSpinner);
+    addParam(p, lc, vc, row, 3, "Min SNR:", minSnrSpinner);
+    row++;
+    addParam(p, lc, vc, row, 0, "Band min (Hz):", bandMinSpinner);
+    addParam(p, lc, vc, row, 3, "Band max (Hz):", bandMaxSpinner);
+    row++;
+    addParam(p, lc, vc, row, 0, "Grid steps:", gridStepsSpinner);
+    addParam(p, lc, vc, row, 3, "TDOA estimator:", tdoaCombo);
 
     return p;
   }
@@ -374,7 +378,7 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
       }
       try {
         WorkbenchRunResult result = get();
-        lastResult = result;
+        lastRunResult = result;
         appendLog("--- Run complete ---");
         appendLog(
             String.format(
@@ -462,7 +466,7 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
     private static final Color COLOR_TRACK = new Color(200, 50, 30);
     private static final Color COLOR_GRID = new Color(210, 210, 210);
 
-    private SimulationScenario scenario;
+    private transient SimulationScenario scenario;
     private List<TrackedSource> lastTracks = List.of();
     private List<Vector2> gridPoints = List.of();
 
@@ -536,7 +540,7 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
 
       // microphone positions
       g2.setColor(COLOR_MIC);
-      for (var mic : scenario.array().microphones()) {
+      for (Microphone mic : scenario.array().microphones()) {
         int px = toPixelX(mic.positionMeters().x(), MARGIN, scaleX);
         int py = toPixelY(mic.positionMeters().y(), MARGIN, scaleY, canvasH);
         g2.fillOval(px - 5, py - 5, 10, 10);
@@ -550,8 +554,7 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
       Stroke defaultStroke = g2.getStroke();
       g2.setStroke(new BasicStroke(2.0f));
       List<? extends AcousticEmitter2D> emitters = scenario.emitters();
-      for (int i = 0; i < emitters.size(); i++) {
-        AcousticEmitter2D emitter = emitters.get(i);
+      for (AcousticEmitter2D emitter : emitters) {
         int px = toPixelX(emitter.startMeters().x(), MARGIN, scaleX);
         int py = toPixelY(emitter.startMeters().y(), MARGIN, scaleY, canvasH);
         drawTriangle(g2, px, py, 8);
@@ -659,6 +662,6 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
 
   /** Return the last completed run result, or {@code null} if no run has completed yet. */
   public WorkbenchRunResult lastResult() {
-    return lastResult;
+    return lastRunResult;
   }
 }
