@@ -5,6 +5,7 @@ import java.util.List;
 import org.hammer.audio.acquisition.Microphone;
 import org.hammer.audio.acquisition.MicrophoneArray;
 import org.hammer.audio.experimental.acoustic.scenario.AcousticGroundTruth;
+import org.hammer.audio.experimental.acoustic.scenario.ClassificationGroundTruth;
 import org.hammer.audio.experimental.acoustic.scenario.Scenario;
 import org.hammer.audio.experimental.acoustic.scenario.ScenarioEnvironment;
 import org.hammer.audio.experimental.acoustic.scenario.ScenarioSource;
@@ -30,6 +31,8 @@ import org.hammer.audio.geometry.Vector2;
  *   <li>{@link #movingAcrossArray()} — one source travelling laterally across the array.
  *   <li>{@link #twoMovingSources()} — two tones with distinct velocities.
  *   <li>{@link #reflectedEnvironment()} — single source with wall reflections enabled.
+ *   <li>{@link #twoMosquitoWingbeats()} — two stationary mosquito-like sources at close wingbeat
+ *       frequencies for classification and separation tests.
  * </ul>
  */
 public final class SimulationScenarios {
@@ -128,6 +131,75 @@ public final class SimulationScenarios {
         8L);
   }
 
+  /**
+   * Two stationary mosquito-like sources at 600 Hz and 640 Hz.
+   *
+   * <p>Both sources are placed at distinct positions in an anechoic room. Their fundamental
+   * frequencies are intentionally close (40 Hz apart) to exercise the ability of narrow-band
+   * trackers and classifiers to separate two overlapping wingbeat signals.
+   *
+   * <p>For a ground-truth {@link Scenario} that additionally includes the harmonic amplitude
+   * profile, jitter, drift and species classification metadata, use {@link
+   * #twoMosquitoWingbeatsGroundTruth()}.
+   */
+  public static SimulationScenario twoMosquitoWingbeats() {
+    return new SimulationScenario(
+        "two-mosquito-wingbeats",
+        new Room2D(3.0, 2.0, 0.0, 0.0),
+        defaultArray(),
+        List.of(
+            new SoundEmitter2D(new Vector2(1.0, 1.0), Vector2.ZERO, 600.0, 0.5),
+            new SoundEmitter2D(new Vector2(2.0, 1.0), Vector2.ZERO, 640.0, 0.5)),
+        SAMPLE_RATE,
+        0.5,
+        9L);
+  }
+
+  /**
+   * Build a rich ground-truth {@link Scenario} for the {@link #twoMosquitoWingbeats()} scenario.
+   *
+   * <p>Unlike the generic {@link SimulationScenario#groundTruth()} implementation, this method
+   * additionally populates each source with:
+   *
+   * <ul>
+   *   <li>harmonic amplitude profile, jitter and drift from {@link
+   *       WingbeatSignalParameters#mosquitoLike(double)};
+   *   <li>a {@link ClassificationGroundTruth} with species {@code "synthetic-mosquito-like"}.
+   * </ul>
+   *
+   * <p>This richer ground-truth record is intended for benchmark comparison of frequency-extraction
+   * and classification algorithms.
+   */
+  public static Scenario twoMosquitoWingbeatsGroundTruth() {
+    SimulationScenario scenario = twoMosquitoWingbeats();
+    List<ScenarioSource> sources = new ArrayList<>(scenario.emitters().size());
+    for (int i = 0; i < scenario.emitters().size(); i++) {
+      SoundEmitter2D emitter = scenario.emitters().get(i);
+      ScenarioTrajectory trajectory =
+          ScenarioTrajectory.linear(
+              emitter.startMeters(),
+              emitter.velocityMetersPerSecond(),
+              scenario.durationSeconds(),
+              2);
+      AcousticGroundTruth acoustic =
+          WingbeatSignalParameters.mosquitoLike(emitter.frequencyHz()).toGroundTruth();
+      ClassificationGroundTruth labels =
+          ClassificationGroundTruth.ofSpecies("synthetic-mosquito-like");
+      sources.add(
+          ScenarioSource.builder("source-" + i, "mosquito")
+              .trajectory(trajectory)
+              .acousticProperties(acoustic)
+              .labels(labels)
+              .build());
+    }
+    ScenarioEnvironment environment =
+        new ScenarioEnvironment(
+            SimulatedMicrophoneArraySource.DEFAULT_SPEED_OF_SOUND_METERS_PER_SECOND,
+            "Simulated air");
+    return new Scenario(
+        scenario.name(), "Simulated scenario: " + scenario.name(), sources, environment);
+  }
+
   /** Single source with reflective walls (specular x-axis reflection in the simulator). */
   public static SimulationScenario reflectedEnvironment() {
     return new SimulationScenario(
@@ -150,7 +222,8 @@ public final class SimulationScenarios {
         movingTowardArray(),
         movingAcrossArray(),
         twoMovingSources(),
-        reflectedEnvironment());
+        reflectedEnvironment(),
+        twoMosquitoWingbeats());
   }
 
   /** Default 4-microphone square array spanning roughly 30 cm, centered near (1.5, 0.1). */
