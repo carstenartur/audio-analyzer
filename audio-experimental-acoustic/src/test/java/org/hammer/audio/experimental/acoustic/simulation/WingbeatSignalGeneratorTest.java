@@ -6,7 +6,6 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.lang.reflect.Field;
 import java.util.Arrays;
 import java.util.List;
 import org.hammer.audio.core.AudioBlock;
@@ -91,15 +90,13 @@ class WingbeatSignalGeneratorTest {
   }
 
   @Test
-  void largePhaseStepsAreWrappedModuloTwoPi() throws Exception {
+  void wrapsLargePhaseStepsModuloTwoPi() {
     WingbeatSignalGenerator gen =
         new WingbeatSignalGenerator(MONO, WingbeatSignalParameters.of(100_000.0), 0L);
 
     gen.nextBlock(1);
 
-    Field phaseField = WingbeatSignalGenerator.class.getDeclaredField("fundamentalPhase");
-    phaseField.setAccessible(true);
-    double phase = phaseField.getDouble(gen);
+    double phase = gen.currentFundamentalPhase();
     assertTrue(phase >= 0.0 && phase < 2.0 * Math.PI, "phase must stay wrapped to [0, 2π)");
   }
 

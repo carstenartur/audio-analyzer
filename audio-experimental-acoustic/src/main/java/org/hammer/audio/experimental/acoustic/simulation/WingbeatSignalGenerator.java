@@ -143,6 +143,10 @@ public final class WingbeatSignalGenerator implements SignalGenerator {
     return params;
   }
 
+  double currentFundamentalPhase() {
+    return fundamentalPhase;
+  }
+
   private double harmonicAmplitude(int harmonicIndex) {
     var amplitudes = params.harmonicAmplitudes();
     if (amplitudes == null || harmonicIndex >= amplitudes.size()) {
