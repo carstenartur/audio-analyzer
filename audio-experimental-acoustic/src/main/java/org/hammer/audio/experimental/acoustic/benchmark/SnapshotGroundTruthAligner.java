@@ -225,6 +225,8 @@ public final class SnapshotGroundTruthAligner {
   }
 
   private static long scaledCost(double cost, int trackIndex, int trackCount) {
+    // Preserve the alignment cost as the primary ordering and use the track index only as a
+    // deterministic tie-breaker when two candidate matches quantize to the same cost.
     return Math.round(cost * COST_SCALE) * (trackCount + 1L) + trackIndex;
   }
 
@@ -336,6 +338,14 @@ public final class SnapshotGroundTruthAligner {
   private record PathResult(
       boolean reachable, long distanceToSink, int[] previousNode, int[] previousEdge) {}
 
+  /**
+   * Residual-network edge for the min-cost max-flow truth-to-track assignment search.
+   *
+   * <p>{@code reverseIndex} points at the paired reverse edge, {@code truthIndex}/{@code
+   * trackIndex} identify only real truth-to-track match edges, and {@code capacity} stays mutable
+   * so the residual graph can be updated after each augmenting path while the other edge metadata
+   * remains fixed.
+   */
   private static final class Edge {
     private final int to;
     private final int reverseIndex;
