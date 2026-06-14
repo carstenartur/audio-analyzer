@@ -33,9 +33,8 @@ import org.hammer.audio.experimental.acoustic.scenario.AcousticGroundTruth;
  * @param modulationHz amplitude-modulation frequency in Hz; {@code 0} disables AM
  * @param modulationDepth AM depth in {@code [0, 1]}; {@code 0} disables AM
  * @param driftHzPerSecond linear frequency drift per second; {@code 0} for no drift
- * @param jitterHz maximum signed per-sample frequency deviation from the instantaneous
- *     fundamental, so the peak-to-peak jitter span is {@code 2 * jitterHz}; {@code 0} for no
- *     jitter
+ * @param jitterHz maximum signed per-sample frequency deviation from the instantaneous fundamental,
+ *     so the peak-to-peak jitter span is {@code 2 * jitterHz}; {@code 0} for no jitter
  * @param noiseAmplitude additive white-noise amplitude in {@code [0, 1]}; {@code 0} for no noise
  */
 public record WingbeatSignalParameters(
@@ -63,15 +62,14 @@ public record WingbeatSignalParameters(
       for (int i = 0; i < harmonicAmplitudes.size(); i++) {
         Double amplitude = harmonicAmplitudes.get(i);
         if (amplitude == null) {
-          throw new IllegalArgumentException("harmonicAmplitudes[%d] must not be null".formatted(i));
+          throw new IllegalArgumentException(
+              "harmonicAmplitudes[%d] must not be null".formatted(i));
         }
         if (Double.isNaN(amplitude)) {
-          throw new IllegalArgumentException(
-              "harmonicAmplitudes[%d] must not be NaN".formatted(i));
+          throw new IllegalArgumentException("harmonicAmplitudes[%d] must not be NaN".formatted(i));
         }
         if (Double.isInfinite(amplitude)) {
-          throw new IllegalArgumentException(
-              "harmonicAmplitudes[%d] must be finite".formatted(i));
+          throw new IllegalArgumentException("harmonicAmplitudes[%d] must be finite".formatted(i));
         }
       }
 
@@ -144,8 +142,8 @@ public record WingbeatSignalParameters(
    *   <li>{@link #resolvedHarmonicAmplitudes()} → {@link AcousticGroundTruth#harmonics()}
    *   <li>{@link #modulationHz()} → {@link AcousticGroundTruth#modulationFrequencyHz()}
    *   <li>{@link #modulationDepth()} → {@link AcousticGroundTruth#modulationDepth()}
-   *   <li>{@link #jitterHz()} → {@link AcousticGroundTruth#jitter()} as a maximum signed
-   *       deviation in Hz
+   *   <li>{@link #jitterHz()} → {@link AcousticGroundTruth#jitter()} as a maximum signed deviation
+   *       in Hz
    *   <li>{@link #driftHzPerSecond()} → {@link AcousticGroundTruth#drift()}
    *   <li>{@link #noiseAmplitude()} → {@link AcousticGroundTruth#noiseAmplitude()}
    * </ul>

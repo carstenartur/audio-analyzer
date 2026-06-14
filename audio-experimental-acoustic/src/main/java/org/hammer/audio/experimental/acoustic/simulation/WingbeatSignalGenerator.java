@@ -228,10 +228,7 @@ public final class WingbeatSignalGenerator implements SignalGenerator {
   }
 
   private static double instantaneousFrequencyAtTime(
-      WingbeatSignalParameters params,
-      double seconds,
-      long noiseFrameIndex,
-      long randomSeed) {
+      WingbeatSignalParameters params, double seconds, long noiseFrameIndex, long randomSeed) {
     double instFreq = params.fundamentalFrequencyHz() + params.driftHzPerSecond() * seconds;
     if (params.jitterHz() > 0.0) {
       instFreq += params.jitterHz() * hashNoise(noiseFrameIndex, randomSeed);

@@ -4,8 +4,8 @@ import org.hammer.audio.experimental.acoustic.scenario.AcousticGroundTruth;
 import org.hammer.audio.geometry.Vector2;
 
 /**
- * Deterministic emitter that reuses {@link WingbeatSignalParameters} and
- * {@link WingbeatSignalGenerator} for synthetic wingbeat simulation.
+ * Deterministic emitter that reuses {@link WingbeatSignalParameters} and {@link
+ * WingbeatSignalGenerator} for synthetic wingbeat simulation.
  */
 public record WingbeatEmitter2D(
     Vector2 startMeters,
@@ -39,7 +39,8 @@ public record WingbeatEmitter2D(
 
   @Override
   public double sampleAt(double seconds) {
-    return amplitude * WingbeatSignalGenerator.sampleAtTime(params, randomSeed, sampleRate, seconds);
+    return amplitude
+        * WingbeatSignalGenerator.sampleAtTime(params, randomSeed, sampleRate, seconds);
   }
 
   @Override

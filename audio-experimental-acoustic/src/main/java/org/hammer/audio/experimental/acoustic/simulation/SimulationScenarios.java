@@ -147,8 +147,10 @@ public final class SimulationScenarios {
         new Room2D(3.0, 2.0, 0.0, 0.0),
         defaultArray(),
         List.of(
-            new WingbeatEmitter2D(new Vector2(1.0, 1.0), Vector2.ZERO, 0.5, params.get(0), SAMPLE_RATE, 9L),
-            new WingbeatEmitter2D(new Vector2(2.0, 1.0), Vector2.ZERO, 0.5, params.get(1), SAMPLE_RATE, 10L)),
+            new WingbeatEmitter2D(
+                new Vector2(1.0, 1.0), Vector2.ZERO, 0.5, params.get(0), SAMPLE_RATE, 9L),
+            new WingbeatEmitter2D(
+                new Vector2(2.0, 1.0), Vector2.ZERO, 0.5, params.get(1), SAMPLE_RATE, 10L)),
         SAMPLE_RATE,
         0.5,
         9L);
