@@ -45,7 +45,6 @@ public record WingbeatSignalParameters(
     double jitterHz,
     double noiseAmplitude) {
 
-  /** Validate all fields and defensively copy {@link #harmonicAmplitudes()} when provided. */
   public WingbeatSignalParameters {
     if (!Double.isFinite(fundamentalFrequencyHz) || fundamentalFrequencyHz <= 0.0) {
       throw new IllegalArgumentException("fundamentalFrequencyHz must be finite and > 0");
@@ -65,6 +64,7 @@ public record WingbeatSignalParameters(
               "harmonicAmplitudes[%d] must be non-null and finite".formatted(i));
         }
       }
+
       harmonicAmplitudes = List.copyOf(harmonicAmplitudes);
     }
     if (!Double.isFinite(modulationHz) || modulationHz < 0.0) {
@@ -82,6 +82,11 @@ public record WingbeatSignalParameters(
     if (!Double.isFinite(noiseAmplitude) || noiseAmplitude < 0.0 || noiseAmplitude > 1.0) {
       throw new IllegalArgumentException("noiseAmplitude must be in [0, 1]");
     }
+  }
+
+  @Override
+  public List<Double> harmonicAmplitudes() {
+    return harmonicAmplitudes == null ? null : List.copyOf(harmonicAmplitudes);
   }
 
   /**
@@ -124,12 +129,19 @@ public record WingbeatSignalParameters(
    * </ul>
    */
   public AcousticGroundTruth toGroundTruth() {
+    Double modulation = null;
+    if (modulationHz > 0.0) {
+      modulation = modulationHz;
+    }
+    Double jitter = null;
+    if (jitterHz > 0.0) {
+      jitter = jitterHz;
+    }
+    Double drift = null;
+    if (driftHzPerSecond != 0.0) {
+      drift = driftHzPerSecond;
+    }
     return new AcousticGroundTruth(
-        fundamentalFrequencyHz,
-        harmonicAmplitudes,
-        modulationHz > 0.0 ? modulationHz : null,
-        jitterHz > 0.0 ? jitterHz : null,
-        driftHzPerSecond != 0.0 ? driftHzPerSecond : null,
-        null);
+        fundamentalFrequencyHz, harmonicAmplitudes(), modulation, jitter, drift, null);
   }
 }
