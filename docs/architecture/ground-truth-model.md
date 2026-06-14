@@ -120,6 +120,35 @@ Scenario truth = sim.groundTruth();
 // and AcousticGroundTruth holding the emitter's fundamental frequency
 ```
 
+## Benchmark validation workflow
+
+The benchmark layer turns the shared `Scenario` model into reproducible quality reports:
+
+```java
+TrackingScenarioBenchmarkRunner runner = new TrackingScenarioBenchmarkRunner(2048);
+BenchmarkReport report = runner.run(SimulationScenarios.movingSource());
+
+String json = report.toJson();
+String csvHeader = BenchmarkReport.csvHeader();
+String csvRow = report.toCsvRow();
+String markdown = report.toMarkdownSummary();
+```
+
+`TrackingBenchmarkComparator` uses `SnapshotGroundTruthAligner` to align each
+`TrackingSnapshot` to `ScenarioTrajectory` / `AcousticGroundTruth` / `ClassificationGroundTruth`
+metadata and then computes:
+
+- localization error (position + angle),
+- frequency error,
+- Doppler/radial-velocity error,
+- track continuity and ID stability,
+- source-count accuracy,
+- false-positive / false-negative rates,
+- processing-time summaries.
+
+New localization or classification algorithms should demonstrate improvements by comparing their
+`BenchmarkReport` outputs against the same scenarios rather than relying on ad-hoc inspection.
+
 ## Design constraints
 
 - **No UI coupling** — the model is in `audio-experimental-acoustic` and imports only

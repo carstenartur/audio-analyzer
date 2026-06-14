@@ -3,56 +3,43 @@ package org.hammer.audio.experimental.acoustic.benchmark;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Objects;
 
 /**
- * Summary metric for benchmark comparisons of localization accuracy.
+ * Summary metric for benchmark comparisons of Doppler/radial-velocity estimates.
  *
- * @param meanDistanceErrorMeters mean distance error in meters
- * @param medianDistanceErrorMeters median distance error in meters
- * @param meanAngularErrorDegrees mean angular error in degrees
- * @param medianAngularErrorDegrees median angular error in degrees
- * @param sampleCount total localization sample count
- * @param evaluatedCount number of evaluated localization samples
- * @param skippedCount number of skipped localization samples
- * @param unavailableTruthCount number of samples without usable localization truth
+ * @param meanAbsoluteErrorMetersPerSecond mean absolute Doppler error in meters per second
+ * @param medianAbsoluteErrorMetersPerSecond median absolute Doppler error in meters per second
+ * @param sampleCount total Doppler sample count
+ * @param evaluatedCount number of evaluated Doppler samples
+ * @param skippedCount number of skipped Doppler samples
+ * @param unavailableTruthCount number of samples without usable Doppler truth
  */
-public record LocalizationErrorMetric(
-    Double meanDistanceErrorMeters,
-    Double medianDistanceErrorMeters,
-    Double meanAngularErrorDegrees,
-    Double medianAngularErrorDegrees,
+public record DopplerErrorMetric(
+    Double meanAbsoluteErrorMetersPerSecond,
+    Double medianAbsoluteErrorMetersPerSecond,
     int sampleCount,
     int evaluatedCount,
     int skippedCount,
     int unavailableTruthCount) {
 
-  public LocalizationErrorMetric {
+  public DopplerErrorMetric {
     validateCounts(sampleCount, evaluatedCount, skippedCount, unavailableTruthCount);
-    validateMetric(meanDistanceErrorMeters, evaluatedCount, "meanDistanceErrorMeters");
-    validateMetric(medianDistanceErrorMeters, evaluatedCount, "medianDistanceErrorMeters");
-    validateMetric(meanAngularErrorDegrees, evaluatedCount, "meanAngularErrorDegrees");
-    validateMetric(medianAngularErrorDegrees, evaluatedCount, "medianAngularErrorDegrees");
+    validateMetric(
+        meanAbsoluteErrorMetersPerSecond, evaluatedCount, "meanAbsoluteErrorMetersPerSecond");
+    validateMetric(
+        medianAbsoluteErrorMetersPerSecond, evaluatedCount, "medianAbsoluteErrorMetersPerSecond");
   }
 
-  /** Build a summary metric from per-sample distance and angular errors. */
-  public static LocalizationErrorMetric ofSamples(
-      List<Double> distanceErrorsMeters,
-      List<Double> angularErrorsDegrees,
-      int skippedCount,
-      int unavailableTruthCount) {
-    Objects.requireNonNull(distanceErrorsMeters, "distanceErrorsMeters");
-    Objects.requireNonNull(angularErrorsDegrees, "angularErrorsDegrees");
-    if (distanceErrorsMeters.size() != angularErrorsDegrees.size()) {
-      throw new IllegalArgumentException(
-          "distanceErrorsMeters and angularErrorsDegrees must have the same size");
+  /** Build a summary metric from per-sample absolute errors. */
+  public static DopplerErrorMetric ofSamples(
+      List<Double> absoluteErrorsMetersPerSecond, int skippedCount, int unavailableTruthCount) {
+    if (absoluteErrorsMetersPerSecond == null) {
+      throw new IllegalArgumentException("absoluteErrorsMetersPerSecond must not be null");
     }
-    int evaluatedCount = distanceErrorsMeters.size();
-    return new LocalizationErrorMetric(
-        evaluatedCount == 0 ? null : mean(distanceErrorsMeters),
-        evaluatedCount == 0 ? null : median(distanceErrorsMeters),
-        evaluatedCount == 0 ? null : mean(angularErrorsDegrees),
-        evaluatedCount == 0 ? null : median(angularErrorsDegrees),
+    int evaluatedCount = absoluteErrorsMetersPerSecond.size();
+    return new DopplerErrorMetric(
+        evaluatedCount == 0 ? null : mean(absoluteErrorsMetersPerSecond),
+        evaluatedCount == 0 ? null : median(absoluteErrorsMetersPerSecond),
         evaluatedCount + skippedCount + unavailableTruthCount,
         evaluatedCount,
         skippedCount,
