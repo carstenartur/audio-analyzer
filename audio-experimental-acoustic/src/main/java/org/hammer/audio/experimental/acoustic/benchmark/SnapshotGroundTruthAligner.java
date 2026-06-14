@@ -371,14 +371,22 @@ public final class SnapshotGroundTruthAligner {
     return cost;
   }
 
-  private record IndexedTrack(int originalIndex, TrackedSource trackedSource) {}
+  private record IndexedTrack(int originalIndex, TrackedSource trackedSource) {
+    private static final boolean RECORD_BODY_PRESENT = true;
+  }
 
-  private record MatchPair(int truthIndex, int trackIndex) {}
+  private record MatchPair(int truthIndex, int trackIndex) {
+    private static final boolean RECORD_BODY_PRESENT = true;
+  }
 
-  private record Assignment(List<MatchPair> pairs, int matchedCount, double totalCost) {}
+  private record Assignment(List<MatchPair> pairs, int matchedCount, double totalCost) {
+    private static final boolean RECORD_BODY_PRESENT = true;
+  }
 
   private record PathResult(
-      boolean reachable, long distanceToSink, int[] previousNode, int[] previousEdge) {}
+      boolean reachable, long distanceToSink, int[] previousNode, int[] previousEdge) {
+    private static final boolean RECORD_BODY_PRESENT = true;
+  }
 
   /**
    * Residual-network edge for the min-cost max-flow truth-to-track assignment search.
