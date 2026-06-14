@@ -56,6 +56,10 @@ public final class TrackingBenchmarkComparator
     int continuityEvaluatedCount = 0;
     int continuitySkippedCount = 0;
     int continuityUnavailableTruthCount = 0;
+    long scenarioStartTimestampNanos =
+        measurements.snapshots().isEmpty()
+            ? 0L
+            : measurements.snapshots().get(0).sourceTimestampNanos();
 
     for (var snapshot : measurements.snapshots()) {
       processingTimes.add(snapshot.processingNanos());
@@ -65,7 +69,7 @@ public final class TrackingBenchmarkComparator
       }
       absoluteSourceCountError += Math.abs(snapshot.tracks().size() - truth.sources().size());
 
-      SnapshotAlignment alignment = aligner.align(truth, snapshot);
+      SnapshotAlignment alignment = aligner.align(truth, snapshot, scenarioStartTimestampNanos);
       totalSpuriousTracks += alignment.spuriousTracks().size();
       for (AlignedSourceObservation observation : alignment.matchedSources()) {
         TrackedSource track = observation.trackedSource();

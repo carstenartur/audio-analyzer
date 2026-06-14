@@ -163,6 +163,39 @@ class TrackingBenchmarkComparatorTest {
   }
 
   @Test
+  void compareNormalizesSnapshotTimestampsFromFirstObservation() {
+    Scenario scenario =
+        scenario(
+            "absolute-timestamps",
+            source("alpha", new Vector2(2.0, 0.0), Vector2.ZERO, 400.0, null));
+
+    BenchmarkReport report =
+        new TrackingBenchmarkComparator()
+            .compare(
+                scenario,
+                new BenchmarkMeasurements(
+                    ARRAY,
+                    List.of(
+                        new TrackingSnapshot(
+                            0,
+                            10_000_000_000L,
+                            List.of(),
+                            List.of(track(1, 400.0, new Vector2(2.0, 0.0), 10_000_000_000L)),
+                            10L),
+                        new TrackingSnapshot(
+                            1,
+                            11_000_000_000L,
+                            List.of(),
+                            List.of(track(1, 400.0, new Vector2(2.0, 0.0), 11_000_000_000L)),
+                            10L)),
+                    Map.of()));
+
+    assertEquals(2, report.localization().evaluatedCount());
+    assertEquals(0.0, report.localization().meanDistanceErrorMeters(), 1e-9);
+    assertEquals(1.0, report.trackContinuity(), 1e-9);
+  }
+
+  @Test
   void compareDistinguishesSkippedAndUnavailableTruth() {
     Scenario scenario =
         scenario(
