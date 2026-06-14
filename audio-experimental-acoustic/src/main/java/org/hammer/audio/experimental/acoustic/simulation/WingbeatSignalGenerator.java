@@ -40,8 +40,8 @@ public final class WingbeatSignalGenerator implements SignalGenerator {
   private static final double TWO_PI = 2.0 * Math.PI;
   private static final long ADDITIVE_NOISE_HASH_LANE = 0xA5A5A5A5L;
 
-  private final AudioFormatDescriptor format;
-  private final WingbeatSignalParameters params;
+  private final AudioFormatDescriptor audioFormat;
+  private final WingbeatSignalParameters signalParameters;
   private final List<Double> harmonicAmplitudes;
   private final long randomSeed;
 
@@ -64,8 +64,8 @@ public final class WingbeatSignalGenerator implements SignalGenerator {
     if (params == null) {
       throw new IllegalArgumentException("params must not be null");
     }
-    this.format = format;
-    this.params = params;
+    this.audioFormat = format;
+    this.signalParameters = params;
     this.harmonicAmplitudes = params.resolvedHarmonicAmplitudes();
     this.randomSeed = randomSeed;
     this.fundamentalPhase = 0.0;
@@ -74,7 +74,7 @@ public final class WingbeatSignalGenerator implements SignalGenerator {
 
   @Override
   public AudioFormatDescriptor format() {
-    return format;
+    return audioFormat;
   }
 
   @Override
@@ -82,8 +82,8 @@ public final class WingbeatSignalGenerator implements SignalGenerator {
     if (frames < 1) {
       throw new IllegalArgumentException("frames must be >= 1");
     }
-    int channels = format.channels();
-    double sampleRate = format.sampleRate();
+    int channels = audioFormat.channels();
+    double sampleRate = audioFormat.sampleRate();
     float[][] samples = new float[channels][frames];
 
     for (int i = 0; i < frames; i++) {
@@ -91,26 +91,27 @@ public final class WingbeatSignalGenerator implements SignalGenerator {
       double t = absoluteFrame / sampleRate;
 
       // Instantaneous frequency with drift and jitter.
-      double instFreq = instantaneousFrequency(params, absoluteFrame, sampleRate, randomSeed);
+      double instFreq =
+          instantaneousFrequency(signalParameters, absoluteFrame, sampleRate, randomSeed);
 
       // Advance the fundamental phase accumulator and keep it in [0, 2π).
       fundamentalPhase = wrapPhaseIfNeeded(fundamentalPhase + phaseIncrement(instFreq, sampleRate));
 
       // Amplitude modulation envelope.
-      double am = modulationEnvelope(params, t);
+      double am = modulationEnvelope(signalParameters, t);
 
       // Sum harmonics.
       double signal = 0.0;
-      int harmonicCount = params.harmonicCount();
+      int harmonicCount = signalParameters.harmonicCount();
       for (int k = 0; k < harmonicCount; k++) {
         signal += harmonicAmplitude(k) * Math.sin((k + 1) * fundamentalPhase);
       }
       signal *= am;
 
       // Additive noise (use a different hash lane from jitter).
-      if (params.noiseAmplitude() > 0.0) {
+      if (signalParameters.noiseAmplitude() > 0.0) {
         signal +=
-            params.noiseAmplitude()
+            signalParameters.noiseAmplitude()
                 * hashNoise(absoluteFrame ^ ADDITIVE_NOISE_HASH_LANE, randomSeed);
       }
 
@@ -120,7 +121,7 @@ public final class WingbeatSignalGenerator implements SignalGenerator {
       }
     }
 
-    AudioBlock block = AudioBlock.wrap(format, samples, frameIndex, System.nanoTime());
+    AudioBlock block = AudioBlock.wrap(audioFormat, samples, frameIndex, System.nanoTime());
     frameIndex += frames;
     return block;
   }
@@ -137,7 +138,7 @@ public final class WingbeatSignalGenerator implements SignalGenerator {
    * @return signal-model parameters
    */
   public WingbeatSignalParameters params() {
-    return params;
+    return signalParameters;
   }
 
   double currentFundamentalPhase() {
@@ -172,13 +173,13 @@ public final class WingbeatSignalGenerator implements SignalGenerator {
     if (params == null) {
       throw new IllegalArgumentException("params must not be null");
     }
-    if (!(sampleRate > 0.0) || !Double.isFinite(sampleRate)) {
+    if (sampleRate <= 0.0 || !Double.isFinite(sampleRate)) {
       throw new IllegalArgumentException("sampleRate must be finite and > 0");
     }
     if (!Double.isFinite(seconds)) {
       throw new IllegalArgumentException("seconds must be finite");
     }
-    if (!(frequencyScale > 0.0) || !Double.isFinite(frequencyScale)) {
+    if (frequencyScale <= 0.0 || !Double.isFinite(frequencyScale)) {
       throw new IllegalArgumentException("frequencyScale must be finite and > 0");
     }
 
@@ -297,9 +298,10 @@ public final class WingbeatSignalGenerator implements SignalGenerator {
     private final double sampleRate;
 
     private long maxComputedPositiveFrame = -1L;
-    private double phaseAtMaxComputedPositiveFrame = 0.0;
-    private long minComputedNegativeFrame = 0L;
-    private double phaseAtMinComputedNegativeFrame = 0.0;
+    private double phaseAtMaxComputedPositiveFrame;
+    private long minComputedNegativeFrame;
+    private double phaseAtMinComputedNegativeFrame;
+    private final Object phaseLock = new Object();
 
     private PhaseAccumulatorCache(
         WingbeatSignalParameters params, long randomSeed, double sampleRate) {
@@ -308,18 +310,23 @@ public final class WingbeatSignalGenerator implements SignalGenerator {
       this.sampleRate = sampleRate;
     }
 
-    private synchronized double phaseAt(long frameIndex) {
-      if (frameIndex >= 0L) {
-        return extendPositive(frameIndex);
+    private double phaseAt(long frameIndex) {
+      synchronized (phaseLock) {
+        if (frameIndex >= 0L) {
+          return extendPositive(frameIndex);
+        }
+        return extendNegative(frameIndex);
       }
-      return extendNegative(frameIndex);
     }
 
     private double extendPositive(long targetFrame) {
       if (targetFrame <= maxComputedPositiveFrame) {
         return uncachedPhaseAtFrame(params, randomSeed, sampleRate, targetFrame, 1.0);
       }
-      double phase = phaseAtMaxComputedPositiveFrame;
+      double phase = 0.0;
+      if (maxComputedPositiveFrame >= 0L) {
+        phase = phaseAtMaxComputedPositiveFrame;
+      }
       for (long frame = maxComputedPositiveFrame + 1L; frame <= targetFrame; frame++) {
         phase =
             wrapPhaseIfNeeded(

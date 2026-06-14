@@ -9,11 +9,11 @@ import org.hammer.audio.geometry.Vector2;
  */
 public final class WingbeatEmitter2D implements AcousticEmitter2D {
 
-  private final Vector2 startMeters;
-  private final Vector2 velocityMetersPerSecond;
-  private final double amplitude;
-  private final WingbeatSignalParameters params;
-  private final double sampleRate;
+  private final Vector2 initialPositionMeters;
+  private final Vector2 velocityVectorMetersPerSecond;
+  private final double signalAmplitude;
+  private final WingbeatSignalParameters signalParameters;
+  private final double sampleRateHz;
   private final long randomSeed;
   private final WingbeatSignalGenerator.PhaseAccumulatorCache unitScalePhaseCache;
 
@@ -34,14 +34,14 @@ public final class WingbeatEmitter2D implements AcousticEmitter2D {
     if (params == null) {
       throw new IllegalArgumentException("params must not be null");
     }
-    if (!(sampleRate > 0.0) || !Double.isFinite(sampleRate)) {
+    if (sampleRate <= 0.0 || !Double.isFinite(sampleRate)) {
       throw new IllegalArgumentException("sampleRate must be finite and > 0");
     }
-    this.startMeters = startMeters;
-    this.velocityMetersPerSecond = velocityMetersPerSecond;
-    this.amplitude = amplitude;
-    this.params = params;
-    this.sampleRate = sampleRate;
+    this.initialPositionMeters = startMeters;
+    this.velocityVectorMetersPerSecond = velocityMetersPerSecond;
+    this.signalAmplitude = amplitude;
+    this.signalParameters = params;
+    this.sampleRateHz = sampleRate;
     this.randomSeed = randomSeed;
     this.unitScalePhaseCache =
         WingbeatSignalGenerator.newPhaseAccumulatorCache(params, randomSeed, sampleRate);
@@ -49,47 +49,47 @@ public final class WingbeatEmitter2D implements AcousticEmitter2D {
 
   @Override
   public Vector2 startMeters() {
-    return startMeters;
+    return initialPositionMeters;
   }
 
   @Override
   public Vector2 velocityMetersPerSecond() {
-    return velocityMetersPerSecond;
+    return velocityVectorMetersPerSecond;
   }
 
   @Override
   public double frequencyHz() {
-    return params.fundamentalFrequencyHz();
+    return signalParameters.fundamentalFrequencyHz();
   }
 
   @Override
   public double amplitude() {
-    return amplitude;
+    return signalAmplitude;
   }
 
   @Override
   public double sampleAt(double seconds) {
-    return amplitude
+    return signalAmplitude
         * WingbeatSignalGenerator.sampleAtTime(
-            params, randomSeed, sampleRate, seconds, 1.0, unitScalePhaseCache);
+            signalParameters, randomSeed, sampleRateHz, seconds, 1.0, unitScalePhaseCache);
   }
 
   @Override
   public double sampleAt(double seconds, double observedFrequencyHz) {
-    if (!(observedFrequencyHz > 0.0) || !Double.isFinite(observedFrequencyHz)) {
+    if (observedFrequencyHz <= 0.0 || !Double.isFinite(observedFrequencyHz)) {
       throw new IllegalArgumentException("observedFrequencyHz must be finite and > 0");
     }
-    double frequencyScale = observedFrequencyHz / params.fundamentalFrequencyHz();
+    double frequencyScale = observedFrequencyHz / signalParameters.fundamentalFrequencyHz();
     if (Double.compare(frequencyScale, 1.0) == 0) {
       return sampleAt(seconds);
     }
-    return amplitude
+    return signalAmplitude
         * WingbeatSignalGenerator.sampleAtTime(
-            params, randomSeed, sampleRate, seconds, frequencyScale);
+            signalParameters, randomSeed, sampleRateHz, seconds, frequencyScale);
   }
 
   @Override
   public AcousticGroundTruth acousticGroundTruth() {
-    return params.toGroundTruth();
+    return signalParameters.toGroundTruth();
   }
 }

@@ -20,7 +20,7 @@ public final class SimulatedMicrophoneArraySource implements MultiChannelAudioSo
   private final Room2D room;
   private final MicrophoneArray array;
   private final List<AcousticEmitter2D> emitters;
-  private final AudioFormatDescriptor format;
+  private final AudioFormatDescriptor audioFormat;
   private final SampleClock clock;
   private final Random random;
   private final long totalFrames;
@@ -43,13 +43,13 @@ public final class SimulatedMicrophoneArraySource implements MultiChannelAudioSo
     if (emitters == null || emitters.isEmpty()) {
       throw new IllegalArgumentException("emitters must not be empty");
     }
-    if (!(durationSeconds > 0.0) || !Double.isFinite(durationSeconds)) {
+    if (durationSeconds <= 0.0 || !Double.isFinite(durationSeconds)) {
       throw new IllegalArgumentException("durationSeconds must be finite and > 0");
     }
     this.room = room;
     this.array = array;
     this.emitters = List.copyOf(emitters);
-    this.format = new AudioFormatDescriptor(sampleRate, array.channels(), 32);
+    this.audioFormat = new AudioFormatDescriptor(sampleRate, array.channels(), 32);
     this.clock = new SampleClock(sampleRate, 0L);
     this.random = new Random(randomSeed);
     this.totalFrames = Math.round(durationSeconds * sampleRate);
@@ -57,7 +57,7 @@ public final class SimulatedMicrophoneArraySource implements MultiChannelAudioSo
 
   @Override
   public AudioFormatDescriptor format() {
-    return format;
+    return audioFormat;
   }
 
   @Override
@@ -77,13 +77,14 @@ public final class SimulatedMicrophoneArraySource implements MultiChannelAudioSo
     float[][] samples = new float[array.channels()][blockFrames];
     for (int frame = 0; frame < blockFrames; frame++) {
       long absoluteFrame = nextFrameIndex + frame;
-      double receiverTime = absoluteFrame / format.sampleRate();
+      double receiverTime = absoluteFrame / audioFormat.sampleRate();
       for (Microphone mic : array.microphones()) {
         samples[mic.channel()][frame] = (float) sampleAt(mic.positionMeters(), receiverTime);
       }
     }
     AudioBlock block =
-        AudioBlock.wrap(format, samples, nextFrameIndex, clock.timestampForFrame(nextFrameIndex));
+        AudioBlock.wrap(
+            audioFormat, samples, nextFrameIndex, clock.timestampForFrame(nextFrameIndex));
     nextFrameIndex += blockFrames;
     return Optional.of(block);
   }

@@ -7,12 +7,11 @@ public record SoundEmitter2D(
     Vector2 startMeters, Vector2 velocityMetersPerSecond, double frequencyHz, double amplitude)
     implements AcousticEmitter2D {
 
-  /** Create a synthetic emitter. */
   public SoundEmitter2D {
     if (startMeters == null || velocityMetersPerSecond == null) {
       throw new IllegalArgumentException("positions must not be null");
     }
-    if (!(frequencyHz > 0.0) || !Double.isFinite(frequencyHz)) {
+    if (frequencyHz <= 0.0 || !Double.isFinite(frequencyHz)) {
       throw new IllegalArgumentException("frequencyHz must be finite and > 0");
     }
     if (amplitude < 0.0 || amplitude > 1.0 || !Double.isFinite(amplitude)) {
@@ -32,7 +31,7 @@ public record SoundEmitter2D(
 
   @Override
   public double sampleAt(double seconds, double observedFrequencyHz) {
-    if (!(observedFrequencyHz > 0.0) || !Double.isFinite(observedFrequencyHz)) {
+    if (observedFrequencyHz <= 0.0 || !Double.isFinite(observedFrequencyHz)) {
       throw new IllegalArgumentException("observedFrequencyHz must be finite and > 0");
     }
     return amplitude * Math.sin(2.0 * Math.PI * observedFrequencyHz * seconds);
