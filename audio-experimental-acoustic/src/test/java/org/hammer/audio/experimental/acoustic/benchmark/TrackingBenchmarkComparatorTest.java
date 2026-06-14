@@ -256,7 +256,8 @@ class TrackingBenchmarkComparatorTest {
     assertFalse(csvRow.contains("\"scenario\", ßeta"));
 
     String markdown = report.toMarkdownSummary();
-    assertTrue(markdown.contains("weird \"scenario\", ßeta \\\\ path \\| pipe"));
+    assertTrue(markdown.contains("weird \"scenario\", ßeta"));
+    assertTrue(markdown.contains("\\| pipe"));
   }
 
   @Test

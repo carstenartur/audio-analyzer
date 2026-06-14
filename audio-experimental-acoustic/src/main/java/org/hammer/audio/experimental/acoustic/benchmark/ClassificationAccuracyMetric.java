@@ -18,9 +18,7 @@ public record ClassificationAccuracyMetric(
       if (accuracy != null) {
         throw new IllegalArgumentException("accuracy must be null when evaluatedCount is 0");
       }
-      return;
-    }
-    if (accuracy == null || !Double.isFinite(accuracy) || accuracy < 0.0 || accuracy > 1.0) {
+    } else if (accuracy == null || !Double.isFinite(accuracy) || accuracy < 0.0 || accuracy > 1.0) {
       throw new IllegalArgumentException("accuracy must be finite and in [0,1]");
     }
   }
