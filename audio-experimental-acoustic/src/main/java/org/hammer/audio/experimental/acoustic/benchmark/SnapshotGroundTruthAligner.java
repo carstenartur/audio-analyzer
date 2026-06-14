@@ -12,11 +12,12 @@ import org.hammer.audio.experimental.acoustic.tracking.TrackedSource;
 import org.hammer.audio.experimental.acoustic.tracking.TrackingSnapshot;
 import org.hammer.audio.geometry.Vector2;
 
-/** Align tracking snapshots to scenario ground truth using position and frequency hints. */
+/** Align tracking snapshots to scenario ground truth with deterministic nearest-neighbour matching. */
 public final class SnapshotGroundTruthAligner {
 
   private static final double MAX_POSITION_ALIGNMENT_METERS = 1.5;
   private static final double MAX_FREQUENCY_ALIGNMENT_HZ = 120.0;
+  private static final double FREQUENCY_TIE_BREAK_COST_METERS_PER_HZ = 1.0e-6;
   private static final Comparator<GroundTruthObservation> TRUTH_ORDER =
       Comparator.comparing((GroundTruthObservation observation) -> observation.source().sourceId())
           .thenComparing(
@@ -338,34 +339,25 @@ public final class SnapshotGroundTruthAligner {
     if (!truth.hasAlignmentTruth()) {
       return Double.POSITIVE_INFINITY;
     }
-    double positionError = Double.NaN;
     if (truth.expectedPositionMeters() != null) {
-      positionError = truth.expectedPositionMeters().distanceTo(track.positionMeters());
-      if (positionError > MAX_POSITION_ALIGNMENT_METERS && truth.expectedFrequencyHz() == null) {
+      double positionError = truth.expectedPositionMeters().distanceTo(track.positionMeters());
+      if (positionError > MAX_POSITION_ALIGNMENT_METERS) {
         return Double.POSITIVE_INFINITY;
       }
-    }
-    double frequencyError = Double.NaN;
-    if (truth.expectedFrequencyHz() != null) {
-      frequencyError = Math.abs(track.frequencyHz() - truth.expectedFrequencyHz());
-      if (frequencyError > MAX_FREQUENCY_ALIGNMENT_HZ && truth.expectedPositionMeters() == null) {
-        return Double.POSITIVE_INFINITY;
+      if (truth.expectedFrequencyHz() == null) {
+        return positionError;
       }
+      double frequencyError = Math.abs(track.frequencyHz() - truth.expectedFrequencyHz());
+      return positionError + frequencyError * FREQUENCY_TIE_BREAK_COST_METERS_PER_HZ;
     }
-    if (truth.expectedPositionMeters() != null
-        && truth.expectedFrequencyHz() != null
-        && positionError > MAX_POSITION_ALIGNMENT_METERS
-        && frequencyError > MAX_FREQUENCY_ALIGNMENT_HZ) {
+    if (truth.expectedFrequencyHz() == null) {
       return Double.POSITIVE_INFINITY;
     }
-    double cost = 0.0;
-    if (Double.isFinite(positionError)) {
-      cost += positionError;
+    double frequencyError = Math.abs(track.frequencyHz() - truth.expectedFrequencyHz());
+    if (frequencyError > MAX_FREQUENCY_ALIGNMENT_HZ) {
+      return Double.POSITIVE_INFINITY;
     }
-    if (Double.isFinite(frequencyError)) {
-      cost += frequencyError / 100.0;
-    }
-    return cost;
+    return frequencyError;
   }
 
   private static final class IndexedTrack {

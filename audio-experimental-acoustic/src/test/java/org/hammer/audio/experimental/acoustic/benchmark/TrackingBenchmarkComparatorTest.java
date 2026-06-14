@@ -163,6 +163,77 @@ class TrackingBenchmarkComparatorTest {
   }
 
   @Test
+  void alignmentUsesNearestNeighbourBeforeFrequencyHints() {
+    Scenario scenario =
+        scenario(
+            "alignment-nearest-neighbour",
+            source("alpha", new Vector2(1.00, 0.0), Vector2.ZERO, 400.0, null),
+            source("beta", new Vector2(1.02, 0.0), Vector2.ZERO, 700.0, null));
+    TrackingSnapshot snapshot =
+        new TrackingSnapshot(
+            0,
+            0L,
+            List.of(),
+            List.of(
+                track(20, 400.0, new Vector2(1.021, 0.0), 0L),
+                track(10, 700.0, new Vector2(1.001, 0.0), 0L)),
+            10L);
+
+    SnapshotAlignment alignment = new SnapshotGroundTruthAligner().align(scenario, snapshot);
+
+    assertEquals(Map.of("alpha", 10, "beta", 20), sourceToTrackIds(alignment));
+  }
+
+  @Test
+  void alignmentFallsBackDeterministicallyAtSourceCrossings() {
+    Scenario sourceOrderA =
+        scenario(
+            "crossing-a",
+            source(
+                "alpha",
+                new ScenarioTrajectory(
+                    List.of(0.0, 1.0, 2.0),
+                    List.of(
+                        new Vector2(0.0, 0.0), new Vector2(1.0, 0.0), new Vector2(2.0, 0.0)),
+                    List.of(Vector2.ZERO, Vector2.ZERO, Vector2.ZERO),
+                    null),
+                AcousticGroundTruth.ofFrequency(500.0),
+                null),
+            source(
+                "beta",
+                new ScenarioTrajectory(
+                    List.of(0.0, 1.0, 2.0),
+                    List.of(
+                        new Vector2(2.0, 0.0), new Vector2(1.0, 0.0), new Vector2(0.0, 0.0)),
+                    List.of(Vector2.ZERO, Vector2.ZERO, Vector2.ZERO),
+                    null),
+                AcousticGroundTruth.ofFrequency(500.0),
+                null));
+    Scenario sourceOrderB =
+        scenario(
+            "crossing-b",
+            sourceOrderA.sources().get(1),
+            sourceOrderA.sources().get(0));
+    TrackingSnapshot snapshot =
+        new TrackingSnapshot(
+            1,
+            1_000_000_000L,
+            List.of(),
+            List.of(
+                track(20, 500.0, new Vector2(1.0, 0.0), 1L),
+                track(10, 500.0, new Vector2(1.0, 0.0), 1L)),
+            10L);
+
+    SnapshotGroundTruthAligner aligner = new SnapshotGroundTruthAligner();
+
+    Map<String, Integer> mappingA = sourceToTrackIds(aligner.align(sourceOrderA, snapshot));
+    Map<String, Integer> mappingB = sourceToTrackIds(aligner.align(sourceOrderB, snapshot));
+
+    assertEquals(Map.of("alpha", 10, "beta", 20), mappingA);
+    assertEquals(mappingA, mappingB);
+  }
+
+  @Test
   void compareNormalizesSnapshotTimestampsFromFirstObservation() {
     Scenario scenario =
         scenario(
