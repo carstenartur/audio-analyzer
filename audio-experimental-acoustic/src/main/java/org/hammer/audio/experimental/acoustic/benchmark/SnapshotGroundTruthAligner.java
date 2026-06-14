@@ -179,7 +179,9 @@ public final class SnapshotGroundTruthAligner {
       matchedCount++;
     }
     return new Assignment(
-        collectMatchedPairs(graph, matchedCount), matchedCount, totalScaledCost / (double) COST_SCALE);
+        collectMatchedPairs(graph, matchedCount),
+        matchedCount,
+        totalScaledCost / (double) COST_SCALE);
   }
 
   private static List<List<Edge>> emptyGraph(int nodeCount) {
@@ -203,8 +205,8 @@ public final class SnapshotGroundTruthAligner {
       int truthCount,
       int trackCount) {
     for (int truthIndex = 0; truthIndex < truthSamples.size(); truthIndex++) {
-      addCandidateEdgesForTruth(graph, truthSamples.get(truthIndex), tracks, truthCount, trackCount,
-          truthIndex);
+      addCandidateEdgesForTruth(
+          graph, truthSamples.get(truthIndex), tracks, truthCount, trackCount, truthIndex);
     }
   }
 
@@ -366,18 +368,14 @@ public final class SnapshotGroundTruthAligner {
     return cost;
   }
 
-  private record IndexedTrack(int originalIndex, TrackedSource trackedSource) {
-  }
+  private record IndexedTrack(int originalIndex, TrackedSource trackedSource) {}
 
-  private record MatchPair(int truthIndex, int trackIndex) {
-  }
+  private record MatchPair(int truthIndex, int trackIndex) {}
 
-  private record Assignment(List<MatchPair> pairs, int matchedCount, double totalCost) {
-  }
+  private record Assignment(List<MatchPair> pairs, int matchedCount, double totalCost) {}
 
   private record PathResult(
-      boolean reachable, long distanceToSink, int[] previousNode, int[] previousEdge) {
-  }
+      boolean reachable, long distanceToSink, int[] previousNode, int[] previousEdge) {}
 
   /**
    * Residual-network edge for the min-cost max-flow truth-to-track assignment search.
