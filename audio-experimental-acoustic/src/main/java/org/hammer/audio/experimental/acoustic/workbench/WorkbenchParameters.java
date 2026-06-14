@@ -138,7 +138,10 @@ public final class WorkbenchParameters {
     /** Set block size (and default FFT size). */
     public Builder blockSize(int v) {
       this.blockSize = v;
-      this.fftSize = v;
+      // Only adopt v as the default FFT size when it is itself a valid power of two.
+      if (v > 0 && (v & (v - 1)) == 0) {
+        this.fftSize = v;
+      }
       return this;
     }
 
