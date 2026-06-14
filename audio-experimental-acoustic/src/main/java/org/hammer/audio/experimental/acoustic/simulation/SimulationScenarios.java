@@ -31,8 +31,9 @@ import org.hammer.audio.geometry.Vector2;
  *   <li>{@link #movingAcrossArray()} — one source travelling laterally across the array.
  *   <li>{@link #twoMovingSources()} — two tones with distinct velocities.
  *   <li>{@link #reflectedEnvironment()} — single source with wall reflections enabled.
- *   <li>{@link #twoMosquitoWingbeats()} — two stationary mosquito-like sources at close wingbeat
- *       frequencies for classification and separation tests.
+ *   <li>{@link #twoMosquitoWingbeats()} — two stationary pure-tone sources at close mosquito
+ *       wingbeat frequencies for separation tests, paired with richer benchmark metadata via {@link
+ *       #twoMosquitoWingbeatsGroundTruth()}.
  * </ul>
  */
 public final class SimulationScenarios {
@@ -132,14 +133,15 @@ public final class SimulationScenarios {
   }
 
   /**
-   * Two stationary mosquito-like sources at 600 Hz and 640 Hz.
+   * Two stationary pure-tone sources at 600 Hz and 640 Hz.
    *
-   * <p>Both sources are placed at distinct positions in an anechoic room. Their fundamental
-   * frequencies are intentionally close (40 Hz apart) to exercise the ability of narrow-band
-   * trackers and classifiers to separate two overlapping wingbeat signals.
+   * <p>Both sources are placed at distinct positions in an anechoic room. Their frequencies are
+   * intentionally close (40 Hz apart) to exercise the ability of narrow-band trackers to separate
+   * overlapping tonal content.
    *
-   * <p>For a ground-truth {@link Scenario} that additionally includes the harmonic amplitude
-   * profile, jitter, drift and species classification metadata, use {@link
+   * <p>The emitted waveform remains a pair of pure tones via {@link SoundEmitter2D}. For a
+   * benchmark-oriented ground-truth {@link Scenario} that additionally includes synthetic
+   * mosquito-like harmonic amplitudes, jitter, drift and species metadata, use {@link
    * #twoMosquitoWingbeatsGroundTruth()}.
    */
   public static SimulationScenario twoMosquitoWingbeats() {
@@ -156,10 +158,12 @@ public final class SimulationScenarios {
   }
 
   /**
-   * Build a rich ground-truth {@link Scenario} for the {@link #twoMosquitoWingbeats()} scenario.
+   * Build a rich benchmark ground-truth {@link Scenario} for the {@link #twoMosquitoWingbeats()}
+   * scenario.
    *
    * <p>Unlike the generic {@link SimulationScenario#groundTruth()} implementation, this method
-   * additionally populates each source with:
+   * populates each source with synthetic mosquito-like metadata in addition to the simulation
+   * geometry:
    *
    * <ul>
    *   <li>harmonic amplitude profile, jitter and drift from {@link
@@ -168,7 +172,8 @@ public final class SimulationScenarios {
    * </ul>
    *
    * <p>This richer ground-truth record is intended for benchmark comparison of frequency-extraction
-   * and classification algorithms.
+   * and classification algorithms; it does not change the pure-tone audio emitted by {@link
+   * #twoMosquitoWingbeats()}.
    */
   public static Scenario twoMosquitoWingbeatsGroundTruth() {
     SimulationScenario scenario = twoMosquitoWingbeats();

@@ -95,7 +95,7 @@ public final class WingbeatSignalGenerator implements SignalGenerator {
       // Advance the fundamental phase accumulator and keep it in [0, 2π).
       fundamentalPhase += TWO_PI * instFreq / sampleRate;
       if (fundamentalPhase >= TWO_PI) {
-        fundamentalPhase -= TWO_PI;
+        fundamentalPhase %= TWO_PI;
       }
 
       // Amplitude modulation envelope.

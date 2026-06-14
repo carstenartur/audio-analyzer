@@ -31,7 +31,8 @@ import org.hammer.audio.experimental.acoustic.scenario.AcousticGroundTruth;
  * @param modulationHz amplitude-modulation frequency in Hz; {@code 0} disables AM
  * @param modulationDepth AM depth in {@code [0, 1]}; {@code 0} disables AM
  * @param driftHzPerSecond linear frequency drift per second; {@code 0} for no drift
- * @param jitterHz peak-to-peak magnitude of per-sample frequency jitter; {@code 0} for no jitter
+ * @param jitterHz maximum absolute per-sample frequency deviation from the instantaneous
+ *     fundamental; {@code 0} for no jitter
  * @param noiseAmplitude additive white-noise amplitude in {@code [0, 1]}; {@code 0} for no noise
  */
 public record WingbeatSignalParameters(
@@ -56,6 +57,13 @@ public record WingbeatSignalParameters(
       if (harmonicAmplitudes.size() != harmonicCount) {
         throw new IllegalArgumentException(
             "harmonicAmplitudes.size() must equal harmonicCount when provided");
+      }
+      for (int i = 0; i < harmonicAmplitudes.size(); i++) {
+        Double amplitude = harmonicAmplitudes.get(i);
+        if (amplitude == null || !Double.isFinite(amplitude)) {
+          throw new IllegalArgumentException(
+              "harmonicAmplitudes[%d] must be non-null and finite".formatted(i));
+        }
       }
       harmonicAmplitudes = List.copyOf(harmonicAmplitudes);
     }

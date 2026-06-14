@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.lang.reflect.Field;
 import java.util.Arrays;
 import java.util.List;
 import org.hammer.audio.core.AudioBlock;
@@ -87,6 +88,19 @@ class WingbeatSignalGeneratorTest {
     assertFalse(
         Arrays.equals(b1.channelView(0), b2.channelView(0)),
         "different seeds must produce different jitter sequences");
+  }
+
+  @Test
+  void largePhaseStepsAreWrappedModuloTwoPi() throws Exception {
+    WingbeatSignalGenerator gen =
+        new WingbeatSignalGenerator(MONO, WingbeatSignalParameters.of(100_000.0), 0L);
+
+    gen.nextBlock(1);
+
+    Field phaseField = WingbeatSignalGenerator.class.getDeclaredField("fundamentalPhase");
+    phaseField.setAccessible(true);
+    double phase = phaseField.getDouble(gen);
+    assertTrue(phase >= 0.0 && phase < 2.0 * Math.PI, "phase must stay wrapped to [0, 2π)");
   }
 
   // ---- Frequency recovery ----
@@ -188,6 +202,19 @@ class WingbeatSignalGeneratorTest {
     assertThrows(
         IllegalArgumentException.class,
         () -> new WingbeatSignalParameters(440.0, 2, List.of(1.0), 0.0, 0.0, 0.0, 0.0, 0.0));
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            new WingbeatSignalParameters(
+                440.0, 2, Arrays.asList(1.0, null), 0.0, 0.0, 0.0, 0.0, 0.0));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> new WingbeatSignalParameters(440.0, 1, List.of(Double.NaN), 0.0, 0.0, 0.0, 0.0, 0.0));
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            new WingbeatSignalParameters(
+                440.0, 1, List.of(Double.POSITIVE_INFINITY), 0.0, 0.0, 0.0, 0.0, 0.0));
     assertThrows(
         IllegalArgumentException.class,
         () -> new WingbeatSignalParameters(440.0, 1, null, -1.0, 0.0, 0.0, 0.0, 0.0));
