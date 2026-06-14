@@ -22,23 +22,29 @@ class ScenarioModelTest {
     AcousticGroundTruth truth = AcousticGroundTruth.ofFrequency(440.0);
 
     assertEquals(440.0, truth.fundamentalFrequencyHz());
+    assertNull(truth.harmonicCount());
     assertNull(truth.harmonics());
-    assertNull(truth.modulation());
+    assertNull(truth.modulationFrequencyHz());
+    assertNull(truth.modulationDepth());
     assertNull(truth.jitter());
     assertNull(truth.drift());
+    assertNull(truth.noiseAmplitude());
     assertNull(truth.signalPower());
   }
 
   @Test
   void acousticGroundTruthAcceptsFullyPopulatedInstance() {
     AcousticGroundTruth truth =
-        new AcousticGroundTruth(600.0, List.of(2.0, 3.0), 5.0, 0.01, 0.5, -20.0);
+        new AcousticGroundTruth(600.0, 2, List.of(1.0, 0.4), 5.0, 0.25, 0.01, 0.5, 0.02, -20.0);
 
     assertEquals(600.0, truth.fundamentalFrequencyHz());
-    assertEquals(List.of(2.0, 3.0), truth.harmonics());
-    assertEquals(5.0, truth.modulation());
+    assertEquals(2, truth.harmonicCount());
+    assertEquals(List.of(1.0, 0.4), truth.harmonics());
+    assertEquals(5.0, truth.modulationFrequencyHz());
+    assertEquals(0.25, truth.modulationDepth());
     assertEquals(0.01, truth.jitter());
     assertEquals(0.5, truth.drift());
+    assertEquals(0.02, truth.noiseAmplitude());
     assertEquals(-20.0, truth.signalPower());
   }
 
@@ -53,13 +59,14 @@ class ScenarioModelTest {
   void acousticGroundTruthRejectsNegativeJitter() {
     assertThrows(
         IllegalArgumentException.class,
-        () -> new AcousticGroundTruth(440.0, null, null, -0.01, null, null));
+        () -> new AcousticGroundTruth(440.0, null, null, null, null, -0.01, null, null, null));
   }
 
   @Test
   void acousticGroundTruthHarmonicsAreDefensivelyCopied() {
     List<Double> harmonics = new java.util.ArrayList<>(List.of(2.0, 3.0));
-    AcousticGroundTruth truth = new AcousticGroundTruth(440.0, harmonics, null, null, null, null);
+    AcousticGroundTruth truth =
+        new AcousticGroundTruth(440.0, 2, harmonics, null, null, null, null, null, null);
     harmonics.add(4.0);
 
     assertEquals(2, truth.harmonics().size());

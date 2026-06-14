@@ -39,6 +39,18 @@ public record ClassificationGroundTruth(
     return new ClassificationGroundTruth(species, null, null, null, Map.of());
   }
 
+  /**
+   * Create a classification truth for synthetic fixtures while keeping biological species labels
+   * separate.
+   *
+   * @param customLabel synthetic fixture label; must not be {@code null}
+   */
+  public static ClassificationGroundTruth synthetic(String customLabel) {
+    Objects.requireNonNull(customLabel, "customLabel");
+    return new ClassificationGroundTruth(
+        "unknown", null, null, null, Map.of("customLabel", customLabel));
+  }
+
   /** Create a classification truth with no known classification fields. */
   public static ClassificationGroundTruth unknown() {
     return new ClassificationGroundTruth(null, null, null, null, Map.of());

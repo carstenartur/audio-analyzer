@@ -19,8 +19,8 @@ public final class SimulatedMicrophoneArraySource implements MultiChannelAudioSo
 
   private final Room2D room;
   private final MicrophoneArray array;
-  private final List<SoundEmitter2D> emitters;
-  private final AudioFormatDescriptor format;
+  private final List<AcousticEmitter2D> emitters;
+  private final AudioFormatDescriptor audioFormat;
   private final SampleClock clock;
   private final Random random;
   private final long totalFrames;
@@ -30,7 +30,7 @@ public final class SimulatedMicrophoneArraySource implements MultiChannelAudioSo
   public SimulatedMicrophoneArraySource(
       Room2D room,
       MicrophoneArray array,
-      List<SoundEmitter2D> emitters,
+      List<AcousticEmitter2D> emitters,
       float sampleRate,
       double durationSeconds,
       long randomSeed) {
@@ -43,13 +43,13 @@ public final class SimulatedMicrophoneArraySource implements MultiChannelAudioSo
     if (emitters == null || emitters.isEmpty()) {
       throw new IllegalArgumentException("emitters must not be empty");
     }
-    if (!(durationSeconds > 0.0) || !Double.isFinite(durationSeconds)) {
+    if (durationSeconds <= 0.0 || !Double.isFinite(durationSeconds)) {
       throw new IllegalArgumentException("durationSeconds must be finite and > 0");
     }
     this.room = room;
     this.array = array;
     this.emitters = List.copyOf(emitters);
-    this.format = new AudioFormatDescriptor(sampleRate, array.channels(), 32);
+    this.audioFormat = new AudioFormatDescriptor(sampleRate, array.channels(), 32);
     this.clock = new SampleClock(sampleRate, 0L);
     this.random = new Random(randomSeed);
     this.totalFrames = Math.round(durationSeconds * sampleRate);
@@ -57,7 +57,7 @@ public final class SimulatedMicrophoneArraySource implements MultiChannelAudioSo
 
   @Override
   public AudioFormatDescriptor format() {
-    return format;
+    return audioFormat;
   }
 
   @Override
@@ -77,20 +77,21 @@ public final class SimulatedMicrophoneArraySource implements MultiChannelAudioSo
     float[][] samples = new float[array.channels()][blockFrames];
     for (int frame = 0; frame < blockFrames; frame++) {
       long absoluteFrame = nextFrameIndex + frame;
-      double receiverTime = absoluteFrame / format.sampleRate();
+      double receiverTime = absoluteFrame / audioFormat.sampleRate();
       for (Microphone mic : array.microphones()) {
         samples[mic.channel()][frame] = (float) sampleAt(mic.positionMeters(), receiverTime);
       }
     }
     AudioBlock block =
-        AudioBlock.wrap(format, samples, nextFrameIndex, clock.timestampForFrame(nextFrameIndex));
+        AudioBlock.wrap(
+            audioFormat, samples, nextFrameIndex, clock.timestampForFrame(nextFrameIndex));
     nextFrameIndex += blockFrames;
     return Optional.of(block);
   }
 
   private double sampleAt(Vector2 microphonePosition, double receiverTimeSeconds) {
     double sample = room.noiseAmplitude() * (random.nextDouble() * 2.0 - 1.0);
-    for (SoundEmitter2D emitter : emitters) {
+    for (AcousticEmitter2D emitter : emitters) {
       Vector2 emitterPosition = emitter.positionAt(receiverTimeSeconds);
       double distance = Math.max(0.01, microphonePosition.distanceTo(emitterPosition));
       double travelSeconds = distance / DEFAULT_SPEED_OF_SOUND_METERS_PER_SECOND;
@@ -122,7 +123,7 @@ public final class SimulatedMicrophoneArraySource implements MultiChannelAudioSo
    * Doppler-shifted frequency at a microphone; positive radial velocity means motion toward mic.
    */
   public static double observedFrequencyAt(
-      SoundEmitter2D emitter, Vector2 microphonePosition, double receiverTimeSeconds) {
+      AcousticEmitter2D emitter, Vector2 microphonePosition, double receiverTimeSeconds) {
     Vector2 emitterPosition = emitter.positionAt(receiverTimeSeconds);
     return observedFrequencyAt(
         emitterPosition,

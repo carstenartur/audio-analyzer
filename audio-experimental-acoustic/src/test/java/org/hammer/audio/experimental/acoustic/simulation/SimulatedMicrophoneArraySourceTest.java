@@ -112,17 +112,17 @@ class SimulatedMicrophoneArraySourceTest {
   }
 
   private static SimulatedMicrophoneArraySource source(
-      MicrophoneArray array, long seed, SoundEmitter2D emitter, Room2D room) {
+      MicrophoneArray array, long seed, AcousticEmitter2D emitter, Room2D room) {
     return source(array, seed, emitter, null, room);
   }
 
   private static SimulatedMicrophoneArraySource source(
       MicrophoneArray array,
       long seed,
-      SoundEmitter2D firstEmitter,
-      SoundEmitter2D secondEmitter,
+      AcousticEmitter2D firstEmitter,
+      AcousticEmitter2D secondEmitter,
       Room2D room) {
-    List<SoundEmitter2D> emitters =
+    List<AcousticEmitter2D> emitters =
         secondEmitter == null ? List.of(firstEmitter) : List.of(firstEmitter, secondEmitter);
     return new SimulatedMicrophoneArraySource(room, array, emitters, 8_000.0f, 0.2, seed);
   }
