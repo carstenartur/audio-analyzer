@@ -5,7 +5,18 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 
-/** Summary metric for benchmark comparisons of localization accuracy. */
+/**
+ * Summary metric for benchmark comparisons of localization accuracy.
+ *
+ * @param meanDistanceErrorMeters mean distance error in meters
+ * @param medianDistanceErrorMeters median distance error in meters
+ * @param meanAngularErrorDegrees mean angular error in degrees
+ * @param medianAngularErrorDegrees median angular error in degrees
+ * @param sampleCount total localization sample count
+ * @param evaluatedCount number of evaluated localization samples
+ * @param skippedCount number of skipped localization samples
+ * @param unavailableTruthCount number of samples without usable localization truth
+ */
 public record LocalizationErrorMetric(
     Double meanDistanceErrorMeters,
     Double medianDistanceErrorMeters,

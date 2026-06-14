@@ -6,7 +6,30 @@ import com.fasterxml.jackson.databind.json.JsonMapper;
 import java.util.Locale;
 import java.util.Objects;
 
-/** Machine-readable benchmark summary for one scenario execution. */
+/**
+ * Machine-readable benchmark summary for one scenario execution.
+ *
+ * @param scenarioId scenario identifier
+ * @param expectedSourceCount expected number of scenario sources
+ * @param snapshotCount number of processed snapshots
+ * @param localization localization-accuracy summary
+ * @param frequency frequency-accuracy summary
+ * @param doppler Doppler/radial-velocity summary
+ * @param classification classification-accuracy summary
+ * @param trackContinuity matched-track continuity ratio, or {@code null} if unavailable
+ * @param trackContinuitySampleCount number of continuity samples considered
+ * @param trackContinuityEvaluatedCount number of continuity samples that were evaluated
+ * @param trackContinuitySkippedCount number of continuity samples skipped because no match existed
+ * @param trackContinuityUnavailableTruthCount number of continuity samples without usable truth
+ * @param idStability dominant-track stability ratio, or {@code null} if unavailable
+ * @param sourceCountAccuracy fraction of frames with the exact expected source count
+ * @param meanSourceCountError mean absolute source-count error per frame
+ * @param falsePositiveRate fraction of produced tracks that were spurious
+ * @param falseNegativeRate fraction of available truth samples that were missed
+ * @param meanProcessingNanos mean per-snapshot processing time in nanoseconds
+ * @param medianProcessingNanos median per-snapshot processing time in nanoseconds
+ * @param maxProcessingNanos maximum per-snapshot processing time in nanoseconds
+ */
 public record BenchmarkReport(
     String scenarioId,
     int expectedSourceCount,
@@ -30,6 +53,7 @@ public record BenchmarkReport(
     long maxProcessingNanos) {
 
   private static final ObjectMapper OBJECT_MAPPER = JsonMapper.builder().build();
+  private static final String MARKDOWN_COLUMN_SEPARATOR = " | ";
 
   public BenchmarkReport {
     Objects.requireNonNull(scenarioId, "scenarioId");
@@ -171,33 +195,32 @@ public record BenchmarkReport(
   public String toMarkdownSummary() {
     return "| Scenario | Median position error (m) | Mean frequency error (Hz) | Track continuity |"
         + " ID stability | False+ | False- | Mean processing (ns) |\n"
-        + "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n"
-        + "| "
+        + "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n| "
         + markdownEscape(scenarioId)
-        + " | "
+        + MARKDOWN_COLUMN_SEPARATOR
         + markdownFormat(localization.medianDistanceErrorMeters())
-        + " | "
+        + MARKDOWN_COLUMN_SEPARATOR
         + markdownFormat(frequency.meanAbsoluteErrorHz())
-        + " | "
+        + MARKDOWN_COLUMN_SEPARATOR
         + formatTrackContinuity()
-        + " | "
+        + MARKDOWN_COLUMN_SEPARATOR
         + markdownFormat(idStability)
-        + " | "
+        + MARKDOWN_COLUMN_SEPARATOR
         + markdownFormat(falsePositiveRate)
-        + " | "
+        + MARKDOWN_COLUMN_SEPARATOR
         + markdownFormat(falseNegativeRate)
-        + " | "
+        + MARKDOWN_COLUMN_SEPARATOR
         + meanProcessingNanos
         + " |";
   }
 
   private String formatTrackContinuity() {
-    int continuityDenominator = trackContinuityEvaluatedCount + trackContinuitySkippedCount;
     if (trackContinuity == null) {
       return trackContinuityUnavailableTruthCount > 0
           ? "n/a (%d unavailable)".formatted(trackContinuityUnavailableTruthCount)
           : "n/a";
     }
+    int continuityDenominator = trackContinuityEvaluatedCount + trackContinuitySkippedCount;
     return "%s (%d/%d)"
         .formatted(
             format(trackContinuity),

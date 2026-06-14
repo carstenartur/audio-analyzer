@@ -4,7 +4,14 @@ import java.util.List;
 import java.util.Objects;
 import org.hammer.audio.experimental.acoustic.tracking.TrackedSource;
 
-/** Alignment result for one tracking snapshot against scenario truth. */
+/**
+ * Alignment result for one tracking snapshot against scenario truth.
+ *
+ * @param timestampSeconds scenario-relative snapshot timestamp in seconds
+ * @param matchedSources aligned truth-to-track matches
+ * @param missingSources truth sources without a matched track
+ * @param spuriousTracks tracks without a matched truth source
+ */
 public record SnapshotAlignment(
     double timestampSeconds,
     List<AlignedSourceObservation> matchedSources,

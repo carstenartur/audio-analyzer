@@ -3,7 +3,15 @@ package org.hammer.audio.experimental.acoustic.benchmark;
 import java.util.Map;
 import java.util.Objects;
 
-/** Predicted classification labels produced by a benchmarked algorithm. */
+/**
+ * Predicted classification labels produced by a benchmarked algorithm.
+ *
+ * @param species predicted species label
+ * @param sex predicted sex label
+ * @param age predicted age label
+ * @param feedingStatus predicted feeding-status label
+ * @param labels additional synthetic or domain-specific labels
+ */
 public record ClassificationPrediction(
     String species, String sex, String age, String feedingStatus, Map<String, String> labels) {
 

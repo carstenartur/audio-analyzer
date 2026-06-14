@@ -6,7 +6,13 @@ import java.util.Objects;
 import org.hammer.audio.acquisition.MicrophoneArray;
 import org.hammer.audio.experimental.acoustic.tracking.TrackingSnapshot;
 
-/** Measured outputs that can be compared against a scenario ground truth. */
+/**
+ * Measured outputs that can be compared against a scenario ground truth.
+ *
+ * @param array microphone-array metadata used to produce the measurements
+ * @param snapshots ordered tracking snapshots captured for the scenario run
+ * @param classificationPredictions optional per-source classification predictions
+ */
 public record BenchmarkMeasurements(
     MicrophoneArray array,
     List<TrackingSnapshot> snapshots,

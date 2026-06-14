@@ -1,5 +1,6 @@
 package org.hammer.audio.experimental.acoustic.benchmark;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -63,18 +64,21 @@ public final class TrackingScenarioBenchmarkRunner {
   }
 
   private List<TrackingSnapshot> runSnapshots(SimulationScenario scenario) {
-    SimulatedMicrophoneArraySource source = scenario.newSource();
-    MicrophoneArray array = source.microphoneArray();
-    TrackingPipeline pipeline = newPipeline(scenario);
-    List<TrackingSnapshot> snapshots = new ArrayList<>();
-    while (true) {
-      AudioBlock block = source.readBlock(blockFrames).orElse(null);
-      if (block == null || block.frames() < blockFrames) {
-        break;
+    try (SimulatedMicrophoneArraySource source = scenario.newSource()) {
+      MicrophoneArray array = source.microphoneArray();
+      TrackingPipeline pipeline = newPipeline(scenario);
+      List<TrackingSnapshot> snapshots = new ArrayList<>();
+      while (true) {
+        AudioBlock block = source.readBlock(blockFrames).orElse(null);
+        if (block == null || block.frames() < blockFrames) {
+          break;
+        }
+        snapshots.add(pipeline.process(block, array));
       }
-      snapshots.add(pipeline.process(block, array));
+      return snapshots;
+    } catch (IOException exception) {
+      throw new IllegalStateException("Failed to read simulated benchmark scenario", exception);
     }
-    return snapshots;
   }
 
   private TrackingPipeline newPipeline(SimulationScenario scenario) {

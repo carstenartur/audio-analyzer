@@ -5,7 +5,17 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 
-/** Summary metric for benchmark comparisons of recovered source frequencies. */
+/**
+ * Summary metric for benchmark comparisons of recovered source frequencies.
+ *
+ * @param meanAbsoluteErrorHz mean absolute frequency error in hertz
+ * @param medianAbsoluteErrorHz median absolute frequency error in hertz
+ * @param meanRelativeError mean relative frequency error
+ * @param sampleCount total frequency sample count
+ * @param evaluatedCount number of evaluated frequency samples
+ * @param skippedCount number of skipped frequency samples
+ * @param unavailableTruthCount number of samples without usable frequency truth
+ */
 public record FrequencyErrorMetric(
     Double meanAbsoluteErrorHz,
     Double medianAbsoluteErrorHz,

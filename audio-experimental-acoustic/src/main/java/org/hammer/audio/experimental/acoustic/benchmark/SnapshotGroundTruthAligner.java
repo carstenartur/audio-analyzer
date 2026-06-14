@@ -162,34 +162,10 @@ public final class SnapshotGroundTruthAligner {
     int nodeCount = 2 + truthCount + trackCount;
     int sourceNode = 0;
     int sinkNode = nodeCount - 1;
-    List<List<Edge>> graph = new ArrayList<>(nodeCount);
-    for (int i = 0; i < nodeCount; i++) {
-      graph.add(new ArrayList<>());
-    }
-
-    for (int truthIndex = 0; truthIndex < truthCount; truthIndex++) {
-      addEdge(graph, sourceNode, truthNode(truthIndex), 1, 0L, -1, -1);
-    }
-    for (int truthIndex = 0; truthIndex < truthCount; truthIndex++) {
-      GroundTruthObservation truth = truthSamples.get(truthIndex);
-      for (int trackIndex = 0; trackIndex < trackCount; trackIndex++) {
-        double cost = alignmentCost(truth, tracks.get(trackIndex).trackedSource());
-        if (!Double.isFinite(cost)) {
-          continue;
-        }
-        addEdge(
-            graph,
-            truthNode(truthIndex),
-            trackNode(truthCount, trackIndex),
-            1,
-            scaledCost(cost, trackIndex, trackCount),
-            truthIndex,
-            trackIndex);
-      }
-    }
-    for (int trackIndex = 0; trackIndex < trackCount; trackIndex++) {
-      addEdge(graph, trackNode(truthCount, trackIndex), sinkNode, 1, 0L, -1, -1);
-    }
+    List<List<Edge>> graph = emptyGraph(nodeCount);
+    addSourceEdges(graph, sourceNode, truthCount);
+    addCandidateEdges(graph, truthSamples, tracks, truthCount, trackCount);
+    addSinkEdges(graph, sinkNode, truthCount, trackCount);
 
     long totalScaledCost = 0L;
     int matchedCount = 0;
@@ -202,18 +178,78 @@ public final class SnapshotGroundTruthAligner {
       totalScaledCost += path.distanceToSink();
       matchedCount++;
     }
+    return new Assignment(
+        collectMatchedPairs(graph, matchedCount), matchedCount, totalScaledCost / (double) COST_SCALE);
+  }
 
+  private static List<List<Edge>> emptyGraph(int nodeCount) {
+    List<List<Edge>> graph = new ArrayList<>(nodeCount);
+    for (int i = 0; i < nodeCount; i++) {
+      graph.add(new ArrayList<>());
+    }
+    return graph;
+  }
+
+  private static void addSourceEdges(List<List<Edge>> graph, int sourceNode, int truthCount) {
+    for (int truthIndex = 0; truthIndex < truthCount; truthIndex++) {
+      addEdge(graph, sourceNode, truthNode(truthIndex), 1, 0L, -1, -1);
+    }
+  }
+
+  private static void addCandidateEdges(
+      List<List<Edge>> graph,
+      List<GroundTruthObservation> truthSamples,
+      List<IndexedTrack> tracks,
+      int truthCount,
+      int trackCount) {
+    for (int truthIndex = 0; truthIndex < truthSamples.size(); truthIndex++) {
+      addCandidateEdgesForTruth(graph, truthSamples.get(truthIndex), tracks, truthCount, trackCount,
+          truthIndex);
+    }
+  }
+
+  private static void addCandidateEdgesForTruth(
+      List<List<Edge>> graph,
+      GroundTruthObservation truth,
+      List<IndexedTrack> tracks,
+      int truthCount,
+      int trackCount,
+      int truthIndex) {
+    for (int trackIndex = 0; trackIndex < trackCount; trackIndex++) {
+      double cost = alignmentCost(truth, tracks.get(trackIndex).trackedSource());
+      if (!Double.isFinite(cost)) {
+        continue;
+      }
+      addEdge(
+          graph,
+          truthNode(truthIndex),
+          trackNode(truthCount, trackIndex),
+          1,
+          scaledCost(cost, trackIndex, trackCount),
+          truthIndex,
+          trackIndex);
+    }
+  }
+
+  private static void addSinkEdges(
+      List<List<Edge>> graph, int sinkNode, int truthCount, int trackCount) {
+    for (int trackIndex = 0; trackIndex < trackCount; trackIndex++) {
+      addEdge(graph, trackNode(truthCount, trackIndex), sinkNode, 1, 0L, -1, -1);
+    }
+  }
+
+  private static List<MatchPair> collectMatchedPairs(List<List<Edge>> graph, int matchedCount) {
     List<MatchPair> pairs = new ArrayList<>(matchedCount);
     for (List<Edge> edges : graph) {
       for (Edge edge : edges) {
-        if (edge.truthIndex() >= 0 && edge.trackIndex() >= 0 && edge.capacity() == 0) {
+        if (edge.truthIndex() >= 0 && edge.trackIndex() >= 0 && edge.remainingCapacity() == 0) {
           pairs.add(new MatchPair(edge.truthIndex(), edge.trackIndex()));
         }
       }
     }
     pairs.sort(
         Comparator.comparingInt(MatchPair::truthIndex).thenComparingInt(MatchPair::trackIndex));
-    return new Assignment(pairs, matchedCount, totalScaledCost / (double) COST_SCALE);
+    return pairs;
   }
 
   private static int truthNode(int truthIndex) {
@@ -260,23 +296,24 @@ public final class SnapshotGroundTruthAligner {
     List<Integer> queue = new ArrayList<>();
     queue.add(source);
     inQueue[source] = true;
-    for (int queueIndex = 0; queueIndex < queue.size(); queueIndex++) {
-      int node = queue.get(queueIndex);
+    int queueIndex = 0;
+    while (queueIndex < queue.size()) {
+      int node = queue.get(queueIndex++);
       inQueue[node] = false;
       List<Edge> edges = graph.get(node);
       for (int edgeIndex = 0; edgeIndex < edges.size(); edgeIndex++) {
         Edge edge = edges.get(edgeIndex);
-        if (edge.capacity() <= 0) {
+        if (edge.remainingCapacity() <= 0) {
           continue;
         }
-        long nextDistance = distance[node] + edge.cost();
-        if (nextDistance < distance[edge.to()]) {
-          distance[edge.to()] = nextDistance;
-          previousNode[edge.to()] = node;
-          previousEdge[edge.to()] = edgeIndex;
-          if (!inQueue[edge.to()]) {
-            queue.add(edge.to());
-            inQueue[edge.to()] = true;
+        long nextDistance = distance[node] + edge.edgeCost();
+        if (nextDistance < distance[edge.targetNode()]) {
+          distance[edge.targetNode()] = nextDistance;
+          previousNode[edge.targetNode()] = node;
+          previousEdge[edge.targetNode()] = edgeIndex;
+          if (!inQueue[edge.targetNode()]) {
+            queue.add(edge.targetNode());
+            inQueue[edge.targetNode()] = true;
           }
         }
       }
@@ -289,9 +326,9 @@ public final class SnapshotGroundTruthAligner {
     for (int node = sink; path.previousNode()[node] >= 0; node = path.previousNode()[node]) {
       int previousNode = path.previousNode()[node];
       Edge forward = graph.get(previousNode).get(path.previousEdge()[node]);
-      Edge reverse = graph.get(node).get(forward.reverseIndex());
-      forward.capacity(forward.capacity() - 1);
-      reverse.capacity(reverse.capacity() + 1);
+      Edge reverse = graph.get(node).get(forward.reverseEdgeIndex());
+      forward.remainingCapacity(forward.remainingCapacity() - 1);
+      reverse.remainingCapacity(reverse.remainingCapacity() + 1);
     }
   }
 
@@ -329,14 +366,18 @@ public final class SnapshotGroundTruthAligner {
     return cost;
   }
 
-  private record IndexedTrack(int originalIndex, TrackedSource trackedSource) {}
+  private record IndexedTrack(int originalIndex, TrackedSource trackedSource) {
+  }
 
-  private record MatchPair(int truthIndex, int trackIndex) {}
+  private record MatchPair(int truthIndex, int trackIndex) {
+  }
 
-  private record Assignment(List<MatchPair> pairs, int matchedCount, double totalCost) {}
+  private record Assignment(List<MatchPair> pairs, int matchedCount, double totalCost) {
+  }
 
   private record PathResult(
-      boolean reachable, long distanceToSink, int[] previousNode, int[] previousEdge) {}
+      boolean reachable, long distanceToSink, int[] previousNode, int[] previousEdge) {
+  }
 
   /**
    * Residual-network edge for the min-cost max-flow truth-to-track assignment search.
@@ -347,41 +388,41 @@ public final class SnapshotGroundTruthAligner {
    * remains fixed.
    */
   private static final class Edge {
-    private final int to;
-    private final int reverseIndex;
-    private int capacity;
-    private final long cost;
+    private final int targetNode;
+    private final int reverseEdgeIndex;
+    private int remainingCapacity;
+    private final long edgeCost;
     private final int truthIndex;
     private final int trackIndex;
 
     private Edge(
         int to, int reverseIndex, int capacity, long cost, int truthIndex, int trackIndex) {
-      this.to = to;
-      this.reverseIndex = reverseIndex;
-      this.capacity = capacity;
-      this.cost = cost;
+      this.targetNode = to;
+      this.reverseEdgeIndex = reverseIndex;
+      this.remainingCapacity = capacity;
+      this.edgeCost = cost;
       this.truthIndex = truthIndex;
       this.trackIndex = trackIndex;
     }
 
-    private int to() {
-      return to;
+    private int targetNode() {
+      return targetNode;
     }
 
-    private int reverseIndex() {
-      return reverseIndex;
+    private int reverseEdgeIndex() {
+      return reverseEdgeIndex;
     }
 
-    private int capacity() {
-      return capacity;
+    private int remainingCapacity() {
+      return remainingCapacity;
     }
 
-    private void capacity(int capacity) {
-      this.capacity = capacity;
+    private void remainingCapacity(int capacity) {
+      this.remainingCapacity = capacity;
     }
 
-    private long cost() {
-      return cost;
+    private long edgeCost() {
+      return edgeCost;
     }
 
     private int truthIndex() {

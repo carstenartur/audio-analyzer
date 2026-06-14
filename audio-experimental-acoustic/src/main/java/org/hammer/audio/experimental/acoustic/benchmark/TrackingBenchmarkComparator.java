@@ -1,8 +1,8 @@
 package org.hammer.audio.experimental.acoustic.benchmark;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -33,194 +33,64 @@ public final class TrackingBenchmarkComparator
     Objects.requireNonNull(truth, "truth");
     Objects.requireNonNull(measurements, "measurements");
 
+    ComparisonAccumulator accumulator = new ComparisonAccumulator(measurements.snapshots().size());
     Vector2 arrayCenter = arrayCenter(measurements);
-    List<Double> distanceErrorsMeters = new ArrayList<>();
-    List<Double> angularErrorsDegrees = new ArrayList<>();
-    List<Double> absoluteFrequencyErrorsHz = new ArrayList<>();
-    List<Double> relativeFrequencyErrors = new ArrayList<>();
-    List<Double> absoluteDopplerErrorsMetersPerSecond = new ArrayList<>();
-    List<Long> processingTimes = new ArrayList<>(measurements.snapshots().size());
-    Map<String, Map<Integer, Integer>> trackCountsBySource = new HashMap<>();
-    Set<String> continuityEvaluableSources = new HashSet<>();
-
-    long totalMeasuredObservations = 0L;
-    long totalSpuriousTracks = 0L;
-    long exactSourceCountFrames = 0L;
-    long absoluteSourceCountError = 0L;
-    int localizationSkippedCount = 0;
-    int localizationUnavailableTruthCount = 0;
-    int frequencySkippedCount = 0;
-    int frequencyUnavailableTruthCount = 0;
-    int dopplerSkippedCount = 0;
-    int dopplerUnavailableTruthCount = 0;
-    int continuityEvaluatedCount = 0;
-    int continuitySkippedCount = 0;
-    int continuityUnavailableTruthCount = 0;
-    long scenarioStartTimestampNanos =
-        measurements.snapshots().isEmpty()
-            ? 0L
-            : measurements.snapshots().get(0).sourceTimestampNanos();
-
-    for (var snapshot : measurements.snapshots()) {
-      processingTimes.add(snapshot.processingNanos());
-      totalMeasuredObservations += snapshot.tracks().size();
-      if (snapshot.tracks().size() == truth.sources().size()) {
-        exactSourceCountFrames++;
-      }
-      absoluteSourceCountError += Math.abs(snapshot.tracks().size() - truth.sources().size());
-
-      SnapshotAlignment alignment = aligner.align(truth, snapshot, scenarioStartTimestampNanos);
-      totalSpuriousTracks += alignment.spuriousTracks().size();
-      for (AlignedSourceObservation observation : alignment.matchedSources()) {
-        TrackedSource track = observation.trackedSource();
-        GroundTruthObservation groundTruth = observation.groundTruth();
-        ScenarioSource source = groundTruth.source();
-        if (groundTruth.hasAlignmentTruth()) {
-          continuityEvaluableSources.add(source.sourceId());
-          continuityEvaluatedCount++;
-          trackCountsBySource
-              .computeIfAbsent(source.sourceId(), ignored -> new HashMap<>())
-              .merge(track.id(), 1, Integer::sum);
-        } else {
-          continuityUnavailableTruthCount++;
-        }
-        if (groundTruth.hasPositionTruth()) {
-          distanceErrorsMeters.add(
-              groundTruth.expectedPositionMeters().distanceTo(track.positionMeters()));
-          angularErrorsDegrees.add(
-              angularErrorDegrees(
-                  arrayCenter, groundTruth.expectedPositionMeters(), track.positionMeters()));
-        } else {
-          localizationUnavailableTruthCount++;
-        }
-        if (groundTruth.hasFrequencyTruth()) {
-          double trueFrequency = groundTruth.expectedFrequencyHz();
-          double absoluteErrorHz = Math.abs(track.frequencyHz() - trueFrequency);
-          absoluteFrequencyErrorsHz.add(absoluteErrorHz);
-          relativeFrequencyErrors.add(absoluteErrorHz / trueFrequency);
-        } else {
-          frequencyUnavailableTruthCount++;
-        }
-        if (groundTruth.hasDopplerTruth()) {
-          double trueRadialVelocity =
-              radialVelocityToward(
-                  arrayCenter,
-                  groundTruth.expectedPositionMeters(),
-                  groundTruth.expectedVelocityMetersPerSecond());
-          absoluteDopplerErrorsMetersPerSecond.add(
-              Math.abs(track.radialVelocityMetersPerSecond() - trueRadialVelocity));
-        } else {
-          dopplerUnavailableTruthCount++;
-        }
-      }
-      for (GroundTruthObservation missingSource : alignment.missingSources()) {
-        if (missingSource.hasAlignmentTruth()) {
-          continuityEvaluableSources.add(missingSource.source().sourceId());
-          continuitySkippedCount++;
-        } else {
-          continuityUnavailableTruthCount++;
-        }
-        if (missingSource.hasPositionTruth()) {
-          localizationSkippedCount++;
-        } else {
-          localizationUnavailableTruthCount++;
-        }
-        if (missingSource.hasFrequencyTruth()) {
-          frequencySkippedCount++;
-        } else {
-          frequencyUnavailableTruthCount++;
-        }
-        if (missingSource.hasDopplerTruth()) {
-          dopplerSkippedCount++;
-        } else {
-          dopplerUnavailableTruthCount++;
-        }
-      }
+    long scenarioStartTimestampNanos = scenarioStartTimestampNanos(measurements);
+    for (TrackingSnapshot snapshot : measurements.snapshots()) {
+      processSnapshot(truth, snapshot, scenarioStartTimestampNanos, arrayCenter, accumulator);
     }
+    return accumulator.toReport(
+        truth, measurements, summarizeClassification(truth, measurements.classificationPredictions()));
+  }
 
+  private void processSnapshot(
+      Scenario truth,
+      TrackingSnapshot snapshot,
+      long scenarioStartTimestampNanos,
+      Vector2 arrayCenter,
+      ComparisonAccumulator accumulator) {
+    accumulator.recordSnapshot(snapshot, truth.sources().size());
+    SnapshotAlignment alignment = aligner.align(truth, snapshot, scenarioStartTimestampNanos);
+    accumulator.totalSpuriousTracks += alignment.spuriousTracks().size();
+    for (AlignedSourceObservation observation : alignment.matchedSources()) {
+      accumulator.recordMatchedObservation(arrayCenter, observation);
+    }
+    for (GroundTruthObservation missingSource : alignment.missingSources()) {
+      accumulator.recordMissingObservation(missingSource);
+    }
+  }
+
+  private static long scenarioStartTimestampNanos(BenchmarkMeasurements measurements) {
+    return measurements.snapshots().isEmpty()
+        ? 0L
+        : measurements.snapshots().get(0).sourceTimestampNanos();
+  }
+
+  private static ClassificationSummary summarizeClassification(
+      Scenario truth, Map<String, ClassificationPrediction> predictions) {
     int classificationCorrect = 0;
     int classificationEvaluatedCount = 0;
     int classificationSkippedCount = 0;
     int classificationUnavailableTruthCount = 0;
     for (ScenarioSource source : truth.sources()) {
       ClassificationGroundTruth labels = source.labels();
-      ClassificationPrediction prediction =
-          measurements.classificationPredictions().get(source.sourceId());
+      ClassificationPrediction prediction = predictions.get(source.sourceId());
       if (labels == null || !hasComparableClassification(labels)) {
         classificationUnavailableTruthCount++;
-        continue;
-      }
-      if (prediction == null) {
+      } else if (prediction == null) {
         classificationSkippedCount++;
-        continue;
-      }
-      classificationEvaluatedCount++;
-      if (classificationMatches(labels, prediction)) {
-        classificationCorrect++;
+      } else {
+        classificationEvaluatedCount++;
+        if (classificationMatches(labels, prediction)) {
+          classificationCorrect++;
+        }
       }
     }
-
-    int continuitySampleCount =
-        continuityEvaluatedCount + continuitySkippedCount + continuityUnavailableTruthCount;
-    int continuityAvailableCount = continuityEvaluatedCount + continuitySkippedCount;
-    Double trackContinuity =
-        continuityAvailableCount == 0
-            ? null
-            : continuityEvaluatedCount / (double) continuityAvailableCount;
-    Double idStability = idStability(continuityEvaluableSources, trackCountsBySource);
-    Double sourceCountAccuracy =
-        measurements.snapshots().isEmpty()
-            ? null
-            : exactSourceCountFrames / (double) measurements.snapshots().size();
-    Double meanSourceCountError =
-        measurements.snapshots().isEmpty()
-            ? null
-            : absoluteSourceCountError / (double) measurements.snapshots().size();
-    Double falsePositiveRate =
-        totalMeasuredObservations == 0L
-            ? null
-            : totalSpuriousTracks / (double) totalMeasuredObservations;
-    Double falseNegativeRate =
-        continuityAvailableCount == 0
-            ? null
-            : continuitySkippedCount / (double) continuityAvailableCount;
-
-    return new BenchmarkReport(
-        truth.id(),
-        truth.sources().size(),
-        measurements.snapshots().size(),
-        LocalizationErrorMetric.ofSamples(
-            distanceErrorsMeters,
-            angularErrorsDegrees,
-            localizationSkippedCount,
-            localizationUnavailableTruthCount),
-        FrequencyErrorMetric.ofSamples(
-            absoluteFrequencyErrorsHz,
-            relativeFrequencyErrors,
-            frequencySkippedCount,
-            frequencyUnavailableTruthCount),
-        DopplerErrorMetric.ofSamples(
-            absoluteDopplerErrorsMetersPerSecond,
-            dopplerSkippedCount,
-            dopplerUnavailableTruthCount),
-        ClassificationAccuracyMetric.ofCounts(
-            classificationCorrect,
-            classificationEvaluatedCount,
-            classificationSkippedCount,
-            classificationUnavailableTruthCount),
-        trackContinuity,
-        continuitySampleCount,
-        continuityEvaluatedCount,
-        continuitySkippedCount,
-        continuityUnavailableTruthCount,
-        idStability,
-        sourceCountAccuracy,
-        meanSourceCountError,
-        falsePositiveRate,
-        falseNegativeRate,
-        mean(processingTimes),
-        median(processingTimes),
-        max(processingTimes));
+    return new ClassificationSummary(
+        classificationCorrect,
+        classificationEvaluatedCount,
+        classificationSkippedCount,
+        classificationUnavailableTruthCount);
   }
 
   private static boolean hasComparableClassification(ClassificationGroundTruth labels) {
@@ -334,5 +204,214 @@ public final class TrackingBenchmarkComparator
       max = Math.max(max, value);
     }
     return max;
+  }
+
+  private record ClassificationSummary(
+      int correctCount, int evaluatedCount, int skippedCount, int unavailableTruthCount) {
+    private ClassificationAccuracyMetric asMetric() {
+      return ClassificationAccuracyMetric.ofCounts(
+          correctCount, evaluatedCount, skippedCount, unavailableTruthCount);
+    }
+  }
+
+  private static final class ComparisonAccumulator {
+    private final List<Double> distanceErrorsMeters = new ArrayList<>();
+    private final List<Double> angularErrorsDegrees = new ArrayList<>();
+    private final List<Double> absoluteFrequencyErrorsHz = new ArrayList<>();
+    private final List<Double> relativeFrequencyErrors = new ArrayList<>();
+    private final List<Double> absoluteDopplerErrorsMetersPerSecond = new ArrayList<>();
+    private final List<Long> processingTimes;
+    private final Map<String, Map<Integer, Integer>> trackCountsBySource = new LinkedHashMap<>();
+    private final Set<String> continuityEvaluableSources = new HashSet<>();
+    private long totalMeasuredObservations;
+    private long totalSpuriousTracks;
+    private long exactSourceCountFrames;
+    private long absoluteSourceCountError;
+    private int localizationSkippedCount;
+    private int localizationUnavailableTruthCount;
+    private int frequencySkippedCount;
+    private int frequencyUnavailableTruthCount;
+    private int dopplerSkippedCount;
+    private int dopplerUnavailableTruthCount;
+    private int continuityEvaluatedCount;
+    private int continuitySkippedCount;
+    private int continuityUnavailableTruthCount;
+
+    private ComparisonAccumulator(int expectedSnapshots) {
+      this.processingTimes = new ArrayList<>(expectedSnapshots);
+    }
+
+    private void recordSnapshot(TrackingSnapshot snapshot, int expectedSourceCount) {
+      processingTimes.add(snapshot.processingNanos());
+      totalMeasuredObservations += snapshot.tracks().size();
+      if (snapshot.tracks().size() == expectedSourceCount) {
+        exactSourceCountFrames++;
+      }
+      absoluteSourceCountError += Math.abs(snapshot.tracks().size() - expectedSourceCount);
+    }
+
+    private void recordMatchedObservation(
+        Vector2 arrayCenter, AlignedSourceObservation observation) {
+      TrackedSource track = observation.trackedSource();
+      GroundTruthObservation groundTruth = observation.groundTruth();
+      recordContinuityMatch(groundTruth.source().sourceId(), track.id(), groundTruth);
+      recordLocalization(arrayCenter, track, groundTruth);
+      recordFrequency(track, groundTruth);
+      recordDoppler(arrayCenter, track, groundTruth);
+    }
+
+    private void recordContinuityMatch(
+        String sourceId, int trackId, GroundTruthObservation groundTruth) {
+      if (groundTruth.hasAlignmentTruth()) {
+        continuityEvaluableSources.add(sourceId);
+        continuityEvaluatedCount++;
+        trackCountsBySource
+            .computeIfAbsent(sourceId, ignored -> new LinkedHashMap<>())
+            .merge(trackId, 1, Integer::sum);
+      } else {
+        continuityUnavailableTruthCount++;
+      }
+    }
+
+    private void recordLocalization(
+        Vector2 arrayCenter, TrackedSource track, GroundTruthObservation groundTruth) {
+      if (groundTruth.hasPositionTruth()) {
+        distanceErrorsMeters.add(
+            groundTruth.expectedPositionMeters().distanceTo(track.positionMeters()));
+        angularErrorsDegrees.add(
+            angularErrorDegrees(
+                arrayCenter, groundTruth.expectedPositionMeters(), track.positionMeters()));
+      } else {
+        localizationUnavailableTruthCount++;
+      }
+    }
+
+    private void recordFrequency(TrackedSource track, GroundTruthObservation groundTruth) {
+      if (groundTruth.hasFrequencyTruth()) {
+        double trueFrequency = groundTruth.expectedFrequencyHz();
+        double absoluteErrorHz = Math.abs(track.frequencyHz() - trueFrequency);
+        absoluteFrequencyErrorsHz.add(absoluteErrorHz);
+        relativeFrequencyErrors.add(absoluteErrorHz / trueFrequency);
+      } else {
+        frequencyUnavailableTruthCount++;
+      }
+    }
+
+    private void recordDoppler(
+        Vector2 arrayCenter, TrackedSource track, GroundTruthObservation groundTruth) {
+      if (groundTruth.hasDopplerTruth()) {
+        double trueRadialVelocity =
+            radialVelocityToward(
+                arrayCenter,
+                groundTruth.expectedPositionMeters(),
+                groundTruth.expectedVelocityMetersPerSecond());
+        absoluteDopplerErrorsMetersPerSecond.add(
+            Math.abs(track.radialVelocityMetersPerSecond() - trueRadialVelocity));
+      } else {
+        dopplerUnavailableTruthCount++;
+      }
+    }
+
+    private void recordMissingObservation(GroundTruthObservation missingSource) {
+      recordMissingContinuity(missingSource);
+      recordMissingLocalization(missingSource);
+      recordMissingFrequency(missingSource);
+      recordMissingDoppler(missingSource);
+    }
+
+    private void recordMissingContinuity(GroundTruthObservation missingSource) {
+      if (missingSource.hasAlignmentTruth()) {
+        continuityEvaluableSources.add(missingSource.source().sourceId());
+        continuitySkippedCount++;
+      } else {
+        continuityUnavailableTruthCount++;
+      }
+    }
+
+    private void recordMissingLocalization(GroundTruthObservation missingSource) {
+      if (missingSource.hasPositionTruth()) {
+        localizationSkippedCount++;
+      } else {
+        localizationUnavailableTruthCount++;
+      }
+    }
+
+    private void recordMissingFrequency(GroundTruthObservation missingSource) {
+      if (missingSource.hasFrequencyTruth()) {
+        frequencySkippedCount++;
+      } else {
+        frequencyUnavailableTruthCount++;
+      }
+    }
+
+    private void recordMissingDoppler(GroundTruthObservation missingSource) {
+      if (missingSource.hasDopplerTruth()) {
+        dopplerSkippedCount++;
+      } else {
+        dopplerUnavailableTruthCount++;
+      }
+    }
+
+    private BenchmarkReport toReport(
+        Scenario truth,
+        BenchmarkMeasurements measurements,
+        ClassificationSummary classificationSummary) {
+      int continuitySampleCount =
+          continuityEvaluatedCount + continuitySkippedCount + continuityUnavailableTruthCount;
+      int continuityAvailableCount = continuityEvaluatedCount + continuitySkippedCount;
+      Double trackContinuity =
+          continuityAvailableCount == 0
+              ? null
+              : continuityEvaluatedCount / (double) continuityAvailableCount;
+      Double idStability = idStability(continuityEvaluableSources, trackCountsBySource);
+      Double sourceCountAccuracy =
+          measurements.snapshots().isEmpty()
+              ? null
+              : exactSourceCountFrames / (double) measurements.snapshots().size();
+      Double meanSourceCountError =
+          measurements.snapshots().isEmpty()
+              ? null
+              : absoluteSourceCountError / (double) measurements.snapshots().size();
+      Double falsePositiveRate =
+          totalMeasuredObservations == 0L
+              ? null
+              : totalSpuriousTracks / (double) totalMeasuredObservations;
+      Double falseNegativeRate =
+          continuityAvailableCount == 0
+              ? null
+              : continuitySkippedCount / (double) continuityAvailableCount;
+      return new BenchmarkReport(
+          truth.id(),
+          truth.sources().size(),
+          measurements.snapshots().size(),
+          LocalizationErrorMetric.ofSamples(
+              distanceErrorsMeters,
+              angularErrorsDegrees,
+              localizationSkippedCount,
+              localizationUnavailableTruthCount),
+          FrequencyErrorMetric.ofSamples(
+              absoluteFrequencyErrorsHz,
+              relativeFrequencyErrors,
+              frequencySkippedCount,
+              frequencyUnavailableTruthCount),
+          DopplerErrorMetric.ofSamples(
+              absoluteDopplerErrorsMetersPerSecond,
+              dopplerSkippedCount,
+              dopplerUnavailableTruthCount),
+          classificationSummary.asMetric(),
+          trackContinuity,
+          continuitySampleCount,
+          continuityEvaluatedCount,
+          continuitySkippedCount,
+          continuityUnavailableTruthCount,
+          idStability,
+          sourceCountAccuracy,
+          meanSourceCountError,
+          falsePositiveRate,
+          falseNegativeRate,
+          mean(processingTimes),
+          median(processingTimes),
+          max(processingTimes));
+    }
   }
 }

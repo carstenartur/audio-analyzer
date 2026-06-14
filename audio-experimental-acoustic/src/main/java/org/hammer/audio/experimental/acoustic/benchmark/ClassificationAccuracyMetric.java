@@ -1,6 +1,15 @@
 package org.hammer.audio.experimental.acoustic.benchmark;
 
-/** Summary metric for benchmark comparisons of classification outputs against scenario truth. */
+/**
+ * Summary metric for benchmark comparisons of classification outputs against scenario truth.
+ *
+ * @param accuracy ratio of correct classifications among evaluated samples
+ * @param correctCount number of correct classifications
+ * @param sampleCount total classification sample count
+ * @param evaluatedCount number of evaluated classification samples
+ * @param skippedCount number of skipped classification samples
+ * @param unavailableTruthCount number of samples without comparable truth labels
+ */
 public record ClassificationAccuracyMetric(
     Double accuracy,
     int correctCount,

@@ -4,7 +4,16 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-/** Summary metric for benchmark comparisons of Doppler/radial-velocity estimates. */
+/**
+ * Summary metric for benchmark comparisons of Doppler/radial-velocity estimates.
+ *
+ * @param meanAbsoluteErrorMetersPerSecond mean absolute Doppler error in meters per second
+ * @param medianAbsoluteErrorMetersPerSecond median absolute Doppler error in meters per second
+ * @param sampleCount total Doppler sample count
+ * @param evaluatedCount number of evaluated Doppler samples
+ * @param skippedCount number of skipped Doppler samples
+ * @param unavailableTruthCount number of samples without usable Doppler truth
+ */
 public record DopplerErrorMetric(
     Double meanAbsoluteErrorMetersPerSecond,
     Double medianAbsoluteErrorMetersPerSecond,
