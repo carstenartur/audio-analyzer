@@ -4,6 +4,96 @@ This detail page expands the [plugin entry page](../acoustic-localization.md). T
 experimental research subsystem for real-time localization and tracking of weak or insect-like sound
 sources. It is not a production mosquito detector.
 
+## How to run the workbench
+
+The Plugins menu in Audio Analyzer exposes an interactive **Acoustic Localization Workbench
+(experimental)** that lets you run deterministic simulation scenarios through the full tracking
+pipeline without a microphone array.
+
+### Opening the workbench
+
+1. Start Audio Analyzer.
+2. Open the **Plugins** menu in the menu bar.
+3. Expand the **Experimental Acoustic Localization** submenu.
+4. Click **Open: Acoustic Localization Workbench (experimental)**.
+
+A dialog opens with three areas:
+
+- **Top** — scenario selector, pipeline parameter controls and Run / Stop buttons.
+- **Centre left** — log, Markdown, CSV and JSON-lines tabs showing live and post-run output.
+- **Centre right** — 2-D room map: room rectangle, microphone positions (blue circles), emitter
+  ground-truth positions (green triangles), candidate grid (grey dots) and estimated track
+  positions (red circles, labelled by track ID).
+
+### Available scenarios
+
+All scenarios from `SimulationScenarios.all()` are listed in the dropdown:
+
+|         Scenario         |                         Description                          |
+|--------------------------|--------------------------------------------------------------|
+| `single-source`          | One stationary 600 Hz tone in an anechoic room               |
+| `two-close-frequencies`  | Two sources at 600 Hz and 640 Hz — challenges naive trackers |
+| `noisy-room`             | Single source with broadband background noise                |
+| `moving-source`          | Source crossing the room at constant velocity                |
+| `moving-toward-array`    | Source approaching the array (Doppler validation)            |
+| `moving-across-array`    | Source moving laterally across the array                     |
+| `two-moving-sources`     | Two tones with distinct velocities                           |
+| `reflected-environment`  | Single source with wall reflections enabled                  |
+| `two-mosquito-wingbeats` | Two deterministic wingbeat emitters at close frequencies     |
+
+### Configurable parameters
+
+|   Parameter    |    Default    |                            Meaning                            |
+|----------------|---------------|---------------------------------------------------------------|
+| Block size     | 1024          | Frames per processing block                                   |
+| FFT size       | 1024          | FFT window length (power of two)                              |
+| Max peaks      | 3             | Peaks detected per channel per block                          |
+| Min SNR        | 2.0           | Minimum peak-to-median SNR                                    |
+| Band min / max | 150 – 2500 Hz | Frequency search band                                         |
+| Grid steps     | 8             | Steps per room axis; total grid is (steps+1)×(steps+1) points |
+| TDOA estimator | GCC-PHAT      | `GCC_PHAT` or `CROSS_CORRELATION`                             |
+
+### Log output format
+
+Each processed block prints one line:
+
+```
+Block   12  frame=  12288  time=  768.0 ms  clusters=1  tracks=1  proc=142.3 µs
+         [600 Hz]  {id=0 f=600 Hz pos=(1.50,1.00) conf=0.92 n=13}
+```
+
+Processing time exceeding the per-block budget (block duration × 0.8) is reported in the final
+summary.
+
+### Export
+
+After a run completes the three export tabs are populated:
+
+- **Markdown** — human-readable summary with scenario metadata, parameter table and per-block table.
+- **CSV** — one row per tracked source per frame (`frameIndex`, `timestampNs`, `trackId`,
+  `frequencyHz`, `posX`, `posY`, …).
+- **JSON-lines** — one JSON object per frame, suitable for offline analysis.
+
+Copy the content to a file for archiving.
+
+### Headless / programmatic use
+
+`WorkbenchScenarioRunner` runs scenarios without Swing:
+
+```java
+SimulationScenario scenario = SimulationScenarios.singleSource();
+WorkbenchParameters params = WorkbenchParameters.defaults().build();
+WorkbenchRunResult result = WorkbenchScenarioRunner.run(scenario, params);
+System.out.println(WorkbenchRunExporter.toMarkdown(result));
+```
+
+All five required acceptance-criteria scenarios (`singleSource`, `twoCloseFrequencies`,
+`movingSource`, `noisyRoom`, `reflectedEnvironment`) are covered by
+`WorkbenchScenarioRunnerTest` and `AcousticLocalizationWorkbenchPanelTest` in
+`audio-experimental-acoustic`.
+
+---
+
 ## Pipeline overview
 
 ```text

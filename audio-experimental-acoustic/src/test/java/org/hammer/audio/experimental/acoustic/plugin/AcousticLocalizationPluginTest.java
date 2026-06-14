@@ -46,12 +46,39 @@ class AcousticLocalizationPluginTest {
   @Test
   void viewContributionProducesUniqueComponents() {
     AcousticLocalizationPlugin plugin = new AcousticLocalizationPlugin();
-    ViewContribution view = plugin.viewContributions().get(0);
-    JComponent first = view.componentFactory().get();
-    JComponent second = view.componentFactory().get();
-    assertNotNull(first);
-    assertNotNull(second);
-    assertNotSame(first, second, "factory must return fresh component instances");
+    for (ViewContribution view : plugin.viewContributions()) {
+      JComponent first = view.componentFactory().get();
+      JComponent second = view.componentFactory().get();
+      assertNotNull(first, view.id() + " first component must not be null");
+      assertNotNull(second, view.id() + " second component must not be null");
+      assertNotSame(
+          first, second, "factory for " + view.id() + " must return fresh component instances");
+    }
+  }
+
+  @Test
+  void workbenchViewContributionIsPresent() {
+    AcousticLocalizationPlugin plugin = new AcousticLocalizationPlugin();
+    boolean hasWorkbench =
+        plugin.viewContributions().stream()
+            .anyMatch(v -> "acoustic-localization-workbench".equals(v.id()));
+    assertTrue(hasWorkbench, "plugin must expose the acoustic-localization-workbench view");
+  }
+
+  @Test
+  void workbenchViewFactoryProducesWorkbenchPanel() {
+    AcousticLocalizationPlugin plugin = new AcousticLocalizationPlugin();
+    ViewContribution workbench =
+        plugin.viewContributions().stream()
+            .filter(v -> "acoustic-localization-workbench".equals(v.id()))
+            .findFirst()
+            .orElseThrow();
+    JComponent component = workbench.componentFactory().get();
+    assertNotNull(component);
+    assertTrue(
+        component.getClass().getSimpleName().equals("AcousticLocalizationWorkbenchPanel"),
+        "workbench view should produce AcousticLocalizationWorkbenchPanel, got "
+            + component.getClass().getSimpleName());
   }
 
   @Test
