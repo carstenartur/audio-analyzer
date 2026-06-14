@@ -2,14 +2,13 @@ package org.hammer.audio.experimental.acoustic.benchmark;
 
 import java.util.List;
 import java.util.Objects;
-import org.hammer.audio.experimental.acoustic.scenario.ScenarioSource;
 import org.hammer.audio.experimental.acoustic.tracking.TrackedSource;
 
 /** Alignment result for one tracking snapshot against scenario truth. */
 public record SnapshotAlignment(
     double timestampSeconds,
     List<AlignedSourceObservation> matchedSources,
-    List<ScenarioSource> missingSources,
+    List<GroundTruthObservation> missingSources,
     List<TrackedSource> spuriousTracks) {
 
   public SnapshotAlignment {

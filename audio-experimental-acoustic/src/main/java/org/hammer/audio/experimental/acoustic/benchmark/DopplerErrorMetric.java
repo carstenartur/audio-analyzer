@@ -6,40 +6,60 @@ import java.util.List;
 
 /** Summary metric for benchmark comparisons of Doppler/radial-velocity estimates. */
 public record DopplerErrorMetric(
-    double meanAbsoluteErrorMetersPerSecond,
-    double medianAbsoluteErrorMetersPerSecond,
-    int sampleCount) {
+    Double meanAbsoluteErrorMetersPerSecond,
+    Double medianAbsoluteErrorMetersPerSecond,
+    int sampleCount,
+    int evaluatedCount,
+    int skippedCount,
+    int unavailableTruthCount) {
 
   public DopplerErrorMetric {
-    if (!Double.isFinite(meanAbsoluteErrorMetersPerSecond)
-        || meanAbsoluteErrorMetersPerSecond < 0.0) {
-      throw new IllegalArgumentException(
-          "meanAbsoluteErrorMetersPerSecond must be finite and >= 0");
-    }
-    if (!Double.isFinite(medianAbsoluteErrorMetersPerSecond)
-        || medianAbsoluteErrorMetersPerSecond < 0.0) {
-      throw new IllegalArgumentException(
-          "medianAbsoluteErrorMetersPerSecond must be finite and >= 0");
-    }
-    if (sampleCount < 0) {
-      throw new IllegalArgumentException("sampleCount must be >= 0");
-    }
-  }
-
-  /** Empty metric for scenarios where no aligned Doppler samples were available. */
-  public static DopplerErrorMetric empty() {
-    return new DopplerErrorMetric(0.0, 0.0, 0);
+    validateCounts(sampleCount, evaluatedCount, skippedCount, unavailableTruthCount);
+    validateMetric(
+        meanAbsoluteErrorMetersPerSecond, evaluatedCount, "meanAbsoluteErrorMetersPerSecond");
+    validateMetric(
+        medianAbsoluteErrorMetersPerSecond,
+        evaluatedCount,
+        "medianAbsoluteErrorMetersPerSecond");
   }
 
   /** Build a summary metric from per-sample absolute errors. */
-  public static DopplerErrorMetric ofSamples(List<Double> absoluteErrorsMetersPerSecond) {
-    if (absoluteErrorsMetersPerSecond == null || absoluteErrorsMetersPerSecond.isEmpty()) {
-      return empty();
+  public static DopplerErrorMetric ofSamples(
+      List<Double> absoluteErrorsMetersPerSecond, int skippedCount, int unavailableTruthCount) {
+    if (absoluteErrorsMetersPerSecond == null) {
+      throw new IllegalArgumentException("absoluteErrorsMetersPerSecond must not be null");
     }
+    int evaluatedCount = absoluteErrorsMetersPerSecond.size();
     return new DopplerErrorMetric(
-        mean(absoluteErrorsMetersPerSecond),
-        median(absoluteErrorsMetersPerSecond),
-        absoluteErrorsMetersPerSecond.size());
+        evaluatedCount == 0 ? null : mean(absoluteErrorsMetersPerSecond),
+        evaluatedCount == 0 ? null : median(absoluteErrorsMetersPerSecond),
+        evaluatedCount + skippedCount + unavailableTruthCount,
+        evaluatedCount,
+        skippedCount,
+        unavailableTruthCount);
+  }
+
+  private static void validateCounts(
+      int sampleCount, int evaluatedCount, int skippedCount, int unavailableTruthCount) {
+    if (sampleCount < 0 || evaluatedCount < 0 || skippedCount < 0 || unavailableTruthCount < 0) {
+      throw new IllegalArgumentException("metric counts must be >= 0");
+    }
+    if (sampleCount != evaluatedCount + skippedCount + unavailableTruthCount) {
+      throw new IllegalArgumentException(
+          "sampleCount must equal evaluatedCount + skippedCount + unavailableTruthCount");
+    }
+  }
+
+  private static void validateMetric(Double value, int evaluatedCount, String fieldName) {
+    if (evaluatedCount == 0) {
+      if (value != null) {
+        throw new IllegalArgumentException(fieldName + " must be null when evaluatedCount is 0");
+      }
+      return;
+    }
+    if (value == null || !Double.isFinite(value) || value < 0.0) {
+      throw new IllegalArgumentException(fieldName + " must be finite and >= 0");
+    }
   }
 
   private static double mean(List<Double> values) {

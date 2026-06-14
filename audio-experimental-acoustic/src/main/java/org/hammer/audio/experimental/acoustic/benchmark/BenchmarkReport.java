@@ -1,5 +1,8 @@
 package org.hammer.audio.experimental.acoustic.benchmark;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.json.JsonMapper;
 import java.util.Locale;
 import java.util.Objects;
 
@@ -12,15 +15,21 @@ public record BenchmarkReport(
     FrequencyErrorMetric frequency,
     DopplerErrorMetric doppler,
     ClassificationAccuracyMetric classification,
-    double trackContinuity,
-    double idStability,
-    double sourceCountAccuracy,
-    double meanSourceCountError,
-    double falsePositiveRate,
-    double falseNegativeRate,
+    Double trackContinuity,
+    int trackContinuitySampleCount,
+    int trackContinuityEvaluatedCount,
+    int trackContinuitySkippedCount,
+    int trackContinuityUnavailableTruthCount,
+    Double idStability,
+    Double sourceCountAccuracy,
+    Double meanSourceCountError,
+    Double falsePositiveRate,
+    Double falseNegativeRate,
     long meanProcessingNanos,
     long medianProcessingNanos,
     long maxProcessingNanos) {
+
+  private static final ObjectMapper OBJECT_MAPPER = JsonMapper.builder().build();
 
   public BenchmarkReport {
     Objects.requireNonNull(scenarioId, "scenarioId");
@@ -34,12 +43,18 @@ public record BenchmarkReport(
     if (expectedSourceCount < 0 || snapshotCount < 0) {
       throw new IllegalArgumentException("counts must be >= 0");
     }
-    validateRate(trackContinuity, "trackContinuity");
-    validateRate(idStability, "idStability");
-    validateRate(sourceCountAccuracy, "sourceCountAccuracy");
-    validateNonNegative(meanSourceCountError, "meanSourceCountError");
-    validateRate(falsePositiveRate, "falsePositiveRate");
-    validateRate(falseNegativeRate, "falseNegativeRate");
+    validateCounts(
+        trackContinuitySampleCount,
+        trackContinuityEvaluatedCount,
+        trackContinuitySkippedCount,
+        trackContinuityUnavailableTruthCount,
+        "trackContinuity");
+    validateNullableRate(trackContinuity, "trackContinuity");
+    validateNullableRate(idStability, "idStability");
+    validateNullableRate(sourceCountAccuracy, "sourceCountAccuracy");
+    validateNullableNonNegative(meanSourceCountError, "meanSourceCountError");
+    validateNullableRate(falsePositiveRate, "falsePositiveRate");
+    validateNullableRate(falseNegativeRate, "falseNegativeRate");
     if (meanProcessingNanos < 0L || medianProcessingNanos < 0L || maxProcessingNanos < 0L) {
       throw new IllegalArgumentException("processing times must be >= 0");
     }
@@ -56,13 +71,34 @@ public record BenchmarkReport(
         "medianDistanceErrorMeters",
         "meanAngularErrorDegrees",
         "medianAngularErrorDegrees",
+        "localizationSampleCount",
+        "localizationEvaluatedCount",
+        "localizationSkippedCount",
+        "localizationUnavailableTruthCount",
         "meanAbsoluteFrequencyErrorHz",
         "medianAbsoluteFrequencyErrorHz",
         "meanRelativeFrequencyError",
+        "frequencySampleCount",
+        "frequencyEvaluatedCount",
+        "frequencySkippedCount",
+        "frequencyUnavailableTruthCount",
         "meanAbsoluteDopplerErrorMps",
         "medianAbsoluteDopplerErrorMps",
+        "dopplerSampleCount",
+        "dopplerEvaluatedCount",
+        "dopplerSkippedCount",
+        "dopplerUnavailableTruthCount",
         "classificationAccuracy",
+        "classificationCorrectCount",
+        "classificationSampleCount",
+        "classificationEvaluatedCount",
+        "classificationSkippedCount",
+        "classificationUnavailableTruthCount",
         "trackContinuity",
+        "trackContinuitySampleCount",
+        "trackContinuityEvaluatedCount",
+        "trackContinuitySkippedCount",
+        "trackContinuityUnavailableTruthCount",
         "idStability",
         "sourceCountAccuracy",
         "meanSourceCountError",
@@ -84,13 +120,34 @@ public record BenchmarkReport(
         format(localization.medianDistanceErrorMeters()),
         format(localization.meanAngularErrorDegrees()),
         format(localization.medianAngularErrorDegrees()),
+        Integer.toString(localization.sampleCount()),
+        Integer.toString(localization.evaluatedCount()),
+        Integer.toString(localization.skippedCount()),
+        Integer.toString(localization.unavailableTruthCount()),
         format(frequency.meanAbsoluteErrorHz()),
         format(frequency.medianAbsoluteErrorHz()),
         format(frequency.meanRelativeError()),
+        Integer.toString(frequency.sampleCount()),
+        Integer.toString(frequency.evaluatedCount()),
+        Integer.toString(frequency.skippedCount()),
+        Integer.toString(frequency.unavailableTruthCount()),
         format(doppler.meanAbsoluteErrorMetersPerSecond()),
         format(doppler.medianAbsoluteErrorMetersPerSecond()),
+        Integer.toString(doppler.sampleCount()),
+        Integer.toString(doppler.evaluatedCount()),
+        Integer.toString(doppler.skippedCount()),
+        Integer.toString(doppler.unavailableTruthCount()),
         format(classification.accuracy()),
+        Integer.toString(classification.correctCount()),
+        Integer.toString(classification.sampleCount()),
+        Integer.toString(classification.evaluatedCount()),
+        Integer.toString(classification.skippedCount()),
+        Integer.toString(classification.unavailableTruthCount()),
         format(trackContinuity),
+        Integer.toString(trackContinuitySampleCount),
+        Integer.toString(trackContinuityEvaluatedCount),
+        Integer.toString(trackContinuitySkippedCount),
+        Integer.toString(trackContinuityUnavailableTruthCount),
         format(idStability),
         format(sourceCountAccuracy),
         format(meanSourceCountError),
@@ -103,65 +160,11 @@ public record BenchmarkReport(
 
   /** Serialize the report to a compact JSON object. */
   public String toJson() {
-    return "{"
-        + jsonField("scenarioId", jsonEscape(scenarioId))
-        + ",\"expectedSourceCount\":"
-        + expectedSourceCount
-        + ",\"snapshotCount\":"
-        + snapshotCount
-        + ",\"localization\":{\"meanDistanceErrorMeters\":"
-        + format(localization.meanDistanceErrorMeters())
-        + ",\"medianDistanceErrorMeters\":"
-        + format(localization.medianDistanceErrorMeters())
-        + ",\"meanAngularErrorDegrees\":"
-        + format(localization.meanAngularErrorDegrees())
-        + ",\"medianAngularErrorDegrees\":"
-        + format(localization.medianAngularErrorDegrees())
-        + ",\"sampleCount\":"
-        + localization.sampleCount()
-        + "}"
-        + ",\"frequency\":{\"meanAbsoluteErrorHz\":"
-        + format(frequency.meanAbsoluteErrorHz())
-        + ",\"medianAbsoluteErrorHz\":"
-        + format(frequency.medianAbsoluteErrorHz())
-        + ",\"meanRelativeError\":"
-        + format(frequency.meanRelativeError())
-        + ",\"sampleCount\":"
-        + frequency.sampleCount()
-        + "}"
-        + ",\"doppler\":{\"meanAbsoluteErrorMetersPerSecond\":"
-        + format(doppler.meanAbsoluteErrorMetersPerSecond())
-        + ",\"medianAbsoluteErrorMetersPerSecond\":"
-        + format(doppler.medianAbsoluteErrorMetersPerSecond())
-        + ",\"sampleCount\":"
-        + doppler.sampleCount()
-        + "}"
-        + ",\"classification\":{\"accuracy\":"
-        + format(classification.accuracy())
-        + ",\"correctCount\":"
-        + classification.correctCount()
-        + ",\"comparedCount\":"
-        + classification.comparedCount()
-        + "}"
-        + ",\"trackContinuity\":"
-        + format(trackContinuity)
-        + ",\"idStability\":"
-        + format(idStability)
-        + ",\"sourceCountAccuracy\":"
-        + format(sourceCountAccuracy)
-        + ",\"meanSourceCountError\":"
-        + format(meanSourceCountError)
-        + ",\"falsePositiveRate\":"
-        + format(falsePositiveRate)
-        + ",\"falseNegativeRate\":"
-        + format(falseNegativeRate)
-        + ",\"meanProcessingNanos\":"
-        + meanProcessingNanos
-        + ",\"medianProcessingNanos\":"
-        + medianProcessingNanos
-        + ",\"maxProcessingNanos\":"
-        + maxProcessingNanos
-        + "}";
+    try {
+      return OBJECT_MAPPER.writeValueAsString(this);
+    } catch (JsonProcessingException exception) {
+      throw new IllegalStateException("Failed to serialize benchmark report", exception);
+    }
   }
 
   /** Render a human-friendly markdown summary suitable for benchmark reports. */
@@ -170,48 +173,81 @@ public record BenchmarkReport(
         + " ID stability | False+ | False- | Mean processing (ns) |\n"
         + "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n"
         + "| "
-        + scenarioId
+        + markdownEscape(scenarioId)
         + " | "
-        + format(localization.medianDistanceErrorMeters())
+        + markdownFormat(localization.medianDistanceErrorMeters())
         + " | "
-        + format(frequency.meanAbsoluteErrorHz())
+        + markdownFormat(frequency.meanAbsoluteErrorHz())
         + " | "
-        + format(trackContinuity)
+        + formatTrackContinuity()
         + " | "
-        + format(idStability)
+        + markdownFormat(idStability)
         + " | "
-        + format(falsePositiveRate)
+        + markdownFormat(falsePositiveRate)
         + " | "
-        + format(falseNegativeRate)
+        + markdownFormat(falseNegativeRate)
         + " | "
         + meanProcessingNanos
         + " |";
   }
 
-  private static String jsonField(String name, String value) {
-    return "\"" + name + "\":\"" + value + "\"";
+  private String formatTrackContinuity() {
+    int continuityDenominator = trackContinuityEvaluatedCount + trackContinuitySkippedCount;
+    if (trackContinuity == null) {
+      return trackContinuityUnavailableTruthCount > 0
+          ? "n/a (%d unavailable)".formatted(trackContinuityUnavailableTruthCount)
+          : "n/a";
+    }
+    return "%s (%d/%d)"
+        .formatted(
+            format(trackContinuity),
+            trackContinuityEvaluatedCount,
+            Math.max(continuityDenominator, 1));
   }
 
   private static String csvEscape(String value) {
     return '"' + value.replace("\"", "\"\"") + '"';
   }
 
-  private static String jsonEscape(String value) {
-    return value.replace("\\", "\\\\").replace("\"", "\\\"");
+  private static String markdownEscape(String value) {
+    return value.replace("\\", "\\\\").replace("|", "\\|").replace("\r", " ").replace("\n", " ");
   }
 
-  private static String format(double value) {
+  private static String markdownFormat(Double value) {
+    return value == null ? "n/a" : format(value);
+  }
+
+  private static String format(Double value) {
+    if (value == null) {
+      return "";
+    }
     return String.format(Locale.ROOT, "%.6f", value);
   }
 
-  private static void validateRate(double value, String fieldName) {
-    if (!Double.isFinite(value) || value < 0.0 || value > 1.0) {
+  private static void validateCounts(
+      int sampleCount,
+      int evaluatedCount,
+      int skippedCount,
+      int unavailableTruthCount,
+      String fieldName) {
+    if (sampleCount < 0 || evaluatedCount < 0 || skippedCount < 0 || unavailableTruthCount < 0) {
+      throw new IllegalArgumentException(fieldName + " counts must be >= 0");
+    }
+    if (sampleCount != evaluatedCount + skippedCount + unavailableTruthCount) {
+      throw new IllegalArgumentException(
+          fieldName
+              + " sampleCount must equal evaluatedCount + skippedCount + unavailableTruthCount");
+    }
+  }
+
+  private static void validateNullableRate(Double value, String fieldName) {
+    if (value != null && (!Double.isFinite(value) || value < 0.0 || value > 1.0)) {
       throw new IllegalArgumentException(fieldName + " must be finite and in [0,1]");
     }
   }
 
-  private static void validateNonNegative(double value, String fieldName) {
-    if (!Double.isFinite(value) || value < 0.0) {
+  private static void validateNullableNonNegative(Double value, String fieldName) {
+    if (value != null && (!Double.isFinite(value) || value < 0.0)) {
       throw new IllegalArgumentException(fieldName + " must be finite and >= 0");
     }
   }

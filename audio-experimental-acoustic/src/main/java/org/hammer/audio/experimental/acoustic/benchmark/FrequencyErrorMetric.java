@@ -7,48 +7,65 @@ import java.util.Objects;
 
 /** Summary metric for benchmark comparisons of recovered source frequencies. */
 public record FrequencyErrorMetric(
-    double meanAbsoluteErrorHz,
-    double medianAbsoluteErrorHz,
-    double meanRelativeError,
-    int sampleCount) {
+    Double meanAbsoluteErrorHz,
+    Double medianAbsoluteErrorHz,
+    Double meanRelativeError,
+    int sampleCount,
+    int evaluatedCount,
+    int skippedCount,
+    int unavailableTruthCount) {
 
   public FrequencyErrorMetric {
-    if (!Double.isFinite(meanAbsoluteErrorHz) || meanAbsoluteErrorHz < 0.0) {
-      throw new IllegalArgumentException("meanAbsoluteErrorHz must be finite and >= 0");
-    }
-    if (!Double.isFinite(medianAbsoluteErrorHz) || medianAbsoluteErrorHz < 0.0) {
-      throw new IllegalArgumentException("medianAbsoluteErrorHz must be finite and >= 0");
-    }
-    if (!Double.isFinite(meanRelativeError) || meanRelativeError < 0.0) {
-      throw new IllegalArgumentException("meanRelativeError must be finite and >= 0");
-    }
-    if (sampleCount < 0) {
-      throw new IllegalArgumentException("sampleCount must be >= 0");
-    }
-  }
-
-  /** Empty metric for scenarios where no aligned frequency samples were available. */
-  public static FrequencyErrorMetric empty() {
-    return new FrequencyErrorMetric(0.0, 0.0, 0.0, 0);
+    validateCounts(sampleCount, evaluatedCount, skippedCount, unavailableTruthCount);
+    validateMetric(meanAbsoluteErrorHz, evaluatedCount, "meanAbsoluteErrorHz");
+    validateMetric(medianAbsoluteErrorHz, evaluatedCount, "medianAbsoluteErrorHz");
+    validateMetric(meanRelativeError, evaluatedCount, "meanRelativeError");
   }
 
   /** Build a summary metric from per-sample absolute and relative errors. */
   public static FrequencyErrorMetric ofSamples(
-      List<Double> absoluteErrorsHz, List<Double> relativeErrors) {
+      List<Double> absoluteErrorsHz,
+      List<Double> relativeErrors,
+      int skippedCount,
+      int unavailableTruthCount) {
     Objects.requireNonNull(absoluteErrorsHz, "absoluteErrorsHz");
     Objects.requireNonNull(relativeErrors, "relativeErrors");
     if (absoluteErrorsHz.size() != relativeErrors.size()) {
       throw new IllegalArgumentException(
           "absoluteErrorsHz and relativeErrors must have the same size");
     }
-    if (absoluteErrorsHz.isEmpty()) {
-      return empty();
-    }
+    int evaluatedCount = absoluteErrorsHz.size();
     return new FrequencyErrorMetric(
-        mean(absoluteErrorsHz),
-        median(absoluteErrorsHz),
-        mean(relativeErrors),
-        absoluteErrorsHz.size());
+        evaluatedCount == 0 ? null : mean(absoluteErrorsHz),
+        evaluatedCount == 0 ? null : median(absoluteErrorsHz),
+        evaluatedCount == 0 ? null : mean(relativeErrors),
+        evaluatedCount + skippedCount + unavailableTruthCount,
+        evaluatedCount,
+        skippedCount,
+        unavailableTruthCount);
+  }
+
+  private static void validateCounts(
+      int sampleCount, int evaluatedCount, int skippedCount, int unavailableTruthCount) {
+    if (sampleCount < 0 || evaluatedCount < 0 || skippedCount < 0 || unavailableTruthCount < 0) {
+      throw new IllegalArgumentException("metric counts must be >= 0");
+    }
+    if (sampleCount != evaluatedCount + skippedCount + unavailableTruthCount) {
+      throw new IllegalArgumentException(
+          "sampleCount must equal evaluatedCount + skippedCount + unavailableTruthCount");
+    }
+  }
+
+  private static void validateMetric(Double value, int evaluatedCount, String fieldName) {
+    if (evaluatedCount == 0) {
+      if (value != null) {
+        throw new IllegalArgumentException(fieldName + " must be null when evaluatedCount is 0");
+      }
+      return;
+    }
+    if (value == null || !Double.isFinite(value) || value < 0.0) {
+      throw new IllegalArgumentException(fieldName + " must be finite and >= 0");
+    }
   }
 
   private static double mean(List<Double> values) {

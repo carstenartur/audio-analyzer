@@ -2,9 +2,11 @@ package org.hammer.audio.experimental.acoustic.benchmark;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import org.hammer.audio.acquisition.Microphone;
 import org.hammer.audio.experimental.acoustic.scenario.ClassificationGroundTruth;
 import org.hammer.audio.experimental.acoustic.scenario.Scenario;
@@ -39,17 +41,24 @@ public final class TrackingBenchmarkComparator
     List<Double> absoluteDopplerErrorsMetersPerSecond = new ArrayList<>();
     List<Long> processingTimes = new ArrayList<>(measurements.snapshots().size());
     Map<String, Map<Integer, Integer>> trackCountsBySource = new HashMap<>();
+    Set<String> continuityEvaluableSources = new HashSet<>();
 
-    long totalExpectedObservations = 0L;
     long totalMeasuredObservations = 0L;
-    long totalMissingSources = 0L;
     long totalSpuriousTracks = 0L;
     long exactSourceCountFrames = 0L;
     long absoluteSourceCountError = 0L;
+    int localizationSkippedCount = 0;
+    int localizationUnavailableTruthCount = 0;
+    int frequencySkippedCount = 0;
+    int frequencyUnavailableTruthCount = 0;
+    int dopplerSkippedCount = 0;
+    int dopplerUnavailableTruthCount = 0;
+    int continuityEvaluatedCount = 0;
+    int continuitySkippedCount = 0;
+    int continuityUnavailableTruthCount = 0;
 
     for (var snapshot : measurements.snapshots()) {
       processingTimes.add(snapshot.processingNanos());
-      totalExpectedObservations += truth.sources().size();
       totalMeasuredObservations += snapshot.tracks().size();
       if (snapshot.tracks().size() == truth.sources().size()) {
         exactSourceCountFrames++;
@@ -57,87 +66,149 @@ public final class TrackingBenchmarkComparator
       absoluteSourceCountError += Math.abs(snapshot.tracks().size() - truth.sources().size());
 
       SnapshotAlignment alignment = aligner.align(truth, snapshot);
-      totalMissingSources += alignment.missingSources().size();
       totalSpuriousTracks += alignment.spuriousTracks().size();
       for (AlignedSourceObservation observation : alignment.matchedSources()) {
         TrackedSource track = observation.trackedSource();
-        ScenarioSource source = observation.groundTruth();
-        if (observation.expectedPositionMeters() != null) {
-          distanceErrorsMeters.add(
-              observation.expectedPositionMeters().distanceTo(track.positionMeters()));
-          angularErrorsDegrees.add(
-              angularErrorDegrees(
-                  arrayCenter, observation.expectedPositionMeters(), track.positionMeters()));
+        GroundTruthObservation groundTruth = observation.groundTruth();
+        ScenarioSource source = groundTruth.source();
+        if (groundTruth.hasAlignmentTruth()) {
+          continuityEvaluableSources.add(source.sourceId());
+          continuityEvaluatedCount++;
           trackCountsBySource
               .computeIfAbsent(source.sourceId(), ignored -> new HashMap<>())
               .merge(track.id(), 1, Integer::sum);
+        } else {
+          continuityUnavailableTruthCount++;
         }
-        if (source.acousticProperties() != null) {
-          double trueFrequency = source.acousticProperties().fundamentalFrequencyHz();
+        if (groundTruth.hasPositionTruth()) {
+          distanceErrorsMeters.add(
+              groundTruth.expectedPositionMeters().distanceTo(track.positionMeters()));
+          angularErrorsDegrees.add(
+              angularErrorDegrees(
+                  arrayCenter, groundTruth.expectedPositionMeters(), track.positionMeters()));
+        } else {
+          localizationUnavailableTruthCount++;
+        }
+        if (groundTruth.hasFrequencyTruth()) {
+          double trueFrequency = groundTruth.expectedFrequencyHz();
           double absoluteErrorHz = Math.abs(track.frequencyHz() - trueFrequency);
           absoluteFrequencyErrorsHz.add(absoluteErrorHz);
           relativeFrequencyErrors.add(absoluteErrorHz / trueFrequency);
+        } else {
+          frequencyUnavailableTruthCount++;
         }
-        if (observation.expectedPositionMeters() != null
-            && observation.expectedVelocityMetersPerSecond() != null) {
+        if (groundTruth.hasDopplerTruth()) {
           double trueRadialVelocity =
               radialVelocityToward(
                   arrayCenter,
-                  observation.expectedPositionMeters(),
-                  observation.expectedVelocityMetersPerSecond());
+                  groundTruth.expectedPositionMeters(),
+                  groundTruth.expectedVelocityMetersPerSecond());
           absoluteDopplerErrorsMetersPerSecond.add(
               Math.abs(track.radialVelocityMetersPerSecond() - trueRadialVelocity));
+        } else {
+          dopplerUnavailableTruthCount++;
+        }
+      }
+      for (GroundTruthObservation missingSource : alignment.missingSources()) {
+        if (missingSource.hasAlignmentTruth()) {
+          continuityEvaluableSources.add(missingSource.source().sourceId());
+          continuitySkippedCount++;
+        } else {
+          continuityUnavailableTruthCount++;
+        }
+        if (missingSource.hasPositionTruth()) {
+          localizationSkippedCount++;
+        } else {
+          localizationUnavailableTruthCount++;
+        }
+        if (missingSource.hasFrequencyTruth()) {
+          frequencySkippedCount++;
+        } else {
+          frequencyUnavailableTruthCount++;
+        }
+        if (missingSource.hasDopplerTruth()) {
+          dopplerSkippedCount++;
+        } else {
+          dopplerUnavailableTruthCount++;
         }
       }
     }
 
     int classificationCorrect = 0;
-    int classificationCompared = 0;
+    int classificationEvaluatedCount = 0;
+    int classificationSkippedCount = 0;
+    int classificationUnavailableTruthCount = 0;
     for (ScenarioSource source : truth.sources()) {
       ClassificationGroundTruth labels = source.labels();
       ClassificationPrediction prediction =
           measurements.classificationPredictions().get(source.sourceId());
-      if (labels == null || prediction == null || !hasComparableClassification(labels)) {
+      if (labels == null || !hasComparableClassification(labels)) {
+        classificationUnavailableTruthCount++;
         continue;
       }
-      classificationCompared++;
+      if (prediction == null) {
+        classificationSkippedCount++;
+        continue;
+      }
+      classificationEvaluatedCount++;
       if (classificationMatches(labels, prediction)) {
         classificationCorrect++;
       }
     }
 
-    double trackContinuity =
-        totalExpectedObservations == 0L
-            ? 0.0
-            : (totalExpectedObservations - totalMissingSources)
-                / (double) totalExpectedObservations;
-    double idStability = idStability(truth, trackCountsBySource);
-    double sourceCountAccuracy =
+    int continuitySampleCount =
+        continuityEvaluatedCount + continuitySkippedCount + continuityUnavailableTruthCount;
+    int continuityAvailableCount = continuityEvaluatedCount + continuitySkippedCount;
+    Double trackContinuity =
+        continuityAvailableCount == 0
+            ? null
+            : continuityEvaluatedCount / (double) continuityAvailableCount;
+    Double idStability = idStability(continuityEvaluableSources, trackCountsBySource);
+    Double sourceCountAccuracy =
         measurements.snapshots().isEmpty()
-            ? 0.0
+            ? null
             : exactSourceCountFrames / (double) measurements.snapshots().size();
-    double meanSourceCountError =
+    Double meanSourceCountError =
         measurements.snapshots().isEmpty()
-            ? 0.0
+            ? null
             : absoluteSourceCountError / (double) measurements.snapshots().size();
-    double falsePositiveRate =
+    Double falsePositiveRate =
         totalMeasuredObservations == 0L
-            ? 0.0
+            ? null
             : totalSpuriousTracks / (double) totalMeasuredObservations;
-    double falseNegativeRate =
-        totalExpectedObservations == 0L
-            ? 0.0
-            : totalMissingSources / (double) totalExpectedObservations;
+    Double falseNegativeRate =
+        continuityAvailableCount == 0
+            ? null
+            : continuitySkippedCount / (double) continuityAvailableCount;
 
     return new BenchmarkReport(
         truth.id(),
         truth.sources().size(),
         measurements.snapshots().size(),
-        LocalizationErrorMetric.ofSamples(distanceErrorsMeters, angularErrorsDegrees),
-        FrequencyErrorMetric.ofSamples(absoluteFrequencyErrorsHz, relativeFrequencyErrors),
-        DopplerErrorMetric.ofSamples(absoluteDopplerErrorsMetersPerSecond),
-        ClassificationAccuracyMetric.ofCounts(classificationCorrect, classificationCompared),
+        LocalizationErrorMetric.ofSamples(
+            distanceErrorsMeters,
+            angularErrorsDegrees,
+            localizationSkippedCount,
+            localizationUnavailableTruthCount),
+        FrequencyErrorMetric.ofSamples(
+            absoluteFrequencyErrorsHz,
+            relativeFrequencyErrors,
+            frequencySkippedCount,
+            frequencyUnavailableTruthCount),
+        DopplerErrorMetric.ofSamples(
+            absoluteDopplerErrorsMetersPerSecond,
+            dopplerSkippedCount,
+            dopplerUnavailableTruthCount),
+        ClassificationAccuracyMetric.ofCounts(
+            classificationCorrect,
+            classificationEvaluatedCount,
+            classificationSkippedCount,
+            classificationUnavailableTruthCount),
         trackContinuity,
+        continuitySampleCount,
+        continuityEvaluatedCount,
+        continuitySkippedCount,
+        continuityUnavailableTruthCount,
         idStability,
         sourceCountAccuracy,
         meanSourceCountError,
@@ -172,7 +243,7 @@ public final class TrackingBenchmarkComparator
       return false;
     }
     for (Map.Entry<String, String> entry : truth.labels().entrySet()) {
-      if (!entry.getValue().equals(prediction.labels().get(entry.getKey()))) {
+      if (!Objects.equals(entry.getValue(), prediction.labels().get(entry.getKey()))) {
         return false;
       }
     }
@@ -207,14 +278,14 @@ public final class TrackingBenchmarkComparator
     return velocity.dot(receiver.minus(source).normalized());
   }
 
-  private static double idStability(
-      Scenario truth, Map<String, Map<Integer, Integer>> trackCountsBySource) {
-    if (truth.sources().isEmpty()) {
-      return 0.0;
+  private static Double idStability(
+      Set<String> evaluableSourceIds, Map<String, Map<Integer, Integer>> trackCountsBySource) {
+    if (evaluableSourceIds.isEmpty()) {
+      return null;
     }
     double total = 0.0;
-    for (ScenarioSource source : truth.sources()) {
-      Map<Integer, Integer> trackCounts = trackCountsBySource.get(source.sourceId());
+    for (String sourceId : evaluableSourceIds) {
+      Map<Integer, Integer> trackCounts = trackCountsBySource.get(sourceId);
       if (trackCounts == null || trackCounts.isEmpty()) {
         continue;
       }
@@ -226,7 +297,7 @@ public final class TrackingBenchmarkComparator
       }
       total += dominant / (double) matched;
     }
-    return total / truth.sources().size();
+    return total / evaluableSourceIds.size();
   }
 
   private static long mean(List<Long> values) {

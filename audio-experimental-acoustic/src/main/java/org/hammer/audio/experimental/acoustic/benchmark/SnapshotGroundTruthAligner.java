@@ -1,10 +1,9 @@
 package org.hammer.audio.experimental.acoustic.benchmark;
 
 import java.util.ArrayList;
-import java.util.HashSet;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
-import java.util.Set;
 import org.hammer.audio.experimental.acoustic.scenario.AcousticGroundTruth;
 import org.hammer.audio.experimental.acoustic.scenario.Scenario;
 import org.hammer.audio.experimental.acoustic.scenario.ScenarioSource;
@@ -18,41 +17,60 @@ public final class SnapshotGroundTruthAligner {
 
   private static final double MAX_POSITION_ALIGNMENT_METERS = 1.5;
   private static final double MAX_FREQUENCY_ALIGNMENT_HZ = 120.0;
+  private static final Comparator<GroundTruthObservation> TRUTH_ORDER =
+      Comparator.comparing((GroundTruthObservation observation) -> observation.source().sourceId())
+          .thenComparing(
+              GroundTruthObservation::expectedFrequencyHz,
+              Comparator.nullsLast(Double::compareTo))
+          .thenComparing(
+              observation ->
+                  observation.expectedPositionMeters() != null
+                      ? observation.expectedPositionMeters().x()
+                      : null,
+              Comparator.nullsLast(Double::compareTo))
+          .thenComparing(
+              observation ->
+                  observation.expectedPositionMeters() != null
+                      ? observation.expectedPositionMeters().y()
+                      : null,
+              Comparator.nullsLast(Double::compareTo));
+  private static final Comparator<IndexedTrack> TRACK_ORDER =
+      Comparator.comparingInt((IndexedTrack track) -> track.trackedSource().id())
+          .thenComparingDouble(track -> track.trackedSource().frequencyHz())
+          .thenComparingDouble(track -> track.trackedSource().positionMeters().x())
+          .thenComparingDouble(track -> track.trackedSource().positionMeters().y())
+          .thenComparingInt(IndexedTrack::originalIndex);
 
   /** Align one snapshot to the supplied scenario truth. */
   public SnapshotAlignment align(Scenario scenario, TrackingSnapshot snapshot) {
     Objects.requireNonNull(scenario, "scenario");
     Objects.requireNonNull(snapshot, "snapshot");
     double timestampSeconds = snapshot.sourceTimestampNanos() / 1.0e9;
-    List<TruthSample> truthSamples = truthSamplesAt(scenario, timestampSeconds);
-    Assignment assignment = bestAssignment(truthSamples, snapshot.tracks());
+    List<GroundTruthObservation> truthSamples = truthSamplesAt(scenario, timestampSeconds);
+    List<IndexedTrack> indexedTracks = sortedTracks(snapshot.tracks());
+    Assignment assignment = bestAssignment(truthSamples, indexedTracks);
 
     List<AlignedSourceObservation> matchedSources = new ArrayList<>(assignment.pairs.size());
-    Set<Integer> matchedTruthIndexes = new HashSet<>();
-    Set<Integer> matchedTrackIndexes = new HashSet<>();
+    boolean[] matchedTruthIndexes = new boolean[truthSamples.size()];
+    boolean[] matchedTrackIndexes = new boolean[snapshot.tracks().size()];
     for (MatchPair pair : assignment.pairs) {
-      TruthSample sample = truthSamples.get(pair.truthIndex);
-      TrackedSource track = snapshot.tracks().get(pair.trackIndex);
-      matchedTruthIndexes.add(pair.truthIndex);
-      matchedTrackIndexes.add(pair.trackIndex);
-      matchedSources.add(
-          new AlignedSourceObservation(
-              sample.source(),
-              sample.expectedPositionMeters(),
-              sample.expectedVelocityMetersPerSecond(),
-              track));
+      GroundTruthObservation sample = truthSamples.get(pair.truthIndex);
+      IndexedTrack track = indexedTracks.get(pair.trackIndex);
+      matchedTruthIndexes[pair.truthIndex] = true;
+      matchedTrackIndexes[track.originalIndex()] = true;
+      matchedSources.add(new AlignedSourceObservation(sample, track.trackedSource()));
     }
 
-    List<ScenarioSource> missingSources = new ArrayList<>();
+    List<GroundTruthObservation> missingSources = new ArrayList<>();
     for (int i = 0; i < truthSamples.size(); i++) {
-      if (!matchedTruthIndexes.contains(i)) {
-        missingSources.add(truthSamples.get(i).source());
+      if (!matchedTruthIndexes[i]) {
+        missingSources.add(truthSamples.get(i));
       }
     }
 
     List<TrackedSource> spuriousTracks = new ArrayList<>();
     for (int i = 0; i < snapshot.tracks().size(); i++) {
-      if (!matchedTrackIndexes.contains(i)) {
+      if (!matchedTrackIndexes[i]) {
         spuriousTracks.add(snapshot.tracks().get(i));
       }
     }
@@ -60,8 +78,8 @@ public final class SnapshotGroundTruthAligner {
     return new SnapshotAlignment(timestampSeconds, matchedSources, missingSources, spuriousTracks);
   }
 
-  private static List<TruthSample> truthSamplesAt(Scenario scenario, double timestampSeconds) {
-    List<TruthSample> samples = new ArrayList<>(scenario.sources().size());
+  private static List<GroundTruthObservation> truthSamplesAt(Scenario scenario, double timestampSeconds) {
+    List<GroundTruthObservation> samples = new ArrayList<>(scenario.sources().size());
     for (ScenarioSource source : scenario.sources()) {
       ScenarioTrajectory trajectory = source.trajectory();
       Vector2 expectedPosition =
@@ -74,8 +92,9 @@ public final class SnapshotGroundTruthAligner {
               : null;
       AcousticGroundTruth acoustic = source.acousticProperties();
       Double expectedFrequency = acoustic != null ? acoustic.fundamentalFrequencyHz() : null;
-      samples.add(new TruthSample(source, expectedPosition, expectedVelocity, expectedFrequency));
+      samples.add(new GroundTruthObservation(source, expectedPosition, expectedVelocity, expectedFrequency));
     }
+    samples.sort(TRUTH_ORDER);
     return samples;
   }
 
@@ -101,8 +120,17 @@ public final class SnapshotGroundTruthAligner {
     return values.get(lastIndex);
   }
 
+  private static List<IndexedTrack> sortedTracks(List<TrackedSource> tracks) {
+    List<IndexedTrack> indexedTracks = new ArrayList<>(tracks.size());
+    for (int i = 0; i < tracks.size(); i++) {
+      indexedTracks.add(new IndexedTrack(i, tracks.get(i)));
+    }
+    indexedTracks.sort(TRACK_ORDER);
+    return List.copyOf(indexedTracks);
+  }
+
   private static Assignment bestAssignment(
-      List<TruthSample> truthSamples, List<TrackedSource> tracks) {
+      List<GroundTruthObservation> truthSamples, List<IndexedTrack> tracks) {
     return searchAssignments(
         truthSamples,
         tracks,
@@ -114,8 +142,8 @@ public final class SnapshotGroundTruthAligner {
   }
 
   private static Assignment searchAssignments(
-      List<TruthSample> truthSamples,
-      List<TrackedSource> tracks,
+      List<GroundTruthObservation> truthSamples,
+      List<IndexedTrack> tracks,
       int truthIndex,
       boolean[] usedTracks,
       List<MatchPair> currentPairs,
@@ -130,12 +158,12 @@ public final class SnapshotGroundTruthAligner {
     best =
         searchAssignments(
             truthSamples, tracks, truthIndex + 1, usedTracks, currentPairs, currentCost, best);
-    TruthSample truth = truthSamples.get(truthIndex);
+    GroundTruthObservation truth = truthSamples.get(truthIndex);
     for (int trackIndex = 0; trackIndex < tracks.size(); trackIndex++) {
       if (usedTracks[trackIndex]) {
         continue;
       }
-      double cost = alignmentCost(truth, tracks.get(trackIndex));
+      double cost = alignmentCost(truth, tracks.get(trackIndex).trackedSource());
       if (!Double.isFinite(cost)) {
         continue;
       }
@@ -163,10 +191,36 @@ public final class SnapshotGroundTruthAligner {
     if (second.matchedCount < first.matchedCount) {
       return first;
     }
-    return second.totalCost < first.totalCost ? second : first;
+    if (second.totalCost < first.totalCost) {
+      return second;
+    }
+    if (second.totalCost > first.totalCost) {
+      return first;
+    }
+    return comparePairs(second.pairs, first.pairs) < 0 ? second : first;
   }
 
-  private static double alignmentCost(TruthSample truth, TrackedSource track) {
+  private static int comparePairs(List<MatchPair> first, List<MatchPair> second) {
+    int comparisonLength = Math.min(first.size(), second.size());
+    for (int i = 0; i < comparisonLength; i++) {
+      MatchPair firstPair = first.get(i);
+      MatchPair secondPair = second.get(i);
+      int truthComparison = Integer.compare(firstPair.truthIndex(), secondPair.truthIndex());
+      if (truthComparison != 0) {
+        return truthComparison;
+      }
+      int trackComparison = Integer.compare(firstPair.trackIndex(), secondPair.trackIndex());
+      if (trackComparison != 0) {
+        return trackComparison;
+      }
+    }
+    return Integer.compare(first.size(), second.size());
+  }
+
+  private static double alignmentCost(GroundTruthObservation truth, TrackedSource track) {
+    if (!truth.hasAlignmentTruth()) {
+      return Double.POSITIVE_INFINITY;
+    }
     double positionError = Double.NaN;
     if (truth.expectedPositionMeters() != null) {
       positionError = truth.expectedPositionMeters().distanceTo(track.positionMeters());
@@ -197,11 +251,7 @@ public final class SnapshotGroundTruthAligner {
     return cost;
   }
 
-  private record TruthSample(
-      ScenarioSource source,
-      Vector2 expectedPositionMeters,
-      Vector2 expectedVelocityMetersPerSecond,
-      Double expectedFrequencyHz) {}
+  private record IndexedTrack(int originalIndex, TrackedSource trackedSource) {}
 
   private record MatchPair(int truthIndex, int trackIndex) {}
 
