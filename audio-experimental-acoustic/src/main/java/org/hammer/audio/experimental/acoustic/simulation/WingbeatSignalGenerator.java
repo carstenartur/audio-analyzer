@@ -1,5 +1,6 @@
 package org.hammer.audio.experimental.acoustic.simulation;
 
+import java.util.List;
 import org.hammer.audio.core.AudioBlock;
 import org.hammer.audio.core.AudioFormatDescriptor;
 import org.hammer.audio.signal.SignalGenerator;
@@ -39,6 +40,7 @@ public final class WingbeatSignalGenerator implements SignalGenerator {
 
   private final AudioFormatDescriptor format;
   private final WingbeatSignalParameters params;
+  private final List<Double> harmonicAmplitudes;
   private final long randomSeed;
 
   private double fundamentalPhase;
@@ -62,6 +64,7 @@ public final class WingbeatSignalGenerator implements SignalGenerator {
     }
     this.format = format;
     this.params = params;
+    this.harmonicAmplitudes = params.resolvedHarmonicAmplitudes();
     this.randomSeed = randomSeed;
     this.fundamentalPhase = 0.0;
     this.frameIndex = 0L;
@@ -148,11 +151,7 @@ public final class WingbeatSignalGenerator implements SignalGenerator {
   }
 
   private double harmonicAmplitude(int harmonicIndex) {
-    var amplitudes = params.harmonicAmplitudes();
-    if (amplitudes == null || harmonicIndex >= amplitudes.size()) {
-      return 1.0;
-    }
-    return amplitudes.get(harmonicIndex);
+    return harmonicAmplitudes.get(harmonicIndex);
   }
 
   /**

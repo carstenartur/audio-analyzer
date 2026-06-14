@@ -1,5 +1,6 @@
 package org.hammer.audio.experimental.acoustic.simulation;
 
+import java.util.Collections;
 import java.util.List;
 import org.hammer.audio.experimental.acoustic.scenario.AcousticGroundTruth;
 
@@ -27,7 +28,8 @@ import org.hammer.audio.experimental.acoustic.scenario.AcousticGroundTruth;
  * @param harmonicCount number of partials (1 = fundamental only); must be &gt;= 1
  * @param harmonicAmplitudes per-partial amplitude coefficients for indices {@code 0 ..
  *     harmonicCount-1}; {@code null} means all coefficients equal {@code 1.0}; when non-null its
- *     size must equal {@link #harmonicCount()}
+ *     size must equal {@link #harmonicCount()}. TODO: Replace this flat list with a HarmonicProfile
+ *     abstraction once synthetic fixtures need harmonic phases or rolloff metadata.
  * @param modulationHz amplitude-modulation frequency in Hz; {@code 0} disables AM
  * @param modulationDepth AM depth in {@code [0, 1]}; {@code 0} disables AM
  * @param driftHzPerSecond linear frequency drift per second; {@code 0} for no drift
@@ -90,6 +92,16 @@ public record WingbeatSignalParameters(
   }
 
   /**
+   * Return the fully resolved harmonic amplitude profile used by the generator and ground truth.
+   */
+  public List<Double> resolvedHarmonicAmplitudes() {
+    if (harmonicAmplitudes == null) {
+      return Collections.nCopies(harmonicCount, 1.0);
+    }
+    return harmonicAmplitudes();
+  }
+
+  /**
    * Create a minimal single-tone parameter set (fundamental only, no modulation, no noise).
    *
    * @param fundamentalFrequencyHz fundamental frequency in Hz; must be finite and positive
@@ -120,28 +132,25 @@ public record WingbeatSignalParameters(
    *
    * <ul>
    *   <li>{@link #fundamentalFrequencyHz()} → {@link AcousticGroundTruth#fundamentalFrequencyHz()}
-   *   <li>{@link #harmonicAmplitudes()} → {@link AcousticGroundTruth#harmonics()}
-   *   <li>{@link #modulationHz()} → {@link AcousticGroundTruth#modulation()} ({@code null} when
-   *       zero)
-   *   <li>{@link #jitterHz()} → {@link AcousticGroundTruth#jitter()} ({@code null} when zero)
-   *   <li>{@link #driftHzPerSecond()} → {@link AcousticGroundTruth#drift()} ({@code null} when
-   *       zero)
+   *   <li>{@link #harmonicCount()} → {@link AcousticGroundTruth#harmonicCount()}
+   *   <li>{@link #resolvedHarmonicAmplitudes()} → {@link AcousticGroundTruth#harmonics()}
+   *   <li>{@link #modulationHz()} → {@link AcousticGroundTruth#modulationFrequencyHz()}
+   *   <li>{@link #modulationDepth()} → {@link AcousticGroundTruth#modulationDepth()}
+   *   <li>{@link #jitterHz()} → {@link AcousticGroundTruth#jitter()}
+   *   <li>{@link #driftHzPerSecond()} → {@link AcousticGroundTruth#drift()}
+   *   <li>{@link #noiseAmplitude()} → {@link AcousticGroundTruth#noiseAmplitude()}
    * </ul>
    */
   public AcousticGroundTruth toGroundTruth() {
-    Double modulation = null;
-    if (modulationHz > 0.0) {
-      modulation = modulationHz;
-    }
-    Double jitter = null;
-    if (jitterHz > 0.0) {
-      jitter = jitterHz;
-    }
-    Double drift = null;
-    if (driftHzPerSecond != 0.0) {
-      drift = driftHzPerSecond;
-    }
     return new AcousticGroundTruth(
-        fundamentalFrequencyHz, harmonicAmplitudes(), modulation, jitter, drift, null);
+        fundamentalFrequencyHz,
+        harmonicCount,
+        resolvedHarmonicAmplitudes(),
+        modulationHz,
+        modulationDepth,
+        jitterHz,
+        driftHzPerSecond,
+        noiseAmplitude,
+        null);
   }
 }

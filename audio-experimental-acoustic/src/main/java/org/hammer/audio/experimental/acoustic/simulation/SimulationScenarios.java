@@ -141,17 +141,20 @@ public final class SimulationScenarios {
    *
    * <p>The emitted waveform remains a pair of pure tones via {@link SoundEmitter2D}. For a
    * benchmark-oriented ground-truth {@link Scenario} that additionally includes synthetic
-   * mosquito-like harmonic amplitudes, jitter, drift and species metadata, use {@link
+   * mosquito-like harmonic amplitudes, jitter, drift and fixture metadata, use {@link
    * #twoMosquitoWingbeatsGroundTruth()}.
    */
   public static SimulationScenario twoMosquitoWingbeats() {
+    List<WingbeatSignalParameters> params = mosquitoWingbeatParameters();
     return new SimulationScenario(
         "two-mosquito-wingbeats",
         new Room2D(3.0, 2.0, 0.0, 0.0),
         defaultArray(),
         List.of(
-            new SoundEmitter2D(new Vector2(1.0, 1.0), Vector2.ZERO, 600.0, 0.5),
-            new SoundEmitter2D(new Vector2(2.0, 1.0), Vector2.ZERO, 640.0, 0.5)),
+            new SoundEmitter2D(
+                new Vector2(1.0, 1.0), Vector2.ZERO, params.get(0).fundamentalFrequencyHz(), 0.5),
+            new SoundEmitter2D(
+                new Vector2(2.0, 1.0), Vector2.ZERO, params.get(1).fundamentalFrequencyHz(), 0.5)),
         SAMPLE_RATE,
         0.5,
         9L);
@@ -166,9 +169,10 @@ public final class SimulationScenarios {
    * geometry:
    *
    * <ul>
-   *   <li>harmonic amplitude profile, jitter and drift from {@link
-   *       WingbeatSignalParameters#mosquitoLike(double)};
-   *   <li>a {@link ClassificationGroundTruth} with species {@code "synthetic-mosquito-like"}.
+   *   <li>harmonic amplitude profile, harmonic count, modulation, jitter, drift and noise from
+   *       {@link WingbeatSignalParameters#mosquitoLike(double)};
+   *   <li>a {@link ClassificationGroundTruth} that marks the fixture as synthetic without
+   *       overloading the species field.
    * </ul>
    *
    * <p>This richer ground-truth record is intended for benchmark comparison of frequency-extraction
@@ -177,6 +181,7 @@ public final class SimulationScenarios {
    */
   public static Scenario twoMosquitoWingbeatsGroundTruth() {
     SimulationScenario scenario = twoMosquitoWingbeats();
+    List<WingbeatSignalParameters> params = mosquitoWingbeatParameters();
     List<ScenarioSource> sources = new ArrayList<>(scenario.emitters().size());
     for (int i = 0; i < scenario.emitters().size(); i++) {
       SoundEmitter2D emitter = scenario.emitters().get(i);
@@ -186,10 +191,8 @@ public final class SimulationScenarios {
               emitter.velocityMetersPerSecond(),
               scenario.durationSeconds(),
               2);
-      AcousticGroundTruth acoustic =
-          WingbeatSignalParameters.mosquitoLike(emitter.frequencyHz()).toGroundTruth();
-      ClassificationGroundTruth labels =
-          ClassificationGroundTruth.ofSpecies("synthetic-mosquito-like");
+      AcousticGroundTruth acoustic = params.get(i).toGroundTruth();
+      ClassificationGroundTruth labels = ClassificationGroundTruth.synthetic("synthetic-wingbeat");
       sources.add(
           ScenarioSource.builder("source-" + i, "mosquito")
               .trajectory(trajectory)
@@ -203,6 +206,14 @@ public final class SimulationScenarios {
             "Simulated air");
     return new Scenario(
         scenario.name(), "Simulated scenario: " + scenario.name(), sources, environment);
+  }
+
+  private static List<WingbeatSignalParameters> mosquitoWingbeatParameters() {
+    // TODO(#137): Replace the pure-tone SoundEmitter2D instances with a WingbeatEmitter2D or
+    // ParameterizedEmitter2D that consumes these parameters directly, so the emitted waveform and
+    // benchmark ground truth stay fully identical instead of only sharing the same fundamentals.
+    return List.of(
+        WingbeatSignalParameters.mosquitoLike(600.0), WingbeatSignalParameters.mosquitoLike(640.0));
   }
 
   /** Single source with reflective walls (specular x-axis reflection in the simulator). */

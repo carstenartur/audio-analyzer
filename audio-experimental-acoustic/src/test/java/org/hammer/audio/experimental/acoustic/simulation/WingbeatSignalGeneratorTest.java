@@ -2,6 +2,7 @@ package org.hammer.audio.experimental.acoustic.simulation;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertIterableEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -21,6 +22,7 @@ class WingbeatSignalGeneratorTest {
 
   private static final AudioFormatDescriptor MONO = new AudioFormatDescriptor(16_000.0f, 1, 32);
   private static final int FFT_SIZE = 2048;
+  private static final int HIGH_RESOLUTION_FFT_SIZE = 8192;
 
   // ---- Construction ----
 
@@ -107,18 +109,13 @@ class WingbeatSignalGeneratorTest {
     double targetHz = 600.0;
     WingbeatSignalParameters params = WingbeatSignalParameters.of(targetHz);
     WingbeatSignalGenerator gen = new WingbeatSignalGenerator(MONO, params, 1L);
-    AudioBlock block = gen.nextBlock(FFT_SIZE);
+    AudioBlock block = gen.nextBlock(HIGH_RESOLUTION_FFT_SIZE);
 
     WingbeatFrequencyTracker tracker =
-        new WingbeatFrequencyTracker(FFT_SIZE, new FrequencyBand(400.0, 800.0));
+        new WingbeatFrequencyTracker(HIGH_RESOLUTION_FFT_SIZE, new FrequencyBand(400.0, 800.0));
     SpectralPeak peak = tracker.track(block, 0);
 
-    double binWidthHz = (double) MONO.sampleRate() / FFT_SIZE;
-    assertEquals(
-        targetHz,
-        peak.frequencyHz(),
-        binWidthHz,
-        "recovered frequency must be within one FFT bin of the true fundamental");
+    assertEquals(targetHz, peak.frequencyHz(), 2.0, "recovered frequency must stay within 2 Hz");
     assertTrue(peak.magnitude() > 0.0, "magnitude must be positive");
   }
 
@@ -127,18 +124,17 @@ class WingbeatSignalGeneratorTest {
     double targetHz = 640.0;
     WingbeatSignalParameters params = WingbeatSignalParameters.mosquitoLike(targetHz);
     WingbeatSignalGenerator gen = new WingbeatSignalGenerator(MONO, params, 3L);
-    AudioBlock block = gen.nextBlock(FFT_SIZE);
+    AudioBlock block = gen.nextBlock(HIGH_RESOLUTION_FFT_SIZE);
 
     WingbeatFrequencyTracker tracker =
-        new WingbeatFrequencyTracker(FFT_SIZE, new FrequencyBand(400.0, 900.0));
+        new WingbeatFrequencyTracker(HIGH_RESOLUTION_FFT_SIZE, new FrequencyBand(400.0, 900.0));
     SpectralPeak peak = tracker.track(block, 0);
 
-    double binWidthHz = (double) MONO.sampleRate() / FFT_SIZE;
     assertEquals(
-        targetHz,
-        peak.frequencyHz(),
-        binWidthHz,
-        "fundamental must be recoverable even with harmonics and noise");
+        targetHz, peak.frequencyHz(), 2.0, "fundamental must stay within 2 Hz even with noise");
+    assertTrue(
+        Math.abs(peak.frequencyHz() - targetHz) / targetHz < 0.01,
+        "fundamental must stay within 1% relative error");
   }
 
   // ---- Signal model ----
@@ -227,15 +223,20 @@ class WingbeatSignalGeneratorTest {
   }
 
   @Test
-  void parametersToGroundTruthExposesFrequencyAndHarmonics() {
-    WingbeatSignalParameters params = WingbeatSignalParameters.mosquitoLike(600.0);
+  void parametersToGroundTruthMirrorsGeneratorParametersExactly() {
+    WingbeatSignalParameters params =
+        new WingbeatSignalParameters(
+            600.0, 4, List.of(1.0, 0.5, 0.25, 0.125), 12.0, 0.35, 0.5, 1.0, 0.02);
     AcousticGroundTruth truth = params.toGroundTruth();
 
     assertEquals(600.0, truth.fundamentalFrequencyHz());
-    assertNotNull(truth.harmonics(), "harmonic amplitudes must be present");
-    assertEquals(4, truth.harmonics().size());
-    assertNotNull(truth.jitter(), "jitter must be exposed");
-    assertNotNull(truth.drift(), "drift must be exposed");
+    assertEquals(4, truth.harmonicCount());
+    assertIterableEquals(params.resolvedHarmonicAmplitudes(), truth.harmonics());
+    assertEquals(12.0, truth.modulationFrequencyHz());
+    assertEquals(0.35, truth.modulationDepth());
+    assertEquals(1.0, truth.jitter());
+    assertEquals(0.5, truth.drift());
+    assertEquals(0.02, truth.noiseAmplitude());
   }
 
   @Test
@@ -244,10 +245,14 @@ class WingbeatSignalGeneratorTest {
     AcousticGroundTruth truth = params.toGroundTruth();
 
     assertEquals(500.0, truth.fundamentalFrequencyHz());
+    assertEquals(1, truth.harmonicCount());
+    assertIterableEquals(List.of(1.0), truth.harmonics());
     assertEquals(1, params.harmonicCount());
-    assertEquals(0.0, params.modulationHz());
-    assertEquals(0.0, params.jitterHz());
-    assertEquals(0.0, params.driftHzPerSecond());
+    assertEquals(0.0, truth.modulationFrequencyHz());
+    assertEquals(0.0, truth.modulationDepth());
+    assertEquals(0.0, truth.jitter());
+    assertEquals(0.0, truth.drift());
+    assertEquals(0.0, truth.noiseAmplitude());
   }
 
   // ---- Scenario integration ----
@@ -274,13 +279,19 @@ class WingbeatSignalGeneratorTest {
             source -> {
               AcousticGroundTruth acoustic = source.acousticProperties();
               assertNotNull(acoustic, "acoustic ground truth must be present");
+              assertEquals(4, acoustic.harmonicCount(), "harmonic count must be present");
               assertNotNull(acoustic.harmonics(), "harmonics must be present");
               assertFalse(acoustic.harmonics().isEmpty(), "harmonics list must not be empty");
-              assertNotNull(acoustic.jitter(), "jitter must be exposed in ground truth");
-              assertNotNull(acoustic.drift(), "drift must be exposed in ground truth");
+              assertEquals(
+                  0.0, acoustic.modulationFrequencyHz(), "modulation frequency must be explicit");
+              assertEquals(0.0, acoustic.modulationDepth(), "modulation depth must be explicit");
+              assertEquals(1.0, acoustic.jitter(), "jitter must be exposed in ground truth");
+              assertEquals(0.5, acoustic.drift(), "drift must be exposed in ground truth");
+              assertEquals(0.02, acoustic.noiseAmplitude(), "noise amplitude must be exposed");
 
               assertNotNull(source.labels(), "classification labels must be present");
-              assertEquals("synthetic-mosquito-like", source.labels().species());
+              assertEquals("unknown", source.labels().species());
+              assertEquals("synthetic-wingbeat", source.labels().labels().get("customLabel"));
               assertEquals("mosquito", source.sourceType());
             });
   }
