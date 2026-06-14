@@ -12,7 +12,9 @@ import org.hammer.audio.experimental.acoustic.tracking.TrackedSource;
 import org.hammer.audio.experimental.acoustic.tracking.TrackingSnapshot;
 import org.hammer.audio.geometry.Vector2;
 
-/** Align tracking snapshots to scenario ground truth with deterministic nearest-neighbour matching. */
+/**
+ * Align tracking snapshots to scenario ground truth with deterministic nearest-neighbour matching.
+ */
 public final class SnapshotGroundTruthAligner {
 
   private static final double MAX_POSITION_ALIGNMENT_METERS = 1.5;

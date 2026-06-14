@@ -193,8 +193,7 @@ class TrackingBenchmarkComparatorTest {
                 "alpha",
                 new ScenarioTrajectory(
                     List.of(0.0, 1.0, 2.0),
-                    List.of(
-                        new Vector2(0.0, 0.0), new Vector2(1.0, 0.0), new Vector2(2.0, 0.0)),
+                    List.of(new Vector2(0.0, 0.0), new Vector2(1.0, 0.0), new Vector2(2.0, 0.0)),
                     List.of(Vector2.ZERO, Vector2.ZERO, Vector2.ZERO),
                     null),
                 AcousticGroundTruth.ofFrequency(500.0),
@@ -203,17 +202,13 @@ class TrackingBenchmarkComparatorTest {
                 "beta",
                 new ScenarioTrajectory(
                     List.of(0.0, 1.0, 2.0),
-                    List.of(
-                        new Vector2(2.0, 0.0), new Vector2(1.0, 0.0), new Vector2(0.0, 0.0)),
+                    List.of(new Vector2(2.0, 0.0), new Vector2(1.0, 0.0), new Vector2(0.0, 0.0)),
                     List.of(Vector2.ZERO, Vector2.ZERO, Vector2.ZERO),
                     null),
                 AcousticGroundTruth.ofFrequency(500.0),
                 null));
     Scenario sourceOrderB =
-        scenario(
-            "crossing-b",
-            sourceOrderA.sources().get(1),
-            sourceOrderA.sources().get(0));
+        scenario("crossing-b", sourceOrderA.sources().get(1), sourceOrderA.sources().get(0));
     TrackingSnapshot snapshot =
         new TrackingSnapshot(
             1,
