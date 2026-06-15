@@ -20,7 +20,7 @@ import java.util.Objects;
 public record ClassificationResult(
     String label, double confidence, WingbeatFeatureVector featureVector) {
 
-  /** Validate fields. */
+  /* Validate fields. */
   public ClassificationResult {
     Objects.requireNonNull(label, "label");
     if (label.isBlank()) {

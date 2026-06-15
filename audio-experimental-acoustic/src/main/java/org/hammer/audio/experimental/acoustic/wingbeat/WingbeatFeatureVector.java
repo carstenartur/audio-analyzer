@@ -49,7 +49,7 @@ public record WingbeatFeatureVector(
     double trackDurationSeconds,
     double featureConfidence) {
 
-  /** Validate fields and defensively copy lists. */
+  /* Validate fields and defensively copy lists. */
   public WingbeatFeatureVector {
     Objects.requireNonNull(harmonicAmplitudes, "harmonicAmplitudes");
     Objects.requireNonNull(harmonicRatios, "harmonicRatios");

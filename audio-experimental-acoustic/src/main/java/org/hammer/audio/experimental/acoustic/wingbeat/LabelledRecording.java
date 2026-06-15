@@ -20,7 +20,7 @@ import java.util.Objects;
 public record LabelledRecording(
     String id, String description, String groundTruthLabel, WingbeatFeatureVector features) {
 
-  /** Validate fields. */
+  /* Validate fields. */
   public LabelledRecording {
     Objects.requireNonNull(id, "id");
     Objects.requireNonNull(description, "description");

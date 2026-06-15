@@ -25,7 +25,7 @@ public record TrackingSnapshot(
     long processingNanos,
     Map<Integer, ClassificationResult> classificationResults) {
 
-  /** Validate and defensively copy lists and maps. */
+  /* Validate and defensively copy lists and maps. */
   public TrackingSnapshot {
     Objects.requireNonNull(clusters, "clusters");
     Objects.requireNonNull(tracks, "tracks");

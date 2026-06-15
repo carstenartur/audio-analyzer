@@ -1,12 +1,14 @@
 package org.hammer.audio.experimental.acoustic.wingbeat;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class WingbeatDatasetTest {
@@ -46,6 +48,12 @@ class WingbeatDatasetTest {
     assertEquals(3, evaluation.sampleCount());
     assertEquals(2, evaluation.correctCount());
     assertEquals(2.0 / 3.0, evaluation.accuracy(), 1e-9);
+    assertEquals(
+        Map.of(WingbeatLabel.FEMALE_LIKELY, 2, WingbeatLabel.MALE_LIKELY, 1),
+        evaluation.labelSampleCounts());
+    assertEquals(
+        Map.of(WingbeatLabel.FEMALE_LIKELY, 2, WingbeatLabel.MALE_LIKELY, 0),
+        evaluation.labelCorrectCounts());
   }
 
   @Test
@@ -59,13 +67,32 @@ class WingbeatDatasetTest {
 
     assertEquals(0, evaluation.correctCount());
     assertEquals(0.0, evaluation.accuracy(), 1e-9);
+    assertEquals(Map.of(WingbeatLabel.FEMALE_LIKELY, 1), evaluation.labelSampleCounts());
+    assertEquals(Map.of(WingbeatLabel.FEMALE_LIKELY, 0), evaluation.labelCorrectCounts());
   }
 
   @Test
   void evaluationAccuracyIsNullForEmptyDataset() {
-    WingbeatDataset.Evaluation evaluation = new WingbeatDataset.Evaluation("empty", 0, 0);
+    WingbeatDataset.Evaluation evaluation =
+        new WingbeatDataset.Evaluation("empty", 0, 0, Map.of(), Map.of());
 
     assertNull(evaluation.accuracy());
+  }
+
+  @Test
+  void evaluationRejectsInconsistentPerLabelCounts() {
+    IllegalArgumentException exception =
+        assertThrows(
+            IllegalArgumentException.class,
+            () ->
+                new WingbeatDataset.Evaluation(
+                    "invalid",
+                    2,
+                    1,
+                    Map.of(WingbeatLabel.FEMALE_LIKELY, 2),
+                    Map.of(WingbeatLabel.FEMALE_LIKELY, 2)));
+
+    assertFalse(exception.getMessage().isBlank());
   }
 
   @Test
