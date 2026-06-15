@@ -16,6 +16,9 @@ is **not** a production mosquito detector, species classifier or validated track
 
 ## What is implemented
 
+- **interactive simulation workbench** — run any of nine deterministic scenarios through the full
+  tracking pipeline directly from the Plugins menu, with live per-frame log, 2-D room map and
+  Markdown / CSV / JSON export;
 - plugin descriptor, menu/view contributions and generic host integration;
 - insect-like demo presets and frequency peak/cluster tracking;
 - cross-correlation and GCC-PHAT TDOA experiments;
@@ -35,6 +38,7 @@ is **not** a production mosquito detector, species classifier or validated track
 
 ## Detailed documentation
 
+- [**How to run the workbench**](acoustic-localization/README.md#how-to-run-the-workbench)
 - [Plugin details, pipeline and boundaries](acoustic-localization/README.md)
 - [Physics and latency limits](acoustic-localization/physics-and-latency-limits.md)
 - [Synchronization requirements](acoustic-localization/synchronization.md)
