@@ -15,11 +15,11 @@ import java.awt.Insets;
 import java.awt.RenderingHints;
 import java.awt.Stroke;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -485,7 +485,7 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
     private List<Vector2> gridPoints = List.of();
 
     /** Accumulated positions per track ID (in appearance order). */
-    private Map<Integer, List<Vector2>> trackHistory = new LinkedHashMap<>();
+    private Map<Integer, List<Vector2>> trackHistory = new ConcurrentHashMap<>();
 
     /** Alignment of the last snapshot against ground truth (for error lines). */
     private transient SnapshotAlignment lastAlignment;
@@ -500,7 +500,7 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
       this.scenario = s;
       this.lastTracks = List.of();
       this.gridPoints = List.of();
-      this.trackHistory = new LinkedHashMap<>();
+      this.trackHistory = new ConcurrentHashMap<>();
       this.lastAlignment = null;
       repaint();
     }
@@ -514,7 +514,7 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
       this.lastTracks = last == null ? List.of() : last.tracks();
 
       // Accumulate full track history (all positions per track ID across all frames)
-      Map<Integer, List<Vector2>> history = new LinkedHashMap<>();
+      Map<Integer, List<Vector2>> history = new ConcurrentHashMap<>();
       for (TrackingSnapshot snap : result.snapshots()) {
         for (TrackedSource track : snap.tracks()) {
           history
@@ -570,21 +570,33 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
       double scaleX = canvasW / roomW;
       double scaleY = canvasH / roomH;
 
-      // room background
+      paintRoomBackground(g2, canvasW, canvasH);
+      paintGridDots(g2, scaleX, scaleY, canvasH);
+      paintMicrophones(g2, scaleX, scaleY, canvasH);
+      paintEmitterTrajectories(g2, scaleX, scaleY, canvasH);
+      paintTrackPaths(g2, scaleX, scaleY, canvasH);
+      paintErrorLines(g2, scaleX, scaleY, canvasH);
+      paintEstimatedTracks(g2, scaleX, scaleY, canvasH);
+      paintLegend(g2);
+    }
+
+    private void paintRoomBackground(Graphics2D g2, int canvasW, int canvasH) {
       g2.setColor(COLOR_ROOM);
       g2.fillRect(MARGIN, MARGIN, canvasW, canvasH);
       g2.setColor(Color.DARK_GRAY);
       g2.drawRect(MARGIN, MARGIN, canvasW, canvasH);
+    }
 
-      // candidate grid dots
+    private void paintGridDots(Graphics2D g2, double scaleX, double scaleY, int canvasH) {
       g2.setColor(COLOR_GRID);
       for (Vector2 pt : gridPoints) {
         int px = toPixelX(pt.x(), MARGIN, scaleX);
         int py = toPixelY(pt.y(), MARGIN, scaleY, canvasH);
         g2.fillOval(px - 1, py - 1, 3, 3);
       }
+    }
 
-      // microphone positions
+    private void paintMicrophones(Graphics2D g2, double scaleX, double scaleY, int canvasH) {
       g2.setColor(COLOR_MIC);
       for (Microphone mic : scenario.array().microphones()) {
         int px = toPixelX(mic.positionMeters().x(), MARGIN, scaleX);
@@ -594,13 +606,14 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
         drawCenteredString(g2, mic.id(), px, py);
         g2.setColor(COLOR_MIC);
       }
+    }
 
-      // emitter ground-truth trajectory (start → end)
+    private void paintEmitterTrajectories(
+        Graphics2D g2, double scaleX, double scaleY, int canvasH) {
       Stroke defaultStroke = g2.getStroke();
       g2.setColor(COLOR_EMITTER);
       g2.setStroke(new BasicStroke(2.0f));
-      List<? extends AcousticEmitter2D> emitters = scenario.emitters();
-      for (AcousticEmitter2D emitter : emitters) {
+      for (AcousticEmitter2D emitter : scenario.emitters()) {
         int px = toPixelX(emitter.startMeters().x(), MARGIN, scaleX);
         int py = toPixelY(emitter.startMeters().y(), MARGIN, scaleY, canvasH);
         drawTriangle(g2, px, py, 8);
@@ -615,13 +628,14 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
           int ey =
               toPixelY(emitter.startMeters().y() + vel.y() * duration, MARGIN, scaleY, canvasH);
           g2.drawLine(px, py, ex, ey);
-          // end-of-trajectory marker
           drawTriangle(g2, ex, ey, 5);
         }
       }
       g2.setStroke(defaultStroke);
+    }
 
-      // accumulated estimated track paths (dashed lines per track ID)
+    private void paintTrackPaths(Graphics2D g2, double scaleX, double scaleY, int canvasH) {
+      Stroke defaultStroke = g2.getStroke();
       Stroke dashed =
           new BasicStroke(
               1.0f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_BEVEL, 0, new float[] {4, 4}, 0);
@@ -637,34 +651,38 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
         }
       }
       g2.setStroke(defaultStroke);
+    }
 
-      // localization error lines (last-frame ground-truth to estimated position)
-      if (lastAlignment != null) {
-        Stroke errorStroke =
-            new BasicStroke(
-                1.5f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_BEVEL, 0, new float[] {2, 4}, 0);
-        g2.setColor(COLOR_ERROR);
-        g2.setStroke(errorStroke);
-        for (AlignedSourceObservation obs : lastAlignment.matchedSources()) {
-          if (obs.groundTruth().expectedPositionMeters() != null) {
-            Vector2 truth = obs.groundTruth().expectedPositionMeters();
-            Vector2 est = obs.trackedSource().positionMeters();
-            int tx = toPixelX(truth.x(), MARGIN, scaleX);
-            int ty = toPixelY(truth.y(), MARGIN, scaleY, canvasH);
-            int ex = toPixelX(est.x(), MARGIN, scaleX);
-            int ey = toPixelY(est.y(), MARGIN, scaleY, canvasH);
-            g2.drawLine(tx, ty, ex, ey);
-            double errorM = truth.distanceTo(est);
-            g2.drawString(
-                String.format(Locale.ROOT, "err=%.2fm", errorM),
-                (tx + ex) / 2 + 2,
-                (ty + ey) / 2 - 2);
-          }
-        }
-        g2.setStroke(defaultStroke);
+    private void paintErrorLines(Graphics2D g2, double scaleX, double scaleY, int canvasH) {
+      if (lastAlignment == null) {
+        return;
       }
+      Stroke defaultStroke = g2.getStroke();
+      Stroke errorStroke =
+          new BasicStroke(
+              1.5f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_BEVEL, 0, new float[] {2, 4}, 0);
+      g2.setColor(COLOR_ERROR);
+      g2.setStroke(errorStroke);
+      for (AlignedSourceObservation obs : lastAlignment.matchedSources()) {
+        if (obs.groundTruth().expectedPositionMeters() != null) {
+          Vector2 truth = obs.groundTruth().expectedPositionMeters();
+          Vector2 est = obs.trackedSource().positionMeters();
+          int tx = toPixelX(truth.x(), MARGIN, scaleX);
+          int ty = toPixelY(truth.y(), MARGIN, scaleY, canvasH);
+          int ex = toPixelX(est.x(), MARGIN, scaleX);
+          int ey = toPixelY(est.y(), MARGIN, scaleY, canvasH);
+          g2.drawLine(tx, ty, ex, ey);
+          double errorM = truth.distanceTo(est);
+          g2.drawString(
+              String.format(Locale.ROOT, "err=%.2fm", errorM),
+              (tx + ex) / 2 + 2,
+              (ty + ey) / 2 - 2);
+        }
+      }
+      g2.setStroke(defaultStroke);
+    }
 
-      // estimated tracks (last frame) — drawn on top
+    private void paintEstimatedTracks(Graphics2D g2, double scaleX, double scaleY, int canvasH) {
       g2.setColor(COLOR_TRACK);
       for (TrackedSource track : lastTracks) {
         int px = toPixelX(track.positionMeters().x(), MARGIN, scaleX);
@@ -679,9 +697,6 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
             px + LABEL_OFFSET_X,
             py + LABEL_OFFSET_Y);
       }
-
-      // legend
-      paintLegend(g2);
     }
 
     private void paintLegend(Graphics2D g2) {

@@ -22,6 +22,7 @@ public final class WorkbenchRunExporter {
   private static final String FMT_4F = "%.4f";
   private static final String MARKDOWN_PIPE_SEPARATOR = " | ";
   private static final String PARAM_RESULT = "result";
+  private static final String NA = "n/a";
 
   private WorkbenchRunExporter() {
     // utility class
@@ -47,65 +48,46 @@ public final class WorkbenchRunExporter {
           + "*Not available — run produced no snapshots or benchmark computation failed.*\n";
     }
     StringBuilder sb = new StringBuilder(512);
-    sb.append("# Benchmark Report — ").append(result.scenario().name()).append("\n\n");
-    sb.append(
-        "> Comparison of estimated tracking output against scenario ground truth.\n"
-            + "> All metrics are experimental.\n\n");
-    sb.append(report.toMarkdownSummary()).append("\n\n");
-    sb.append("## Localization Details\n\n| Metric | Value |\n|---|---|\n");
+    sb.append("# Benchmark Report — ")
+        .append(result.scenario().name())
+        .append(
+            "\n\n> Comparison of estimated tracking output against scenario ground truth.\n"
+                + "> All metrics are experimental.\n\n")
+        .append(report.toMarkdownSummary())
+        .append("\n\n## Localization Details\n\n| Metric | Value |\n|---|---|\n");
     appendRow(
         sb,
         "Mean position error (m)",
-        formatMetric("%.4f", report.localization().meanDistanceErrorMeters()));
+        formatMetric(FMT_4F, report.localization().meanDistanceErrorMeters()));
     appendRow(
         sb,
         "Median position error (m)",
-        formatMetric("%.4f", report.localization().medianDistanceErrorMeters()));
+        formatMetric(FMT_4F, report.localization().medianDistanceErrorMeters()));
     appendRow(
         sb,
         "Mean angular error (°)",
-        formatMetric("%.4f", report.localization().meanAngularErrorDegrees()));
+        formatMetric(FMT_4F, report.localization().meanAngularErrorDegrees()));
     appendRow(sb, "Evaluated samples", report.localization().evaluatedCount());
     appendRow(sb, "Skipped samples", report.localization().skippedCount());
     sb.append("\n## Frequency Details\n\n| Metric | Value |\n|---|---|\n");
     appendRow(
         sb,
         "Mean absolute error (Hz)",
-        formatMetric("%.4f", report.frequency().meanAbsoluteErrorHz()));
+        formatMetric(FMT_4F, report.frequency().meanAbsoluteErrorHz()));
     appendRow(
         sb,
         "Median absolute error (Hz)",
-        formatMetric("%.4f", report.frequency().medianAbsoluteErrorHz()));
+        formatMetric(FMT_4F, report.frequency().medianAbsoluteErrorHz()));
     appendRow(
         sb, "Mean relative error", formatMetric("%.6f", report.frequency().meanRelativeError()));
     appendRow(sb, "Evaluated samples", report.frequency().evaluatedCount());
     sb.append("\n## Tracking Quality\n\n| Metric | Value |\n|---|---|\n");
     appendRow(sb, "Expected sources", report.expectedSourceCount());
     appendRow(sb, "Snapshot count", report.snapshotCount());
-    appendRow(
-        sb,
-        "Track continuity",
-        report.trackContinuity() == null
-            ? "n/a"
-            : String.format(Locale.ROOT, "%.4f", report.trackContinuity()));
-    appendRow(
-        sb,
-        "ID stability",
-        report.idStability() == null
-            ? "n/a"
-            : String.format(Locale.ROOT, "%.4f", report.idStability()));
-    appendRow(
-        sb,
-        "False-positive rate",
-        report.falsePositiveRate() == null
-            ? "n/a"
-            : String.format(Locale.ROOT, "%.4f", report.falsePositiveRate()));
-    appendRow(
-        sb,
-        "False-negative rate",
-        report.falseNegativeRate() == null
-            ? "n/a"
-            : String.format(Locale.ROOT, "%.4f", report.falseNegativeRate()));
+    appendRow(sb, "Track continuity", formatMetric(FMT_4F, report.trackContinuity()));
+    appendRow(sb, "ID stability", formatMetric(FMT_4F, report.idStability()));
+    appendRow(sb, "False-positive rate", formatMetric(FMT_4F, report.falsePositiveRate()));
+    appendRow(sb, "False-negative rate", formatMetric(FMT_4F, report.falseNegativeRate()));
     appendRow(sb, "Mean processing (ns)", report.meanProcessingNanos());
     return sb.toString();
   }
@@ -325,7 +307,7 @@ public final class WorkbenchRunExporter {
   }
 
   private static String formatMetric(String fmt, Double value) {
-    return value == null ? "n/a" : String.format(Locale.ROOT, fmt, value);
+    return value == null ? NA : String.format(Locale.ROOT, fmt, value);
   }
 
   private static void appendRow(StringBuilder sb, String label, Object value) {
