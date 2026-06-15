@@ -20,7 +20,7 @@ import org.hammer.audio.experimental.acoustic.tracking.TrackingSnapshot;
 public final class WorkbenchRunExporter {
 
   private static final String FMT_4F = "%.4f";
-  private static final String PIPE_SEP = " | ";
+  private static final String MARKDOWN_PIPE_SEPARATOR = " | ";
   private static final String PARAM_RESULT = "result";
 
   private WorkbenchRunExporter() {
@@ -182,13 +182,13 @@ public final class WorkbenchRunExporter {
     for (TrackingSnapshot snap : result.snapshots()) {
       sb.append("| ")
           .append(snap.sourceFrameIndex())
-          .append(PIPE_SEP)
+          .append(MARKDOWN_PIPE_SEPARATOR)
           .append(String.format(Locale.ROOT, "%.1f", snap.sourceTimestampNanos() / 1_000_000.0))
-          .append(PIPE_SEP)
+          .append(MARKDOWN_PIPE_SEPARATOR)
           .append(snap.clusters().size())
-          .append(PIPE_SEP)
+          .append(MARKDOWN_PIPE_SEPARATOR)
           .append(snap.tracks().size())
-          .append(PIPE_SEP)
+          .append(MARKDOWN_PIPE_SEPARATOR)
           .append(String.format(Locale.ROOT, "%.1f", snap.processingNanos() / 1_000.0))
           .append(" |\n");
     }
@@ -324,6 +324,6 @@ public final class WorkbenchRunExporter {
   }
 
   private static void appendRow(StringBuilder sb, String label, Object value) {
-    sb.append("| ").append(label).append(PIPE_SEP).append(value).append(" |\n");
+    sb.append("| ").append(label).append(MARKDOWN_PIPE_SEPARATOR).append(value).append(" |\n");
   }
 }
