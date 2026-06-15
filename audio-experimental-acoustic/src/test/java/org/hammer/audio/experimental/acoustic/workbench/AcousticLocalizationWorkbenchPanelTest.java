@@ -236,7 +236,25 @@ class AcousticLocalizationWorkbenchPanelTest {
 
     String bm = WorkbenchRunExporter.toBenchmarkMarkdown(result);
     assertFalse(bm.isBlank(), "benchmark markdown must not be blank");
+    // Localization section: all three metric rows must render "n/a" when evaluatedCount == 0
     assertTrue(
-        bm.contains("n/a"), "benchmark markdown must render 'n/a' for zero-evaluated metrics");
+        bm.contains("Mean position error (m) | n/a"),
+        "mean position error must render 'n/a' for zero-evaluated localization");
+    assertTrue(
+        bm.contains("Median position error (m) | n/a"),
+        "median position error must render 'n/a' for zero-evaluated localization");
+    assertTrue(
+        bm.contains("Mean angular error (°) | n/a"),
+        "mean angular error must render 'n/a' for zero-evaluated localization");
+    // Frequency section: all three metric rows must render "n/a" when evaluatedCount == 0
+    assertTrue(
+        bm.contains("Mean absolute error (Hz) | n/a"),
+        "mean absolute error must render 'n/a' for zero-evaluated frequency");
+    assertTrue(
+        bm.contains("Median absolute error (Hz) | n/a"),
+        "median absolute error must render 'n/a' for zero-evaluated frequency");
+    assertTrue(
+        bm.contains("Mean relative error | n/a"),
+        "mean relative error must render 'n/a' for zero-evaluated frequency");
   }
 }
