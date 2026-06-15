@@ -30,6 +30,7 @@ documentation stays grounded in code that compiles and is exercised by tests.
 - Subproject overview: [`docs/plugins/acoustic-localization.md`](../../acoustic-localization.md)
 - Plugin user guide: [`../README.md`](../README.md)
 - Tracking pipeline architecture: [`../tracking.md`](../tracking.md)
+- Real-world dataset strategy: [`../datasets.md`](../datasets.md)
 - Synchronization assumptions: [`../synchronization.md`](../synchronization.md)
 - Repository-level architecture: [`../../../architecture/experimental-acoustic-localization.md`](../../../architecture/experimental-acoustic-localization.md)
 
@@ -60,4 +61,3 @@ If a future contribution wants to apply this codebase to one of those domains,
 that contribution belongs in a separate project with its own ethical review;
 the acoustic subproject here remains a generic measurement and tracking
 platform.
-

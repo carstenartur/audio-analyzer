@@ -43,5 +43,6 @@ is **not** a production mosquito detector, species classifier or validated track
 - [Physics and latency limits](acoustic-localization/physics-and-latency-limits.md)
 - [Synchronization requirements](acoustic-localization/synchronization.md)
 - [Tracking pipeline](acoustic-localization/tracking.md)
+- [Real-world dataset strategy](acoustic-localization/datasets.md)
 - [Research notes and datasets](acoustic-localization/research/README.md)
 
