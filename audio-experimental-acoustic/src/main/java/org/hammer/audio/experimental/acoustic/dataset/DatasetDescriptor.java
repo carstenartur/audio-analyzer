@@ -58,9 +58,4 @@ public record DatasetDescriptor(
     }
     return Map.copyOf(values);
   }
-
-  @Override
-  public Map<String, String> metadataSchema() {
-    return Map.copyOf(metadataSchema);
-  }
 }

@@ -42,9 +42,4 @@ public record DatasetAnnotation(
     }
     return Map.copyOf(values);
   }
-
-  @Override
-  public Map<String, String> metadata() {
-    return Map.copyOf(metadata);
-  }
 }

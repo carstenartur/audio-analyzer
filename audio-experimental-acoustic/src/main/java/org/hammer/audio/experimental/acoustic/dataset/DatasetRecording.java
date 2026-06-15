@@ -59,14 +59,4 @@ public record DatasetRecording(
     }
     return Map.copyOf(values);
   }
-
-  @Override
-  public Map<String, String> labels() {
-    return Map.copyOf(labels);
-  }
-
-  @Override
-  public Map<String, String> metadata() {
-    return Map.copyOf(metadata);
-  }
 }
