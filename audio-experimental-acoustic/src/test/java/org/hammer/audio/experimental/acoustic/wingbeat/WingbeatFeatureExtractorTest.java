@@ -194,7 +194,8 @@ class WingbeatFeatureExtractorTest {
 
   private static AudioBlock harmonicBlock(WingbeatSignalParameters params, long seed) {
     WingbeatSignalGenerator generator =
-        new WingbeatSignalGenerator(new AudioFormatDescriptor(HARMONIC_SAMPLE_RATE, 1, 32), params, seed);
+        new WingbeatSignalGenerator(
+            new AudioFormatDescriptor(HARMONIC_SAMPLE_RATE, 1, 32), params, seed);
     return generator.nextBlock(HARMONIC_FRAMES);
   }
 }

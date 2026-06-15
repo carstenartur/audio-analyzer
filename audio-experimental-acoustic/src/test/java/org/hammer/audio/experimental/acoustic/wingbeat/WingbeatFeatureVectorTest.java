@@ -88,17 +88,7 @@ class WingbeatFeatureVectorTest {
         IllegalArgumentException.class,
         () ->
             new WingbeatFeatureVector(
-                500.0,
-                List.of(Double.NaN),
-                List.of(),
-                500.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                1.0));
+                500.0, List.of(Double.NaN), List.of(), 500.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0));
   }
 
   @Test
