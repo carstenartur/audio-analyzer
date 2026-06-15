@@ -6,6 +6,7 @@ import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
+import org.hammer.audio.experimental.acoustic.workbench.AcousticLocalizationWorkbenchPanel;
 import org.hammer.audio.plugin.AnalysisContribution;
 import org.hammer.audio.plugin.AudioAnalyzerPlugin;
 import org.hammer.audio.plugin.DemoSignalContribution;
@@ -103,6 +104,22 @@ public final class AcousticLocalizationPlugin implements AudioAnalyzerPlugin {
   @Override
   public List<ViewContribution> viewContributions() {
     return List.of(
+        new ViewContribution() {
+          @Override
+          public String id() {
+            return "acoustic-localization-workbench";
+          }
+
+          @Override
+          public String title() {
+            return "Acoustic Localization Workbench (experimental)";
+          }
+
+          @Override
+          public java.util.function.Supplier<javax.swing.JComponent> componentFactory() {
+            return AcousticLocalizationWorkbenchPanel::new;
+          }
+        },
         new ViewContribution() {
           @Override
           public String id() {
