@@ -44,7 +44,8 @@ class RuleBasedWingbeatClassifierTest {
 
     assertEquals(WingbeatLabel.POSSIBLY_BLOOD_FED_FEMALE, result.label());
     assertTrue(result.confidence() > 0.0);
-    assertTrue(result.confidence() <= 1.0);
+    assertTrue(
+        result.confidence() <= RuleBasedWingbeatClassifier.MAX_EXPERIMENTAL_BLOOD_FED_CONFIDENCE);
   }
 
   @Test

@@ -6,9 +6,12 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.List;
 import org.hammer.audio.core.AudioBlock;
 import org.hammer.audio.core.AudioFormatDescriptor;
 import org.hammer.audio.experimental.acoustic.FrequencyBand;
+import org.hammer.audio.experimental.acoustic.simulation.WingbeatSignalGenerator;
+import org.hammer.audio.experimental.acoustic.simulation.WingbeatSignalParameters;
 import org.hammer.audio.experimental.acoustic.tracking.TrackedSource;
 import org.hammer.audio.geometry.Vector2;
 import org.hammer.audio.geometry.Vector3;
@@ -18,6 +21,8 @@ class WingbeatFeatureExtractorTest {
 
   private static final int SAMPLE_RATE = 8_192;
   private static final int FRAMES = 2_048;
+  private static final int HARMONIC_SAMPLE_RATE = 16_384;
+  private static final int HARMONIC_FRAMES = 4_096;
   private static final FrequencyBand BAND = new FrequencyBand(300.0, 800.0);
 
   @Test
@@ -74,6 +79,46 @@ class WingbeatFeatureExtractorTest {
     assertEquals(3, vector.harmonicAmplitudes().size());
     assertFalse(vector.harmonicRatios().isEmpty());
     assertTrue(vector.harmonicAmplitudes().get(0) > 0.0);
+  }
+
+  @Test
+  void audioEnhancedExtractIsDeterministicForSameInput() {
+    WingbeatFeatureExtractor extractor = new WingbeatFeatureExtractor(HARMONIC_FRAMES, BAND, 4);
+    TrackedSource source = source(512.0, 0.9, 0.0);
+    AudioBlock block =
+        harmonicBlock(
+            new WingbeatSignalParameters(
+                512.0, 4, List.of(1.0, 0.5, 0.25, 0.125), 0.0, 0.0, 0.0, 0.0, 0.0),
+            7L);
+
+    WingbeatFeatureVector first = extractor.extract(source, block, 0, 1.0);
+    WingbeatFeatureVector second = extractor.extract(source, block, 0, 1.0);
+
+    assertEquals(first, second);
+  }
+
+  @Test
+  void audioEnhancedExtractRecoversConfiguredHarmonics() {
+    WingbeatFeatureExtractor extractor = new WingbeatFeatureExtractor(HARMONIC_FRAMES, BAND, 4);
+    TrackedSource source = source(512.0, 0.9, 0.0);
+    AudioBlock block =
+        harmonicBlock(
+            new WingbeatSignalParameters(
+                512.0, 4, List.of(1.0, 0.5, 0.25, 0.125), 0.0, 0.0, 0.0, 0.0, 0.0),
+            11L);
+
+    WingbeatFeatureVector vector = extractor.extract(source, block, 0, 1.0);
+
+    assertEquals(4, vector.harmonicAmplitudes().size());
+    assertEquals(3, vector.harmonicRatios().size());
+    assertTrue(vector.harmonicAmplitudes().get(0) > vector.harmonicAmplitudes().get(1));
+    assertTrue(vector.harmonicAmplitudes().get(1) > vector.harmonicAmplitudes().get(2));
+    assertTrue(vector.harmonicAmplitudes().get(2) > vector.harmonicAmplitudes().get(3));
+    assertTrue(vector.harmonicRatios().get(0) > vector.harmonicRatios().get(1));
+    assertTrue(vector.harmonicRatios().get(1) > vector.harmonicRatios().get(2));
+    assertTrue(vector.harmonicRatios().get(0) >= 0.35 && vector.harmonicRatios().get(0) <= 0.5);
+    assertTrue(vector.harmonicRatios().get(1) >= 0.15 && vector.harmonicRatios().get(1) <= 0.3);
+    assertTrue(vector.harmonicRatios().get(2) >= 0.05 && vector.harmonicRatios().get(2) <= 0.18);
   }
 
   @Test
@@ -145,5 +190,11 @@ class WingbeatFeatureExtractorTest {
       samples[0][i] = (float) Math.sin(2.0 * Math.PI * frequencyHz * i / SAMPLE_RATE);
     }
     return new AudioBlock(new AudioFormatDescriptor(SAMPLE_RATE, 1, 32), samples, 0, 0);
+  }
+
+  private static AudioBlock harmonicBlock(WingbeatSignalParameters params, long seed) {
+    WingbeatSignalGenerator generator =
+        new WingbeatSignalGenerator(new AudioFormatDescriptor(HARMONIC_SAMPLE_RATE, 1, 32), params, seed);
+    return generator.nextBlock(HARMONIC_FRAMES);
   }
 }

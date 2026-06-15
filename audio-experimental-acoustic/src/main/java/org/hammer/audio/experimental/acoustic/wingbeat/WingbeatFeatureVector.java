@@ -53,6 +53,12 @@ public record WingbeatFeatureVector(
   public WingbeatFeatureVector {
     Objects.requireNonNull(harmonicAmplitudes, "harmonicAmplitudes");
     Objects.requireNonNull(harmonicRatios, "harmonicRatios");
+    validateSeries(harmonicAmplitudes, "harmonicAmplitudes");
+    validateSeries(harmonicRatios, "harmonicRatios");
+    if (harmonicAmplitudes.isEmpty() && !harmonicRatios.isEmpty()) {
+      throw new IllegalArgumentException(
+          "harmonicRatios must be empty when harmonicAmplitudes is empty");
+    }
     if (!Double.isFinite(fundamentalFrequencyHz) || fundamentalFrequencyHz < 0.0) {
       throw new IllegalArgumentException("fundamentalFrequencyHz must be finite and >= 0");
     }
@@ -84,5 +90,23 @@ public record WingbeatFeatureVector(
     }
     harmonicAmplitudes = List.copyOf(harmonicAmplitudes);
     harmonicRatios = List.copyOf(harmonicRatios);
+  }
+
+  private static void validateSeries(List<Double> values, String fieldName) {
+    for (int i = 0; i < values.size(); i++) {
+      Double value = values.get(i);
+      if (value == null) {
+        throw new IllegalArgumentException(fieldName + "[" + i + "] must not be null");
+      }
+      if (Double.isNaN(value)) {
+        throw new IllegalArgumentException(fieldName + "[" + i + "] must not be NaN");
+      }
+      if (Double.isInfinite(value)) {
+        throw new IllegalArgumentException(fieldName + "[" + i + "] must be finite");
+      }
+      if (value < 0.0) {
+        throw new IllegalArgumentException(fieldName + "[" + i + "] must be >= 0");
+      }
+    }
   }
 }

@@ -74,6 +74,62 @@ class WingbeatFeatureVectorTest {
   }
 
   @Test
+  void constructorRejectsNegativeSignalToNoiseRatio() {
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            new WingbeatFeatureVector(
+                500.0, List.of(), List.of(), 500.0, 0.0, 0.0, 0.0, 0.0, -0.1, 0.0, 1.0));
+  }
+
+  @Test
+  void constructorRejectsNanHarmonicAmplitude() {
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            new WingbeatFeatureVector(
+                500.0,
+                List.of(Double.NaN),
+                List.of(),
+                500.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0));
+  }
+
+  @Test
+  void constructorRejectsInfiniteHarmonicRatio() {
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            new WingbeatFeatureVector(
+                500.0,
+                List.of(1.0),
+                List.of(Double.POSITIVE_INFINITY),
+                500.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0));
+  }
+
+  @Test
+  void constructorRejectsRatiosWithoutHarmonicAmplitudes() {
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            new WingbeatFeatureVector(
+                500.0, List.of(), List.of(0.5), 500.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0));
+  }
+
+  @Test
   void constructorRejectsNullHarmonicAmplitudes() {
     assertThrows(
         NullPointerException.class,

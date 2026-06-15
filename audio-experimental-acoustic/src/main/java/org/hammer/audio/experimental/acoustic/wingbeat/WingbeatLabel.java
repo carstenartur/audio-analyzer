@@ -25,8 +25,8 @@ public final class WingbeatLabel {
   public static final String FEMALE_LIKELY = "female-likely";
 
   /**
-   * Features suggest a blood-fed female mosquito; the lowest wingbeat frequency sub-range,
-   * consistent with the additional mass after a blood meal.
+   * Experimental heuristic for the lowest-frequency female-like sub-range; not a confirmed
+   * biological state and intended to be interpreted conservatively.
    */
   public static final String POSSIBLY_BLOOD_FED_FEMALE = "possibly-blood-fed-female";
 

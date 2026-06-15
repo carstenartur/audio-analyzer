@@ -16,7 +16,8 @@ import java.util.Objects;
  *       {@link WingbeatLabel#UNKNOWN}.
  *   <li>Within the mosquito-like range, the frequency is compared against empirical sub-ranges:
  *       <ul>
- *         <li>{@link WingbeatLabel#POSSIBLY_BLOOD_FED_FEMALE}: 300–430 Hz (lowest female range)
+ *         <li>{@link WingbeatLabel#POSSIBLY_BLOOD_FED_FEMALE}: 300–430 Hz (experimental lowest
+ *             female range, capped to low confidence)
  *         <li>{@link WingbeatLabel#FEMALE_LIKELY}: 430–550 Hz (typical female range)
  *         <li>{@link WingbeatLabel#MALE_LIKELY}: above the overlap boundary (≥550 Hz)
  *         <li>{@link WingbeatLabel#MOSQUITO_LIKE}: near the 550 Hz boundary; returned with reduced
@@ -29,6 +30,9 @@ import java.util.Objects;
  * <ul>
  *   <li>Frequency thresholds represent approximate ranges for <em>Anopheles gambiae</em> and
  *       similar species. Other mosquito species may have different ranges.
+ *   <li>The {@link WingbeatLabel#POSSIBLY_BLOOD_FED_FEMALE} branch is intentionally conservative:
+ *       it is an exploratory label with a hard confidence cap and must not be read as a confirmed
+ *       feeding-state prediction.
  *   <li>Environmental factors such as temperature, humidity and fatigue affect wingbeat frequency
  *       but are not modelled.
  *   <li>The classifier uses only the fundamental frequency and the feature confidence. Future
@@ -52,6 +56,9 @@ public final class RuleBasedWingbeatClassifier implements WingbeatClassifier {
 
   /** Upper bound of the blood-fed-female sub-range (Hz). */
   static final double BLOOD_FED_FEMALE_HIGH_HZ = 430.0;
+
+  /** Maximum confidence for the experimental lowest-frequency female-like label. */
+  static final double MAX_EXPERIMENTAL_BLOOD_FED_CONFIDENCE = 0.35;
 
   /** Transition frequency between female-likely and male-likely (Hz). */
   static final double FEMALE_MALE_BOUNDARY_HZ = 550.0;
@@ -80,7 +87,7 @@ public final class RuleBasedWingbeatClassifier implements WingbeatClassifier {
       double subScore = bandScore(f, MOSQUITO_BAND_LOW_HZ, BLOOD_FED_FEMALE_HIGH_HZ);
       return new ClassificationResult(
           WingbeatLabel.POSSIBLY_BLOOD_FED_FEMALE,
-          Math.min(1.0, baseConfidence * subScore),
+          Math.min(MAX_EXPERIMENTAL_BLOOD_FED_CONFIDENCE, Math.min(1.0, baseConfidence * subScore)),
           features);
     }
     if (f < FEMALE_MALE_BOUNDARY_HZ) {
