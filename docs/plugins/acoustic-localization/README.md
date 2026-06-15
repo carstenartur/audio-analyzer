@@ -23,7 +23,7 @@ A dialog opens with three areas:
 - **Centre left** — log, Markdown, CSV and JSON-lines tabs showing live and post-run output.
 - **Centre right** — 2-D room map: room rectangle, microphone positions (blue circles), emitter
   ground-truth positions (green triangles), candidate grid (grey dots) and estimated track
-  positions (red circles, labelled by track ID).
+  positions (red circles, labeled by track ID).
 
 ### Available scenarios
 

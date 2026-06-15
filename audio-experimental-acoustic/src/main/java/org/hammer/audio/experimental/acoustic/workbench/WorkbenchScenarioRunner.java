@@ -3,6 +3,8 @@ package org.hammer.audio.experimental.acoustic.workbench;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import org.hammer.audio.acquisition.MicrophoneArray;
 import org.hammer.audio.core.AudioBlock;
 import org.hammer.audio.experimental.acoustic.CrossCorrelationTdoaEstimator;
@@ -10,6 +12,10 @@ import org.hammer.audio.experimental.acoustic.DelayAndSumBeamformer;
 import org.hammer.audio.experimental.acoustic.FrequencyBand;
 import org.hammer.audio.experimental.acoustic.GccPhatTdoaEstimator;
 import org.hammer.audio.experimental.acoustic.TdoaEstimator;
+import org.hammer.audio.experimental.acoustic.benchmark.BenchmarkMeasurements;
+import org.hammer.audio.experimental.acoustic.benchmark.BenchmarkReport;
+import org.hammer.audio.experimental.acoustic.benchmark.TrackingBenchmarkComparator;
+import org.hammer.audio.experimental.acoustic.scenario.Scenario;
 import org.hammer.audio.experimental.acoustic.simulation.SimulatedMicrophoneArraySource;
 import org.hammer.audio.experimental.acoustic.simulation.SimulationScenarios.SimulationScenario;
 import org.hammer.audio.experimental.acoustic.tracking.FrameSchedule;
@@ -33,6 +39,8 @@ import org.hammer.audio.geometry.Vector2;
  * class.
  */
 public final class WorkbenchScenarioRunner {
+
+  private static final Logger LOGGER = Logger.getLogger(WorkbenchScenarioRunner.class.getName());
 
   /** Called after each audio block is processed during an incremental run. */
   @FunctionalInterface
@@ -100,9 +108,33 @@ public final class WorkbenchScenarioRunner {
         blockIndex++;
       }
 
-      return new WorkbenchRunResult(scenario, parameters, snapshots, totalProcessingNanos);
+      return new WorkbenchRunResult(
+          scenario,
+          parameters,
+          snapshots,
+          totalProcessingNanos,
+          computeBenchmarkReport(scenario, snapshots));
     } catch (java.io.IOException e) {
       throw new IllegalStateException("Unexpected close failure on simulation source", e);
+    }
+  }
+
+  /**
+   * Compute a {@link BenchmarkReport} by comparing the collected snapshots against the scenario
+   * ground truth. Returns {@code null} when no snapshots were collected or if comparison fails.
+   */
+  private static BenchmarkReport computeBenchmarkReport(
+      SimulationScenario scenario, List<TrackingSnapshot> snapshots) {
+    if (snapshots.isEmpty()) {
+      return null;
+    }
+    try {
+      Scenario truth = scenario.groundTruth();
+      BenchmarkMeasurements measurements = BenchmarkMeasurements.of(scenario.array(), snapshots);
+      return new TrackingBenchmarkComparator().compare(truth, measurements);
+    } catch (RuntimeException e) {
+      LOGGER.log(Level.WARNING, "Benchmark report computation failed", e);
+      return null;
     }
   }
 

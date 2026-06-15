@@ -2,6 +2,7 @@ package org.hammer.audio.experimental.acoustic.workbench;
 
 import java.util.List;
 import java.util.Objects;
+import org.hammer.audio.experimental.acoustic.benchmark.BenchmarkReport;
 import org.hammer.audio.experimental.acoustic.simulation.SimulationScenarios.SimulationScenario;
 import org.hammer.audio.experimental.acoustic.tracking.TrackedSource;
 import org.hammer.audio.experimental.acoustic.tracking.TrackingSnapshot;
@@ -13,12 +14,15 @@ import org.hammer.audio.experimental.acoustic.tracking.TrackingSnapshot;
  * @param parameters the parameters used during the run
  * @param snapshots one {@link TrackingSnapshot} per processed audio block, in order
  * @param totalProcessingNanos cumulative pipeline wall-clock time across all blocks
+ * @param benchmarkReport benchmark quality report comparing estimated tracks against ground truth,
+ *     or {@code null} if benchmarking was not possible (e.g. empty run)
  */
 public record WorkbenchRunResult(
     SimulationScenario scenario,
     WorkbenchParameters parameters,
     List<TrackingSnapshot> snapshots,
-    long totalProcessingNanos) {
+    long totalProcessingNanos,
+    BenchmarkReport benchmarkReport) {
 
   // Validates and defensively copies the snapshots list.
   public WorkbenchRunResult {
@@ -29,6 +33,7 @@ public record WorkbenchRunResult(
       throw new IllegalArgumentException("totalProcessingNanos must be >= 0");
     }
     snapshots = List.copyOf(snapshots);
+    // benchmarkReport may be null when the run produced no snapshots or benchmarking failed
   }
 
   /** Number of audio blocks that were processed. */
