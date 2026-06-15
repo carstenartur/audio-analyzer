@@ -62,17 +62,21 @@ The initial schema is represented in code by:
 - `annotations` (time spans and labels)
 - `metadata` (environment, device, location, capture context)
 
-## HumBugDB importer decision and implementation plan
+## HumBugDB importer implementation
 
-Decision: **implement HumBugDB importer first**, but keep it optional and local-only.
+The first concrete importer is now `org.hammer.audio.experimental.acoustic.dataset.HumBugDbImporter`.
 
-Planned steps:
+Behavior:
 
-1. Add `DatasetImporter` implementation for HumBugDB local exports.
-2. Read metadata CSV files from a user-provided root path.
-3. Map each row to `DatasetRecording` and build `DatasetManifest`.
-4. Export normalized manifest (JSON/CSV) for benchmark tooling.
-5. Keep fixtures tiny and synthetic unless explicit redistribution permission exists.
+1. Reads one user-provided local root path only; nothing is downloaded automatically.
+2. Looks for metadata CSV files under `data/metadata/*.csv` (matching the upstream HumBugDB export
+   layout) and falls back to local CSV discovery when needed.
+3. Resolves `.wav` files from the local export and populates `DatasetRecording.audioPath`.
+4. Copies available labels (`sound_type`, `species`, `gender`, `fed`, `plurality`, `age`) into the
+   normalized `labels` map.
+5. Preserves all other CSV columns as normalized `metadata`.
+6. Creates explicit `DatasetAnnotation` spans when timing columns exist; otherwise it creates a
+   whole-clip annotation from the available clip label.
 
 ## Benchmark integration path
 
@@ -87,3 +91,22 @@ After local import is available, benchmark flow should be:
    - consistent metrics from benchmark package
 
 This keeps #143, #144 and #137 aligned without forcing large or restricted datasets into Git.
+
+## End-to-end local workflow
+
+```java
+Path humbugRoot = Path.of("/absolute/path/to/HumBugDB");
+DatasetImporter importer = new HumBugDbImporter();
+DatasetManifest manifest = importer.importFrom(humbugRoot);
+
+DatasetWingbeatEvaluationWorkflow workflow = new DatasetWingbeatEvaluationWorkflow();
+WingbeatDataset wingbeatDataset = workflow.buildDataset(manifest);
+WingbeatDataset.Evaluation evaluation =
+    wingbeatDataset.evaluate(new RuleBasedWingbeatClassifier());
+
+System.out.println(DatasetWingbeatEvaluationWorkflow.toMarkdownReport(evaluation));
+```
+
+The imported recordings can also be browsed in the plugin-provided **Imported Recording Workbench
+(experimental)**, which lets a user load a local HumBugDB export, inspect one recording's metadata,
+re-run feature extraction/classification on demand and review a dataset-level evaluation summary.
