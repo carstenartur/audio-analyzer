@@ -146,12 +146,14 @@ public final class HumBugDbImporter implements DatasetImporter {
     return value.trim().replaceAll("[^A-Za-z0-9._-]+", "-");
   }
 
-  private static double sampleRateHz(Map<String, String> row, AudioFileInfo audioInfo) {
+  private static double sampleRateHz(
+      Map<String, String> row, DatasetAudioLoader.AudioFileInfo audioInfo) {
     Double parsed = parseDouble(firstPresent(row, SAMPLE_RATE_COLUMNS));
     return parsed != null && parsed > 0.0 ? parsed : audioInfo.sampleRateHz();
   }
 
-  private static double durationSeconds(Map<String, String> row, AudioFileInfo audioInfo) {
+  private static double durationSeconds(
+      Map<String, String> row, DatasetAudioLoader.AudioFileInfo audioInfo) {
     Double parsed = parseDouble(firstPresent(row, DURATION_COLUMNS));
     if (parsed != null && parsed >= 0.0) {
       return parsed;
@@ -198,7 +200,12 @@ public final class HumBugDbImporter implements DatasetImporter {
   }
 
   private static String annotationLabel(Map<String, String> row) {
-    return firstNonBlank(firstPresent(row, ANNOTATION_LABEL_COLUMNS), "recording");
+    return firstNonBlank(
+        row.get("event_label"),
+        row.get("annotation_label"),
+        row.get("sound_type"),
+        row.get("species"),
+        "recording");
   }
 
   private static Map<String, String> annotationMetadata(Map<String, String> row) {
