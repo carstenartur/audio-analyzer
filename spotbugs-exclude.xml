@@ -69,4 +69,114 @@
     </Or>
     <Bug pattern="RV_RETURN_VALUE_IGNORED_BAD_PRACTICE"/>
   </Match>
+  <!-- Legacy per-class bug-pattern suppressions for existing findings -->
+  <Match>
+    <Class name="org.hammer.AudioAnalyseFrame"/>
+    <Bug pattern="CT_CONSTRUCTOR_THROW"/>
+  </Match>
+  <Match>
+    <Class name="org.hammer.AudioAnalyseFrame"/>
+    <Bug pattern="SE_TRANSIENT_FIELD_NOT_RESTORED"/>
+  </Match>
+  <Match>
+    <Class name="org.hammer.SpectrumPanel"/>
+    <Bug pattern="EI_EXPOSE_REP"/>
+  </Match>
+  <Match>
+    <Class name="org.hammer.WaveformPanel"/>
+    <Bug pattern="EI_EXPOSE_REP"/>
+  </Match>
+  <Match>
+    <Class name="org.hammer.WaveformPanel"/>
+    <Bug pattern="SE_TRANSIENT_FIELD_NOT_RESTORED"/>
+  </Match>
+  <Match>
+    <Class name="org.hammer.audio.AudioCaptureServiceImpl"/>
+    <Bug pattern="EI_EXPOSE_REP"/>
+  </Match>
+  <Match>
+    <Class name="org.hammer.audio.AudioCaptureServiceImpl"/>
+    <Bug pattern="SA_FIELD_SELF_COMPARISON"/>
+  </Match>
+  <Match>
+    <Class name="org.hammer.audio.AudioCaptureServiceImpl"/>
+    <Bug pattern="VO_VOLATILE_REFERENCE_TO_ARRAY"/>
+  </Match>
+  <Match>
+    <Class name="org.hammer.audio.DemoAudioCaptureService"/>
+    <Bug pattern="EI_EXPOSE_REP"/>
+  </Match>
+  <Match>
+    <Class name="org.hammer.audio.DemoAudioCaptureService"/>
+    <Bug pattern="RV_RETURN_VALUE_IGNORED_BAD_PRACTICE"/>
+  </Match>
+  <Match>
+    <Class name="org.hammer.audio.RecordedAudioCaptureService"/>
+    <Bug pattern="EI_EXPOSE_REP"/>
+  </Match>
+  <Match>
+    <Class name="org.hammer.audio.RecordedAudioCaptureService"/>
+    <Bug pattern="RV_RETURN_VALUE_IGNORED_BAD_PRACTICE"/>
+  </Match>
+  <Match>
+    <Class name="org.hammer.audio.analysis.SpectrumDisplayState"/>
+    <Bug pattern="EI_EXPOSE_REP"/>
+  </Match>
+  <Match>
+    <Class name="org.hammer.audio.analysis.SpectrumDisplayState"/>
+    <Bug pattern="EI_EXPOSE_REP2"/>
+  </Match>
+  <Match>
+    <Class name="org.hammer.audio.analysis.SpectrumSnapshot"/>
+    <Bug pattern="EI_EXPOSE_REP"/>
+  </Match>
+  <Match>
+    <Class name="org.hammer.audio.analysis.WaveformTrigger$TriggeredView"/>
+    <Bug pattern="EI_EXPOSE_REP"/>
+  </Match>
+  <Match>
+    <Class name="org.hammer.audio.diagnosis.DiagnosisSnapshot"/>
+    <Bug pattern="SING_SINGLETON_HAS_NONPRIVATE_CONSTRUCTOR"/>
+  </Match>
+  <Match>
+    <Class name="org.hammer.audio.experimental.acoustic.MosquitoLocalizationPipeline"/>
+    <Bug pattern="FE_FLOATING_POINT_EQUALITY"/>
+  </Match>
+  <Match>
+    <Class name="org.hammer.audio.experimental.acoustic.tracking.SourceTracker$Track"/>
+    <Bug pattern="UWF_FIELD_NOT_INITIALIZED_IN_CONSTRUCTOR"/>
+  </Match>
+  <Match>
+    <Class name="org.hammer.audio.export.EvidenceBundleExporter"/>
+    <Bug pattern="NP_NULL_ON_SOME_PATH_FROM_RETURN_VALUE"/>
+  </Match>
+  <Match>
+    <Class name="org.hammer.audio.export.EvidenceData"/>
+    <Bug pattern="EI_EXPOSE_REP"/>
+  </Match>
+  <Match>
+    <Class name="org.hammer.audio.export.EvidenceData$Builder"/>
+    <Bug pattern="EI_EXPOSE_REP2"/>
+  </Match>
+  <Match>
+    <Class name="org.hammer.audio.snapshot.PhaseScopeSnapshot"/>
+    <Bug pattern="EI_EXPOSE_REP"/>
+  </Match>
+  <Match>
+    <Class name="org.hammer.audio.spectrogram.SpectrogramAnalyzer"/>
+    <Bug pattern="EI_EXPOSE_REP"/>
+  </Match>
+  <Match>
+    <Class name="org.hammer.audio.spectrogram.SpectrogramAnalyzer"/>
+    <Bug pattern="EI_EXPOSE_REP2"/>
+  </Match>
+  <Match>
+    <Class name="org.hammer.audio.spectrogram.SpectrogramFrame"/>
+    <Bug pattern="EI_EXPOSE_REP"/>
+  </Match>
+  <Match>
+    <Class name="org.hammer.audio.ui.theme.PlotRenderTheme"/>
+    <Bug pattern="UM_UNNECESSARY_MATH"/>
+  </Match>
+
 </FindBugsFilter>

@@ -269,7 +269,7 @@
           <configLocation>${maven.multiModuleProjectDirectory}/checkstyle.xml</configLocation>
           <suppressionsLocation>${maven.multiModuleProjectDirectory}/checkstyle-suppressions.xml</suppressionsLocation>
           <consoleOutput>true</consoleOutput>
-          <failOnViolation>false</failOnViolation>
+          <failOnViolation>true</failOnViolation>
           <violationSeverity>warning</violationSeverity>
           <propertyExpansion>checkstyle.suppressions.file=${maven.multiModuleProjectDirectory}/checkstyle-suppressions.xml</propertyExpansion>
         </configuration>
@@ -288,7 +288,7 @@
         <artifactId>spotbugs-maven-plugin</artifactId>
         <version>${spotbugs-maven-plugin.version}</version>
         <configuration>
-          <failOnError>false</failOnError>
+          <failOnError>true</failOnError>
           <effort>Max</effort>
           <threshold>Low</threshold>
           <xmlOutput>true</xmlOutput>
@@ -309,8 +309,9 @@
         <artifactId>maven-pmd-plugin</artifactId>
         <version>${maven-pmd-plugin.version}</version>
         <configuration>
-          <failOnViolation>false</failOnViolation>
+          <failOnViolation>true</failOnViolation>
           <printFailingErrors>true</printFailingErrors>
+          <excludeFromFailureFile>${maven.multiModuleProjectDirectory}/pmd-exclude.properties</excludeFromFailureFile>
           <rulesets>
             <ruleset>${maven.multiModuleProjectDirectory}/pmd-ruleset.xml</ruleset>
           </rulesets>

@@ -25,4 +25,48 @@
   <!-- Swing event handler methods often have unused event parameters -->
   <suppress checks="UnusedFormalParameter" files=".*Frame\.java"/>
   <suppress checks="UnusedFormalParameter" files=".*Panel\.java"/>
+  <!-- Legacy per-violation suppressions for existing findings -->
+  <suppress files=".*audio\-acquisition/src/main/java/org/hammer/audio/acquisition/Microphone\.java" checks="com\.puppycrawl\.tools\.checkstyle\.checks\.javadoc\.JavadocTypeCheck" lines="6"/>
+  <suppress files=".*audio\-acquisition/src/main/java/org/hammer/audio/acquisition/SampleClock\.java" checks="com\.puppycrawl\.tools\.checkstyle\.checks\.javadoc\.JavadocTypeCheck" lines="4"/>
+  <suppress files=".*audio\-app/src/main/java/org/hammer/audio/ui/theme/PlotRenderTheme\.java" checks="com\.puppycrawl\.tools\.checkstyle\.checks\.whitespace\.WhitespaceAroundCheck" lines="46"/>
+  <suppress files=".*audio\-app/src/main/java/org/hammer/audio/ui/theme/UiTheme\.java" checks="com\.puppycrawl\.tools\.checkstyle\.checks\.whitespace\.WhitespaceAroundCheck" lines="18"/>
+  <suppress files=".*audio\-app/src/main/java/org/hammer/tools/DocImageRenderer\.java" checks="com\.puppycrawl\.tools\.checkstyle\.checks\.whitespace\.WhitespaceAroundCheck" lines="68"/>
+  <suppress files=".*audio\-dsp/src/main/java/org/hammer/audio/analysis/MeasurementSnapshot\.java" checks="com\.puppycrawl\.tools\.checkstyle\.checks\.javadoc\.JavadocTypeCheck" lines="4"/>
+  <suppress files=".*audio\-dsp/src/main/java/org/hammer/audio/analysis/MeasurementSnapshot\.java" checks="com\.puppycrawl\.tools\.checkstyle\.checks\.whitespace\.WhitespaceAroundCheck" lines="10"/>
+  <suppress files=".*audio\-dsp/src/main/java/org/hammer/audio/diagnosis/DiagnosisAnalyzer\.java" checks="com\.puppycrawl\.tools\.checkstyle\.checks\.whitespace\.WhitespaceAroundCheck" lines="547"/>
+  <suppress files=".*audio\-dsp/src/main/java/org/hammer/audio/diagnosis/DiagnosisAnalyzer\.java" checks="com\.puppycrawl\.tools\.checkstyle\.checks\.whitespace\.WhitespaceAroundCheck" lines="549"/>
+  <suppress files=".*audio\-dsp/src/main/java/org/hammer/audio/diagnosis/DiagnosisAnalyzer\.java" checks="com\.puppycrawl\.tools\.checkstyle\.checks\.whitespace\.WhitespaceAroundCheck" lines="551"/>
+  <suppress files=".*audio\-dsp/src/main/java/org/hammer/audio/diagnosis/DiagnosisAnalyzer\.java" checks="com\.puppycrawl\.tools\.checkstyle\.checks\.whitespace\.WhitespaceAroundCheck" lines="553"/>
+  <suppress files=".*audio\-dsp/src/main/java/org/hammer/audio/localization/StereoDelaySnapshot\.java" checks="com\.puppycrawl\.tools\.checkstyle\.checks\.sizes\.ParameterNumberCheck" lines="38"/>
+  <suppress files=".*audio\-dsp/src/main/java/org/hammer/audio/recording/AudioBlockRecordingFormat\.java" checks="com\.puppycrawl\.tools\.checkstyle\.checks\.whitespace\.WhitespaceAroundCheck" lines="40"/>
+  <suppress files=".*audio\-dsp/src/main/java/org/hammer/audio/recording/AudioBlockRecordingReader\.java" checks="com\.puppycrawl\.tools\.checkstyle\.checks\.coding\.InnerAssignmentCheck" lines="44"/>
+  <suppress files=".*audio\-experimental\-acoustic/src/main/java/org/hammer/audio/experimental/acoustic/AcousticLocalizationSnapshot\.java" checks="com\.puppycrawl\.tools\.checkstyle\.checks\.javadoc\.JavadocTypeCheck" lines="9"/>
+  <suppress files=".*audio\-experimental\-acoustic/src/main/java/org/hammer/audio/experimental/acoustic/DelayAndSumBeamformer\.java" checks="com\.puppycrawl\.tools\.checkstyle\.checks\.javadoc\.JavadocTypeCheck" lines="67"/>
+  <suppress files=".*audio\-experimental\-acoustic/src/main/java/org/hammer/audio/experimental/acoustic/FrequencyBand\.java" checks="com\.puppycrawl\.tools\.checkstyle\.checks\.javadoc\.JavadocTypeCheck" lines="4"/>
+  <suppress files=".*audio\-experimental\-acoustic/src/main/java/org/hammer/audio/experimental/acoustic/GccPhatTdoaEstimator\.java" checks="com\.puppycrawl\.tools\.checkstyle\.checks\.whitespace\.WhitespaceAroundCheck" lines="124"/>
+  <suppress files=".*audio\-experimental\-acoustic/src/main/java/org/hammer/audio/experimental/acoustic/SpectralPeak\.java" checks="com\.puppycrawl\.tools\.checkstyle\.checks\.javadoc\.JavadocTypeCheck" lines="4"/>
+  <suppress files=".*audio\-experimental\-acoustic/src/main/java/org/hammer/audio/experimental/acoustic/TdoaEstimate\.java" checks="com\.puppycrawl\.tools\.checkstyle\.checks\.javadoc\.JavadocTypeCheck" lines="6"/>
+  <suppress files=".*audio\-experimental\-acoustic/src/main/java/org/hammer/audio/experimental/acoustic/doppler/FrequencyTrack\.java" checks="com\.puppycrawl\.tools\.checkstyle\.checks\.javadoc\.JavadocTypeCheck" lines="80"/>
+  <suppress files=".*audio\-experimental\-acoustic/src/main/java/org/hammer/audio/experimental/acoustic/doppler/RadialVelocityEstimate\.java" checks="com\.puppycrawl\.tools\.checkstyle\.checks\.javadoc\.JavadocTypeCheck" lines="4"/>
+  <suppress files=".*audio\-experimental\-acoustic/src/main/java/org/hammer/audio/experimental/acoustic/doppler/SourceObservation\.java" checks="com\.puppycrawl\.tools\.checkstyle\.checks\.javadoc\.JavadocTypeCheck" lines="9"/>
+  <suppress files=".*audio\-experimental\-acoustic/src/main/java/org/hammer/audio/experimental/acoustic/simulation/Room2D\.java" checks="com\.puppycrawl\.tools\.checkstyle\.checks\.javadoc\.JavadocTypeCheck" lines="6"/>
+  <suppress files=".*audio\-experimental\-acoustic/src/main/java/org/hammer/audio/experimental/acoustic/simulation/SoundEmitter2D\.java" checks="com\.puppycrawl\.tools\.checkstyle\.checks\.javadoc\.JavadocTypeCheck" lines="6"/>
+  <suppress files=".*audio\-experimental\-acoustic/src/main/java/org/hammer/audio/experimental/acoustic/tracking/DetectedPeak\.java" checks="com\.puppycrawl\.tools\.checkstyle\.checks\.javadoc\.JavadocTypeCheck" lines="11"/>
+  <suppress files=".*audio\-experimental\-acoustic/src/main/java/org/hammer/audio/experimental/acoustic/tracking/FrequencyCluster\.java" checks="com\.puppycrawl\.tools\.checkstyle\.checks\.javadoc\.JavadocTypeCheck" lines="15"/>
+  <suppress files=".*audio\-experimental\-acoustic/src/main/java/org/hammer/audio/experimental/acoustic/tracking/SourceTracker\.java" checks="com\.puppycrawl\.tools\.checkstyle\.checks\.javadoc\.JavadocTypeCheck" lines="297"/>
+  <suppress files=".*audio\-experimental\-acoustic/src/main/java/org/hammer/audio/experimental/acoustic/tracking/SourceTracker\.java" checks="com\.puppycrawl\.tools\.checkstyle\.checks\.sizes\.ParameterNumberCheck" lines="58"/>
+  <suppress files=".*audio\-experimental\-acoustic/src/main/java/org/hammer/audio/experimental/acoustic/tracking/SourceTracker\.java" checks="com\.puppycrawl\.tools\.checkstyle\.checks\.sizes\.ParameterNumberCheck" lines="82"/>
+  <suppress files=".*audio\-experimental\-acoustic/src/main/java/org/hammer/audio/experimental/acoustic/tracking/TrackedSource\.java" checks="com\.puppycrawl\.tools\.checkstyle\.checks\.javadoc\.JavadocTypeCheck" lines="15"/>
+  <suppress files=".*audio\-experimental\-acoustic/src/main/java/org/hammer/audio/experimental/acoustic/tracking/TrackedSource\.java" checks="com\.puppycrawl\.tools\.checkstyle\.checks\.sizes\.ParameterNumberCheck" lines="31"/>
+  <suppress files=".*audio\-experimental\-acoustic/src/main/java/org/hammer/audio/experimental/acoustic/tracking/TrackingPipeline\.java" checks="com\.puppycrawl\.tools\.checkstyle\.checks\.javadoc\.JavadocTypeCheck" lines="268"/>
+  <suppress files=".*audio\-experimental\-acoustic/src/main/java/org/hammer/audio/experimental/acoustic/tracking/TrackingPipeline\.java" checks="com\.puppycrawl\.tools\.checkstyle\.checks\.sizes\.ParameterNumberCheck" lines="86"/>
+  <suppress files=".*audio\-experimental\-acoustic/src/main/java/org/hammer/audio/experimental/acoustic/visualization/AcousticDebugFrame\.java" checks="com\.puppycrawl\.tools\.checkstyle\.checks\.javadoc\.JavadocTypeCheck" lines="10"/>
+  <suppress files=".*audio\-experimental\-acoustic/src/main/java/org/hammer/audio/experimental/acoustic/wingbeat/WingbeatLabel\.java" checks="com\.puppycrawl\.tools\.checkstyle\.checks\.whitespace\.WhitespaceAroundCheck" lines="33"/>
+  <suppress files=".*audio\-experimental\-acoustic/src/main/java/org/hammer/audio/experimental/acoustic/workbench/WorkbenchParameters\.java" checks="com\.puppycrawl\.tools\.checkstyle\.checks\.whitespace\.WhitespaceAroundCheck" lines="82"/>
+  <suppress files=".*audio\-geometry/src/main/java/org/hammer/audio/geometry/LocalizationConstraint2D\.java" checks="com\.puppycrawl\.tools\.checkstyle\.checks\.javadoc\.JavadocTypeCheck" lines="6"/>
+  <suppress files=".*audio\-geometry/src/main/java/org/hammer/audio/geometry/MicrophoneArrayGeometry\.java" checks="com\.puppycrawl\.tools\.checkstyle\.checks\.javadoc\.JavadocTypeCheck" lines="116"/>
+  <suppress files=".*audio\-geometry/src/main/java/org/hammer/audio/geometry/Ray2D\.java" checks="com\.puppycrawl\.tools\.checkstyle\.checks\.javadoc\.JavadocTypeCheck" lines="4"/>
+  <suppress files=".*audio\-geometry/src/main/java/org/hammer/audio/geometry/Vector2\.java" checks="com\.puppycrawl\.tools\.checkstyle\.checks\.javadoc\.JavadocTypeCheck" lines="4"/>
+  <suppress files=".*audio\-geometry/src/main/java/org/hammer/audio/geometry/Vector3\.java" checks="com\.puppycrawl\.tools\.checkstyle\.checks\.javadoc\.JavadocTypeCheck" lines="4"/>
+
 </suppressions>
