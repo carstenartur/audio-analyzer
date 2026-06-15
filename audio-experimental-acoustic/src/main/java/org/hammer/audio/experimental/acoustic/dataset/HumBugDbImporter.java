@@ -251,9 +251,10 @@ public final class HumBugDbImporter implements DatasetImporter {
     if (id != null && !id.isBlank()) {
       candidates.add(id.trim() + ".wav");
     }
+    Path normalizedRoot = root.normalize();
     for (String candidate : candidates) {
       Path direct = root.resolve(candidate).normalize();
-      if (Files.isRegularFile(direct)) {
+      if (direct.startsWith(normalizedRoot) && Files.isRegularFile(direct)) {
         return direct;
       }
       Path indexed = audioFileIndex.resolve(candidate);

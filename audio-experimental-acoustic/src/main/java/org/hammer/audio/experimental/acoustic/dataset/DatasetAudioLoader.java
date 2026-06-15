@@ -66,7 +66,7 @@ public final class DatasetAudioLoader {
         int frames = decoder.framesIn(bytes.length);
         float[][] samples = new float[descriptor.channels()][frames];
         decoder.decode(bytes, bytes.length, samples);
-        return new AudioBlock(descriptor, samples, 0L, 0L);
+        return AudioBlock.wrap(descriptor, samples, 0L, 0L);
       }
     } catch (UnsupportedAudioFileException ex) {
       throw new IOException("Unsupported audio file: " + audioPath, ex);

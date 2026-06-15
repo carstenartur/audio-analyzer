@@ -7,6 +7,9 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.concurrent.ExecutionException;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
@@ -17,6 +20,7 @@ import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
+import javax.swing.SwingWorker;
 import javax.swing.filechooser.FileSystemView;
 import org.hammer.audio.experimental.acoustic.dataset.DatasetManifest;
 import org.hammer.audio.experimental.acoustic.dataset.DatasetRecording;
@@ -30,6 +34,8 @@ import org.hammer.audio.experimental.acoustic.wingbeat.WingbeatDataset;
  */
 public final class ImportedRecordingWorkbenchPanel extends JPanel {
 
+  private static final Logger LOGGER =
+      Logger.getLogger(ImportedRecordingWorkbenchPanel.class.getName());
   private static final long serialVersionUID = 1L;
 
   private final JTextField datasetPathField;
@@ -42,7 +48,11 @@ public final class ImportedRecordingWorkbenchPanel extends JPanel {
   private final transient DatasetWingbeatEvaluationWorkflow workflow;
   private final transient RuleBasedWingbeatClassifier classifier;
 
-  private transient volatile DatasetManifest loadedManifest;
+  /** Both fields are read and written exclusively on the Swing event dispatch thread. */
+  private transient DatasetManifest loadedManifest;
+
+  /** Suppresses the combo-box action listener during programmatic setup. */
+  private transient boolean programmaticUpdate;
 
   /** Create the imported-recording workbench panel. */
   public ImportedRecordingWorkbenchPanel() {
@@ -65,7 +75,7 @@ public final class ImportedRecordingWorkbenchPanel extends JPanel {
     datasetPathField = new JTextField(42);
     recordingCombo = new JComboBox<>();
     recordingCombo.setEnabled(false);
-    recordingCombo.addActionListener(e -> refreshSelectedRecording());
+    recordingCombo.addActionListener(e -> onComboSelectionChanged());
 
     manifestArea = newTextArea();
     recordingArea = newTextArea();
@@ -149,32 +159,106 @@ public final class ImportedRecordingWorkbenchPanel extends JPanel {
       evaluationArea.setText("");
       return;
     }
-    try {
-      loadManifest(importer.importFrom(Path.of(value)));
-    } catch (IOException ex) {
-      manifestArea.setText("Import failed: " + ex.getMessage());
-      recordingArea.setText("");
-      evaluationArea.setText("");
-      recordingCombo.removeAllItems();
-      recordingCombo.setEnabled(false);
-    }
+    Path root = Path.of(value);
+    new SwingWorker<ImportResult, Void>() {
+      @Override
+      protected ImportResult doInBackground() throws IOException {
+        DatasetManifest manifest = importer.importFrom(root);
+        WingbeatDataset.Evaluation evaluation = null;
+        if (!manifest.recordings().isEmpty()) {
+          evaluation = workflow.evaluate(manifest, classifier);
+        }
+        return new ImportResult(manifest, evaluation);
+      }
+
+      @Override
+      protected void done() {
+        try {
+          applyImportResult(get());
+        } catch (ExecutionException ex) {
+          LOGGER.log(Level.WARNING, "Dataset import failed", ex);
+          manifestArea.setText("Import failed: " + ex.getCause().getMessage());
+          recordingArea.setText("");
+          evaluationArea.setText("");
+          recordingCombo.removeAllItems();
+          recordingCombo.setEnabled(false);
+        } catch (InterruptedException ex) {
+          Thread.currentThread().interrupt();
+          manifestArea.setText("Import was interrupted.");
+        }
+      }
+    }.execute();
   }
 
-  void loadManifest(DatasetManifest importedManifest) throws IOException {
-    loadedManifest = Objects.requireNonNull(importedManifest, "importedManifest");
+  // PMD.UnusedAssignment: programmaticUpdate = true is read by onComboSelectionChanged() via the
+  // action-listener mechanism; PMD cannot follow cross-method field reads within the same class.
+  @SuppressWarnings("PMD.UnusedAssignment")
+  private void applyImportResult(ImportResult result) {
+    loadedManifest = result.manifest();
+    programmaticUpdate = true;
     recordingCombo.removeAllItems();
     for (DatasetRecording recording : loadedManifest.recordings()) {
       recordingCombo.addItem(new RecordingItem(recording));
     }
     recordingCombo.setEnabled(recordingCombo.getItemCount() > 0);
+    programmaticUpdate = false;
+
     manifestArea.setText(renderManifest(loadedManifest));
-    WingbeatDataset.Evaluation evaluation = workflow.evaluate(loadedManifest, classifier);
-    evaluationArea.setText(DatasetWingbeatEvaluationWorkflow.toMarkdownReport(evaluation));
+    if (result.evaluation() != null) {
+      evaluationArea.setText(
+          DatasetWingbeatEvaluationWorkflow.toMarkdownReport(result.evaluation()));
+    } else {
+      evaluationArea.setText("No recordings to evaluate.");
+    }
     if (recordingCombo.getItemCount() > 0) {
       recordingCombo.setSelectedIndex(0);
-      refreshSelectedRecording();
     } else {
       recordingArea.setText("No recordings imported.");
+    }
+  }
+
+  /**
+   * Load an already-imported manifest directly. Intended for headless tests; performs all I/O
+   * synchronously on the calling thread.
+   */
+  // PMD.UnusedAssignment: see applyImportResult above.
+  @SuppressWarnings("PMD.UnusedAssignment")
+  void loadManifest(DatasetManifest importedManifest) throws IOException {
+    loadedManifest = Objects.requireNonNull(importedManifest, "importedManifest");
+    programmaticUpdate = true;
+    try {
+      recordingCombo.removeAllItems();
+      for (DatasetRecording recording : loadedManifest.recordings()) {
+        recordingCombo.addItem(new RecordingItem(recording));
+      }
+      recordingCombo.setEnabled(recordingCombo.getItemCount() > 0);
+      manifestArea.setText(renderManifest(loadedManifest));
+      if (loadedManifest.recordings().isEmpty()) {
+        evaluationArea.setText("No recordings to evaluate.");
+      } else {
+        WingbeatDataset.Evaluation evaluation = workflow.evaluate(loadedManifest, classifier);
+        evaluationArea.setText(DatasetWingbeatEvaluationWorkflow.toMarkdownReport(evaluation));
+      }
+      if (recordingCombo.getItemCount() > 0) {
+        recordingCombo.setSelectedIndex(0);
+        RecordingItem firstItem = recordingCombo.getItemAt(0);
+        DatasetWingbeatEvaluationWorkflow.RecordingAnalysis analysis =
+            workflow.analyzeRecording(loadedManifest, firstItem.recording(), classifier);
+        recordingArea.setText(renderRecordingAnalysis(analysis));
+      } else {
+        recordingArea.setText("No recordings imported.");
+      }
+    } finally {
+      programmaticUpdate = false;
+    }
+  }
+
+  /**
+   * Fires when the combo-box selection changes due to user interaction (not programmatic setup).
+   */
+  private void onComboSelectionChanged() {
+    if (!programmaticUpdate) {
+      refreshSelectedRecording();
     }
   }
 
@@ -183,13 +267,27 @@ public final class ImportedRecordingWorkbenchPanel extends JPanel {
     if (item == null || loadedManifest == null) {
       return;
     }
-    try {
-      DatasetWingbeatEvaluationWorkflow.RecordingAnalysis analysis =
-          workflow.analyzeRecording(loadedManifest, item.recording(), classifier);
-      recordingArea.setText(renderRecordingAnalysis(analysis));
-    } catch (IOException ex) {
-      recordingArea.setText("Recording analysis failed: " + ex.getMessage());
-    }
+    final DatasetManifest currentManifest = loadedManifest;
+    final DatasetRecording currentRecording = item.recording();
+    new SwingWorker<DatasetWingbeatEvaluationWorkflow.RecordingAnalysis, Void>() {
+      @Override
+      protected DatasetWingbeatEvaluationWorkflow.RecordingAnalysis doInBackground()
+          throws IOException {
+        return workflow.analyzeRecording(currentManifest, currentRecording, classifier);
+      }
+
+      @Override
+      protected void done() {
+        try {
+          recordingArea.setText(renderRecordingAnalysis(get()));
+        } catch (ExecutionException ex) {
+          LOGGER.log(Level.WARNING, "Recording analysis failed", ex);
+          recordingArea.setText("Recording analysis failed: " + ex.getCause().getMessage());
+        } catch (InterruptedException ex) {
+          Thread.currentThread().interrupt();
+        }
+      }
+    }.execute();
   }
 
   @SuppressWarnings({"PMD.ConsecutiveAppendsShouldReuse", "PMD.ConsecutiveLiteralAppends"})
@@ -275,4 +373,6 @@ public final class ImportedRecordingWorkbenchPanel extends JPanel {
           : recording.recordingId() + " — " + species;
     }
   }
+
+  private record ImportResult(DatasetManifest manifest, WingbeatDataset.Evaluation evaluation) {}
 }

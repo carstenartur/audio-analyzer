@@ -61,6 +61,10 @@ public final class DatasetWingbeatEvaluationWorkflow {
    */
   public WingbeatDataset buildDataset(DatasetManifest manifest) throws IOException {
     Objects.requireNonNull(manifest, "manifest");
+    if (manifest.recordings().isEmpty()) {
+      throw new IllegalArgumentException(
+          "manifest must contain at least one recording to build a dataset");
+    }
     List<LabelledRecording> entries = new ArrayList<>(manifest.recordings().size());
     for (DatasetRecording recording : manifest.recordings()) {
       RecordingAnalysis analysis = analyzeRecording(manifest, recording, null);
