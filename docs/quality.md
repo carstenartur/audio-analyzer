@@ -1,38 +1,25 @@
 # Quality Gates & Coverage
 
-This page describes the quality checks that are actually enforced today and the checks that remain
-report-only. It intentionally avoids claiming hard gates that are not present in Maven or CI.
+This page describes the quality checks that are enforced in Maven/CI.
 
 ## Current gates
 
-|          Gate           |                                      Configuration                                       |                                    Fails build/CI?                                    |
-|-------------------------|------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------|
-| Java version            | Maven Enforcer requires Java `[21,)`                                                     | **Yes**, in `mvn verify`                                                              |
-| Unit tests              | Surefire, `java.awt.headless=true`                                                       | **Yes**, in `mvn verify`                                                              |
-| Spotless                | Java, POM and Markdown format check                                                      | **Yes**, in `mvn verify`                                                              |
-| Architecture boundaries | JUnit test in `audio-app`                                                                | **Yes**, in `mvn verify`                                                              |
-| JaCoCo                  | `prepare-agent`, `report`, `check`; `BUNDLE` line coverage minimum `0.05`                | **Yes**, in `mvn verify`                                                              |
-| Checkstyle              | `checkstyle.xml`, severity `warning`, `failOnViolation=false`                            | Report-only locally; **CI fails only if counts exceed `quality-baseline.properties`** |
-| PMD                     | `pmd-ruleset.xml`, `failOnViolation=false`                                               | Report-only locally; **CI fails only if counts exceed `quality-baseline.properties`** |
-| SpotBugs                | `effort=Max`, `threshold=Low`, exclusions in `spotbugs-exclude.xml`, `failOnError=false` | Report-only locally; **CI fails only if counts exceed `quality-baseline.properties`** |
-| Codecov upload          | `codecov/codecov-action`, `fail_ci_if_error=false`                                       | **No**; upload failures are not a quality gate                                        |
-| CodeQL                  | GitHub workflow with explicit Maven package build                                        | **Yes** when the CodeQL workflow runs                                                 |
+|          Gate           |                                      Configuration                                      |                Fails build/CI?                 |
+|-------------------------|-----------------------------------------------------------------------------------------|------------------------------------------------|
+| Java version            | Maven Enforcer requires Java `[21,)`                                                    | **Yes**, in `mvn verify`                       |
+| Unit tests              | Surefire, `java.awt.headless=true`                                                      | **Yes**, in `mvn verify`                       |
+| Spotless                | Java, POM and Markdown format check                                                     | **Yes**, in `mvn verify`                       |
+| Architecture boundaries | JUnit test in `audio-app`                                                               | **Yes**, in `mvn verify`                       |
+| JaCoCo                  | `prepare-agent`, `report`, `check`; `BUNDLE` line coverage minimum `0.05`               | **Yes**, in `mvn verify`                       |
+| Checkstyle              | `checkstyle.xml`, severity `warning`, `failOnViolation=true`                            | **Yes**, in `mvn verify`                       |
+| PMD                     | `pmd-ruleset.xml`, `failOnViolation=true`                                               | **Yes**, in `mvn verify`                       |
+| SpotBugs                | `effort=Max`, `threshold=Low`, exclusions in `spotbugs-exclude.xml`, `failOnError=true` | **Yes**, in `mvn verify`                       |
+| Codecov upload          | `codecov/codecov-action`, `fail_ci_if_error=false`                                      | **No**; upload failures are not a quality gate |
+| CodeQL                  | GitHub workflow with explicit Maven package build                                       | **Yes** when the CodeQL workflow runs          |
 
-## Baseline captured during this pass
+## Current coverage snapshot
 
-Baseline command:
-
-```bash
-JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64 ./mvnw -B clean verify
-```
-
-Result: exit code 0.
-
-Static-analysis findings are intentionally not all fixed in this pass. CI compares the current XML
-report counts with `quality-baseline.properties` and fails if a module introduces additional
-Checkstyle, PMD or SpotBugs findings above that baseline.
-
-Observed JaCoCo line coverage after the baseline run:
+Observed JaCoCo line coverage from a full verification run:
 
 |            Module             | Line coverage |
 |-------------------------------|--------------:|
@@ -44,7 +31,7 @@ Observed JaCoCo line coverage after the baseline run:
 | `audio-app`                   |        29.96% |
 | `audio-experimental-acoustic` |        86.03% |
 
-`audio-acquisition` is included in the Maven reactor and JaCoCo configuration, but the baseline run
+`audio-acquisition` is included in the Maven reactor and JaCoCo configuration, but this run
 did not produce a module JaCoCo XML/HTML report for it because there was no test execution data in
 that module.
 
@@ -61,13 +48,9 @@ coverage from disappearing, not to claim comprehensive test coverage.
 
 ## Hardening roadmap
 
-1. Reduce the committed Checkstyle/PMD/SpotBugs baselines by fixing existing findings module by
-   module.
-2. Switch high-confidence Checkstyle rules to `failOnViolation=true` once the baseline is small
-   enough that local failures are actionable.
-3. Raise JaCoCo line coverage in small steps: **5% → 10% → 20% → 30%**, backed by tests for behavior
+1. Keep static-analysis and formatting/test gates green in regular `mvn verify` runs.
+2. Raise JaCoCo line coverage in small steps: **5% → 10% → 20% → 30%**, backed by tests for behavior
    rather than coverage-only assertions.
-4. Consider severity-filtered hard gates for SpotBugs and PMD once current findings are triaged.
 
 ## Target areas for increased coverage
 
