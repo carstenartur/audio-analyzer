@@ -32,7 +32,9 @@ public final class WorkbenchRunExporter {
    *
    * <p>The summary is derived from the {@link BenchmarkReport} that was computed by comparing the
    * estimated tracking output against the scenario ground truth. If no benchmark report is
-   * available (e.g. the run produced no snapshots), a short placeholder message is returned.
+   * available (e.g. the run produced no snapshots or benchmark computation failed), a short
+   * placeholder message is returned. Localization and frequency metric values that could not be
+   * computed (evaluatedCount == 0) are rendered as {@code n/a}.
    *
    * @param result the run result to format
    * @return a Markdown-formatted benchmark summary string
@@ -41,7 +43,8 @@ public final class WorkbenchRunExporter {
     Objects.requireNonNull(result, PARAM_RESULT);
     BenchmarkReport report = result.benchmarkReport();
     if (report == null) {
-      return "# Benchmark Report\n\n*Not available — run produced no snapshots.*\n";
+      return "# Benchmark Report\n\n"
+          + "*Not available — run produced no snapshots or benchmark computation failed.*\n";
     }
     StringBuilder sb = new StringBuilder(512);
     sb.append("# Benchmark Report — ").append(result.scenario().name()).append("\n\n");
@@ -53,30 +56,28 @@ public final class WorkbenchRunExporter {
     appendRow(
         sb,
         "Mean position error (m)",
-        String.format(Locale.ROOT, "%.4f", report.localization().meanDistanceErrorMeters()));
+        formatMetric("%.4f", report.localization().meanDistanceErrorMeters()));
     appendRow(
         sb,
         "Median position error (m)",
-        String.format(Locale.ROOT, "%.4f", report.localization().medianDistanceErrorMeters()));
+        formatMetric("%.4f", report.localization().medianDistanceErrorMeters()));
     appendRow(
         sb,
         "Mean angular error (°)",
-        String.format(Locale.ROOT, "%.4f", report.localization().meanAngularErrorDegrees()));
+        formatMetric("%.4f", report.localization().meanAngularErrorDegrees()));
     appendRow(sb, "Evaluated samples", report.localization().evaluatedCount());
     appendRow(sb, "Skipped samples", report.localization().skippedCount());
     sb.append("\n## Frequency Details\n\n| Metric | Value |\n|---|---|\n");
     appendRow(
         sb,
         "Mean absolute error (Hz)",
-        String.format(Locale.ROOT, "%.4f", report.frequency().meanAbsoluteErrorHz()));
+        formatMetric("%.4f", report.frequency().meanAbsoluteErrorHz()));
     appendRow(
         sb,
         "Median absolute error (Hz)",
-        String.format(Locale.ROOT, "%.4f", report.frequency().medianAbsoluteErrorHz()));
+        formatMetric("%.4f", report.frequency().medianAbsoluteErrorHz()));
     appendRow(
-        sb,
-        "Mean relative error",
-        String.format(Locale.ROOT, "%.6f", report.frequency().meanRelativeError()));
+        sb, "Mean relative error", formatMetric("%.6f", report.frequency().meanRelativeError()));
     appendRow(sb, "Evaluated samples", report.frequency().evaluatedCount());
     sb.append("\n## Tracking Quality\n\n| Metric | Value |\n|---|---|\n");
     appendRow(sb, "Expected sources", report.expectedSourceCount());
@@ -321,6 +322,10 @@ public final class WorkbenchRunExporter {
       }
     }
     return new ArrayList<>(seen);
+  }
+
+  private static String formatMetric(String fmt, Double value) {
+    return value == null ? "n/a" : String.format(Locale.ROOT, fmt, value);
   }
 
   private static void appendRow(StringBuilder sb, String label, Object value) {
