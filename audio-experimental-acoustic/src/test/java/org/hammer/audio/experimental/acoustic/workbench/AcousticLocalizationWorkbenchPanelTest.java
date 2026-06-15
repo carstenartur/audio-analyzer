@@ -6,6 +6,11 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
+import org.hammer.audio.experimental.acoustic.benchmark.BenchmarkReport;
+import org.hammer.audio.experimental.acoustic.benchmark.ClassificationAccuracyMetric;
+import org.hammer.audio.experimental.acoustic.benchmark.DopplerErrorMetric;
+import org.hammer.audio.experimental.acoustic.benchmark.FrequencyErrorMetric;
+import org.hammer.audio.experimental.acoustic.benchmark.LocalizationErrorMetric;
 import org.hammer.audio.experimental.acoustic.simulation.SimulationScenarios;
 import org.hammer.audio.experimental.acoustic.simulation.SimulationScenarios.SimulationScenario;
 import org.junit.jupiter.api.Test;
@@ -191,5 +196,47 @@ class AcousticLocalizationWorkbenchPanelTest {
     assertNotNull(
         result.benchmarkReport().localization(),
         "localization metrics must be present in benchmark report");
+  }
+
+  @Test
+  void benchmarkMarkdownRendersNaForZeroEvaluatedMetrics() {
+    // Exercises the formatMetric helper path where evaluatedCount == 0 causes null metric values.
+    LocalizationErrorMetric localization =
+        LocalizationErrorMetric.ofSamples(List.of(), List.of(), 0, 0);
+    FrequencyErrorMetric frequency = FrequencyErrorMetric.ofSamples(List.of(), List.of(), 0, 0);
+    DopplerErrorMetric doppler = DopplerErrorMetric.ofSamples(List.of(), 0, 0);
+    ClassificationAccuracyMetric classification = ClassificationAccuracyMetric.ofCounts(0, 0, 0, 0);
+    BenchmarkReport report =
+        new BenchmarkReport(
+            "test-scenario",
+            1,
+            0,
+            localization,
+            frequency,
+            doppler,
+            classification,
+            null,
+            0,
+            0,
+            0,
+            0,
+            null,
+            null,
+            null,
+            null,
+            null,
+            0L,
+            0L,
+            0L);
+
+    SimulationScenario scenario = SimulationScenarios.singleSource();
+    WorkbenchRunResult result =
+        new WorkbenchRunResult(
+            scenario, WorkbenchParameters.defaults().build(), List.of(), 0L, report);
+
+    String bm = WorkbenchRunExporter.toBenchmarkMarkdown(result);
+    assertFalse(bm.isBlank(), "benchmark markdown must not be blank");
+    assertTrue(
+        bm.contains("n/a"), "benchmark markdown must render 'n/a' for zero-evaluated metrics");
   }
 }
