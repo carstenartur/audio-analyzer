@@ -5,7 +5,6 @@ import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.io.IOException;
 import java.nio.file.Path;
-import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import javax.swing.BorderFactory;
@@ -26,7 +25,9 @@ import org.hammer.audio.experimental.acoustic.wingbeat.DatasetWingbeatEvaluation
 import org.hammer.audio.experimental.acoustic.wingbeat.RuleBasedWingbeatClassifier;
 import org.hammer.audio.experimental.acoustic.wingbeat.WingbeatDataset;
 
-/** Small Swing workbench for browsing imported dataset recordings and replaying analysis on them. */
+/**
+ * Small Swing workbench for browsing imported dataset recordings and replaying analysis on them.
+ */
 public final class ImportedRecordingWorkbenchPanel extends JPanel {
 
   private static final long serialVersionUID = 1L;
@@ -37,15 +38,18 @@ public final class ImportedRecordingWorkbenchPanel extends JPanel {
   private final JTextArea recordingArea;
   private final JTextArea evaluationArea;
 
-  private final HumBugDbImporter importer;
-  private final DatasetWingbeatEvaluationWorkflow workflow;
-  private final RuleBasedWingbeatClassifier classifier;
+  private final transient HumBugDbImporter importer;
+  private final transient DatasetWingbeatEvaluationWorkflow workflow;
+  private final transient RuleBasedWingbeatClassifier classifier;
 
-  private transient volatile DatasetManifest manifest;
+  private transient volatile DatasetManifest loadedManifest;
 
   /** Create the imported-recording workbench panel. */
   public ImportedRecordingWorkbenchPanel() {
-    this(new HumBugDbImporter(), new DatasetWingbeatEvaluationWorkflow(), new RuleBasedWingbeatClassifier());
+    this(
+        new HumBugDbImporter(),
+        new DatasetWingbeatEvaluationWorkflow(),
+        new RuleBasedWingbeatClassifier());
   }
 
   ImportedRecordingWorkbenchPanel(
@@ -103,9 +107,7 @@ public final class ImportedRecordingWorkbenchPanel extends JPanel {
   private JSplitPane buildCenterPanel() {
     JSplitPane split =
         new JSplitPane(
-            JSplitPane.HORIZONTAL_SPLIT,
-            new JScrollPane(manifestArea),
-            buildRightPanel());
+            JSplitPane.HORIZONTAL_SPLIT, new JScrollPane(manifestArea), buildRightPanel());
     split.setResizeWeight(0.35);
     split.setDividerLocation(340);
     return split;
@@ -159,14 +161,14 @@ public final class ImportedRecordingWorkbenchPanel extends JPanel {
   }
 
   void loadManifest(DatasetManifest importedManifest) throws IOException {
-    manifest = Objects.requireNonNull(importedManifest, "importedManifest");
+    loadedManifest = Objects.requireNonNull(importedManifest, "importedManifest");
     recordingCombo.removeAllItems();
-    for (DatasetRecording recording : manifest.recordings()) {
+    for (DatasetRecording recording : loadedManifest.recordings()) {
       recordingCombo.addItem(new RecordingItem(recording));
     }
     recordingCombo.setEnabled(recordingCombo.getItemCount() > 0);
-    manifestArea.setText(renderManifest(manifest));
-    WingbeatDataset.Evaluation evaluation = workflow.evaluate(manifest, classifier);
+    manifestArea.setText(renderManifest(loadedManifest));
+    WingbeatDataset.Evaluation evaluation = workflow.evaluate(loadedManifest, classifier);
     evaluationArea.setText(DatasetWingbeatEvaluationWorkflow.toMarkdownReport(evaluation));
     if (recordingCombo.getItemCount() > 0) {
       recordingCombo.setSelectedIndex(0);
@@ -178,17 +180,19 @@ public final class ImportedRecordingWorkbenchPanel extends JPanel {
 
   private void refreshSelectedRecording() {
     RecordingItem item = (RecordingItem) recordingCombo.getSelectedItem();
-    if (item == null || manifest == null) {
+    if (item == null || loadedManifest == null) {
       return;
     }
     try {
-      var analysis = workflow.analyzeRecording(manifest, item.recording(), classifier);
+      DatasetWingbeatEvaluationWorkflow.RecordingAnalysis analysis =
+          workflow.analyzeRecording(loadedManifest, item.recording(), classifier);
       recordingArea.setText(renderRecordingAnalysis(analysis));
     } catch (IOException ex) {
       recordingArea.setText("Recording analysis failed: " + ex.getMessage());
     }
   }
 
+  @SuppressWarnings({"PMD.ConsecutiveAppendsShouldReuse", "PMD.ConsecutiveLiteralAppends"})
   private static String renderManifest(DatasetManifest manifest) {
     StringBuilder sb = new StringBuilder(512);
     sb.append("# Imported Dataset\n\n");
@@ -212,6 +216,7 @@ public final class ImportedRecordingWorkbenchPanel extends JPanel {
     return sb.toString();
   }
 
+  @SuppressWarnings({"PMD.ConsecutiveAppendsShouldReuse", "PMD.ConsecutiveLiteralAppends"})
   private static String renderRecordingAnalysis(
       DatasetWingbeatEvaluationWorkflow.RecordingAnalysis analysis) {
     StringBuilder sb = new StringBuilder(512);
@@ -250,7 +255,7 @@ public final class ImportedRecordingWorkbenchPanel extends JPanel {
   }
 
   DatasetManifest manifest() {
-    return manifest;
+    return loadedManifest;
   }
 
   String recordingSummaryText() {

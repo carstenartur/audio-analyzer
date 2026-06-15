@@ -54,7 +54,8 @@ class DatasetWingbeatEvaluationWorkflowTest {
     assertEquals(WingbeatLabel.FEMALE_LIKELY, analysis.classificationResult().label());
     assertTrue(analysis.features().fundamentalFrequencyHz() >= 450.0);
     assertTrue(
-        DatasetWingbeatEvaluationWorkflow.toMarkdownReport(evaluation).contains("Imported Dataset Evaluation"));
+        DatasetWingbeatEvaluationWorkflow.toMarkdownReport(evaluation)
+            .contains("Imported Dataset Evaluation"));
   }
 
   private static void createSineWave(Path file, int sampleRate, double frequencyHz, double seconds)
@@ -63,7 +64,9 @@ class DatasetWingbeatEvaluationWorkflowTest {
     byte[] pcm = new byte[frames * 2];
     for (int i = 0; i < frames; i++) {
       short sample =
-          (short) Math.round(Math.sin(2.0 * Math.PI * frequencyHz * i / sampleRate) * 0.8 * Short.MAX_VALUE);
+          (short)
+              Math.round(
+                  Math.sin(2.0 * Math.PI * frequencyHz * i / sampleRate) * 0.8 * Short.MAX_VALUE);
       pcm[i * 2] = (byte) (sample & 0xFF);
       pcm[i * 2 + 1] = (byte) ((sample >>> 8) & 0xFF);
     }

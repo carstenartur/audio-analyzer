@@ -82,8 +82,8 @@ public final class DatasetWingbeatEvaluationWorkflow {
    * @return evaluation summary
    * @throws IOException when audio files cannot be loaded
    */
-  public WingbeatDataset.Evaluation evaluate(DatasetManifest manifest, WingbeatClassifier classifier)
-      throws IOException {
+  public WingbeatDataset.Evaluation evaluate(
+      DatasetManifest manifest, WingbeatClassifier classifier) throws IOException {
     return buildDataset(manifest).evaluate(classifier);
   }
 
@@ -118,9 +118,13 @@ public final class DatasetWingbeatEvaluationWorkflow {
             peak.confidence(),
             0L,
             1);
+    double decodedDurationSeconds = block.frames() / block.format().sampleRate();
     WingbeatFeatureVector features =
         featureExtractor.extract(
-            source, block, 0, Math.max(recording.durationSeconds(), block.frames() / block.format().sampleRate()));
+            source,
+            block,
+            0,
+            decodedDurationSeconds > 0.0 ? decodedDurationSeconds : recording.durationSeconds());
     String groundTruthLabel = labelResolver.resolve(recording);
     ClassificationResult classificationResult =
         classifier == null ? null : classifier.classify(features);
@@ -134,6 +138,7 @@ public final class DatasetWingbeatEvaluationWorkflow {
    * @param evaluation evaluation summary
    * @return Markdown summary
    */
+  @SuppressWarnings({"PMD.ConsecutiveAppendsShouldReuse", "PMD.ConsecutiveLiteralAppends"})
   public static String toMarkdownReport(WingbeatDataset.Evaluation evaluation) {
     Objects.requireNonNull(evaluation, "evaluation");
     StringBuilder sb = new StringBuilder(256);
@@ -225,12 +230,30 @@ public final class DatasetWingbeatEvaluationWorkflow {
     String resolve(DatasetRecording recording);
   }
 
-  /** Result of analyzing one imported recording. */
+  /**
+   * Result of analyzing one imported recording.
+   *
+   * @param recording imported recording metadata entry
+   * @param resolvedAudioPath resolved absolute audio path
+   * @param audioBlock decoded audio block used for analysis
+   * @param groundTruthLabel derived classifier ground-truth label
+   * @param features extracted wingbeat feature vector
+   * @param classificationResult classifier output, or {@code null} when no classifier was supplied
+   */
   public record RecordingAnalysis(
       DatasetRecording recording,
       Path resolvedAudioPath,
       AudioBlock audioBlock,
       String groundTruthLabel,
       WingbeatFeatureVector features,
-      ClassificationResult classificationResult) {}
+      ClassificationResult classificationResult) {
+
+    public RecordingAnalysis {
+      Objects.requireNonNull(recording, "recording");
+      Objects.requireNonNull(resolvedAudioPath, "resolvedAudioPath");
+      Objects.requireNonNull(audioBlock, "audioBlock");
+      Objects.requireNonNull(groundTruthLabel, "groundTruthLabel");
+      Objects.requireNonNull(features, "features");
+    }
+  }
 }

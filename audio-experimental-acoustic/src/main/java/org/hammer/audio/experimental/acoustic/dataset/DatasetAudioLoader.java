@@ -27,9 +27,9 @@ public final class DatasetAudioLoader {
       AudioFormat format = stream.getFormat();
       double sampleRate = format.getSampleRate();
       long frameLength = stream.getFrameLength();
-      double duration =
-          frameLength > 0 && sampleRate > 0.0 ? frameLength / sampleRate : 0.0;
-      return new AudioFileInfo(sampleRate, duration, format.getChannels(), format.getSampleSizeInBits());
+      double duration = frameLength > 0 && sampleRate > 0.0 ? frameLength / sampleRate : 0.0;
+      return new AudioFileInfo(
+          sampleRate, duration, format.getChannels(), format.getSampleSizeInBits());
     } catch (UnsupportedAudioFileException ex) {
       throw new IOException("Unsupported audio file: " + audioPath, ex);
     }
@@ -48,7 +48,9 @@ public final class DatasetAudioLoader {
       AudioFormat baseFormat = sourceStream.getFormat();
       AudioFormat targetFormat = pcmFormat(baseFormat);
       try (AudioInputStream pcmStream =
-          needsConversion(baseFormat) ? AudioSystem.getAudioInputStream(targetFormat, sourceStream) : sourceStream) {
+          needsConversion(baseFormat)
+              ? AudioSystem.getAudioInputStream(targetFormat, sourceStream)
+              : sourceStream) {
         AudioFormat effectiveFormat = pcmStream.getFormat();
         AudioFormatDescriptor descriptor =
             new AudioFormatDescriptor(
@@ -92,7 +94,30 @@ public final class DatasetAudioLoader {
         false);
   }
 
-  /** Basic metadata for one inspected audio file. */
+  /**
+   * Basic metadata for one inspected audio file.
+   *
+   * @param sampleRateHz audio sample rate in hertz
+   * @param durationSeconds decoded or header-derived duration in seconds
+   * @param channelCount number of audio channels
+   * @param sampleSizeBits source sample size in bits
+   */
   public record AudioFileInfo(
-      double sampleRateHz, double durationSeconds, int channelCount, int sampleSizeBits) {}
+      double sampleRateHz, double durationSeconds, int channelCount, int sampleSizeBits) {
+
+    public AudioFileInfo {
+      if (!Double.isFinite(sampleRateHz) || sampleRateHz <= 0.0) {
+        throw new IllegalArgumentException("sampleRateHz must be finite and > 0");
+      }
+      if (!Double.isFinite(durationSeconds) || durationSeconds < 0.0) {
+        throw new IllegalArgumentException("durationSeconds must be finite and >= 0");
+      }
+      if (channelCount < 1) {
+        throw new IllegalArgumentException("channelCount must be >= 1");
+      }
+      if (sampleSizeBits < 1) {
+        throw new IllegalArgumentException("sampleSizeBits must be >= 1");
+      }
+    }
+  }
 }
