@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
+import org.hammer.audio.experimental.acoustic.benchmark.BenchmarkReport;
 import org.hammer.audio.experimental.acoustic.tracking.FrequencyCluster;
 import org.hammer.audio.experimental.acoustic.tracking.TrackedSource;
 import org.hammer.audio.experimental.acoustic.tracking.TrackingSnapshot;
@@ -24,6 +25,88 @@ public final class WorkbenchRunExporter {
 
   private WorkbenchRunExporter() {
     // utility class
+  }
+
+  /**
+   * Produce a Markdown benchmark summary for the run result.
+   *
+   * <p>The summary is derived from the {@link BenchmarkReport} that was computed by comparing the
+   * estimated tracking output against the scenario ground truth. If no benchmark report is
+   * available (e.g. the run produced no snapshots), a short placeholder message is returned.
+   *
+   * @param result the run result to format
+   * @return a Markdown-formatted benchmark summary string
+   */
+  public static String toBenchmarkMarkdown(WorkbenchRunResult result) {
+    Objects.requireNonNull(result, PARAM_RESULT);
+    BenchmarkReport report = result.benchmarkReport();
+    if (report == null) {
+      return "# Benchmark Report\n\n*Not available — run produced no snapshots.*\n";
+    }
+    StringBuilder sb = new StringBuilder(512);
+    sb.append("# Benchmark Report — ").append(result.scenario().name()).append("\n\n");
+    sb.append(
+        "> Comparison of estimated tracking output against scenario ground truth.\n"
+            + "> All metrics are experimental.\n\n");
+    sb.append(report.toMarkdownSummary()).append("\n\n");
+    sb.append("## Localization Details\n\n| Metric | Value |\n|---|---|\n");
+    appendRow(
+        sb,
+        "Mean position error (m)",
+        String.format(Locale.ROOT, "%.4f", report.localization().meanDistanceErrorMeters()));
+    appendRow(
+        sb,
+        "Median position error (m)",
+        String.format(Locale.ROOT, "%.4f", report.localization().medianDistanceErrorMeters()));
+    appendRow(
+        sb,
+        "Mean angular error (°)",
+        String.format(Locale.ROOT, "%.4f", report.localization().meanAngularErrorDegrees()));
+    appendRow(sb, "Evaluated samples", report.localization().evaluatedCount());
+    appendRow(sb, "Skipped samples", report.localization().skippedCount());
+    sb.append("\n## Frequency Details\n\n| Metric | Value |\n|---|---|\n");
+    appendRow(
+        sb,
+        "Mean absolute error (Hz)",
+        String.format(Locale.ROOT, "%.4f", report.frequency().meanAbsoluteErrorHz()));
+    appendRow(
+        sb,
+        "Median absolute error (Hz)",
+        String.format(Locale.ROOT, "%.4f", report.frequency().medianAbsoluteErrorHz()));
+    appendRow(
+        sb,
+        "Mean relative error",
+        String.format(Locale.ROOT, "%.6f", report.frequency().meanRelativeError()));
+    appendRow(sb, "Evaluated samples", report.frequency().evaluatedCount());
+    sb.append("\n## Tracking Quality\n\n| Metric | Value |\n|---|---|\n");
+    appendRow(sb, "Expected sources", report.expectedSourceCount());
+    appendRow(sb, "Snapshot count", report.snapshotCount());
+    appendRow(
+        sb,
+        "Track continuity",
+        report.trackContinuity() == null
+            ? "n/a"
+            : String.format(Locale.ROOT, "%.4f", report.trackContinuity()));
+    appendRow(
+        sb,
+        "ID stability",
+        report.idStability() == null
+            ? "n/a"
+            : String.format(Locale.ROOT, "%.4f", report.idStability()));
+    appendRow(
+        sb,
+        "False-positive rate",
+        report.falsePositiveRate() == null
+            ? "n/a"
+            : String.format(Locale.ROOT, "%.4f", report.falsePositiveRate()));
+    appendRow(
+        sb,
+        "False-negative rate",
+        report.falseNegativeRate() == null
+            ? "n/a"
+            : String.format(Locale.ROOT, "%.4f", report.falseNegativeRate()));
+    appendRow(sb, "Mean processing (ns)", report.meanProcessingNanos());
+    return sb.toString();
   }
 
   /**

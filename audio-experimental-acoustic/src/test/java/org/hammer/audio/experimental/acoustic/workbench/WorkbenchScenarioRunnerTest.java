@@ -3,6 +3,7 @@ package org.hammer.audio.experimental.acoustic.workbench;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.ArrayList;
@@ -159,5 +160,72 @@ class WorkbenchScenarioRunnerTest {
         result.maxProcessingNanosPerBlock() <= result.totalProcessingNanos()
             || result.blockCount() == 1,
         "max per block should not exceed total (unless only one block)");
+  }
+
+  @Test
+  void singleSourceRunProducesBenchmarkReport() {
+    SimulationScenario scenario = SimulationScenarios.singleSource();
+    WorkbenchRunResult result =
+        WorkbenchScenarioRunner.run(scenario, WorkbenchParameters.defaults().build());
+
+    assertNotNull(
+        result.benchmarkReport(), "benchmark report must be present after a non-empty run");
+    assertEquals(
+        scenario.name(),
+        result.benchmarkReport().scenarioId(),
+        "benchmark report scenario ID must match the executed scenario");
+  }
+
+  @Test
+  void benchmarkReportSnapshotCountMatchesRunResult() {
+    SimulationScenario scenario = SimulationScenarios.singleSource();
+    WorkbenchRunResult result =
+        WorkbenchScenarioRunner.run(scenario, WorkbenchParameters.defaults().build());
+
+    assertNotNull(result.benchmarkReport());
+    assertEquals(
+        result.blockCount(),
+        result.benchmarkReport().snapshotCount(),
+        "benchmark snapshotCount must equal the number of processed blocks");
+  }
+
+  @Test
+  void benchmarkReportExpectedSourceCountMatchesScenario() {
+    SimulationScenario scenario = SimulationScenarios.singleSource();
+    WorkbenchRunResult result =
+        WorkbenchScenarioRunner.run(scenario, WorkbenchParameters.defaults().build());
+
+    assertNotNull(result.benchmarkReport());
+    assertEquals(
+        scenario.emitters().size(),
+        result.benchmarkReport().expectedSourceCount(),
+        "benchmark expectedSourceCount must match number of emitters in the scenario");
+  }
+
+  @Test
+  void benchmarkReportIsNullForEmptySnapshots() {
+    // Verify the contract: no snapshots → null benchmark report
+    // (We test this indirectly via WorkbenchRunResult constructor accepting null)
+    WorkbenchRunResult result =
+        new WorkbenchRunResult(
+            SimulationScenarios.singleSource(),
+            WorkbenchParameters.defaults().build(),
+            List.of(),
+            0L,
+            null);
+
+    assertNull(
+        result.benchmarkReport(), "benchmark report must be null when constructed with null");
+  }
+
+  @Test
+  void allScenariosProduceBenchmarkReport() {
+    WorkbenchParameters params = WorkbenchParameters.defaults().build();
+    for (SimulationScenario scenario : SimulationScenarios.all()) {
+      WorkbenchRunResult result = WorkbenchScenarioRunner.run(scenario, params);
+      assertNotNull(
+          result.benchmarkReport(),
+          "benchmark report must not be null for scenario: " + scenario.name());
+    }
   }
 }
