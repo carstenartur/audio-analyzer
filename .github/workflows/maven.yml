@@ -133,43 +133,6 @@ jobs:
         if-no-files-found: ignore
         retention-days: 30
 
-    - name: Enforce static-analysis baseline
-      if: always()
-      run: |
-        python3 - <<'PY'
-        import configparser
-        import pathlib
-        import sys
-        import xml.etree.ElementTree as ET
-
-        baseline = configparser.ConfigParser()
-        baseline.read("quality-baseline.properties")
-        checks = {
-            "checkstyle": ("checkstyle-result.xml", ".//error"),
-            "pmd": ("pmd.xml", ".//{*}violation"),
-            "spotbugs": ("spotbugsXml.xml", ".//BugInstance"),
-        }
-        failures = []
-        for module in baseline.sections():
-            for tool, (file_name, xpath) in checks.items():
-                report = pathlib.Path(module) / "target" / file_name
-                if module == ".":
-                    report = pathlib.Path("target") / file_name
-                if not report.exists():
-                    continue
-                actual = len(ET.parse(report).getroot().findall(xpath))
-                allowed = baseline.getint(module, tool)
-                if actual > allowed:
-                    failures.append(
-                        f"{module}:{tool} has {actual} findings, baseline allows {allowed}"
-                    )
-        if failures:
-            print("Static-analysis baseline exceeded:")
-            print("\n".join(failures))
-            sys.exit(1)
-        print("Static-analysis findings are within the committed baseline.")
-        PY
-    
     - name: Debug coverage path
       if: always()
       run: find . -maxdepth 5 -path '*/target/site/jacoco' -type d -print

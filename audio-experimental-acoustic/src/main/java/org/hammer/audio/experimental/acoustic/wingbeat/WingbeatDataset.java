@@ -91,7 +91,6 @@ public record WingbeatDataset(String name, List<LabelledRecording> entries) {
       labelSampleCounts = Map.copyOf(labelSampleCounts);
       labelCorrectCounts = Map.copyOf(labelCorrectCounts);
       int totalLabelSamples = 0;
-      int totalLabelCorrect = 0;
       for (Map.Entry<String, Integer> entry : labelSampleCounts.entrySet()) {
         String label = Objects.requireNonNull(entry.getKey(), "labelSampleCounts key");
         Integer count = Objects.requireNonNull(entry.getValue(), "labelSampleCounts value");
@@ -103,16 +102,17 @@ public record WingbeatDataset(String name, List<LabelledRecording> entries) {
         }
         totalLabelSamples += count;
       }
+      int totalLabelCorrect = 0;
       for (Map.Entry<String, Integer> entry : labelCorrectCounts.entrySet()) {
         String label = Objects.requireNonNull(entry.getKey(), "labelCorrectCounts key");
         Integer count = Objects.requireNonNull(entry.getValue(), "labelCorrectCounts value");
-        Integer labelSamples = labelSampleCounts.get(label);
         if (label.isBlank()) {
           throw new IllegalArgumentException("labelCorrectCounts keys must not be blank");
         }
         if (count < 0) {
           throw new IllegalArgumentException("labelCorrectCounts values must be >= 0");
         }
+        Integer labelSamples = labelSampleCounts.get(label);
         if (labelSamples == null) {
           throw new IllegalArgumentException(
               "labelCorrectCounts labels must also exist in labelSampleCounts");

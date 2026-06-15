@@ -95,7 +95,7 @@ without clipped labels or empty regions._
 - Maven multi-module build with Java 21 enforcement;
 - Spotless formatting, unit tests and architecture-boundary tests;
 - JaCoCo report plus a low 5% bundle line-coverage check;
-- Checkstyle, PMD and SpotBugs reports; CI fails when report counts exceed the committed baseline;
+- Checkstyle, PMD and SpotBugs run during `mvn verify` and fail the build on violations;
 - CodeQL workflow with an explicit Maven build.
 
 ## Maven modules
