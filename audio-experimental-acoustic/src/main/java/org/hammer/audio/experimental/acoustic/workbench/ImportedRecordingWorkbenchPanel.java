@@ -400,6 +400,7 @@ public final class ImportedRecordingWorkbenchPanel extends JPanel {
     private ImportResult {
       Objects.requireNonNull(manifest, "manifest");
       Objects.requireNonNull(analyticsReport, "analyticsReport");
+      // evaluation is intentionally nullable for empty manifests.
     }
   }
 }

@@ -145,7 +145,7 @@ public record WingbeatDataset(String name, List<LabelledRecording> entries) {
       if (totalLabelCorrect != correctCount) {
         throw new IllegalArgumentException("labelCorrectCounts must sum to correctCount");
       }
-      int totalConfusionSamples = 0;
+      int totalConfusionCount = 0;
       Map<String, Integer> confusionRowSums = new LinkedHashMap<>();
       Map<String, Integer> confusionDiagonal = new LinkedHashMap<>();
       for (Map.Entry<String, Map<String, Integer>> rowEntry : confusionMatrix.entrySet()) {
@@ -170,9 +170,9 @@ public record WingbeatDataset(String name, List<LabelledRecording> entries) {
           }
         }
         confusionRowSums.put(actualLabel, rowSum);
-        totalConfusionSamples += rowSum;
+        totalConfusionCount += rowSum;
       }
-      if (totalConfusionSamples != sampleCount) {
+      if (totalConfusionCount != sampleCount) {
         throw new IllegalArgumentException("confusionMatrix must sum to sampleCount");
       }
       for (Map.Entry<String, Integer> entry : labelSampleCounts.entrySet()) {
