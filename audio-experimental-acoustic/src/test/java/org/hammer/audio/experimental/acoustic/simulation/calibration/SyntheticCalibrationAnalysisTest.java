@@ -56,7 +56,7 @@ class SyntheticCalibrationAnalysisTest {
   void generateSyntheticVectorsProducesCorrectCount() {
     WingbeatSignalParameters params = WingbeatSignalParameters.of(500.0);
     List<WingbeatFeatureVector> vectors =
-        SyntheticCalibrationAnalysis.generateSyntheticVectors(params, 50, 42L);
+        SyntheticCalibrationAnalysis.generateSyntheticVectors(params, 50, 42L, 1.0);
     assertEquals(50, vectors.size());
   }
 
@@ -64,7 +64,7 @@ class SyntheticCalibrationAnalysisTest {
   void generateSyntheticVectorsAreUnmodifiable() {
     WingbeatSignalParameters params = WingbeatSignalParameters.of(500.0);
     List<WingbeatFeatureVector> vectors =
-        SyntheticCalibrationAnalysis.generateSyntheticVectors(params, 5, 42L);
+        SyntheticCalibrationAnalysis.generateSyntheticVectors(params, 5, 42L, 1.0);
     assertThrows(UnsupportedOperationException.class, () -> vectors.add(fv(1.0, 1.0, 0.0)));
   }
 
@@ -72,7 +72,7 @@ class SyntheticCalibrationAnalysisTest {
   void generateSyntheticVectorsHaveFundamentalNearParams() {
     WingbeatSignalParameters params = WingbeatSignalParameters.of(500.0);
     List<WingbeatFeatureVector> vectors =
-        SyntheticCalibrationAnalysis.generateSyntheticVectors(params, 200, 42L);
+        SyntheticCalibrationAnalysis.generateSyntheticVectors(params, 200, 42L, 1.0);
     double meanFreq =
         vectors.stream()
             .mapToDouble(WingbeatFeatureVector::fundamentalFrequencyHz)
@@ -87,7 +87,7 @@ class SyntheticCalibrationAnalysisTest {
     WingbeatSignalParameters params =
         new WingbeatSignalParameters(500.0, 1, null, 0.0, 0.0, 0.0, 10.0, 0.0);
     List<WingbeatFeatureVector> vectors =
-        SyntheticCalibrationAnalysis.generateSyntheticVectors(params, 1000, 0L);
+        SyntheticCalibrationAnalysis.generateSyntheticVectors(params, 1000, 0L, 1.0);
     double min =
         vectors.stream()
             .mapToDouble(WingbeatFeatureVector::fundamentalFrequencyHz)
@@ -119,7 +119,7 @@ class SyntheticCalibrationAnalysisTest {
     WingbeatSignalParameters params = WingbeatSignalParameters.of(500.0);
     assertThrows(
         IllegalArgumentException.class,
-        () -> SyntheticCalibrationAnalysis.generateSyntheticVectors(params, 0, 0L));
+        () -> SyntheticCalibrationAnalysis.generateSyntheticVectors(params, 0, 0L, 1.0));
   }
 
   @Test
@@ -127,9 +127,9 @@ class SyntheticCalibrationAnalysisTest {
     WingbeatSignalParameters params =
         new WingbeatSignalParameters(500.0, 1, null, 0.0, 0.0, 0.0, 5.0, 0.0);
     List<WingbeatFeatureVector> run1 =
-        SyntheticCalibrationAnalysis.generateSyntheticVectors(params, 10, 77L);
+        SyntheticCalibrationAnalysis.generateSyntheticVectors(params, 10, 77L, 1.0);
     List<WingbeatFeatureVector> run2 =
-        SyntheticCalibrationAnalysis.generateSyntheticVectors(params, 10, 77L);
+        SyntheticCalibrationAnalysis.generateSyntheticVectors(params, 10, 77L, 1.0);
     for (int i = 0; i < run1.size(); i++) {
       assertEquals(
           run1.get(i).fundamentalFrequencyHz(),

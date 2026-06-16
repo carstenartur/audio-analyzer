@@ -59,12 +59,13 @@ class SyntheticParameterEstimatorTest {
     List<WingbeatFeatureVector> real =
         List.of(fv(500.0, 3.0, 0.0, 0.0, 0.0), fv(500.0, 5.0, 0.0, 0.0, 0.0));
     WingbeatSignalParameters params = estimator.estimate(real);
-    assertEquals(4.0, params.jitterHz(), DELTA);
+    // mean std-dev = 4.0; scaled by sqrt(3) to convert to generator max-deviation
+    assertEquals(4.0 * Math.sqrt(3.0), params.jitterHz(), DELTA);
   }
 
   @Test
-  void estimateModulationDepthClamped() {
-    // modulation = 0.9 → should be clamped to [0,1]
+  void estimateModulationDepthValidValue() {
+    // modulation = 0.9 is a valid value within [0,1]
     List<WingbeatFeatureVector> real = List.of(fv(500.0, 0.0, 0.9, 0.0, 0.0));
     WingbeatSignalParameters params = estimator.estimate(real);
     assertEquals(0.9, params.modulationDepth(), LOOSE_DELTA);

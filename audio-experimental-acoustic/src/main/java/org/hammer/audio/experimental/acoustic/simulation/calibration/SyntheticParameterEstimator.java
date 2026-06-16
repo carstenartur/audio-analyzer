@@ -14,7 +14,9 @@ import org.hammer.audio.experimental.acoustic.wingbeat.WingbeatFeatureVector;
  *
  * <ul>
  *   <li>{@code fundamentalFrequencyHz} ← mean fundamental frequency across real vectors
- *   <li>{@code jitterHz} ← mean frequency-jitter field across real vectors
+ *   <li>{@code jitterHz} ← mean frequency-jitter (std dev) scaled by √3 to convert to the
+ *       generator's uniform max-deviation semantics; see {@link
+ *       WingbeatSignalParameters#jitterHz()}
  *   <li>{@code modulationDepth} ← mean amplitude modulation, clamped to {@code [0, 1]}
  *   <li>{@code noiseAmplitude} ← approximated from mean SNR as {@code 1 / (snr + 1)}, clamped to
  *       {@code [0, 1]}; falls back to {@value #DEFAULT_NOISE_AMPLITUDE} when SNR is zero
@@ -56,7 +58,7 @@ public final class SyntheticParameterEstimator {
     double meanDrift = mean(real, WingbeatFeatureVector::frequencyDriftHzPerSecond);
 
     double fundamentalFreq = Math.max(MIN_FREQ_HZ, meanFreq);
-    double jitterHz = Math.max(0.0, meanJitter);
+    double jitterHz = Math.max(0.0, meanJitter * Math.sqrt(3.0));
     double modulationDepth = Math.max(0.0, Math.min(1.0, meanModulation));
     double noiseAmplitude = estimateNoiseAmplitude(meanSnr);
 

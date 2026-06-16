@@ -54,8 +54,13 @@ public final class SyntheticCalibrationAnalysis {
     if (real.isEmpty()) {
       throw new IllegalArgumentException("real corpus must not be empty");
     }
+    double meanTrackDurationSeconds =
+        real.stream()
+            .mapToDouble(WingbeatFeatureVector::trackDurationSeconds)
+            .average()
+            .orElse(1.0);
     List<WingbeatFeatureVector> synthetic =
-        generateSyntheticVectors(params, real.size(), DEFAULT_SEED);
+        generateSyntheticVectors(params, real.size(), DEFAULT_SEED, meanTrackDurationSeconds);
     return comparison.compare(synthetic, real);
   }
 
@@ -70,7 +75,8 @@ public final class SyntheticCalibrationAnalysis {
    *       WingbeatSignalParameters#fundamentalFrequencyHz()} with half-width {@link
    *       WingbeatSignalParameters#jitterHz()}.
    *   <li>Harmonic amplitudes and ratios are taken directly from the resolved amplitude list.
-   *   <li>Spectral centroid and bandwidth are computed analytically from the harmonic profile.
+   *   <li>Spectral centroid and bandwidth are computed analytically from the per-vector jittered
+   *       fundamental frequency so they remain consistent with the reported fundamental.
    *   <li>SNR is estimated as {@code totalHarmonicAmplitude / noiseAmplitude} when noise is
    *       non-zero; {@code 0} otherwise.
    * </ul>
@@ -78,20 +84,22 @@ public final class SyntheticCalibrationAnalysis {
    * @param params generator parameters; must not be {@code null}
    * @param count number of vectors to generate; must be {@code >= 1}
    * @param seed random seed for the jitter simulation
+   * @param meanTrackDurationSeconds track duration assigned to every generated vector; must be
+   *     finite and {@code >= 0}
    * @return unmodifiable list of synthetic feature vectors; never {@code null}
    */
   public static List<WingbeatFeatureVector> generateSyntheticVectors(
-      WingbeatSignalParameters params, int count, long seed) {
+      WingbeatSignalParameters params, int count, long seed, double meanTrackDurationSeconds) {
     Objects.requireNonNull(params, "params");
     if (count < 1) {
       throw new IllegalArgumentException("count must be >= 1");
     }
+    if (!Double.isFinite(meanTrackDurationSeconds) || meanTrackDurationSeconds < 0.0) {
+      throw new IllegalArgumentException("meanTrackDurationSeconds must be finite and >= 0");
+    }
     Random rng = new Random(seed);
     List<Double> resolvedAmplitudes = params.resolvedHarmonicAmplitudes();
     List<Double> ratios = computeHarmonicRatios(resolvedAmplitudes);
-    double centroid = computeSpectralCentroid(params.fundamentalFrequencyHz(), resolvedAmplitudes);
-    double bandwidth =
-        computeSpectralBandwidth(params.fundamentalFrequencyHz(), resolvedAmplitudes, centroid);
     double snr = estimateSnr(resolvedAmplitudes, params.noiseAmplitude());
     double jitter = params.jitterHz();
 
@@ -99,6 +107,8 @@ public final class SyntheticCalibrationAnalysis {
     for (int i = 0; i < count; i++) {
       double freqOffset = jitter > 0.0 ? (rng.nextDouble() * 2.0 - 1.0) * jitter : 0.0;
       double freq = Math.max(0.0, params.fundamentalFrequencyHz() + freqOffset);
+      double centroid = computeSpectralCentroid(freq, resolvedAmplitudes);
+      double bandwidth = computeSpectralBandwidth(freq, resolvedAmplitudes, centroid);
       vectors.add(
           new WingbeatFeatureVector(
               freq,
@@ -110,7 +120,7 @@ public final class SyntheticCalibrationAnalysis {
               jitter,
               params.modulationDepth(),
               snr,
-              1.0,
+              meanTrackDurationSeconds,
               1.0));
     }
     return List.copyOf(vectors);
