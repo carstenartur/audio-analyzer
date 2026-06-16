@@ -8,14 +8,16 @@ sources. It is not a production mosquito detector.
 
 The Plugins menu in Audio Analyzer exposes an interactive **Acoustic Localization Workbench
 (experimental)** that lets you run deterministic simulation scenarios through the full tracking
-pipeline without a microphone array.
+pipeline without a microphone array. The same plugin also exposes an **Imported Recording
+Workbench (experimental)** for local HumBugDB inspection and evaluation.
 
 ### Opening the workbench
 
 1. Start Audio Analyzer.
 2. Open the **Plugins** menu in the menu bar.
 3. Expand the **Experimental Acoustic Localization** submenu.
-4. Click **Open: Acoustic Localization Workbench (experimental)**.
+4. Click **Open: Acoustic Localization Workbench (experimental)** for simulation scenarios, or
+   **Open: Imported Recording Workbench (experimental)** for local HumBugDB recordings.
 
 A dialog opens with three areas:
 
@@ -24,6 +26,20 @@ A dialog opens with three areas:
 - **Centre right** — 2-D room map: room rectangle, microphone positions (blue circles), emitter
   ground-truth positions (green triangles), candidate grid (grey dots) and estimated track
   positions (red circles, labeled by track ID).
+
+### Imported recording workbench
+
+The imported-recording workbench is intentionally local-only and offline-first.
+
+1. Open **Imported Recording Workbench (experimental)** from the same plugin submenu.
+2. Paste or browse to a local HumBugDB root directory.
+3. Click **Import** to build a `DatasetManifest` from the local WAV/CSV export.
+4. Browse the imported recordings in the combo box.
+5. Use **Replay analysis** to re-run dominant-frequency tracking, feature extraction and baseline
+   rule-based classification for the selected clip.
+
+The left pane shows the imported manifest, the upper-right pane shows one recording's metadata and
+analysis summary, and the lower-right pane shows a dataset-level evaluation report.
 
 ### Available scenarios
 
@@ -91,6 +107,9 @@ All five required acceptance-criteria scenarios (`singleSource`, `twoCloseFreque
 `movingSource`, `noisyRoom`, `reflectedEnvironment`) are covered by
 `WorkbenchScenarioRunnerTest` and `AcousticLocalizationWorkbenchPanelTest` in
 `audio-experimental-acoustic`.
+
+For imported recordings, see `HumBugDbImporter`, `DatasetWingbeatEvaluationWorkflow` and
+`ImportedRecordingWorkbenchPanel` in `audio-experimental-acoustic`.
 
 ---
 

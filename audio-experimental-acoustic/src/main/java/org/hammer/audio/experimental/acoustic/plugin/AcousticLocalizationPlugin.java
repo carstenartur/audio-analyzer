@@ -7,6 +7,7 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import org.hammer.audio.experimental.acoustic.workbench.AcousticLocalizationWorkbenchPanel;
+import org.hammer.audio.experimental.acoustic.workbench.ImportedRecordingWorkbenchPanel;
 import org.hammer.audio.plugin.AnalysisContribution;
 import org.hammer.audio.plugin.AudioAnalyzerPlugin;
 import org.hammer.audio.plugin.DemoSignalContribution;
@@ -135,6 +136,22 @@ public final class AcousticLocalizationPlugin implements AudioAnalyzerPlugin {
           public java.util.function.Supplier<JPanel> componentFactory() {
             return AcousticLocalizationPlugin::createOverviewPanel;
           }
+        },
+        new ViewContribution() {
+          @Override
+          public String id() {
+            return "imported-recording-workbench";
+          }
+
+          @Override
+          public String title() {
+            return "Imported Recording Workbench (experimental)";
+          }
+
+          @Override
+          public java.util.function.Supplier<javax.swing.JComponent> componentFactory() {
+            return ImportedRecordingWorkbenchPanel::new;
+          }
         });
   }
 
@@ -153,6 +170,9 @@ public final class AcousticLocalizationPlugin implements AudioAnalyzerPlugin {
         cross-correlation TDOA estimators, delay-and-sum beamforming and a 2D
         room simulator. The tracking pipeline also estimates Doppler radial
         velocity, frequency shift and a smoothed velocity vector per source.
+        A companion imported-recording workbench can load a local HumBugDB
+        export, browse imported clips and replay feature extraction /
+        classification on one selected recording.
         See docs/plugins/acoustic-localization.md for details and limitations.
 
         Plugin-specific views, analyzers and demo signals are loaded dynamically
