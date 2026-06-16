@@ -100,4 +100,20 @@ class FeatureEvaluationServiceTest {
 
     assertTrue(report.entry("nonExistentFeature").isEmpty());
   }
+
+  @Test
+  void zeroValuedFeaturesAreNotCountedAsMissing() {
+    List<WingbeatFeatureVector> vectors =
+        List.of(
+            new WingbeatFeatureVector(
+                500.0, List.of(), List.of(), 500.0, 20.0, 0.0, 0.0, 0.0, 5.0, 0.0, 1.0),
+            new WingbeatFeatureVector(
+                520.0, List.of(), List.of(), 520.0, 21.0, 0.0, 0.0, 0.0, 5.0, 0.0, 1.0));
+    List<String> labels = List.of("female-likely", "female-likely");
+
+    FeatureEvaluationReport report = service.evaluate(vectors, labels);
+
+    assertEquals(0, report.entry("amplitudeModulation").orElseThrow().statistics().missingCount());
+    assertEquals(0, report.entry("trackDurationSeconds").orElseThrow().statistics().missingCount());
+  }
 }

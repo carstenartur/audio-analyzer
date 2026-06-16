@@ -3,6 +3,7 @@ package org.hammer.audio.experimental.acoustic.benchmark.localization;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
@@ -86,5 +87,10 @@ class LocalizationBenchmarkRunnerTest {
     assertFalse(results.isEmpty());
     List<LocalizationBenchmarkResult> list = results.values().iterator().next();
     assertEquals(0.0, list.get(0).meanLocalizationErrorMeters());
+  }
+
+  @Test
+  void constructorRejectsTooSmallBlockSize() {
+    assertThrows(IllegalArgumentException.class, () -> new TdoaLocalizationBenchmark(127));
   }
 }

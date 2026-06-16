@@ -30,6 +30,9 @@ public final class TdoaLocalizationBenchmark implements LocalizationBenchmark {
    * @param blockFrames FFT block size in samples; must be {@code >= 128}
    */
   public TdoaLocalizationBenchmark(int blockFrames) {
+    if (blockFrames < 128) {
+      throw new IllegalArgumentException("blockFrames must be >= 128");
+    }
     this.runner = new TrackingScenarioBenchmarkRunner(blockFrames);
   }
 

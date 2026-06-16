@@ -121,6 +121,28 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
   private transient volatile WorkbenchRunResult lastRunResult;
   private final AtomicBoolean running = new AtomicBoolean(false);
   private volatile SwingWorker<WorkbenchRunResult, String> currentWorker;
+  private volatile SwingWorker<AnalysisTabContent, Void> analysisWorker;
+
+  private static final class AnalysisTabContent {
+    private final String featureRankingText;
+    private final String featureComparisonText;
+    private final String syntheticRealText;
+    private final String classifierComparisonText;
+    private final String localizationComparisonText;
+
+    AnalysisTabContent(
+        String featureRankingText,
+        String featureComparisonText,
+        String syntheticRealText,
+        String classifierComparisonText,
+        String localizationComparisonText) {
+      this.featureRankingText = featureRankingText;
+      this.featureComparisonText = featureComparisonText;
+      this.syntheticRealText = syntheticRealText;
+      this.classifierComparisonText = classifierComparisonText;
+      this.localizationComparisonText = localizationComparisonText;
+    }
+  }
 
   /** Create the workbench panel. All Swing construction is performed on the calling thread. */
   public AcousticLocalizationWorkbenchPanel() {
@@ -315,6 +337,11 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
     syntheticRealArea.setText("");
     classifierComparisonArea.setText("");
     localizationComparisonArea.setText("");
+    SwingWorker<AnalysisTabContent, Void> currentAnalysis = analysisWorker;
+    if (currentAnalysis != null) {
+      currentAnalysis.cancel(true);
+      analysisWorker = null;
+    }
     roomMapPanel.clear(scenario);
     setRunning(true);
     appendLog("Starting scenario: " + scenario.name());
@@ -379,7 +406,7 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
   // Analysis tab helpers
   // -------------------------------------------------------------------------
 
-  private void populateAnalysisTabs(SimulationScenario completedScenario) {
+  private AnalysisTabContent buildAnalysisTabContent(SimulationScenario completedScenario) {
     // Build a small deterministic demo dataset for feature analysis.
     // Two groups: female-likely (430–550 Hz) and male-likely (580–750 Hz).
     List<WingbeatFeatureVector> synthetic = buildDemoSyntheticVectors();
@@ -423,14 +450,54 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
     Map<String, List<LocalizationBenchmarkResult>> locResults =
         locRunner.run(List.of(completedScenario));
 
-    SwingUtilities.invokeLater(
-        () -> {
-          featureRankingArea.setText(buildFeatureRankingText(ranking));
-          featureComparisonArea.setText(buildFeatureComparisonText(evalReport));
-          syntheticRealArea.setText(buildSyntheticRealText(srReport));
-          classifierComparisonArea.setText(buildClassifierComparisonText(classifierResults));
-          localizationComparisonArea.setText(buildLocalizationComparisonText(locResults));
-        });
+    return new AnalysisTabContent(
+        buildFeatureRankingText(ranking),
+        buildFeatureComparisonText(evalReport),
+        buildSyntheticRealText(srReport),
+        buildClassifierComparisonText(classifierResults),
+        buildLocalizationComparisonText(locResults));
+  }
+
+  private void populateAnalysisTabsAsync(SimulationScenario completedScenario) {
+    featureRankingArea.setText("Computing analysis …");
+    featureComparisonArea.setText("Computing analysis …");
+    syntheticRealArea.setText("Computing analysis …");
+    classifierComparisonArea.setText("Computing analysis …");
+    localizationComparisonArea.setText("Computing analysis …");
+
+    SwingWorker<AnalysisTabContent, Void> worker =
+        new SwingWorker<>() {
+          @Override
+          protected AnalysisTabContent doInBackground() {
+            return buildAnalysisTabContent(completedScenario);
+          }
+
+          @Override
+          protected void done() {
+            if (isCancelled()) {
+              return;
+            }
+            try {
+              AnalysisTabContent content = get();
+              featureRankingArea.setText(content.featureRankingText);
+              featureComparisonArea.setText(content.featureComparisonText);
+              syntheticRealArea.setText(content.syntheticRealText);
+              classifierComparisonArea.setText(content.classifierComparisonText);
+              localizationComparisonArea.setText(content.localizationComparisonText);
+            } catch (java.util.concurrent.ExecutionException ex) {
+              LOGGER.log(Level.WARNING, "Failed to compute analysis tabs", ex);
+              featureRankingArea.setText("Analysis failed: " + ex.getCause().getMessage());
+              featureComparisonArea.setText("Analysis failed: " + ex.getCause().getMessage());
+              syntheticRealArea.setText("Analysis failed: " + ex.getCause().getMessage());
+              classifierComparisonArea.setText("Analysis failed: " + ex.getCause().getMessage());
+              localizationComparisonArea.setText("Analysis failed: " + ex.getCause().getMessage());
+            } catch (InterruptedException ex) {
+              Thread.currentThread().interrupt();
+            }
+          }
+        };
+    analysisWorker = worker;
+    worker.execute();
   }
 
   private static List<WingbeatFeatureVector> buildDemoSyntheticVectors() {
@@ -637,7 +704,7 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
         jsonArea.setText(WorkbenchRunExporter.toJsonLines(result));
         benchmarkArea.setText(WorkbenchRunExporter.toBenchmarkMarkdown(result));
         roomMapPanel.setResult(result);
-        populateAnalysisTabs(result.scenario());
+        populateAnalysisTabsAsync(result.scenario());
       } catch (java.util.concurrent.ExecutionException ex) {
         LOGGER.log(Level.WARNING, "Workbench run failed", ex);
         updateStatus("Run failed: " + ex.getCause().getMessage());

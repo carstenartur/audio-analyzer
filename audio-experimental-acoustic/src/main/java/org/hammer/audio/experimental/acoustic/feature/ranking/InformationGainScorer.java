@@ -5,15 +5,12 @@ import org.hammer.audio.experimental.acoustic.feature.evaluation.ClassSeparation
 import org.hammer.audio.experimental.acoustic.feature.evaluation.FeatureEvaluationEntry;
 
 /**
- * Estimates feature utility using an information-gain proxy based on class-conditional entropy.
+ * Estimates feature utility with a Fisher-weighted entropy proxy.
  *
- * <p>True information gain requires raw sample values; this implementation uses a Gaussian
- * approximation. The score is the entropy of the marginal class distribution minus the
- * class-conditional entropy estimated from the per-class counts and assuming equal-width splitting.
- *
- * <p>Concretely the score is {@code H(Y) - H(Y | feature)} where both terms are computed from
- * {@link ClassSeparationScore#classCounts()}. Features that concentrate mass into fewer classes
- * receive a higher score.
+ * <p>This scorer computes the class-label prior entropy {@code H(Y)} from {@link
+ * ClassSeparationScore#classCounts()} and then scales it by {@code fisherRatio / (1 +
+ * fisherRatio)}. It is an information-gain-inspired heuristic, not an exact information gain
+ * computation.
  */
 public final class InformationGainScorer implements FeatureScorer {
 

@@ -2,6 +2,7 @@ package org.hammer.audio.experimental.acoustic.benchmark.classifier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
@@ -120,5 +121,32 @@ class ClassifierBenchmarkRunnerTest {
     Map<String, ClassifierBenchmarkResult> results = runner.run(allVectors(), allLabels());
 
     assertNotNull(results.values().iterator().next());
+  }
+
+  @Test
+  void labelsIncludePredictedOnlyClasses() {
+    ConfusionMatrix matrix =
+        ConfusionMatrix.of(
+            List.of(WingbeatLabel.FEMALE_LIKELY, WingbeatLabel.FEMALE_LIKELY),
+            List.of(WingbeatLabel.UNKNOWN, WingbeatLabel.UNKNOWN));
+
+    assertTrue(matrix.labels().contains(WingbeatLabel.UNKNOWN));
+    assertTrue(matrix.toMarkdown().contains("| Actual \\ Predicted | female-likely | unknown |"));
+  }
+
+  @Test
+  void benchmarkResultKeepsNullMetricsForUnavailableLabels() {
+    ConfusionMatrix matrix =
+        ConfusionMatrix.of(
+            List.of(WingbeatLabel.FEMALE_LIKELY, WingbeatLabel.FEMALE_LIKELY),
+            List.of(WingbeatLabel.UNKNOWN, WingbeatLabel.UNKNOWN));
+
+    ClassifierBenchmarkResult result = ClassifierBenchmarkResult.of(matrix);
+
+    assertTrue(result.precisionPerLabel().containsKey(WingbeatLabel.FEMALE_LIKELY));
+    assertTrue(result.recallPerLabel().containsKey(WingbeatLabel.UNKNOWN));
+    assertNull(result.precisionPerLabel().get(WingbeatLabel.FEMALE_LIKELY));
+    assertNull(result.recallPerLabel().get(WingbeatLabel.UNKNOWN));
+    assertNull(result.f1PerLabel().get(WingbeatLabel.UNKNOWN));
   }
 }

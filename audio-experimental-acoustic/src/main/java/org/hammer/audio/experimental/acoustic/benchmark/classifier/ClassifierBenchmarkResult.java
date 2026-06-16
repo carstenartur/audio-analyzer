@@ -60,14 +60,10 @@ public record ClassifierBenchmarkResult(
       Double p = matrix.precision(label);
       Double r = matrix.recall(label);
       Double f = matrix.f1(label);
-      if (p != null) {
-        precision.put(label, p);
-      }
-      if (r != null) {
-        recall.put(label, r);
-      }
+      precision.put(label, p);
+      recall.put(label, r);
+      f1.put(label, f);
       if (f != null) {
-        f1.put(label, f);
         f1Sum += f;
         f1Count++;
       }

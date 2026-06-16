@@ -2,9 +2,11 @@ package org.hammer.audio.experimental.acoustic.feature.evaluation;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.ToDoubleFunction;
 import org.hammer.audio.experimental.acoustic.dataset.FeatureHistogram;
 import org.hammer.audio.experimental.acoustic.wingbeat.WingbeatFeatureVector;
@@ -113,20 +115,33 @@ public final class FeatureEvaluationService {
   private static FeatureStatistics computeStatistics(String name, double[] values) {
     double sum = 0.0;
     int missingCount = 0;
+    int observedCount = 0;
+    List<Double> observedValues = new ArrayList<>(values.length);
     for (double v : values) {
-      sum += v;
-      if (v == 0.0) {
+      if (!Double.isFinite(v)) {
         missingCount++;
+        continue;
       }
+      sum += v;
+      observedCount++;
+      observedValues.add(v);
     }
-    double mean = sum / values.length;
+    if (observedCount == 0) {
+      return new FeatureStatistics(
+          name, 0.0, 0.0, FeatureHistogram.of(name, new double[0]), missingCount);
+    }
+    double mean = sum / observedCount;
     double variance = 0.0;
-    for (double v : values) {
+    for (double v : observedValues) {
       double diff = v - mean;
       variance += diff * diff;
     }
-    double stdDev = Math.sqrt(variance / values.length);
-    FeatureHistogram histogram = FeatureHistogram.of(name, values);
+    double stdDev = Math.sqrt(variance / observedCount);
+    double[] observedArray = new double[observedValues.size()];
+    for (int i = 0; i < observedValues.size(); i++) {
+      observedArray[i] = observedValues.get(i);
+    }
+    FeatureHistogram histogram = FeatureHistogram.of(name, observedArray);
     return new FeatureStatistics(name, mean, stdDev, histogram, missingCount);
   }
 
@@ -199,12 +214,7 @@ public final class FeatureEvaluationService {
    */
   private static double computeLabelCorrelation(double[] values, List<String> labels) {
     // Collect all distinct labels
-    List<String> distinctLabels = new ArrayList<>();
-    for (String label : labels) {
-      if (!distinctLabels.contains(label)) {
-        distinctLabels.add(label);
-      }
-    }
+    Set<String> distinctLabels = new LinkedHashSet<>(labels);
     if (distinctLabels.size() <= 1) {
       return 0.0;
     }

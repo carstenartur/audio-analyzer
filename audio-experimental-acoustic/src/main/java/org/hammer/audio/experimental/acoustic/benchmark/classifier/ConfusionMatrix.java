@@ -157,12 +157,16 @@ public final class ConfusionMatrix {
   }
 
   /**
-   * Set of all labels observed as actual labels in the matrix.
+   * Set of all labels observed either as actual or predicted labels in the matrix.
    *
    * @return label set; never {@code null}
    */
   public Set<String> labels() {
-    return new LinkedHashSet<>(matrix.keySet());
+    Set<String> labels = new LinkedHashSet<>(matrix.keySet());
+    for (Map<String, Integer> row : matrix.values()) {
+      labels.addAll(row.keySet());
+    }
+    return labels;
   }
 
   /**
