@@ -5,6 +5,7 @@ import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.ExecutionException;
@@ -22,6 +23,7 @@ import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.SwingWorker;
 import javax.swing.filechooser.FileSystemView;
+import org.hammer.audio.experimental.acoustic.dataset.DatasetAnalytics;
 import org.hammer.audio.experimental.acoustic.dataset.DatasetManifest;
 import org.hammer.audio.experimental.acoustic.dataset.DatasetRecording;
 import org.hammer.audio.experimental.acoustic.dataset.HumBugDbImporter;
@@ -41,6 +43,8 @@ public final class ImportedRecordingWorkbenchPanel extends JPanel {
   private final JTextField datasetPathField;
   private final JComboBox<RecordingItem> recordingCombo;
   private final JTextArea manifestArea;
+  private final JTextArea analyticsArea;
+  private final JTextArea histogramArea;
   private final JTextArea recordingArea;
   private final JTextArea evaluationArea;
 
@@ -78,6 +82,8 @@ public final class ImportedRecordingWorkbenchPanel extends JPanel {
     recordingCombo.addActionListener(e -> onComboSelectionChanged());
 
     manifestArea = newTextArea();
+    analyticsArea = newTextArea();
+    histogramArea = newTextArea();
     recordingArea = newTextArea();
     evaluationArea = newTextArea();
 
@@ -116,10 +122,24 @@ public final class ImportedRecordingWorkbenchPanel extends JPanel {
 
   private JSplitPane buildCenterPanel() {
     JSplitPane split =
-        new JSplitPane(
-            JSplitPane.HORIZONTAL_SPLIT, new JScrollPane(manifestArea), buildRightPanel());
+        new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, buildLeftPanel(), buildRightPanel());
     split.setResizeWeight(0.35);
     split.setDividerLocation(340);
+    return split;
+  }
+
+  private JSplitPane buildLeftPanel() {
+    JSplitPane upper =
+        new JSplitPane(
+            JSplitPane.VERTICAL_SPLIT,
+            new JScrollPane(manifestArea),
+            new JScrollPane(analyticsArea));
+    upper.setResizeWeight(0.5);
+    upper.setDividerLocation(240);
+    JSplitPane split =
+        new JSplitPane(JSplitPane.VERTICAL_SPLIT, upper, new JScrollPane(histogramArea));
+    split.setResizeWeight(0.67);
+    split.setDividerLocation(480);
     return split;
   }
 
@@ -165,10 +185,17 @@ public final class ImportedRecordingWorkbenchPanel extends JPanel {
       protected ImportResult doInBackground() throws IOException {
         DatasetManifest manifest = importer.importFrom(root);
         WingbeatDataset.Evaluation evaluation = null;
+        String histogramsReport = "";
         if (!manifest.recordings().isEmpty()) {
           evaluation = workflow.evaluate(manifest, classifier);
+          List<DatasetWingbeatEvaluationWorkflow.RecordingAnalysis> analyses =
+              workflow.analyzeAll(manifest, null);
+          histogramsReport =
+              DatasetWingbeatEvaluationWorkflow.toHistogramMarkdown(
+                  DatasetWingbeatEvaluationWorkflow.computeHistograms(analyses));
         }
-        return new ImportResult(manifest, evaluation);
+        String analyticsReport = DatasetAnalytics.compute(manifest).toMarkdownReport();
+        return new ImportResult(manifest, evaluation, analyticsReport, histogramsReport);
       }
 
       @Override
@@ -180,6 +207,7 @@ public final class ImportedRecordingWorkbenchPanel extends JPanel {
           manifestArea.setText("Import failed: " + ex.getCause().getMessage());
           recordingArea.setText("");
           evaluationArea.setText("");
+          histogramArea.setText("");
           recordingCombo.removeAllItems();
           recordingCombo.setEnabled(false);
         } catch (InterruptedException ex) {
@@ -204,6 +232,8 @@ public final class ImportedRecordingWorkbenchPanel extends JPanel {
     programmaticUpdate = false;
 
     manifestArea.setText(renderManifest(loadedManifest));
+    analyticsArea.setText(result.analyticsReport());
+    histogramArea.setText(result.histogramsReport());
     if (result.evaluation() != null) {
       evaluationArea.setText(
           DatasetWingbeatEvaluationWorkflow.toMarkdownReport(result.evaluation()));
@@ -233,11 +263,18 @@ public final class ImportedRecordingWorkbenchPanel extends JPanel {
       }
       recordingCombo.setEnabled(recordingCombo.getItemCount() > 0);
       manifestArea.setText(renderManifest(loadedManifest));
+      analyticsArea.setText(DatasetAnalytics.compute(loadedManifest).toMarkdownReport());
       if (loadedManifest.recordings().isEmpty()) {
         evaluationArea.setText("No recordings to evaluate.");
+        histogramArea.setText("No recordings to analyze.");
       } else {
         WingbeatDataset.Evaluation evaluation = workflow.evaluate(loadedManifest, classifier);
         evaluationArea.setText(DatasetWingbeatEvaluationWorkflow.toMarkdownReport(evaluation));
+        List<DatasetWingbeatEvaluationWorkflow.RecordingAnalysis> analyses =
+            workflow.analyzeAll(loadedManifest, null);
+        histogramArea.setText(
+            DatasetWingbeatEvaluationWorkflow.toHistogramMarkdown(
+                DatasetWingbeatEvaluationWorkflow.computeHistograms(analyses)));
       }
       if (recordingCombo.getItemCount() > 0) {
         recordingCombo.setSelectedIndex(0);
@@ -364,6 +401,14 @@ public final class ImportedRecordingWorkbenchPanel extends JPanel {
     return evaluationArea.getText();
   }
 
+  String analyticsText() {
+    return analyticsArea.getText();
+  }
+
+  String histogramText() {
+    return histogramArea.getText();
+  }
+
   private record RecordingItem(DatasetRecording recording) {
     @Override
     public String toString() {
@@ -374,5 +419,17 @@ public final class ImportedRecordingWorkbenchPanel extends JPanel {
     }
   }
 
-  private record ImportResult(DatasetManifest manifest, WingbeatDataset.Evaluation evaluation) {}
+  private record ImportResult(
+      DatasetManifest manifest,
+      WingbeatDataset.Evaluation evaluation,
+      String analyticsReport,
+      String histogramsReport) {
+
+    private ImportResult {
+      Objects.requireNonNull(manifest, "manifest");
+      Objects.requireNonNull(analyticsReport, "analyticsReport");
+      Objects.requireNonNull(histogramsReport, "histogramsReport");
+      // evaluation is intentionally nullable for empty manifests.
+    }
+  }
 }

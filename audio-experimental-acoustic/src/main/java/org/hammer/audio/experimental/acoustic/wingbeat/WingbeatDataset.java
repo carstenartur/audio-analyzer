@@ -4,6 +4,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * A labelled dataset of wingbeat recordings for classifier evaluation.
@@ -48,17 +49,22 @@ public record WingbeatDataset(String name, List<LabelledRecording> entries) {
     int correct = 0;
     Map<String, Integer> labelSampleCounts = new LinkedHashMap<>();
     Map<String, Integer> labelCorrectCounts = new LinkedHashMap<>();
+    Map<String, Map<String, Integer>> confusionMatrix = new LinkedHashMap<>();
     for (LabelledRecording recording : entries) {
       String groundTruthLabel = recording.groundTruthLabel();
       labelSampleCounts.merge(groundTruthLabel, 1, Integer::sum);
       labelCorrectCounts.putIfAbsent(groundTruthLabel, 0);
+      confusionMatrix.computeIfAbsent(groundTruthLabel, k -> new LinkedHashMap<>());
       ClassificationResult result = classifier.classify(recording.features());
-      if (groundTruthLabel.equals(result.label())) {
+      String predictedLabel = result.label();
+      confusionMatrix.get(groundTruthLabel).merge(predictedLabel, 1, Integer::sum);
+      if (groundTruthLabel.equals(predictedLabel)) {
         correct++;
         labelCorrectCounts.merge(groundTruthLabel, 1, Integer::sum);
       }
     }
-    return new Evaluation(name, entries.size(), correct, labelSampleCounts, labelCorrectCounts);
+    return new Evaluation(
+        name, entries.size(), correct, labelSampleCounts, labelCorrectCounts, confusionMatrix);
   }
 
   /**
@@ -69,19 +75,24 @@ public record WingbeatDataset(String name, List<LabelledRecording> entries) {
    * @param correctCount number of correctly classified recordings
    * @param labelSampleCounts total evaluated recordings per ground-truth label
    * @param labelCorrectCounts correctly classified recordings per ground-truth label
+   * @param confusionMatrix full confusion matrix; outer key is ground-truth label, inner key is
+   *     predicted label, value is count
    */
+  @SuppressWarnings("PMD.UseConcurrentHashMap")
   public record Evaluation(
       String datasetName,
       int sampleCount,
       int correctCount,
       Map<String, Integer> labelSampleCounts,
-      Map<String, Integer> labelCorrectCounts) {
+      Map<String, Integer> labelCorrectCounts,
+      Map<String, Map<String, Integer>> confusionMatrix) {
 
     /* Validate counts. */
     public Evaluation {
       Objects.requireNonNull(datasetName, "datasetName");
       Objects.requireNonNull(labelSampleCounts, "labelSampleCounts");
       Objects.requireNonNull(labelCorrectCounts, "labelCorrectCounts");
+      Objects.requireNonNull(confusionMatrix, "confusionMatrix");
       if (sampleCount < 0) {
         throw new IllegalArgumentException("sampleCount must be >= 0");
       }
@@ -90,6 +101,11 @@ public record WingbeatDataset(String name, List<LabelledRecording> entries) {
       }
       labelSampleCounts = Map.copyOf(labelSampleCounts);
       labelCorrectCounts = Map.copyOf(labelCorrectCounts);
+      Map<String, Map<String, Integer>> confusionCopy = new LinkedHashMap<>();
+      for (Map.Entry<String, Map<String, Integer>> row : confusionMatrix.entrySet()) {
+        confusionCopy.put(row.getKey(), Map.copyOf(row.getValue()));
+      }
+      confusionMatrix = Map.copyOf(confusionCopy);
       int totalLabelSamples = 0;
       for (Map.Entry<String, Integer> entry : labelSampleCounts.entrySet()) {
         String label = Objects.requireNonNull(entry.getKey(), "labelSampleCounts key");
@@ -129,6 +145,56 @@ public record WingbeatDataset(String name, List<LabelledRecording> entries) {
       if (totalLabelCorrect != correctCount) {
         throw new IllegalArgumentException("labelCorrectCounts must sum to correctCount");
       }
+      int totalConfusionCount = 0;
+      Map<String, Integer> confusionRowSums = new LinkedHashMap<>();
+      Map<String, Integer> confusionDiagonal = new LinkedHashMap<>();
+      for (Map.Entry<String, Map<String, Integer>> rowEntry : confusionMatrix.entrySet()) {
+        String actualLabel = Objects.requireNonNull(rowEntry.getKey(), "confusionMatrix row key");
+        if (actualLabel.isBlank()) {
+          throw new IllegalArgumentException("confusionMatrix row labels must not be blank");
+        }
+        int rowSum = 0;
+        for (Map.Entry<String, Integer> cellEntry : rowEntry.getValue().entrySet()) {
+          String predictedLabel =
+              Objects.requireNonNull(cellEntry.getKey(), "confusionMatrix column key");
+          Integer count = Objects.requireNonNull(cellEntry.getValue(), "confusionMatrix value");
+          if (predictedLabel.isBlank()) {
+            throw new IllegalArgumentException("confusionMatrix column labels must not be blank");
+          }
+          if (count < 0) {
+            throw new IllegalArgumentException("confusionMatrix values must be >= 0");
+          }
+          rowSum += count;
+          if (actualLabel.equals(predictedLabel)) {
+            confusionDiagonal.merge(actualLabel, count, Integer::sum);
+          }
+        }
+        confusionRowSums.put(actualLabel, rowSum);
+        totalConfusionCount += rowSum;
+      }
+      if (totalConfusionCount != sampleCount) {
+        throw new IllegalArgumentException("confusionMatrix must sum to sampleCount");
+      }
+      for (Map.Entry<String, Integer> entry : labelSampleCounts.entrySet()) {
+        int rowSum = confusionRowSums.getOrDefault(entry.getKey(), 0);
+        if (rowSum != entry.getValue()) {
+          throw new IllegalArgumentException(
+              "confusionMatrix row sums must match labelSampleCounts values");
+        }
+      }
+      for (String actualLabel : confusionRowSums.keySet()) {
+        if (!labelSampleCounts.containsKey(actualLabel)) {
+          throw new IllegalArgumentException(
+              "confusionMatrix rows must only contain labels from labelSampleCounts");
+        }
+      }
+      for (Map.Entry<String, Integer> entry : labelCorrectCounts.entrySet()) {
+        int diagonalCount = confusionDiagonal.getOrDefault(entry.getKey(), 0);
+        if (diagonalCount != entry.getValue()) {
+          throw new IllegalArgumentException(
+              "confusionMatrix diagonal must match labelCorrectCounts values");
+        }
+      }
     }
 
     /**
@@ -139,6 +205,125 @@ public record WingbeatDataset(String name, List<LabelledRecording> entries) {
      */
     public Double accuracy() {
       return sampleCount == 0 ? null : correctCount / (double) sampleCount;
+    }
+
+    /**
+     * Precision for the given predicted label: {@code TP / (TP + FP)}, or {@code null} when no
+     * samples were predicted as that label.
+     *
+     * <p>Precision answers: of everything the classifier predicted as {@code label}, how many were
+     * actually that label?
+     *
+     * @param label the label to compute precision for
+     * @return precision in {@code [0,1]}, or {@code null} when unpredictable
+     */
+    public Double precision(String label) {
+      Objects.requireNonNull(label, "label");
+      int truePositives = labelCorrectCounts.getOrDefault(label, 0);
+      int totalPredicted = 0;
+      for (Map<String, Integer> row : confusionMatrix.values()) {
+        totalPredicted += row.getOrDefault(label, 0);
+      }
+      return totalPredicted == 0 ? null : truePositives / (double) totalPredicted;
+    }
+
+    /**
+     * Recall for the given ground-truth label: {@code TP / (TP + FN)}, or {@code null} when no
+     * samples exist for that label.
+     *
+     * <p>Recall answers: of all recordings that are actually {@code label}, how many did the
+     * classifier correctly identify?
+     *
+     * @param label the label to compute recall for
+     * @return recall in {@code [0,1]}, or {@code null} when no samples exist for that label
+     */
+    public Double recall(String label) {
+      Objects.requireNonNull(label, "label");
+      Integer total = labelSampleCounts.get(label);
+      if (total == null || total == 0) {
+        return null;
+      }
+      return labelCorrectCounts.getOrDefault(label, 0) / (double) total;
+    }
+
+    /**
+     * Set of all labels that appear in the confusion matrix (either as actual or predicted).
+     *
+     * @return sorted set of all observed labels
+     */
+    public Set<String> allLabels() {
+      Set<String> labels = new java.util.TreeSet<>(labelSampleCounts.keySet());
+      for (Map<String, Integer> row : confusionMatrix.values()) {
+        labels.addAll(row.keySet());
+      }
+      return labels;
+    }
+
+    /**
+     * Number of samples whose ground-truth label is {@link WingbeatLabel#UNKNOWN}.
+     *
+     * <p>These samples are included in {@link #sampleCount} and the confusion matrix, but they
+     * cannot inform whether the classifier is working correctly because the expected answer is
+     * itself unknown. Use {@link #evaluatedSampleCount()} to exclude them from quantitative
+     * metrics.
+     *
+     * @return count of samples with an unknown ground-truth label; never negative
+     */
+    public int groundTruthUnknownCount() {
+      return labelSampleCounts.getOrDefault(WingbeatLabel.UNKNOWN, 0);
+    }
+
+    /**
+     * Number of samples whose ground-truth label is known but whose predicted label is {@link
+     * WingbeatLabel#UNKNOWN}.
+     *
+     * <p>These represent cases where the classifier declined to assign a class. They count as false
+     * negatives for all known ground-truth labels.
+     *
+     * @return count of predictions that are unknown for evaluable samples; never negative
+     */
+    public int predictionUnknownCount() {
+      int count = 0;
+      for (Map.Entry<String, Map<String, Integer>> row : confusionMatrix.entrySet()) {
+        if (!WingbeatLabel.UNKNOWN.equals(row.getKey())) {
+          count += row.getValue().getOrDefault(WingbeatLabel.UNKNOWN, 0);
+        }
+      }
+      return count;
+    }
+
+    /**
+     * Number of samples that can meaningfully contribute to accuracy/precision/recall evaluation:
+     * those whose ground-truth label is not {@link WingbeatLabel#UNKNOWN}.
+     *
+     * @return {@code sampleCount - groundTruthUnknownCount()}; never negative
+     */
+    public int evaluatedSampleCount() {
+      return sampleCount - groundTruthUnknownCount();
+    }
+
+    /**
+     * Classification accuracy computed over only the evaluable samples (ground truth ≠ {@link
+     * WingbeatLabel#UNKNOWN}), or {@code null} when no evaluable samples exist.
+     *
+     * <p>This differs from {@link #accuracy()} in that samples with an unknown ground truth are
+     * excluded from both the numerator and denominator, preventing them from inflating or deflating
+     * the reported accuracy.
+     *
+     * @return evaluated accuracy in {@code [0,1]}, or {@code null} when no evaluable samples exist
+     */
+    public Double evaluatedAccuracy() {
+      int evaluable = evaluatedSampleCount();
+      if (evaluable == 0) {
+        return null;
+      }
+      int correctEvaluated = 0;
+      for (Map.Entry<String, Integer> entry : labelCorrectCounts.entrySet()) {
+        if (!WingbeatLabel.UNKNOWN.equals(entry.getKey())) {
+          correctEvaluated += entry.getValue();
+        }
+      }
+      return correctEvaluated / (double) evaluable;
     }
   }
 }
