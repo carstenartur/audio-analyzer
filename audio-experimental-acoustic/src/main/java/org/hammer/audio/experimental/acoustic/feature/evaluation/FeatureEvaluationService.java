@@ -116,7 +116,7 @@ public final class FeatureEvaluationService {
     double sum = 0.0;
     int missingCount = 0;
     int observedCount = 0;
-    List<Double> observedValues = new ArrayList<>(values.length);
+    List<Double> observedValues = new ArrayList<>();
     for (double v : values) {
       if (!Double.isFinite(v)) {
         missingCount++;

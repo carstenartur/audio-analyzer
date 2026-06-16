@@ -20,6 +20,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -89,6 +90,7 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
   private static final Logger LOGGER =
       Logger.getLogger(AcousticLocalizationWorkbenchPanel.class.getName());
   private static final long serialVersionUID = 1L;
+  private static final String COMPUTING_ANALYSIS_MESSAGE = "Computing analysis …";
 
   // --- controls ---
   private final JComboBox<ScenarioItem> scenarioCombo;
@@ -459,11 +461,11 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
   }
 
   private void populateAnalysisTabsAsync(SimulationScenario completedScenario) {
-    featureRankingArea.setText("Computing analysis …");
-    featureComparisonArea.setText("Computing analysis …");
-    syntheticRealArea.setText("Computing analysis …");
-    classifierComparisonArea.setText("Computing analysis …");
-    localizationComparisonArea.setText("Computing analysis …");
+    featureRankingArea.setText(COMPUTING_ANALYSIS_MESSAGE);
+    featureComparisonArea.setText(COMPUTING_ANALYSIS_MESSAGE);
+    syntheticRealArea.setText(COMPUTING_ANALYSIS_MESSAGE);
+    classifierComparisonArea.setText(COMPUTING_ANALYSIS_MESSAGE);
+    localizationComparisonArea.setText(COMPUTING_ANALYSIS_MESSAGE);
 
     SwingWorker<AnalysisTabContent, Void> worker =
         new SwingWorker<>() {
@@ -484,13 +486,14 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
               syntheticRealArea.setText(content.syntheticRealText);
               classifierComparisonArea.setText(content.classifierComparisonText);
               localizationComparisonArea.setText(content.localizationComparisonText);
-            } catch (java.util.concurrent.ExecutionException ex) {
+            } catch (ExecutionException ex) {
               LOGGER.log(Level.WARNING, "Failed to compute analysis tabs", ex);
-              featureRankingArea.setText("Analysis failed: " + ex.getCause().getMessage());
-              featureComparisonArea.setText("Analysis failed: " + ex.getCause().getMessage());
-              syntheticRealArea.setText("Analysis failed: " + ex.getCause().getMessage());
-              classifierComparisonArea.setText("Analysis failed: " + ex.getCause().getMessage());
-              localizationComparisonArea.setText("Analysis failed: " + ex.getCause().getMessage());
+              String errorMessage = "Analysis failed: " + ex.getCause().getMessage();
+              featureRankingArea.setText(errorMessage);
+              featureComparisonArea.setText(errorMessage);
+              syntheticRealArea.setText(errorMessage);
+              classifierComparisonArea.setText(errorMessage);
+              localizationComparisonArea.setText(errorMessage);
             } catch (InterruptedException ex) {
               Thread.currentThread().interrupt();
             }
@@ -705,7 +708,7 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
         benchmarkArea.setText(WorkbenchRunExporter.toBenchmarkMarkdown(result));
         roomMapPanel.setResult(result);
         populateAnalysisTabsAsync(result.scenario());
-      } catch (java.util.concurrent.ExecutionException ex) {
+      } catch (ExecutionException ex) {
         LOGGER.log(Level.WARNING, "Workbench run failed", ex);
         updateStatus("Run failed: " + ex.getCause().getMessage());
         appendLog("ERROR: " + ex.getCause().getMessage());
