@@ -3,6 +3,7 @@ package org.hammer.audio.experimental.acoustic.dataset;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -30,7 +31,7 @@ public final class HumBugDbImporter implements DatasetImporter {
 
   private static final URI HUMBUG_DB_SOURCE =
       URI.create("https://github.com/HumBug-Mosquito/HumBugDB");
-  private static final String LICENSE_PLACEHOLDER = "CHECK_DATASET_RELEASE";
+  private static final String LICENSE_PLACEHOLDER = "CC BY 4.0";
   private static final String SOUND_TYPE = "sound_type";
   private static final String SPECIES = "species";
   private static final String GENDER = "gender";
@@ -94,7 +95,7 @@ public final class HumBugDbImporter implements DatasetImporter {
       Map<String, DatasetRecording> recordings,
       Set<String> usedRecordingIds)
       throws IOException {
-    try (BufferedReader reader = Files.newBufferedReader(csvFile)) {
+    try (BufferedReader reader = Files.newBufferedReader(csvFile, StandardCharsets.UTF_8)) {
       String headerLine = reader.readLine();
       if (headerLine == null || headerLine.isBlank()) {
         return;

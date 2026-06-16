@@ -82,6 +82,61 @@ class HumBugDbImporterTest {
     assertTrue(recording.metadata().containsKey("metadata_csv"));
   }
 
+  @Test
+  void importFromHandlesQuotedFieldsWithCommasAndUtf8() throws IOException {
+    Path root = tempDir.resolve("humbugdb-csv");
+    Path audioDir = Files.createDirectories(root.resolve("data/audio"));
+    Path metadataDir = Files.createDirectories(root.resolve("data/metadata"));
+    createSineWave(audioDir.resolve("clip-q.wav"), 8_000, 300.0, 0.5);
+    // place field contains a comma inside quotes; species contains a UTF-8 character
+    Files.writeString(
+        metadataDir.resolve("quoted.csv"),
+        "id,length,name,sound_type,species,place\n"
+            + "rec-q,0.5,clip-q.wav,mosquito,Aedes \u00e6gypti,\"Nairobi, Kenya\"\n",
+        java.nio.charset.StandardCharsets.UTF_8);
+
+    DatasetManifest manifest = new HumBugDbImporter().importFrom(root);
+
+    assertEquals(1, manifest.recordings().size());
+    DatasetRecording recording = manifest.recordings().getFirst();
+    assertEquals("Aedes \u00e6gypti", recording.labels().get("species"));
+    assertEquals("Nairobi, Kenya", recording.metadata().get("place"));
+  }
+
+  @Test
+  void importFromHandlesEscapedDoubleQuotesInCsvFields() throws IOException {
+    Path root = tempDir.resolve("humbugdb-escaped");
+    Path audioDir = Files.createDirectories(root.resolve("data/audio"));
+    Path metadataDir = Files.createDirectories(root.resolve("data/metadata"));
+    createSineWave(audioDir.resolve("clip-e.wav"), 8_000, 300.0, 0.5);
+    // place uses "" inside a quoted field to represent a literal double-quote
+    Files.writeString(
+        metadataDir.resolve("escaped.csv"),
+        "id,length,name,sound_type,place\n" + "rec-e,0.5,clip-e.wav,mosquito,\"lab \"\"A\"\"\"\n",
+        java.nio.charset.StandardCharsets.UTF_8);
+
+    DatasetManifest manifest = new HumBugDbImporter().importFrom(root);
+
+    assertEquals(1, manifest.recordings().size());
+    DatasetRecording recording = manifest.recordings().getFirst();
+    assertEquals("lab \"A\"", recording.metadata().get("place"));
+  }
+
+  @Test
+  void importFromSetsLicenseToCreativeCommonsBy40() throws IOException {
+    Path root = tempDir.resolve("humbugdb-license");
+    Path audioDir = Files.createDirectories(root.resolve("data/audio"));
+    Path metadataDir = Files.createDirectories(root.resolve("data/metadata"));
+    createSineWave(audioDir.resolve("clip-l.wav"), 8_000, 300.0, 0.5);
+    Files.writeString(
+        metadataDir.resolve("meta.csv"),
+        "id,length,name,sound_type\nrec-l,0.5,clip-l.wav,mosquito\n");
+
+    DatasetManifest manifest = new HumBugDbImporter().importFrom(root);
+
+    assertEquals("CC BY 4.0", manifest.descriptor().license());
+  }
+
   private static void createSineWave(Path file, int sampleRate, double frequencyHz, double seconds)
       throws IOException {
     int frames = (int) Math.round(sampleRate * seconds);
