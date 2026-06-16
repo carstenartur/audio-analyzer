@@ -191,5 +191,16 @@
     <Class name="org.hammer.audio.ui.theme.PlotRenderTheme"/>
     <Bug pattern="UM_UNNECESSARY_MATH"/>
   </Match>
+  <Match>
+    <Class name="org.hammer.audio.experimental.acoustic.benchmark.classifier.ConfusionMatrix"/>
+    <Method name="asMap"/>
+    <Bug pattern="EI_EXPOSE_REP"/>
+  </Match>
+  <!-- NM_CONFUSING: DatasetAnalytics.DistributionStats.stddev() vs FeatureStatistics.stdDev()
+       differ only in capitalisation; both are intentional API names in separate packages. -->
+  <Match>
+    <Class name="org.hammer.audio.experimental.acoustic.dataset.DatasetAnalytics$DistributionStats"/>
+    <Bug pattern="NM_CONFUSING"/>
+  </Match>
 
 </FindBugsFilter>
