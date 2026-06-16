@@ -22,6 +22,7 @@ import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.SwingWorker;
 import javax.swing.filechooser.FileSystemView;
+import org.hammer.audio.experimental.acoustic.dataset.DatasetAnalytics;
 import org.hammer.audio.experimental.acoustic.dataset.DatasetManifest;
 import org.hammer.audio.experimental.acoustic.dataset.DatasetRecording;
 import org.hammer.audio.experimental.acoustic.dataset.HumBugDbImporter;
@@ -41,6 +42,7 @@ public final class ImportedRecordingWorkbenchPanel extends JPanel {
   private final JTextField datasetPathField;
   private final JComboBox<RecordingItem> recordingCombo;
   private final JTextArea manifestArea;
+  private final JTextArea analyticsArea;
   private final JTextArea recordingArea;
   private final JTextArea evaluationArea;
 
@@ -78,6 +80,7 @@ public final class ImportedRecordingWorkbenchPanel extends JPanel {
     recordingCombo.addActionListener(e -> onComboSelectionChanged());
 
     manifestArea = newTextArea();
+    analyticsArea = newTextArea();
     recordingArea = newTextArea();
     evaluationArea = newTextArea();
 
@@ -116,10 +119,20 @@ public final class ImportedRecordingWorkbenchPanel extends JPanel {
 
   private JSplitPane buildCenterPanel() {
     JSplitPane split =
-        new JSplitPane(
-            JSplitPane.HORIZONTAL_SPLIT, new JScrollPane(manifestArea), buildRightPanel());
+        new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, buildLeftPanel(), buildRightPanel());
     split.setResizeWeight(0.35);
     split.setDividerLocation(340);
+    return split;
+  }
+
+  private JSplitPane buildLeftPanel() {
+    JSplitPane split =
+        new JSplitPane(
+            JSplitPane.VERTICAL_SPLIT,
+            new JScrollPane(manifestArea),
+            new JScrollPane(analyticsArea));
+    split.setResizeWeight(0.5);
+    split.setDividerLocation(240);
     return split;
   }
 
@@ -204,6 +217,7 @@ public final class ImportedRecordingWorkbenchPanel extends JPanel {
     programmaticUpdate = false;
 
     manifestArea.setText(renderManifest(loadedManifest));
+    analyticsArea.setText(DatasetAnalytics.compute(loadedManifest).toMarkdownReport());
     if (result.evaluation() != null) {
       evaluationArea.setText(
           DatasetWingbeatEvaluationWorkflow.toMarkdownReport(result.evaluation()));
@@ -233,6 +247,7 @@ public final class ImportedRecordingWorkbenchPanel extends JPanel {
       }
       recordingCombo.setEnabled(recordingCombo.getItemCount() > 0);
       manifestArea.setText(renderManifest(loadedManifest));
+      analyticsArea.setText(DatasetAnalytics.compute(loadedManifest).toMarkdownReport());
       if (loadedManifest.recordings().isEmpty()) {
         evaluationArea.setText("No recordings to evaluate.");
       } else {
@@ -362,6 +377,10 @@ public final class ImportedRecordingWorkbenchPanel extends JPanel {
 
   String evaluationSummaryText() {
     return evaluationArea.getText();
+  }
+
+  String analyticsText() {
+    return analyticsArea.getText();
   }
 
   private record RecordingItem(DatasetRecording recording) {

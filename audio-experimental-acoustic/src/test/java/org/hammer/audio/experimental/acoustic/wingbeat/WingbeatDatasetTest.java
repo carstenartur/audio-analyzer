@@ -74,9 +74,52 @@ class WingbeatDatasetTest {
   @Test
   void evaluationAccuracyIsNullForEmptyDataset() {
     WingbeatDataset.Evaluation evaluation =
-        new WingbeatDataset.Evaluation("empty", 0, 0, Map.of(), Map.of());
+        new WingbeatDataset.Evaluation("empty", 0, 0, Map.of(), Map.of(), Map.of());
 
     assertNull(evaluation.accuracy());
+  }
+
+  @Test
+  void confusionMatrixTracksActualVsPredictedCounts() {
+    WingbeatClassifier alwaysFemale =
+        f -> new ClassificationResult(WingbeatLabel.FEMALE_LIKELY, 0.9);
+    WingbeatDataset dataset =
+        new WingbeatDataset(
+            "cm-dataset",
+            List.of(
+                recording("r1", WingbeatLabel.FEMALE_LIKELY, 480.0),
+                recording("r2", WingbeatLabel.MALE_LIKELY, 650.0)));
+
+    WingbeatDataset.Evaluation evaluation = dataset.evaluate(alwaysFemale);
+
+    Map<String, Map<String, Integer>> cm = evaluation.confusionMatrix();
+    assertEquals(
+        1, cm.get(WingbeatLabel.FEMALE_LIKELY).getOrDefault(WingbeatLabel.FEMALE_LIKELY, 0));
+    assertEquals(1, cm.get(WingbeatLabel.MALE_LIKELY).getOrDefault(WingbeatLabel.FEMALE_LIKELY, 0));
+  }
+
+  @Test
+  void precisionAndRecallAreComputedCorrectly() {
+    WingbeatClassifier alwaysFemale =
+        f -> new ClassificationResult(WingbeatLabel.FEMALE_LIKELY, 0.9);
+    WingbeatDataset dataset =
+        new WingbeatDataset(
+            "pr-dataset",
+            List.of(
+                recording("r1", WingbeatLabel.FEMALE_LIKELY, 480.0),
+                recording("r2", WingbeatLabel.FEMALE_LIKELY, 490.0),
+                recording("r3", WingbeatLabel.MALE_LIKELY, 650.0)));
+
+    WingbeatDataset.Evaluation evaluation = dataset.evaluate(alwaysFemale);
+
+    // Precision for female: 2 TP out of 3 predicted as female
+    assertEquals(2.0 / 3.0, evaluation.precision(WingbeatLabel.FEMALE_LIKELY), 1e-9);
+    // Recall for female: 2 out of 2 actual females
+    assertEquals(1.0, evaluation.recall(WingbeatLabel.FEMALE_LIKELY), 1e-9);
+    // Precision for male: null (nothing predicted as male)
+    assertNull(evaluation.precision(WingbeatLabel.MALE_LIKELY));
+    // Recall for male: 0 out of 1 actual males
+    assertEquals(0.0, evaluation.recall(WingbeatLabel.MALE_LIKELY), 1e-9);
   }
 
   @Test
@@ -90,7 +133,8 @@ class WingbeatDatasetTest {
                     2,
                     1,
                     Map.of(WingbeatLabel.FEMALE_LIKELY, 2),
-                    Map.of(WingbeatLabel.FEMALE_LIKELY, 2)));
+                    Map.of(WingbeatLabel.FEMALE_LIKELY, 2),
+                    Map.of()));
 
     assertFalse(exception.getMessage().isBlank());
   }

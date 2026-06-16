@@ -53,9 +53,11 @@ class DatasetWingbeatEvaluationWorkflowTest {
     assertNotNull(analysis.classificationResult());
     assertEquals(WingbeatLabel.FEMALE_LIKELY, analysis.classificationResult().label());
     assertTrue(analysis.features().fundamentalFrequencyHz() >= 450.0);
-    assertTrue(
-        DatasetWingbeatEvaluationWorkflow.toMarkdownReport(evaluation)
-            .contains("Imported Dataset Evaluation"));
+    String report = DatasetWingbeatEvaluationWorkflow.toMarkdownReport(evaluation);
+    assertTrue(report.contains("Imported Dataset Evaluation"));
+    assertTrue(report.contains("Confusion Matrix"));
+    assertTrue(report.contains("Recall"));
+    assertTrue(report.contains("Precision"));
   }
 
   private static void createSineWave(Path file, int sampleRate, double frequencyHz, double seconds)
