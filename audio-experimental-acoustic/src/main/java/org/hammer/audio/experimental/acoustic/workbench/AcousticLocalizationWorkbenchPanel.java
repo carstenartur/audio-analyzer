@@ -41,6 +41,18 @@ import org.hammer.audio.acquisition.Microphone;
 import org.hammer.audio.experimental.acoustic.benchmark.AlignedSourceObservation;
 import org.hammer.audio.experimental.acoustic.benchmark.SnapshotAlignment;
 import org.hammer.audio.experimental.acoustic.benchmark.SnapshotGroundTruthAligner;
+import org.hammer.audio.experimental.acoustic.benchmark.classifier.ClassifierBenchmarkResult;
+import org.hammer.audio.experimental.acoustic.benchmark.classifier.ClassifierBenchmarkRunner;
+import org.hammer.audio.experimental.acoustic.benchmark.localization.LocalizationBenchmarkResult;
+import org.hammer.audio.experimental.acoustic.benchmark.localization.LocalizationBenchmarkRunner;
+import org.hammer.audio.experimental.acoustic.feature.comparison.FeatureDifference;
+import org.hammer.audio.experimental.acoustic.feature.comparison.SyntheticRealComparison;
+import org.hammer.audio.experimental.acoustic.feature.comparison.SyntheticRealComparisonReport;
+import org.hammer.audio.experimental.acoustic.feature.evaluation.FeatureEvaluationEntry;
+import org.hammer.audio.experimental.acoustic.feature.evaluation.FeatureEvaluationReport;
+import org.hammer.audio.experimental.acoustic.feature.evaluation.FeatureEvaluationService;
+import org.hammer.audio.experimental.acoustic.feature.ranking.FeatureRankingEntry;
+import org.hammer.audio.experimental.acoustic.feature.ranking.FeatureRankingService;
 import org.hammer.audio.experimental.acoustic.scenario.Scenario;
 import org.hammer.audio.experimental.acoustic.simulation.AcousticEmitter2D;
 import org.hammer.audio.experimental.acoustic.simulation.SimulationScenarios;
@@ -48,6 +60,8 @@ import org.hammer.audio.experimental.acoustic.simulation.SimulationScenarios.Sim
 import org.hammer.audio.experimental.acoustic.tracking.FrequencyCluster;
 import org.hammer.audio.experimental.acoustic.tracking.TrackedSource;
 import org.hammer.audio.experimental.acoustic.tracking.TrackingSnapshot;
+import org.hammer.audio.experimental.acoustic.wingbeat.WingbeatFeatureVector;
+import org.hammer.audio.experimental.acoustic.wingbeat.WingbeatLabel;
 import org.hammer.audio.geometry.Vector2;
 
 /**
@@ -95,6 +109,11 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
   private final JTextArea csvArea;
   private final JTextArea jsonArea;
   private final JTextArea benchmarkArea;
+  private final JTextArea featureRankingArea;
+  private final JTextArea featureComparisonArea;
+  private final JTextArea syntheticRealArea;
+  private final JTextArea classifierComparisonArea;
+  private final JTextArea localizationComparisonArea;
   private final JLabel statusLabel;
   private final RoomMapPanel roomMapPanel;
 
@@ -140,6 +159,11 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
     csvArea = newReadOnlyTextArea(20, 60);
     jsonArea = newReadOnlyTextArea(20, 60);
     benchmarkArea = newReadOnlyTextArea(20, 60);
+    featureRankingArea = newReadOnlyTextArea(20, 60);
+    featureComparisonArea = newReadOnlyTextArea(20, 60);
+    syntheticRealArea = newReadOnlyTextArea(20, 60);
+    classifierComparisonArea = newReadOnlyTextArea(20, 60);
+    localizationComparisonArea = newReadOnlyTextArea(20, 60);
     statusLabel = new JLabel("Ready — select a scenario and press Run.");
     roomMapPanel = new RoomMapPanel();
 
@@ -236,6 +260,11 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
     tabs.addTab("Markdown", new JScrollPane(markdownArea));
     tabs.addTab("CSV", new JScrollPane(csvArea));
     tabs.addTab("JSON-lines", new JScrollPane(jsonArea));
+    tabs.addTab("Feature Ranking", new JScrollPane(featureRankingArea));
+    tabs.addTab("Feature Comparison", new JScrollPane(featureComparisonArea));
+    tabs.addTab("Synthetic vs Real", new JScrollPane(syntheticRealArea));
+    tabs.addTab("Classifier Comparison", new JScrollPane(classifierComparisonArea));
+    tabs.addTab("Localization Comparison", new JScrollPane(localizationComparisonArea));
     return tabs;
   }
 
@@ -281,6 +310,11 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
     csvArea.setText("");
     jsonArea.setText("");
     benchmarkArea.setText("");
+    featureRankingArea.setText("");
+    featureComparisonArea.setText("");
+    syntheticRealArea.setText("");
+    classifierComparisonArea.setText("");
+    localizationComparisonArea.setText("");
     roomMapPanel.clear(scenario);
     setRunning(true);
     appendLog("Starting scenario: " + scenario.name());
@@ -339,6 +373,199 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
         .candidateGridSteps((Integer) gridStepsSpinner.getValue())
         .tdoaEstimatorType((WorkbenchParameters.TdoaEstimatorType) tdoaCombo.getSelectedItem())
         .build();
+  }
+
+  // -------------------------------------------------------------------------
+  // Analysis tab helpers
+  // -------------------------------------------------------------------------
+
+  private void populateAnalysisTabs(SimulationScenario completedScenario) {
+    // Build a small deterministic demo dataset for feature analysis.
+    // Two groups: female-likely (430–550 Hz) and male-likely (580–750 Hz).
+    List<WingbeatFeatureVector> synthetic = buildDemoSyntheticVectors();
+    List<WingbeatFeatureVector> real = buildDemoRealVectors();
+    List<WingbeatFeatureVector> allVectors = new java.util.ArrayList<>();
+    allVectors.addAll(synthetic);
+    allVectors.addAll(real);
+    List<String> allLabels = new java.util.ArrayList<>();
+    for (WingbeatFeatureVector v : synthetic) {
+      allLabels.add(
+          v.fundamentalFrequencyHz() < 560.0
+              ? WingbeatLabel.FEMALE_LIKELY
+              : WingbeatLabel.MALE_LIKELY);
+    }
+    for (WingbeatFeatureVector v : real) {
+      allLabels.add(
+          v.fundamentalFrequencyHz() < 560.0
+              ? WingbeatLabel.FEMALE_LIKELY
+              : WingbeatLabel.MALE_LIKELY);
+    }
+
+    // Feature evaluation
+    FeatureEvaluationService evalService = new FeatureEvaluationService();
+    FeatureEvaluationReport evalReport = evalService.evaluate(allVectors, allLabels);
+
+    // Feature ranking
+    FeatureRankingService rankingService = FeatureRankingService.defaultService();
+    List<FeatureRankingEntry> ranking = rankingService.rank(evalReport);
+
+    // Synthetic vs real
+    SyntheticRealComparison srComparison = new SyntheticRealComparison();
+    SyntheticRealComparisonReport srReport = srComparison.compare(synthetic, real);
+
+    // Classifier comparison
+    ClassifierBenchmarkRunner classifierRunner = ClassifierBenchmarkRunner.defaultRunner();
+    Map<String, ClassifierBenchmarkResult> classifierResults =
+        classifierRunner.run(allVectors, allLabels);
+
+    // Localization comparison (run only the current scenario to keep the workbench responsive)
+    LocalizationBenchmarkRunner locRunner = LocalizationBenchmarkRunner.defaultRunner();
+    Map<String, List<LocalizationBenchmarkResult>> locResults =
+        locRunner.run(List.of(completedScenario));
+
+    SwingUtilities.invokeLater(
+        () -> {
+          featureRankingArea.setText(buildFeatureRankingText(ranking));
+          featureComparisonArea.setText(buildFeatureComparisonText(evalReport));
+          syntheticRealArea.setText(buildSyntheticRealText(srReport));
+          classifierComparisonArea.setText(buildClassifierComparisonText(classifierResults));
+          localizationComparisonArea.setText(buildLocalizationComparisonText(locResults));
+        });
+  }
+
+  private static List<WingbeatFeatureVector> buildDemoSyntheticVectors() {
+    double[] freqs = {450.0, 470.0, 490.0, 510.0, 530.0, 600.0, 630.0, 660.0, 690.0, 720.0};
+    List<WingbeatFeatureVector> list = new java.util.ArrayList<>();
+    for (double f : freqs) {
+      list.add(
+          new WingbeatFeatureVector(
+              f, List.of(), List.of(), f, 20.0, 0.0, 5.0, 0.1, 6.0, 1.0, 0.9));
+    }
+    return list;
+  }
+
+  private static List<WingbeatFeatureVector> buildDemoRealVectors() {
+    // Slightly different means to simulate real-vs-synthetic divergence
+    double[] freqs = {455.0, 475.0, 495.0, 515.0, 535.0, 590.0, 625.0, 655.0, 685.0, 715.0};
+    List<WingbeatFeatureVector> list = new java.util.ArrayList<>();
+    for (double f : freqs) {
+      list.add(
+          new WingbeatFeatureVector(
+              f, List.of(), List.of(), f, 22.0, 0.0, 6.0, 0.12, 5.5, 1.0, 0.85));
+    }
+    return list;
+  }
+
+  @SuppressWarnings("PMD.ConsecutiveAppendsShouldReuse")
+  private static String buildFeatureRankingText(List<FeatureRankingEntry> ranking) {
+    StringBuilder sb = new StringBuilder("# Feature Ranking\n\n");
+    sb.append(String.format(Locale.ROOT, "%-30s %12s%n", "Feature", "Mean Score"));
+    sb.append("-".repeat(45)).append('\n');
+    for (FeatureRankingEntry entry : ranking) {
+      sb.append(
+          String.format(Locale.ROOT, "%-30s %12.4f%n", entry.featureName(), entry.meanScore()));
+    }
+    return sb.toString();
+  }
+
+  @SuppressWarnings("PMD.ConsecutiveAppendsShouldReuse")
+  private static String buildFeatureComparisonText(FeatureEvaluationReport report) {
+    StringBuilder sb = new StringBuilder("# Feature Evaluation\n\n");
+    sb.append(
+        String.format(
+            Locale.ROOT, "%-30s %10s %10s %10s%n", "Feature", "Mean", "StdDev", "FisherRatio"));
+    sb.append("-".repeat(65)).append('\n');
+    for (FeatureEvaluationEntry entry : report.entries()) {
+      sb.append(
+          String.format(
+              Locale.ROOT,
+              "%-30s %10.3f %10.3f %10.4f%n",
+              entry.featureName(),
+              entry.statistics().mean(),
+              entry.statistics().stdDev(),
+              entry.separation().fisherRatio()));
+    }
+    return sb.toString();
+  }
+
+  @SuppressWarnings("PMD.ConsecutiveAppendsShouldReuse")
+  private static String buildSyntheticRealText(SyntheticRealComparisonReport report) {
+    StringBuilder sb = new StringBuilder(256);
+    sb.append("# Synthetic vs Real Comparison\n\n");
+    sb.append(
+        String.format(
+            Locale.ROOT, "%-30s %10s %10s %10s%n", "Feature", "Synthetic", "Real", "Rel.Diff"));
+    sb.append("-".repeat(65)).append('\n');
+    for (FeatureDifference diff : report.differences()) {
+      sb.append(
+          String.format(
+              Locale.ROOT,
+              "%-30s %10.3f %10.3f %9.1f%%%n",
+              diff.featureName(),
+              diff.syntheticMean(),
+              diff.realMean(),
+              diff.relativeDifference() * 100.0));
+    }
+    if (!report.generatorWeaknesses().isEmpty()) {
+      sb.append("\n## Generator Weaknesses (rel.diff > ")
+          .append(String.format(Locale.ROOT, "%.0f%%", report.weaknessThreshold() * 100.0))
+          .append(")\n");
+      for (FeatureDifference diff : report.generatorWeaknesses()) {
+        sb.append("  - ").append(diff.featureName()).append('\n');
+      }
+    }
+    return sb.toString();
+  }
+
+  @SuppressWarnings("PMD.ConsecutiveAppendsShouldReuse")
+  private static String buildClassifierComparisonText(
+      Map<String, ClassifierBenchmarkResult> results) {
+    StringBuilder sb = new StringBuilder("# Classifier Comparison\n\n");
+    for (Map.Entry<String, ClassifierBenchmarkResult> entry : results.entrySet()) {
+      ClassifierBenchmarkResult r = entry.getValue();
+      sb.append("## ").append(entry.getKey()).append('\n');
+      sb.append(
+          String.format(
+              Locale.ROOT,
+              "Accuracy: %.3f  MacroF1: %.3f%n",
+              r.confusionMatrix().accuracy(),
+              r.macroF1()));
+      sb.append('\n');
+      sb.append(r.confusionMatrix().toMarkdown()).append('\n');
+    }
+    return sb.toString();
+  }
+
+  @SuppressWarnings("PMD.ConsecutiveAppendsShouldReuse")
+  private static String buildLocalizationComparisonText(
+      Map<String, List<LocalizationBenchmarkResult>> results) {
+    StringBuilder sb = new StringBuilder("# Localization Benchmark\n\n");
+    for (Map.Entry<String, List<LocalizationBenchmarkResult>> entry : results.entrySet()) {
+      sb.append("## ").append(entry.getKey()).append('\n');
+      sb.append(
+          String.format(
+              Locale.ROOT,
+              "%-25s %12s %10s %4s %4s%n",
+              "Scenario",
+              "MeanLocErr(m)",
+              "TrackErr",
+              "FP",
+              "FN"));
+      sb.append("-".repeat(60)).append('\n');
+      for (LocalizationBenchmarkResult r : entry.getValue()) {
+        sb.append(
+            String.format(
+                Locale.ROOT,
+                "%-25s %12.3f %10.3f %4d %4d%n",
+                r.scenarioId(),
+                r.meanLocalizationErrorMeters(),
+                r.trackingError(),
+                r.falsePositiveCount(),
+                r.falseNegativeCount()));
+      }
+      sb.append('\n');
+    }
+    return sb.toString();
   }
 
   // -------------------------------------------------------------------------
@@ -410,6 +637,7 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
         jsonArea.setText(WorkbenchRunExporter.toJsonLines(result));
         benchmarkArea.setText(WorkbenchRunExporter.toBenchmarkMarkdown(result));
         roomMapPanel.setResult(result);
+        populateAnalysisTabs(result.scenario());
       } catch (java.util.concurrent.ExecutionException ex) {
         LOGGER.log(Level.WARNING, "Workbench run failed", ex);
         updateStatus("Run failed: " + ex.getCause().getMessage());
