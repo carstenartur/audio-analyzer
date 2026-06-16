@@ -101,7 +101,7 @@ public record FeatureHistogram(String featureName, List<Bucket> buckets) {
    *
    * @return Markdown snippet; never {@code null}
    */
-  @SuppressWarnings({"PMD.ConsecutiveLiteralAppends", "PMD.ConsecutiveAppendsShouldReuse"})
+  @SuppressWarnings("PMD.ConsecutiveLiteralAppends")
   public String toMarkdown() {
     if (buckets.isEmpty()) {
       return "### " + featureName + "\n\n- No data\n\n";
