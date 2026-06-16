@@ -58,6 +58,7 @@ class DatasetWingbeatEvaluationWorkflowTest {
     assertTrue(report.contains("Confusion Matrix"));
     assertTrue(report.contains("Recall"));
     assertTrue(report.contains("Precision"));
+    assertTrue(report.contains("Evaluated"));
   }
 
   private static void createSineWave(Path file, int sampleRate, double frequencyHz, double seconds)

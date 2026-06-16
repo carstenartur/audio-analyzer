@@ -45,8 +45,11 @@ class ImportedRecordingWorkbenchPanelTest {
     assertTrue(panel.evaluationSummaryText().contains("Imported Dataset Evaluation"));
     assertTrue(panel.evaluationSummaryText().contains("Accuracy"));
     assertTrue(panel.evaluationSummaryText().contains("Confusion Matrix"));
+    assertTrue(panel.evaluationSummaryText().contains("Evaluated"));
     assertTrue(panel.analyticsText().contains("Dataset Analytics"));
     assertTrue(panel.analyticsText().contains("Label Distribution"));
+    assertTrue(panel.histogramText().contains("Feature Histograms"));
+    assertTrue(panel.histogramText().contains("Dominant Frequency"));
   }
 
   private static void createSineWave(Path file, int sampleRate, double frequencyHz, double seconds)

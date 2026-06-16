@@ -11,9 +11,11 @@ import org.hammer.audio.core.AudioBlock;
 import org.hammer.audio.experimental.acoustic.FrequencyBand;
 import org.hammer.audio.experimental.acoustic.SpectralPeak;
 import org.hammer.audio.experimental.acoustic.WingbeatFrequencyTracker;
+import org.hammer.audio.experimental.acoustic.dataset.DatasetAnalytics;
 import org.hammer.audio.experimental.acoustic.dataset.DatasetAudioLoader;
 import org.hammer.audio.experimental.acoustic.dataset.DatasetManifest;
 import org.hammer.audio.experimental.acoustic.dataset.DatasetRecording;
+import org.hammer.audio.experimental.acoustic.dataset.FeatureHistogram;
 import org.hammer.audio.experimental.acoustic.tracking.TrackedSource;
 import org.hammer.audio.geometry.Vector2;
 import org.hammer.audio.geometry.Vector3;
@@ -150,6 +152,140 @@ public final class DatasetWingbeatEvaluationWorkflow {
     return sb.toString();
   }
 
+  /**
+   * Compute histograms for the dominant frequency, SNR, 2nd-harmonic ratio and duration
+   * distributions across all analyzed recordings.
+   *
+   * <p>Bucket boundaries are determined automatically from the observed value range (Sturges'
+   * rule). An empty list of analyses yields histograms with no buckets. Harmonic-ratio histogram is
+   * omitted when no recording provides harmonic data.
+   *
+   * @param analyses list of recording analyses; must not be {@code null}
+   * @return list of four histograms in order: dominant frequency, SNR, 2nd harmonic ratio,
+   *     duration; never {@code null}
+   */
+  public static List<FeatureHistogram> computeHistograms(List<RecordingAnalysis> analyses) {
+    Objects.requireNonNull(analyses, "analyses");
+    double[] freqs =
+        analyses.stream().mapToDouble(a -> a.features().fundamentalFrequencyHz()).toArray();
+    double[] snrs = analyses.stream().mapToDouble(a -> a.features().signalToNoiseRatio()).toArray();
+    double[] durations =
+        analyses.stream().mapToDouble(a -> a.features().trackDurationSeconds()).toArray();
+    double[] h2ratios =
+        analyses.stream()
+            .filter(a -> !a.features().harmonicRatios().isEmpty())
+            .mapToDouble(a -> a.features().harmonicRatios().get(0))
+            .toArray();
+    return List.of(
+        FeatureHistogram.of("Dominant Frequency (Hz)", freqs),
+        FeatureHistogram.of("Signal-to-Noise Ratio", snrs),
+        FeatureHistogram.of("2nd Harmonic Ratio", h2ratios),
+        FeatureHistogram.of("Duration (s)", durations));
+  }
+
+  /**
+   * Render a Markdown section containing all feature histograms.
+   *
+   * @param histograms histograms to render; must not be {@code null}
+   * @return Markdown text; never {@code null}
+   */
+  public static String toHistogramMarkdown(List<FeatureHistogram> histograms) {
+    Objects.requireNonNull(histograms, "histograms");
+    StringBuilder sb = new StringBuilder(512);
+    sb.append("# Feature Histograms\n\n");
+    for (FeatureHistogram h : histograms) {
+      sb.append(h.toMarkdown());
+    }
+    return sb.toString();
+  }
+
+  /**
+   * Compare feature distributions between a synthetic corpus and a real-recording corpus.
+   *
+   * <p>For each of the key features — dominant frequency, SNR, 2nd-harmonic ratio and duration —
+   * this method computes descriptive statistics for both corpora and returns a comparison record
+   * that quantifies the absolute and relative differences between the two means.
+   *
+   * <p>Either list may be empty; in that case the corresponding statistics will have {@code count =
+   * 0} and all numeric fields equal to {@code 0}.
+   *
+   * @param syntheticAnalyses analyses of synthetic recordings; must not be {@code null}
+   * @param realAnalyses analyses of real recordings; must not be {@code null}
+   * @return list of four comparisons in order: dominant frequency, SNR, 2nd harmonic ratio,
+   *     duration; never {@code null}
+   */
+  public static List<FeatureDistributionComparison> compareDatasets(
+      List<RecordingAnalysis> syntheticAnalyses, List<RecordingAnalysis> realAnalyses) {
+    Objects.requireNonNull(syntheticAnalyses, "syntheticAnalyses");
+    Objects.requireNonNull(realAnalyses, "realAnalyses");
+    return List.of(
+        buildComparison(
+            "Dominant Frequency (Hz)",
+            syntheticAnalyses.stream()
+                .map(a -> a.features().fundamentalFrequencyHz())
+                .collect(java.util.stream.Collectors.toList()),
+            realAnalyses.stream()
+                .map(a -> a.features().fundamentalFrequencyHz())
+                .collect(java.util.stream.Collectors.toList())),
+        buildComparison(
+            "Signal-to-Noise Ratio",
+            syntheticAnalyses.stream()
+                .map(a -> a.features().signalToNoiseRatio())
+                .collect(java.util.stream.Collectors.toList()),
+            realAnalyses.stream()
+                .map(a -> a.features().signalToNoiseRatio())
+                .collect(java.util.stream.Collectors.toList())),
+        buildComparison(
+            "2nd Harmonic Ratio",
+            syntheticAnalyses.stream()
+                .filter(a -> !a.features().harmonicRatios().isEmpty())
+                .map(a -> a.features().harmonicRatios().get(0))
+                .collect(java.util.stream.Collectors.toList()),
+            realAnalyses.stream()
+                .filter(a -> !a.features().harmonicRatios().isEmpty())
+                .map(a -> a.features().harmonicRatios().get(0))
+                .collect(java.util.stream.Collectors.toList())),
+        buildComparison(
+            "Duration (s)",
+            syntheticAnalyses.stream()
+                .map(a -> a.features().trackDurationSeconds())
+                .collect(java.util.stream.Collectors.toList()),
+            realAnalyses.stream()
+                .map(a -> a.features().trackDurationSeconds())
+                .collect(java.util.stream.Collectors.toList())));
+  }
+
+  private static FeatureDistributionComparison buildComparison(
+      String featureName, List<Double> syntheticValues, List<Double> realValues) {
+    return FeatureDistributionComparison.of(
+        featureName,
+        DatasetAnalytics.DistributionStats.of(syntheticValues),
+        DatasetAnalytics.DistributionStats.of(realValues));
+  }
+
+  /**
+   * Render a Markdown comparison report from a list of per-feature comparisons.
+   *
+   * @param comparisons list of comparisons to render; must not be {@code null}
+   * @return Markdown text; never {@code null}
+   */
+  public static String toComparisonMarkdown(List<FeatureDistributionComparison> comparisons) {
+    Objects.requireNonNull(comparisons, "comparisons");
+    StringBuilder sb = new StringBuilder(512);
+    sb.append("# Synthetic vs Real Dataset Comparison\n\n");
+    if (comparisons.isEmpty()) {
+      sb.append("*No features to compare.*\n");
+      return sb.toString();
+    }
+    sb.append(
+        "Differences are computed as |realMean − syntheticMean|."
+            + " Relative difference is normalised to the synthetic mean.\n\n");
+    for (FeatureDistributionComparison c : comparisons) {
+      sb.append(c.toMarkdown());
+    }
+    return sb.toString();
+  }
+
   @SuppressWarnings("PMD.ConsecutiveAppendsShouldReuse")
   private static void appendStats(StringBuilder sb, double[] values) {
     if (values.length == 0) {
@@ -237,7 +373,8 @@ public final class DatasetWingbeatEvaluationWorkflow {
   @SuppressWarnings({
     "PMD.ConsecutiveAppendsShouldReuse",
     "PMD.ConsecutiveLiteralAppends",
-    "PMD.AvoidDuplicateLiterals"
+    "PMD.AvoidDuplicateLiterals",
+    "PMD.NPathComplexity"
   })
   public static String toMarkdownReport(WingbeatDataset.Evaluation evaluation) {
     Objects.requireNonNull(evaluation, "evaluation");
@@ -245,12 +382,21 @@ public final class DatasetWingbeatEvaluationWorkflow {
     sb.append("# Imported Dataset Evaluation\n\n");
     sb.append("- Dataset: ").append(evaluation.datasetName()).append('\n');
     sb.append("- Samples: ").append(evaluation.sampleCount()).append('\n');
+    sb.append("- Evaluated (known GT): ").append(evaluation.evaluatedSampleCount()).append('\n');
+    sb.append("- GT unknown: ").append(evaluation.groundTruthUnknownCount()).append('\n');
+    sb.append("- Predicted unknown: ").append(evaluation.predictionUnknownCount()).append('\n');
     sb.append("- Correct: ").append(evaluation.correctCount()).append('\n');
     sb.append("- Accuracy: ");
     if (evaluation.accuracy() == null) {
+      sb.append("n/a\n");
+    } else {
+      sb.append(String.format(Locale.ROOT, "%.3f", evaluation.accuracy())).append('\n');
+    }
+    sb.append("- Evaluated accuracy (excl. unknown GT): ");
+    if (evaluation.evaluatedAccuracy() == null) {
       sb.append("n/a\n\n");
     } else {
-      sb.append(String.format(Locale.ROOT, "%.3f", evaluation.accuracy())).append("\n\n");
+      sb.append(String.format(Locale.ROOT, "%.3f", evaluation.evaluatedAccuracy())).append("\n\n");
     }
     sb.append("## Per-Label Statistics\n\n");
     sb.append("| Ground truth | Samples | Correct | Recall | Precision |\n");

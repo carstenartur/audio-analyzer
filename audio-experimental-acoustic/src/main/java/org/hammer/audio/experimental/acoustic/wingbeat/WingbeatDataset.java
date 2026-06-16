@@ -258,5 +258,72 @@ public record WingbeatDataset(String name, List<LabelledRecording> entries) {
       }
       return labels;
     }
+
+    /**
+     * Number of samples whose ground-truth label is {@link WingbeatLabel#UNKNOWN}.
+     *
+     * <p>These samples are included in {@link #sampleCount} and the confusion matrix, but they
+     * cannot inform whether the classifier is working correctly because the expected answer is
+     * itself unknown. Use {@link #evaluatedSampleCount()} to exclude them from quantitative
+     * metrics.
+     *
+     * @return count of samples with an unknown ground-truth label; never negative
+     */
+    public int groundTruthUnknownCount() {
+      return labelSampleCounts.getOrDefault(WingbeatLabel.UNKNOWN, 0);
+    }
+
+    /**
+     * Number of samples whose ground-truth label is known but whose predicted label is {@link
+     * WingbeatLabel#UNKNOWN}.
+     *
+     * <p>These represent cases where the classifier declined to assign a class. They count as false
+     * negatives for all known ground-truth labels.
+     *
+     * @return count of predictions that are unknown for evaluable samples; never negative
+     */
+    public int predictionUnknownCount() {
+      int count = 0;
+      for (Map.Entry<String, Map<String, Integer>> row : confusionMatrix.entrySet()) {
+        if (!WingbeatLabel.UNKNOWN.equals(row.getKey())) {
+          count += row.getValue().getOrDefault(WingbeatLabel.UNKNOWN, 0);
+        }
+      }
+      return count;
+    }
+
+    /**
+     * Number of samples that can meaningfully contribute to accuracy/precision/recall evaluation:
+     * those whose ground-truth label is not {@link WingbeatLabel#UNKNOWN}.
+     *
+     * @return {@code sampleCount - groundTruthUnknownCount()}; never negative
+     */
+    public int evaluatedSampleCount() {
+      return sampleCount - groundTruthUnknownCount();
+    }
+
+    /**
+     * Classification accuracy computed over only the evaluable samples (ground truth ≠ {@link
+     * WingbeatLabel#UNKNOWN}), or {@code null} when no evaluable samples exist.
+     *
+     * <p>This differs from {@link #accuracy()} in that samples with an unknown ground truth are
+     * excluded from both the numerator and denominator, preventing them from inflating or deflating
+     * the reported accuracy.
+     *
+     * @return evaluated accuracy in {@code [0,1]}, or {@code null} when no evaluable samples exist
+     */
+    public Double evaluatedAccuracy() {
+      int evaluable = evaluatedSampleCount();
+      if (evaluable == 0) {
+        return null;
+      }
+      int correctEvaluated = 0;
+      for (Map.Entry<String, Integer> entry : labelCorrectCounts.entrySet()) {
+        if (!WingbeatLabel.UNKNOWN.equals(entry.getKey())) {
+          correctEvaluated += entry.getValue();
+        }
+      }
+      return correctEvaluated / (double) evaluable;
+    }
   }
 }
