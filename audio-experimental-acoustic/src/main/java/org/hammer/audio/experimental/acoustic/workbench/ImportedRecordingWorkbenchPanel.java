@@ -181,7 +181,8 @@ public final class ImportedRecordingWorkbenchPanel extends JPanel {
         if (!manifest.recordings().isEmpty()) {
           evaluation = workflow.evaluate(manifest, classifier);
         }
-        return new ImportResult(manifest, evaluation);
+        String analyticsReport = DatasetAnalytics.compute(manifest).toMarkdownReport();
+        return new ImportResult(manifest, evaluation, analyticsReport);
       }
 
       @Override
@@ -217,7 +218,7 @@ public final class ImportedRecordingWorkbenchPanel extends JPanel {
     programmaticUpdate = false;
 
     manifestArea.setText(renderManifest(loadedManifest));
-    analyticsArea.setText(DatasetAnalytics.compute(loadedManifest).toMarkdownReport());
+    analyticsArea.setText(result.analyticsReport());
     if (result.evaluation() != null) {
       evaluationArea.setText(
           DatasetWingbeatEvaluationWorkflow.toMarkdownReport(result.evaluation()));
@@ -393,5 +394,12 @@ public final class ImportedRecordingWorkbenchPanel extends JPanel {
     }
   }
 
-  private record ImportResult(DatasetManifest manifest, WingbeatDataset.Evaluation evaluation) {}
+  private record ImportResult(
+      DatasetManifest manifest, WingbeatDataset.Evaluation evaluation, String analyticsReport) {
+
+    private ImportResult {
+      Objects.requireNonNull(manifest, "manifest");
+      Objects.requireNonNull(analyticsReport, "analyticsReport");
+    }
+  }
 }

@@ -2,6 +2,7 @@ package org.hammer.audio.experimental.acoustic.dataset;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.ByteArrayInputStream;
@@ -71,6 +72,32 @@ class DatasetAnalyticsTest {
     assertTrue(report.contains("Sample Rate Distribution"));
     assertTrue(report.contains("Duration Distribution"));
     assertTrue(report.contains("gender"));
+  }
+
+  @Test
+  void constructorRejectsBlankDatasetName() {
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            new DatasetAnalytics(
+                "  ",
+                0,
+                java.util.Map.of(),
+                java.util.Map.of(),
+                new DatasetAnalytics.DistributionStats(0, 0.0, 0.0, 0.0, 0.0)));
+  }
+
+  @Test
+  void constructorRejectsNegativeRecordingCount() {
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            new DatasetAnalytics(
+                "HumBugDB",
+                -1,
+                java.util.Map.of(),
+                java.util.Map.of(),
+                new DatasetAnalytics.DistributionStats(0, 0.0, 0.0, 0.0, 0.0)));
   }
 
   private DatasetManifest buildManifest() throws IOException {

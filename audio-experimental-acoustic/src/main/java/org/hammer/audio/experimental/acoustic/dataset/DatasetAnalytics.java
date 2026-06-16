@@ -35,6 +35,12 @@ public record DatasetAnalytics(
     Objects.requireNonNull(labelDistribution, "labelDistribution");
     Objects.requireNonNull(sampleRateCounts, "sampleRateCounts");
     Objects.requireNonNull(durationStats, "durationStats");
+    if (datasetName.isBlank()) {
+      throw new IllegalArgumentException("datasetName must not be blank");
+    }
+    if (recordingCount < 0) {
+      throw new IllegalArgumentException("recordingCount must be >= 0");
+    }
     Map<String, Map<String, Integer>> labelCopy = new LinkedHashMap<>();
     for (Map.Entry<String, Map<String, Integer>> entry : labelDistribution.entrySet()) {
       labelCopy.put(entry.getKey(), Map.copyOf(entry.getValue()));

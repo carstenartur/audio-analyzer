@@ -140,6 +140,40 @@ class WingbeatDatasetTest {
   }
 
   @Test
+  void evaluationRejectsInconsistentConfusionMatrix() {
+    IllegalArgumentException exception =
+        assertThrows(
+            IllegalArgumentException.class,
+            () ->
+                new WingbeatDataset.Evaluation(
+                    "invalid",
+                    1,
+                    1,
+                    Map.of(WingbeatLabel.FEMALE_LIKELY, 1),
+                    Map.of(WingbeatLabel.FEMALE_LIKELY, 1),
+                    Map.of(WingbeatLabel.FEMALE_LIKELY, Map.of(WingbeatLabel.FEMALE_LIKELY, 0))));
+
+    assertFalse(exception.getMessage().isBlank());
+  }
+
+  @Test
+  void evaluationRejectsNegativeConfusionMatrixCount() {
+    IllegalArgumentException exception =
+        assertThrows(
+            IllegalArgumentException.class,
+            () ->
+                new WingbeatDataset.Evaluation(
+                    "invalid",
+                    1,
+                    0,
+                    Map.of(WingbeatLabel.FEMALE_LIKELY, 1),
+                    Map.of(WingbeatLabel.FEMALE_LIKELY, 0),
+                    Map.of(WingbeatLabel.FEMALE_LIKELY, Map.of(WingbeatLabel.MALE_LIKELY, -1))));
+
+    assertFalse(exception.getMessage().isBlank());
+  }
+
+  @Test
   void datasetConstructorRejectsEmptyEntries() {
     assertThrows(IllegalArgumentException.class, () -> new WingbeatDataset("test", List.of()));
   }

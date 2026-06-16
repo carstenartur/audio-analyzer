@@ -145,6 +145,56 @@ public record WingbeatDataset(String name, List<LabelledRecording> entries) {
       if (totalLabelCorrect != correctCount) {
         throw new IllegalArgumentException("labelCorrectCounts must sum to correctCount");
       }
+      int totalConfusionSamples = 0;
+      Map<String, Integer> confusionRowSums = new LinkedHashMap<>();
+      Map<String, Integer> confusionDiagonal = new LinkedHashMap<>();
+      for (Map.Entry<String, Map<String, Integer>> rowEntry : confusionMatrix.entrySet()) {
+        String actualLabel = Objects.requireNonNull(rowEntry.getKey(), "confusionMatrix row key");
+        if (actualLabel.isBlank()) {
+          throw new IllegalArgumentException("confusionMatrix row labels must not be blank");
+        }
+        int rowSum = 0;
+        for (Map.Entry<String, Integer> cellEntry : rowEntry.getValue().entrySet()) {
+          String predictedLabel =
+              Objects.requireNonNull(cellEntry.getKey(), "confusionMatrix column key");
+          Integer count = Objects.requireNonNull(cellEntry.getValue(), "confusionMatrix value");
+          if (predictedLabel.isBlank()) {
+            throw new IllegalArgumentException("confusionMatrix column labels must not be blank");
+          }
+          if (count < 0) {
+            throw new IllegalArgumentException("confusionMatrix values must be >= 0");
+          }
+          rowSum += count;
+          if (actualLabel.equals(predictedLabel)) {
+            confusionDiagonal.merge(actualLabel, count, Integer::sum);
+          }
+        }
+        confusionRowSums.put(actualLabel, rowSum);
+        totalConfusionSamples += rowSum;
+      }
+      if (totalConfusionSamples != sampleCount) {
+        throw new IllegalArgumentException("confusionMatrix must sum to sampleCount");
+      }
+      for (Map.Entry<String, Integer> entry : labelSampleCounts.entrySet()) {
+        int rowSum = confusionRowSums.getOrDefault(entry.getKey(), 0);
+        if (rowSum != entry.getValue()) {
+          throw new IllegalArgumentException(
+              "confusionMatrix row sums must match labelSampleCounts values");
+        }
+      }
+      for (String actualLabel : confusionRowSums.keySet()) {
+        if (!labelSampleCounts.containsKey(actualLabel)) {
+          throw new IllegalArgumentException(
+              "confusionMatrix rows must only contain labels from labelSampleCounts");
+        }
+      }
+      for (Map.Entry<String, Integer> entry : labelCorrectCounts.entrySet()) {
+        int diagonalCount = confusionDiagonal.getOrDefault(entry.getKey(), 0);
+        if (diagonalCount != entry.getValue()) {
+          throw new IllegalArgumentException(
+              "confusionMatrix diagonal must match labelCorrectCounts values");
+        }
+      }
     }
 
     /**
