@@ -3,6 +3,7 @@ package org.hammer.audio.experimental.acoustic.simulation.calibration;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
 import org.hammer.audio.experimental.acoustic.feature.comparison.FeatureDifference;
@@ -61,8 +62,7 @@ class GeneratorComparisonReportTest {
 
     double improvement = report.overallImprovement();
     assertNotNull(report);
-    assertEquals(
-        true, improvement > 0.0, "Improvement should be positive when after is closer to real");
+    assertTrue(improvement > 0.0, "Improvement should be positive when after is closer to real");
   }
 
   @Test
