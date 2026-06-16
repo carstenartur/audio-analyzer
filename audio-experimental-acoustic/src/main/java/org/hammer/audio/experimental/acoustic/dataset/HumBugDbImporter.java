@@ -31,7 +31,7 @@ public final class HumBugDbImporter implements DatasetImporter {
 
   private static final URI HUMBUG_DB_SOURCE =
       URI.create("https://github.com/HumBug-Mosquito/HumBugDB");
-  private static final String LICENSE_PLACEHOLDER = "CC BY 4.0";
+  private static final String HUMBUGDB_LICENSE = "CC BY 4.0";
   private static final String SOUND_TYPE = "sound_type";
   private static final String SPECIES = "species";
   private static final String GENDER = "gender";
@@ -84,7 +84,7 @@ public final class HumBugDbImporter implements DatasetImporter {
     }
     DatasetDescriptor descriptor =
         new DatasetDescriptor(
-            datasetId(), "HumBugDB", HUMBUG_DB_SOURCE, LICENSE_PLACEHOLDER, root, metadataSchema());
+            datasetId(), "HumBugDB", HUMBUG_DB_SOURCE, HUMBUGDB_LICENSE, root, metadataSchema());
     return new DatasetManifest(descriptor, List.copyOf(recordings.values()));
   }
 
