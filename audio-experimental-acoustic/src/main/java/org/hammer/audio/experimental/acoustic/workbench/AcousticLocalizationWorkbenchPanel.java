@@ -58,6 +58,9 @@ import org.hammer.audio.experimental.acoustic.scenario.Scenario;
 import org.hammer.audio.experimental.acoustic.simulation.AcousticEmitter2D;
 import org.hammer.audio.experimental.acoustic.simulation.SimulationScenarios;
 import org.hammer.audio.experimental.acoustic.simulation.SimulationScenarios.SimulationScenario;
+import org.hammer.audio.experimental.acoustic.simulation.WingbeatSignalParameters;
+import org.hammer.audio.experimental.acoustic.simulation.calibration.CalibrationResult;
+import org.hammer.audio.experimental.acoustic.simulation.calibration.GeneratorCalibrationService;
 import org.hammer.audio.experimental.acoustic.tracking.FrequencyCluster;
 import org.hammer.audio.experimental.acoustic.tracking.TrackedSource;
 import org.hammer.audio.experimental.acoustic.tracking.TrackingSnapshot;
@@ -116,6 +119,7 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
   private final JTextArea syntheticRealArea;
   private final JTextArea classifierComparisonArea;
   private final JTextArea localizationComparisonArea;
+  private final JTextArea calibrationArea;
   private final JLabel statusLabel;
   private final RoomMapPanel roomMapPanel;
 
@@ -131,18 +135,21 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
     private final String syntheticRealText;
     private final String classifierComparisonText;
     private final String localizationComparisonText;
+    private final String calibrationText;
 
     AnalysisTabContent(
         String featureRankingText,
         String featureComparisonText,
         String syntheticRealText,
         String classifierComparisonText,
-        String localizationComparisonText) {
+        String localizationComparisonText,
+        String calibrationText) {
       this.featureRankingText = featureRankingText;
       this.featureComparisonText = featureComparisonText;
       this.syntheticRealText = syntheticRealText;
       this.classifierComparisonText = classifierComparisonText;
       this.localizationComparisonText = localizationComparisonText;
+      this.calibrationText = calibrationText;
     }
   }
 
@@ -188,6 +195,7 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
     syntheticRealArea = newReadOnlyTextArea(20, 60);
     classifierComparisonArea = newReadOnlyTextArea(20, 60);
     localizationComparisonArea = newReadOnlyTextArea(20, 60);
+    calibrationArea = newReadOnlyTextArea(20, 60);
     statusLabel = new JLabel("Ready — select a scenario and press Run.");
     roomMapPanel = new RoomMapPanel();
 
@@ -289,6 +297,7 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
     tabs.addTab("Synthetic vs Real", new JScrollPane(syntheticRealArea));
     tabs.addTab("Classifier Comparison", new JScrollPane(classifierComparisonArea));
     tabs.addTab("Localization Comparison", new JScrollPane(localizationComparisonArea));
+    tabs.addTab("Generator Calibration", new JScrollPane(calibrationArea));
     return tabs;
   }
 
@@ -339,6 +348,7 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
     syntheticRealArea.setText("");
     classifierComparisonArea.setText("");
     localizationComparisonArea.setText("");
+    calibrationArea.setText("");
     SwingWorker<AnalysisTabContent, Void> currentAnalysis = analysisWorker;
     if (currentAnalysis != null) {
       currentAnalysis.cancel(true);
@@ -452,12 +462,18 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
     Map<String, List<LocalizationBenchmarkResult>> locResults =
         locRunner.run(List.of(completedScenario));
 
+    // Calibration
+    WingbeatSignalParameters baseline = WingbeatSignalParameters.mosquitoLike(500.0);
+    GeneratorCalibrationService calibrationService = new GeneratorCalibrationService();
+    CalibrationResult calibrationResult = calibrationService.calibrate(baseline, real);
+
     return new AnalysisTabContent(
         buildFeatureRankingText(ranking),
         buildFeatureComparisonText(evalReport),
         buildSyntheticRealText(srReport),
         buildClassifierComparisonText(classifierResults),
-        buildLocalizationComparisonText(locResults));
+        buildLocalizationComparisonText(locResults),
+        buildCalibrationText(calibrationResult));
   }
 
   private void populateAnalysisTabsAsync(SimulationScenario completedScenario) {
@@ -466,6 +482,7 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
     syntheticRealArea.setText(COMPUTING_ANALYSIS_MESSAGE);
     classifierComparisonArea.setText(COMPUTING_ANALYSIS_MESSAGE);
     localizationComparisonArea.setText(COMPUTING_ANALYSIS_MESSAGE);
+    calibrationArea.setText(COMPUTING_ANALYSIS_MESSAGE);
 
     SwingWorker<AnalysisTabContent, Void> worker =
         new SwingWorker<>() {
@@ -486,6 +503,7 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
               syntheticRealArea.setText(content.syntheticRealText);
               classifierComparisonArea.setText(content.classifierComparisonText);
               localizationComparisonArea.setText(content.localizationComparisonText);
+              calibrationArea.setText(content.calibrationText);
             } catch (ExecutionException ex) {
               LOGGER.log(Level.WARNING, "Failed to compute analysis tabs", ex);
               String errorMessage = "Analysis failed: " + ex.getCause().getMessage();
@@ -494,6 +512,7 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
               syntheticRealArea.setText(errorMessage);
               classifierComparisonArea.setText(errorMessage);
               localizationComparisonArea.setText(errorMessage);
+              calibrationArea.setText(errorMessage);
             } catch (InterruptedException ex) {
               Thread.currentThread().interrupt();
             }
@@ -636,6 +655,78 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
       sb.append('\n');
     }
     return sb.toString();
+  }
+
+  @SuppressWarnings("PMD.ConsecutiveAppendsShouldReuse")
+  private static String buildCalibrationText(CalibrationResult result) {
+    StringBuilder sb = new StringBuilder(512);
+    sb.append("# Generator Calibration\n\n## Baseline Parameters\n\n");
+    appendParamRow(
+        sb, "fundamentalFrequencyHz", result.baselineParameters().fundamentalFrequencyHz());
+    appendParamRow(sb, "harmonicCount", result.baselineParameters().harmonicCount());
+    appendParamRow(sb, "jitterHz", result.baselineParameters().jitterHz());
+    appendParamRow(sb, "modulationDepth", result.baselineParameters().modulationDepth());
+    appendParamRow(sb, "noiseAmplitude", result.baselineParameters().noiseAmplitude());
+    sb.append("\n## Calibrated Parameters\n\n");
+    appendParamRow(
+        sb, "fundamentalFrequencyHz", result.calibratedParameters().fundamentalFrequencyHz());
+    appendParamRow(sb, "harmonicCount", result.calibratedParameters().harmonicCount());
+    appendParamRow(sb, "jitterHz", result.calibratedParameters().jitterHz());
+    appendParamRow(sb, "modulationDepth", result.calibratedParameters().modulationDepth());
+    appendParamRow(sb, "noiseAmplitude", result.calibratedParameters().noiseAmplitude());
+    sb.append("\n## Feature Deviation Report\n\n");
+    sb.append(
+        String.format(
+            Locale.ROOT, "%-30s %10s %10s %10s%n", "Feature", "Before", "After", "Improvement"));
+    sb.append("-".repeat(65)).append('\n');
+    List<FeatureDifference> beforeDiffs = result.beforeCalibration().differences();
+    List<FeatureDifference> afterDiffs = result.afterCalibration().differences();
+    int size = Math.min(beforeDiffs.size(), afterDiffs.size());
+    for (int i = 0; i < size; i++) {
+      double before = beforeDiffs.get(i).relativeDifference();
+      double after = afterDiffs.get(i).relativeDifference();
+      sb.append(
+          String.format(
+              Locale.ROOT,
+              "%-30s %9.1f%% %9.1f%% %9.1f%%%n",
+              beforeDiffs.get(i).featureName(),
+              before * 100.0,
+              after * 100.0,
+              (before - after) * 100.0));
+    }
+    sb.append('\n');
+    sb.append(
+        String.format(Locale.ROOT, "Overall improvement: %.1f%%%n", result.improvement() * 100.0));
+    sb.append(
+        String.format(
+            Locale.ROOT,
+            "Mean relative diff before: %.1f%%  after: %.1f%%%n",
+            result.meanRelativeDifferenceBefore() * 100.0,
+            result.meanRelativeDifferenceAfter() * 100.0));
+    if (!result.afterCalibration().generatorWeaknesses().isEmpty()) {
+      sb.append("\n## Remaining Deviations (rel.diff > ")
+          .append(
+              String.format(
+                  Locale.ROOT, "%.0f%%", result.afterCalibration().weaknessThreshold() * 100.0))
+          .append(")\n");
+      for (FeatureDifference diff : result.afterCalibration().generatorWeaknesses()) {
+        sb.append(
+            String.format(
+                Locale.ROOT,
+                "  - %s (%.1f%%)%n",
+                diff.featureName(),
+                diff.relativeDifference() * 100.0));
+      }
+    }
+    return sb.toString();
+  }
+
+  private static void appendParamRow(StringBuilder sb, String name, double value) {
+    sb.append(String.format(Locale.ROOT, "  %-30s %.6f%n", name + ":", value));
+  }
+
+  private static void appendParamRow(StringBuilder sb, String name, int value) {
+    sb.append(String.format(Locale.ROOT, "  %-30s %d%n", name + ":", value));
   }
 
   // -------------------------------------------------------------------------
