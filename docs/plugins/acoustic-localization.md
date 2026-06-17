@@ -18,16 +18,16 @@ is **not** a production mosquito detector, species classifier or validated track
 
 **Implemented:**
 - **Interactive simulation workbench** — run any of nine deterministic scenarios through the full
-  tracking pipeline directly from the Plugins menu, with live per-frame log, 2-D room map and
-  Markdown / CSV / JSON export;
+tracking pipeline directly from the Plugins menu, with live per-frame log, 2-D room map and
+Markdown / CSV / JSON export;
 - **HumBugDB import workbench** — local offline-first import of HumBugDB dataset, recording
-  inspection, feature extraction, rule-based classification and dataset-level evaluation;
+inspection, feature extraction, rule-based classification and dataset-level evaluation;
 - **End-to-end tracking pipeline** — multi-peak detection, frequency clustering, TDOA estimation,
-  beamforming, Kalman-based source tracking with identity persistence;
+beamforming, Kalman-based source tracking with identity persistence;
 - **Synthetic signal generation** — deterministic room acoustics simulation with moving emitters,
-  reflections, noise and Doppler;
+reflections, noise and Doppler;
 - **Benchmark infrastructure** — localization metrics, classification evaluation, confusion matrices
-  and feature distribution analysis;
+and feature distribution analysis;
 - Plugin descriptor, menu/view contributions and generic host integration;
 - Cross-correlation and GCC-PHAT TDOA estimators;
 - Delay-and-sum beamforming over 2D candidate grids;
@@ -45,7 +45,7 @@ is **not** a production mosquito detector, species classifier or validated track
 - Reflections, noise, microphone mismatch and multiple weak sources can dominate results;
 - Accurate TDOA requires calibrated geometry and a shared sample clock across channels;
 - `SampleClock` currently records nominal timing only and does not compensate drift or USB buffering
-  jitter;
+jitter;
 - Sub-sample TDOA interpolation not implemented;
 - 3D geometry and multi-story array configurations are future work.
 
