@@ -262,6 +262,194 @@ See [`docs/architecture/experimental-acoustic-localization.md`](docs/architectur
 and [`docs/plugins/acoustic-localization/README.md`](docs/plugins/acoustic-localization/README.md) for the
 architecture review, coupling analysis, module-boundary rationale and current limitations.
 
+## Experimental acoustic localization architecture
+
+The `audio-experimental-acoustic` module implements a complete research platform for acoustic
+source localization and wingbeat classification. It has evolved into a sophisticated pipeline
+integrating dataset analysis, feature engineering, synthetic data generation and benchmarking.
+
+### Research platform layers
+
+```text
+┌─────────────────────────────────────────────────┐
+│ Dataset Import                                  │
+│   HumBugDbImporter → DatasetManifest            │
+└─────────────────┬───────────────────────────────┘
+                  │
+                  ▼
+┌─────────────────────────────────────────────────┐
+│ Feature Extraction                              │
+│   WingbeatFeatureExtractor → FeatureVector      │
+│   (dominant frequency, SNR, harmonic ratios)    │
+└─────────────────┬───────────────────────────────┘
+                  │
+                  ▼
+┌─────────────────────────────────────────────────┐
+│ Feature Evaluation                              │
+│   FeatureEvaluationService                      │
+│   FeatureStatistics, FeatureHistogram           │
+└─────────────────┬───────────────────────────────┘
+                  │
+                  ▼
+┌─────────────────────────────────────────────────┐
+│ Feature Ranking                                 │
+│   FeatureRankingService                         │
+│   Discriminative power analysis                 │
+└─────────────────┬───────────────────────────────┘
+                  │
+      ┌───────────┴──────────────┐
+      │                          │
+      ▼                          ▼
+┌──────────────────┐   ┌──────────────────────┐
+│ Synthetic        │   │ Real Recordings      │
+│ Generator        │   │ (HumBugDB)           │
+│ (Simulation)     │   │                      │
+└──────┬───────────┘   └──────┬───────────────┘
+       │                      │
+       └──────────┬───────────┘
+                  ▼
+┌─────────────────────────────────────────────────┐
+│ Synthetic-vs-Real Comparison                    │
+│   FeatureDistributionComparison                 │
+└─────────────────┬───────────────────────────────┘
+                  │
+                  ▼
+┌─────────────────────────────────────────────────┐
+│ Generator Calibration                           │
+│   GeneratorCalibrationService                   │
+│   SyntheticParameterEstimator                   │
+│   (tune generator to match real statistics)     │
+└─────────────────┬───────────────────────────────┘
+                  │
+                  ▼
+┌─────────────────────────────────────────────────┐
+│ Benchmark Framework                             │
+│   ├─ ClassificationAccuracyMetric               │
+│   │   (accuracy, precision/recall, confusion)   │
+│   └─ LocalizationErrorMetric                    │
+│       (position, velocity, tracking continuity) │
+└─────────────────┬───────────────────────────────┘
+                  │
+      ┌───────────┴────────────┐
+      ▼                        ▼
+┌──────────────────┐   ┌──────────────────────┐
+│ Simulation       │   │ Imported Recording   │
+│ Workbench        │   │ Workbench            │
+│ (9 scenarios)    │   │ (HumBugDB analysis)  │
+└──────────────────┘   └──────────────────────┘
+```
+
+### Core pipeline components
+
+**Tracking Pipeline** (real-time localization):
+```text
+AudioBlock (multi-channel)
+  → MultiPeakDetector (FFT + parabolic refinement)
+  → FrequencyClusterer (cross-channel grouping)
+  → TdoaEstimator (GCC-PHAT or cross-correlation)
+  → DelayAndSumBeamformer (2D candidate grid scoring)
+  → SourceTracker (Kalman smoothing + identity persistence)
+  → TrackingSnapshot (immutable per-frame output)
+```
+
+**Classification Pipeline**:
+```text
+Dataset Recording (WAV + metadata)
+  → WingbeatFeatureExtractor
+  → WingbeatFeatureVector
+  → RuleBasedWingbeatClassifier
+  → ClassificationResult
+  → Evaluation Metrics
+```
+
+### Package structure
+
+The experimental module is organized into focused subpackages:
+
+- `tracking` — Real-time source tracking with Kalman filtering and track persistence
+- `simulation` — 2D room acoustics, moving emitters, reflections, Doppler
+- `simulation.calibration` — Generator parameter estimation from real recordings
+- `dataset` — Import, manifest, recording descriptors and audio loading
+- `wingbeat` — Feature extraction, classification, evaluation workflows
+- `feature.evaluation` — Feature statistics, histograms, distribution analysis
+- `feature.ranking` — Discriminative power analysis for classifier development
+- `feature.comparison` — Synthetic vs real feature distribution comparison
+- `benchmark` — Localization and classification metrics, confusion matrices
+- `workbench` — Interactive Swing panels for simulation and dataset analysis
+- `visualization` — 2D room maps, track rendering (UI-independent models)
+- `plugin` — Plugin descriptor and ServiceLoader integration
+
+### Dual workbench architecture
+
+The plugin contributes **two** interactive workbenches to the host application:
+
+**1. Acoustic Localization Workbench (Simulation)**
+
+- Nine deterministic scenarios (single source, moving source, reflections, noise, Doppler, etc.)
+- Configurable pipeline parameters (FFT size, frequency band, TDOA estimator, grid resolution)
+- Live per-frame logs with frequency clusters, track IDs, position, confidence
+- 2D room visualization with microphones, ground truth and tracked positions
+- Markdown/CSV/JSON export for offline analysis
+- Headless runner (`WorkbenchScenarioRunner`) for programmatic use
+
+**2. Imported Recording Workbench (Dataset Analysis)**
+
+- Local offline HumBugDB import (user provides directory path)
+- Recording browser with metadata, labels and durations
+- Per-recording feature extraction and classification
+- Dataset-level evaluation: accuracy, precision/recall, confusion matrix
+- Feature distribution analysis across the corpus
+- No automatic downloads (user must obtain dataset and accept its license)
+
+### Benchmarking capabilities
+
+**Localization metrics** (`LocalizationErrorMetric`, `FrequencyErrorMetric`, `DopplerErrorMetric`):
+- Position error (mean, median, 95th percentile)
+- Velocity error and Doppler accuracy
+- Frequency stability over time
+- Tracking continuity (identity persistence, track switching)
+- Processing latency and real-time budget compliance
+
+**Classification metrics** (`ClassificationAccuracyMetric`):
+- Overall accuracy
+- Per-label precision and recall
+- Confusion matrix (ground truth vs predicted)
+- Feature distribution statistics
+- Baseline vs calibrated generator comparison
+
+### Current implementation status
+
+**Fully implemented:**
+- End-to-end tracking pipeline with multi-peak detection, TDOA, beamforming, Kalman tracking
+- HumBugDB dataset import and manifest generation
+- Feature extraction (`WingbeatFeatureVector` with frequency, SNR, harmonics)
+- Feature evaluation and distribution analysis
+- Feature ranking for discriminative power
+- Synthetic-vs-real comparison infrastructure
+- Generator calibration framework (parameter estimation from real data)
+- Rule-based classification baseline with evaluation metrics
+- Benchmark framework for localization and classification
+- Dual interactive workbenches with export capabilities
+- Nine deterministic simulation scenarios
+- Doppler velocity estimation and reconstruction
+
+**Experimental / partial:**
+- Generator calibration UI integration (infrastructure exists, workbench integration pending)
+- Additional visualization contributions (heatmaps, confidence surfaces)
+
+**Future research directions** (tracked in repository issues):
+- Sub-sample GCC-PHAT peak interpolation
+- Multi-source separation using probabilistic data association
+- 3D geometry and calibrated array file formats
+- Improved reflection models and room impulse responses
+- Expanded benchmark corpus with more real recordings
+- Synchronization and calibration framework for real hardware arrays
+- Advanced localization algorithms beyond baseline GCC-PHAT
+
+See the [Roadmap](ROADMAP.md#experimental-acoustic-localization) for detailed research directions
+and [`docs/plugins/acoustic-localization/README.md`](docs/plugins/acoustic-localization/README.md)
+for comprehensive usage instructions.
+
 ## Split package note: `org.hammer.audio`
 
 `org.hammer.audio` is currently split across `audio-app` and `audio-dsp`: app-owned capture service
