@@ -1,7 +1,13 @@
 # HumBugDB Evaluation Baseline
 
-This document describes how to run the first reproducible classification evaluation using imported
+This document describes how to run reproducible classification evaluation using imported
 HumBugDB recordings.
+
+**Status: Implemented**
+
+The HumBugDB importer, feature extraction, classification baseline and evaluation metrics are
+fully operational and accessible via the **Imported Recording Workbench (experimental)** panel
+or programmatically via `DatasetWingbeatEvaluationWorkflow`.
 
 ## Prerequisites
 
@@ -27,12 +33,14 @@ humbugdb-root/
 
 ### From the Workbench (GUI)
 
-1. Build and launch the application.
-2. Open the **Imported Recording Workbench** panel (usually accessible from the main window tabs).
-3. Click **Browse…** and navigate to your local `humbugdb-root` directory.
-4. Click **Import** to load the dataset.
+**Status: Implemented**
 
-After import, you will see four panels:
+1. Build and launch the application: `./mvnw clean package && java -jar audio-app/target/audio-app-*.jar`
+2. Open **Plugins > Experimental Acoustic Localization > Open: Imported Recording Workbench (experimental)**
+3. Click **Browse…** and navigate to your local `humbugdb-root` directory.
+4. Click **Import** to load the dataset into a `DatasetManifest`.
+
+After import, the workbench displays four panels:
 
 |        Panel         |                                           Content                                           |
 |----------------------|---------------------------------------------------------------------------------------------|
