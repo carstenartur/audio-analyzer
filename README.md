@@ -7,8 +7,10 @@
 [![License](https://img.shields.io/github/license/carstenartur/audio-analyzer)](LICENSE)
 [![SBOM](https://img.shields.io/badge/SBOM-CycloneDX-informational?logo=owasp)](https://github.com/carstenartur/audio-analyzer/dependency-graph/sbom)
 
-**Audio Analyzer** is a Java 21 / Swing **audio and DSP laboratory**. It is useful for
-repeatable signal demos, audio-analysis experiments, UI visualization and plugin research. It is
+**Audio Analyzer** is a Java 21 / Swing **research platform for acoustic analysis and
+localization**. It provides reproducible benchmarking, dataset analysis, feature engineering,
+interactive workbenches and a full experimental acoustic-localization pipeline. It is useful for
+signal analysis research, algorithm development, DSP experiments and UI visualization. It is
 **not** a finished production platform for mosquito tracking.
 
 The root Maven parent is `audioin-parent`; the runnable desktop application is `audio-app`.
@@ -27,9 +29,21 @@ Stable infrastructure today:
 
 Experimental / research-oriented:
 
-- acoustic-localization plugin code for wingbeat/frequency tracking, TDOA/GCC-PHAT, beamforming,
-  Doppler experiments and simulations;
-- plugin UI contributions and localization workflows. These are explicitly not validated as a
+- **Acoustic-localization plugin** for microphone-array experiments: end-to-end tracking pipeline
+  (multi-peak detection, frequency clustering, TDOA, beamforming, Kalman tracking), deterministic
+  room-acoustics simulation with moving sources and reflections, Doppler estimation;
+- **Dataset analysis infrastructure**: HumBugDB dataset import, feature extraction
+  (`WingbeatFeatureVector`), feature evaluation and distribution analysis, feature ranking for
+  classifier development;
+- **Synthetic-vs-real comparison**: feature distribution comparison between synthetic scenarios and
+  real recordings, generator calibration from real datasets, statistical validation;
+- **Benchmark framework**: classification metrics (accuracy, precision/recall, confusion matrices),
+  localization metrics (position/velocity error, frequency stability, tracking continuity);
+- **Dual interactive workbenches**: simulation workbench with nine deterministic scenarios, imported
+  recording workbench for HumBugDB dataset inspection and classification evaluation;
+- **Rule-based classification baseline**: transparent frequency-threshold classifier for reproducible
+  evaluation (not a trained model);
+- Plugin UI contributions and localization workflows. These are explicitly not validated as a
   production mosquito detector.
 
 ## Quickstart

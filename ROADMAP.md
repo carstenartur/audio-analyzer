@@ -32,10 +32,34 @@ current capabilities and are documented under [docs/features/](docs/features/REA
 
 ## Experimental acoustic localization
 
-The `audio-experimental-acoustic` module remains a research plugin, not a production feature. Open
-research work is tracked in the [plugin details](docs/plugins/acoustic-localization/README.md#future-research-directions),
-including multi-source separation, sub-sample GCC-PHAT interpolation, calibrated 3D geometry and a
-benchmark corpus with real and synthetic recordings.
+The `audio-experimental-acoustic` module remains a research plugin, not a production feature.
+
+**Current capabilities (implemented):**
+
+- End-to-end tracking pipeline with multi-peak detection, frequency clustering, TDOA estimation,
+  beamforming and Kalman-based source tracking
+- Interactive simulation workbench with nine deterministic scenarios
+- HumBugDB dataset import (local, offline-first)
+- Rule-based classification baseline with evaluation metrics
+- Feature extraction and distribution analysis
+- Synthetic-vs-real comparison infrastructure
+- Benchmark metrics for localization and classification
+
+**Experimental (partial implementation):**
+
+- Feature ranking and comparison for classifier development
+- Generator calibration for realistic synthetic data
+- Additional visualization contributions to plugin views
+
+**Open research work (future):**
+
+Tracked in repository issues and detailed in [plugin documentation](docs/plugins/acoustic-localization/README.md#future-research-directions):
+
+1. Sub-sample GCC-PHAT peak interpolation for higher localization precision
+2. Multi-source separation using probabilistic data association
+3. 3D geometry and calibrated array file formats
+4. Improved reflection models and measured room impulse responses
+5. Expanded benchmark corpus with more real mosquito recordings
 
 ## Timing and synchronization
 

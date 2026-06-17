@@ -2,17 +2,24 @@
 
 Live demos that can be shown using the `acoustic-localization` plugin loaded into
 `audio-app`. All demos use the deterministic scenarios from
-`SimulationScenarios` so they look the same on every machine and on CI. The UI
-side is the static Swing overview `JPanel` that the plugin contributes via
-`AcousticLocalizationPlugin#viewContributions()` (built by
-`AcousticLocalizationPlugin::createOverviewPanel`); today this panel only
-displays an explanatory text block and does not render live tracker output.
-The immutable `AcousticDebugFrame` record (built from
-`AcousticLocalizationSnapshot`) is the intended consumer model for a richer
-live view, and is what a future demo renderer would read from — wiring it into
-the panel is future work.
+`SimulationScenarios` so they look the same on every machine and on CI.
 
-For each demo we list the scenario, what the operator should highlight on screen
+**Status: Implemented**
+
+The **Acoustic Localization Workbench (experimental)** is fully operational and accessible via
+**Plugins > Experimental Acoustic Localization > Open: Acoustic Localization Workbench
+(experimental)**. It provides:
+
+- Scenario selector dropdown with all nine validation scenarios
+- Configurable pipeline parameters (FFT size, frequency band, TDOA estimator, etc.)
+- Live per-frame log output during runs
+- 2D room map showing microphones (blue), ground truth (green) and tracked positions (red)
+- Post-run Markdown, CSV and JSON-lines export
+
+The workbench UI is implemented by `AcousticLocalizationWorkbenchPanel` and covered by
+`AcousticLocalizationWorkbenchPanelTest` in `audio-experimental-acoustic`.
+
+For each demo below we list the scenario, what the operator should highlight on screen
 and the expected qualitative behaviour. Quantitative pass/fail belongs to
 [`experiments.md`](experiments.md).
 
@@ -29,13 +36,16 @@ tracking from end to end.
 
 - Scenario: `SimulationScenarios.movingSource()`.
 - Source moves left-to-right across the room at 4 m/s.
+- Select this scenario in the workbench dropdown and click **Run**.
 
 ### Visualization
 
-- microphone-array overview panel with the live source position;
-- the per-frame velocity vector reported by `VelocityReconstructor`;
-- the frequency shift between observed and reference frequency, surfaced by the
-  overview panel from the `AcousticDebugFrame` record.
+The workbench displays:
+
+- **Log panel** — per-frame tracking output with position, frequency and processing time
+- **2D room map** — microphones (blue circles), ground truth trajectory (green triangles) and
+  tracked positions (red circles with track IDs)
+- **Post-run export** — Markdown summary, CSV per-frame data, JSON-lines for offline analysis
 
 ### Expected
 
@@ -55,11 +65,15 @@ Show frequency separation and independent tracking of two simultaneous emitters.
 
 - Scenario: `SimulationScenarios.twoMovingSources()` (220 Hz separation, ideal
   for stage demos) or `twoCloseFrequencies()` for the stress variant.
+- Select the scenario in the workbench and click **Run**.
 
 ### Visualization
 
-- two stable `TrackedSource#id` values, each rendered with its own color trail;
-- two distinct cluster frequencies in the frequency panel.
+The workbench displays:
+
+- **Two distinct track IDs** in the log output, each with its own frequency
+- **Two separate trails** on the 2D room map (red circles labeled with track IDs)
+- **Frequency clusters** showing two distinct peaks
 
 ### Expected
 
@@ -78,12 +92,15 @@ conditions.
 ### Setup
 
 - Scenario: `SimulationScenarios.reflectedEnvironment()`.
+- Select the scenario in the workbench and click **Run**.
 
 ### Visualization
 
-- beamforming heatmap from `DelayAndSumBeamformer` showing secondary lobes
-  caused by the reflected path;
-- the resulting jitter on the tracked position.
+The workbench displays:
+
+- **Log output** showing position estimates with some jitter compared to anechoic scenarios
+- **2D room map** with the tracked position occasionally offset from ground truth due to
+  multipath interference
 
 ### Expected
 
@@ -102,13 +119,16 @@ Show graceful degradation as the noise floor approaches the source amplitude.
 ### Setup
 
 - Scenario: `SimulationScenarios.noisyRoom()` as the starting point.
-- For an interactive demo, the operator can wrap the scenario factory and sweep
-  `Room2D.noiseAmplitude` over {0.0, 0.05, 0.10, 0.20}.
+- For an interactive demo, modify the scenario to sweep noise levels.
+- Select the scenario in the workbench and click **Run**.
 
 ### Visualization
 
-- the multi-peak spectrum panel filling with spurious peaks as noise rises;
-- the tracked-source confidence indicator (frequency variance) growing.
+The workbench displays:
+
+- **Log output** showing degrading confidence as noise increases
+- **Frequency peaks** becoming less stable with higher noise
+- **Track drops** when the signal-to-noise ratio falls below detection threshold
 
 ### Expected
 
