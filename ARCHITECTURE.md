@@ -342,6 +342,7 @@ integrating dataset analysis, feature engineering, synthetic data generation and
 ### Core pipeline components
 
 **Tracking Pipeline** (real-time localization):
+
 ```text
 AudioBlock (multi-channel)
   → MultiPeakDetector (FFT + parabolic refinement)
@@ -353,6 +354,7 @@ AudioBlock (multi-channel)
 ```
 
 **Classification Pipeline**:
+
 ```text
 Dataset Recording (WAV + metadata)
   → WingbeatFeatureExtractor
