@@ -10,20 +10,25 @@ that maps research concepts (TDOA, Doppler fusion, frequency tracking) onto the
 classes, simulation scenarios and tests that already live in the repository, so the
 documentation stays grounded in code that compiles and is exercised by tests.
 
+**Status:** These documents describe both implemented features (tracking pipeline, workbench,
+simulation scenarios, evaluation metrics) and exploratory future work (predictive tracking,
+event-driven sensing). Each document clearly marks which sections are operational code vs research
+proposals.
+
 ## Contents
 
-|                                  Document                                  |                                                             Purpose                                                             |
-|----------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------|
-| [`paper-outline.md`](paper-outline.md)                                     | Sections of a publishable description of the system, with cross-references to existing modules and tests.                       |
-| [`experiments.md`](experiments.md)                                         | Reproducible evaluation scenarios, each mapped to a `SimulationScenarios` entry in the `audio-experimental-acoustic` module.    |
-| [`evaluation-metrics.md`](evaluation-metrics.md)                           | Definitions of the metrics used by tests and demos, aligned with `TrackingSnapshot` / `AcousticLocalizationSnapshot`.           |
-| [`demo-scenarios.md`](demo-scenarios.md)                                   | Demos that can be shown live using the Swing plugin and `AcousticDebugFrame`.                                                   |
-| [`predictive-tracking.md`](predictive-tracking.md)                         | Exploratory notes on future-position estimation, latency compensation and confidence-aware prediction.                          |
-| [`event-driven-sensing.md`](event-driven-sensing.md)                       | Generic architecture sketch for using the tracker as a trigger source for an external capture system.                           |
-| [`research-questions.md`](research-questions.md)                           | Open research questions guiding future experiments.                                                                             |
-| [`physics-limitations.md`](physics-limitations.md)                         | Physical and engineering bounds that constrain every claim in this folder.                                                      |
-| [`hardware/microphone-array-setup.md`](hardware/microphone-array-setup.md) | Practical setup notes for real microphone rigs, complementing the simulator.                                                    |
-| [`simulation-datasets/README.md`](simulation-datasets/README.md)           | JSON scenario descriptors with ground truth, derived from `SimulationScenarios`, for benchmark scripts and external evaluation. |
+|                                  Document                                  |                                                             Purpose                                                             |                      Status                      |
+|----------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------|
+| [`paper-outline.md`](paper-outline.md)                                     | Sections of a publishable description of the system, with cross-references to existing modules and tests.                       | Working outline, references implemented code     |
+| [`experiments.md`](experiments.md)                                         | Reproducible evaluation scenarios, each mapped to a `SimulationScenarios` entry in the `audio-experimental-acoustic` module.    | Describes implemented scenarios                  |
+| [`evaluation-metrics.md`](evaluation-metrics.md)                           | Definitions of the metrics used by tests and demos, aligned with `TrackingSnapshot` / `AcousticLocalizationSnapshot`.           | Implemented metrics documented                   |
+| [`demo-scenarios.md`](demo-scenarios.md)                                   | Demos that can be shown live using the Swing plugin and `AcousticDebugFrame`.                                                   | Describes operational workbench features         |
+| [`predictive-tracking.md`](predictive-tracking.md)                         | Exploratory notes on future-position estimation, latency compensation and confidence-aware prediction.                          | **Future work** — not implemented                |
+| [`event-driven-sensing.md`](event-driven-sensing.md)                       | Generic architecture sketch for using the tracker as a trigger source for an external capture system.                           | **Future work** — architectural proposal only    |
+| [`research-questions.md`](research-questions.md)                           | Open research questions guiding future experiments.                                                                             | Future work                                      |
+| [`physics-limitations.md`](physics-limitations.md)                         | Physical and engineering bounds that constrain every claim in this folder.                                                      | Informational — applies to all implementations   |
+| [`hardware/microphone-array-setup.md`](hardware/microphone-array-setup.md) | Practical setup notes for real microphone rigs, complementing the simulator.                                                    | Guidance for real-world experiments              |
+| [`simulation-datasets/README.md`](simulation-datasets/README.md)           | JSON scenario descriptors with ground truth, derived from `SimulationScenarios`, for benchmark scripts and external evaluation. | Generated from implemented scenarios             |
 
 ## Related documents
 
