@@ -116,32 +116,131 @@ For imported recordings, see `HumBugDbImporter`, `DatasetWingbeatEvaluationWorkf
 ## Pipeline overview
 
 ```text
-MultiChannelAudioSource
-  -> AudioBlock
-  -> WingbeatFrequencyTracker
-  -> TDOA estimator (cross-correlation or GCC-PHAT)
-  -> DelayAndSumBeamformer
-  -> AcousticLocalizationSnapshot
-  -> AcousticDebugFrame / renderer
+AudioBlock (multi-channel synchronized frame)
+  → MultiPeakDetector (FFT + parabolic refinement per channel)
+  → FrequencyClusterer (group peaks across channels)
+  → TdoaEstimator (GCC-PHAT or cross-correlation, all microphone pairs)
+  → DelayAndSumBeamformer (2D candidate grid scoring)
+  → SourceTracker (Kalman smoothing + identity persistence)
+  → TrackingSnapshot (immutable per-frame output)
 ```
 
-Implemented today:
+**Implemented:**
 
-- stable acquisition metadata (`Microphone`, `MicrophoneArray`, `MultiChannelAudioSource`,
-  `SampleClock`);
-- experimental frequency tracking over a configurable band;
-- experimental cross-correlation and frequency-domain GCC-PHAT TDOA estimators;
-- configurable `MosquitoLocalizationPipeline` pairing all microphone pairs by default, with an
-  explicit reference-channel mode for calibrated experiments;
-- delay-and-sum beamforming over a caller-supplied candidate grid;
-- deterministic simulation with moving emitters, multiple emitters, reflections and noise;
-- architecture boundary tests that prevent stable packages from importing experimental code.
+- Multi-peak frequency detection with parabolic refinement;
+- Cross-channel frequency clustering with Hz and cents tolerance;
+- GCC-PHAT and cross-correlation TDOA estimators;
+- Delay-and-sum beamforming over configurable 2D grids;
+- Kalman-based source tracking with identity persistence and confidence decay;
+- Doppler radial-velocity estimation and multi-sensor velocity reconstruction;
+- Real-time budget tracking via `FrameSchedule` and `ProcessingBudget`;
+- Deterministic simulation with moving emitters, reflections and noise;
+- HumBugDB dataset import and classification evaluation;
+- Benchmark infrastructure with localization and classification metrics.
 
-Still experimental:
+**Experimental:**
 
-- insect/species identification, robust multi-insect tracking and real-world calibration workflows;
-- sub-sample delay estimation, probabilistic data association and room impulse-response modelling;
-- additional plugin-contributed heatmap/confidence visualizations.
+- Feature ranking and comparison for classifier development;
+- Synthetic-vs-real signal distribution comparison;
+- Generator calibration for realistic synthetic data;
+- Additional heatmap/confidence visualizations in plugin views.
+
+**Future work:**
+
+- Sub-sample TDOA peak interpolation;
+- Probabilistic multi-target data association;
+- 3D geometry and multi-story arrays;
+- Room impulse-response modeling;
+- Trained species classifier.
+
+---
+
+## HumBugDB dataset import
+
+The `HumBugDbImporter` provides local offline-first import of the HumBugDB mosquito dataset:
+
+**How it works:**
+
+1. User provides an absolute path to a local HumBugDB export directory
+2. Importer reads metadata CSVs (`data/metadata/*.csv`) and resolves WAV file paths
+3. Creates a normalized `DatasetManifest` with recordings, labels and annotations
+4. Labels include species, gender, fed status, age when available
+5. Manifest can be used for classification evaluation and feature analysis
+
+**No automatic downloads.** Users must obtain HumBugDB from the upstream project and accept its
+license terms before using it. See [Real-world dataset strategy](datasets.md) for details.
+
+**Workbench integration:**
+
+The **Imported Recording Workbench (experimental)** provides:
+
+- Import UI with directory browser
+- Recording list with metadata and labels
+- Per-recording feature extraction and classification
+- Dataset-level evaluation with accuracy, precision/recall and confusion matrices
+- Feature distribution analysis across the dataset
+
+See [HumBugDB Evaluation Baseline](evaluation-baseline.md) for usage instructions and output format.
+
+---
+
+## Classification and benchmarking
+
+The plugin includes baseline classification and evaluation infrastructure:
+
+**RuleBasedWingbeatClassifier:**
+
+- Transparent rule-based classifier using fixed frequency thresholds from published literature
+- Not a trained model — intended as a reproducible baseline
+- Classifies recordings as: `female-likely`, `male-likely`, `possibly-blood-fed-female`,
+  `mosquito-like`, `unknown`
+- Based on dominant wingbeat frequency and harmonic analysis
+
+**Evaluation metrics:**
+
+- Overall accuracy
+- Per-label precision and recall
+- Confusion matrix (ground-truth vs predicted)
+- Feature distribution statistics (dominant frequency, SNR, harmonic ratios)
+
+**Localization metrics:**
+
+- Position error (mean, median, 95th percentile)
+- Velocity error
+- Frequency stability (variance over time)
+- Tracking continuity (identity persistence, track switching frequency)
+- Processing latency and real-time budget compliance
+
+See [Evaluation metrics](research/evaluation-metrics.md) for detailed definitions.
+
+---
+
+## Synthetic vs real comparison
+
+**Experimental**: The plugin supports comparing feature distributions between synthetic scenarios
+and real imported recordings:
+
+- Run `SimulationScenarios` to generate synthetic data
+- Import real recordings via `HumBugDbImporter`
+- Use `DatasetWingbeatEvaluationWorkflow` to extract features from both
+- Compare distribution statistics to validate synthetic realism
+
+Higher standard deviation in real recordings vs synthetic indicates natural variation not yet
+captured by the simulator. This workflow guides generator calibration.
+
+---
+
+## Generator calibration
+
+**Experimental**: The `simulation.calibration` package provides utilities for:
+
+- Calibrating synthetic emitter parameters to match real recording statistics
+- Tuning noise levels, reflection gains and frequency distributions
+- Validating synthetic data realism against imported datasets
+
+This is future work for improving synthetic training data quality.
+
+---
 
 ## Practical microphone setup
 

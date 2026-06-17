@@ -27,9 +27,11 @@ Stable infrastructure today:
 
 Experimental / research-oriented:
 
-- acoustic-localization plugin code for wingbeat/frequency tracking, TDOA/GCC-PHAT, beamforming,
-  Doppler experiments and simulations;
-- plugin UI contributions and localization workflows. These are explicitly not validated as a
+- **Acoustic-localization plugin** for microphone-array experiments: end-to-end tracking pipeline
+  (multi-peak detection, frequency clustering, TDOA, beamforming, Kalman tracking), deterministic
+  room-acoustics simulation, HumBugDB dataset import and baseline classification evaluation;
+- **Interactive workbenches** for running simulation scenarios and inspecting real recordings;
+- Plugin UI contributions and localization workflows. These are explicitly not validated as a
   production mosquito detector.
 
 ## Quickstart
