@@ -4,6 +4,11 @@ This document describes the real-time multi-source tracking pipeline shipped wit
 `acoustic-localization` plugin. The pipeline turns the plugin from a collection of
 DSP experiments into a coherent acoustic-tracking research platform.
 
+**Status: Implemented and validated**
+
+The pipeline is operational, deterministic and covered by `TrackingPipelineScenarioTest` and
+`SourceTrackerTest` in `audio-experimental-acoustic`.
+
 ## Stages
 
 ```
@@ -76,7 +81,14 @@ catalogue of deterministic, reproducible experiments:
 - `twoCloseFrequencies()` — two stationary sources at distinct positions, ~40 Hz apart;
 - `noisyRoom()` — single source with broadband background noise;
 - `movingSource()` — one source travelling across the room with constant velocity;
-- `reflectedEnvironment()` — single source with strong wall reflections.
+- `movingTowardArray()` — source approaching the array (Doppler validation);
+- `movingAcrossArray()` — source moving laterally across the array;
+- `twoMovingSources()` — two tones with distinct velocities;
+- `reflectedEnvironment()` — single source with strong wall reflections;
+- `twoMosquitoWingbeats()` — two deterministic wingbeat emitters at close frequencies.
+
+**All scenarios are executable** via the Acoustic Localization Workbench (experimental) GUI or
+programmatically via `WorkbenchScenarioRunner`.
 
 `TrackingPipelineScenarioTest` exercises the full pipeline against each scenario and asserts
 the structural guarantees of the platform (deterministic snapshots, identity persistence,

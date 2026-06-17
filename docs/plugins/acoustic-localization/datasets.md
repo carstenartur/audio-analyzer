@@ -1,6 +1,6 @@
 # Acoustic mosquito datasets strategy
 
-This document defines how real-world wingbeat datasets should be integrated into
+This document defines how real-world wingbeat datasets are integrated into
 `audio-experimental-acoustic` without committing large files to Git.
 
 It complements:
@@ -64,9 +64,12 @@ The initial schema is represented in code by:
 
 ## HumBugDB importer implementation
 
-The first concrete importer is now `org.hammer.audio.experimental.acoustic.dataset.HumBugDbImporter`.
+**Status: Implemented**
 
-Behavior:
+The `org.hammer.audio.experimental.acoustic.dataset.HumBugDbImporter` provides local offline-first
+import of HumBugDB mosquito wingbeat datasets.
+
+**Behavior:**
 
 1. Reads one user-provided local root path only; nothing is downloaded automatically.
 2. Looks for metadata CSV files under `data/metadata/*.csv` (matching the upstream HumBugDB export
@@ -78,19 +81,43 @@ Behavior:
 6. Creates explicit `DatasetAnnotation` spans when timing columns exist; otherwise it creates a
    whole-clip annotation from the available clip label.
 
+**Workbench integration:**
+
+The **Imported Recording Workbench (experimental)** panel provides a GUI for:
+
+- Browsing to a local HumBugDB directory
+- Importing the dataset into a `DatasetManifest`
+- Inspecting individual recordings with metadata and labels
+- Running feature extraction and classification on selected clips
+- Viewing dataset-level evaluation metrics and confusion matrices
+
+See [HumBugDB Evaluation Baseline](evaluation-baseline.md) for usage instructions.
+
 ## Benchmark integration path
 
-After local import is available, benchmark flow should be:
+**Status: Implemented**
 
-1. Real dataset import -> `DatasetManifest`
-2. Feature extraction pipeline -> `WingbeatFeatureVector`
-3. Classification/evaluation -> `WingbeatDataset` and benchmark reports
-4. Synthetic-vs-real comparison report combining:
-   - deterministic simulation scenarios,
-   - real imported datasets,
-   - consistent metrics from benchmark package
+The benchmark flow is fully operational:
 
-This keeps #143, #144 and #137 aligned without forcing large or restricted datasets into Git.
+1. **Import** → `DatasetImporter.importFrom(localPath)` → `DatasetManifest`
+2. **Feature extraction** → `DatasetWingbeatEvaluationWorkflow` → `WingbeatFeatureVector` per
+   recording
+3. **Classification** → `RuleBasedWingbeatClassifier.classify(features)` → predicted labels
+4. **Evaluation** → `WingbeatDataset.evaluate(classifier)` → accuracy, precision/recall, confusion
+   matrix
+5. **Reporting** → `DatasetWingbeatEvaluationWorkflow.toMarkdownReport(evaluation)` → Markdown
+   tables
+
+**Synthetic-vs-real comparison:**
+
+Combine deterministic simulation scenarios with real imported datasets:
+
+- Synthetic: `SimulationScenarios` → feature extraction → distribution statistics
+- Real: `DatasetManifest` → feature extraction → distribution statistics
+- Compare: mean/std-dev of dominant frequency, SNR, harmonic ratios
+
+This workflow supports #143 (classification), #144 (synthetic-vs-real) and #137 (benchmarking)
+without forcing large or restricted datasets into Git.
 
 ## End-to-end local workflow
 
