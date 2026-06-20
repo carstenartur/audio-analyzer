@@ -20,6 +20,7 @@ Zentrale Ziele:
 
 2. Zielarchitektur
 
+```text
 Browser
 React / React Flow
 Yjs Collaborative Document
@@ -53,6 +54,7 @@ Classification
 Localization
 Benchmarking
 Reporting
+```
 
 3. Grundprinzip
 
@@ -69,14 +71,15 @@ Workflow
 Ein Workflow beschreibt ein reproduzierbares Experiment oder eine Analysepipeline.
 
 Workflow
-id
-name
-version
-nodes
-edges
-metadata
-layout
-executionSettings
+
+- id
+- name
+- version
+- nodes
+- edges
+- metadata
+- layout
+- executionSettings
 
 Node
 
@@ -95,26 +98,28 @@ Beispiele:
 * Report
 
 Node
-id
-type
-label
-position
-inputPorts
-outputPorts
-properties
-executionState
+
+- id
+- type
+- label
+- position
+- inputPorts
+- outputPorts
+- properties
+- executionState
 
 Port
 
 Ports sind typisiert.
 
 Port
-id
-name
-direction
-dataType
-required
-multiplicity
+
+- id
+- name
+- direction
+- dataType
+- required
+- multiplicity
 
 Beispiele für Typen:
 
@@ -133,11 +138,12 @@ Edge
 Eine Edge verbindet zwei kompatible Ports.
 
 Edge
-id
-sourceNodeId
-sourcePortId
-targetNodeId
-targetPortId
+
+- id
+- sourceNodeId
+- sourcePortId
+- targetNodeId
+- targetPortId
 
 5. Typsystem
 
@@ -293,14 +299,14 @@ JSON ist als Austauschformat geeignet, aber nicht als naives großes workflow.js
 
 Empfohlen:
 
-workflow/
-workflow.json
-nodes/
-<node-id>.json
-edges/
-<edge-id>.json
-metadata.json
-layout.json
+- workflow/
+  - workflow.json
+- nodes/
+  - \<node-id\>.json
+- edges/
+  - \<edge-id\>.json
+- metadata.json
+- layout.json
 
 Vorteile:
 
@@ -317,15 +323,12 @@ Der Merge soll nicht zeilenbasiert gedacht werden.
 
 Stattdessen:
 
-Base Workflow
-Branch A Workflow
-Branch B Workflow
-↓
-Workflow Model Diff
-↓
-Semantic Merge
-↓
-Merged Workflow / Conflict Report
+- Base Workflow
+- Branch A Workflow
+- Branch B Workflow
+- ↓ Workflow Model Diff
+- ↓ Semantic Merge
+- ↓ Merged Workflow / Conflict Report
 
 Konflikte sollen fachlich angezeigt werden:
 
@@ -338,17 +341,12 @@ Node renamed differently
 
 Ein Workflow wird immer aus einem stabilen Snapshot ausgeführt.
 
-Current Collaborative State
-↓
-Execution Snapshot
-↓
-Validation
-↓
-Execution Plan
-↓
-Execution
-↓
-Results
+- Current Collaborative State
+- ↓ Execution Snapshot
+- ↓ Validation
+- ↓ Execution Plan
+- ↓ Execution
+- ↓ Results
 
 Während der Workflow läuft, können Nutzer weiter editieren. Die laufende Ausführung bezieht sich aber auf den Snapshot.
 
@@ -433,12 +431,9 @@ Sie sollte mittelfristig nicht weiter ausgebaut werden.
 
 Ziel:
 
-Swing GUI
-uses Workflow Service
-Web GUI
-uses Workflow Service
-CLI
-uses Workflow Service
+- Swing GUI → uses Workflow Service
+- Web GUI → uses Workflow Service
+- CLI → uses Workflow Service
 
 Keine neue Funktion sollte ausschließlich in Swing entstehen.
 
@@ -651,7 +646,8 @@ Recommended order:
 10. Execution from web
 11. Result overlays
 12. Acoustic node library
-    22\. Architectural decision
+
+22\. Architectural decision
 
 The browser UI is the future primary GUI.
 
