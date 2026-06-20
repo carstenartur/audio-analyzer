@@ -21,38 +21,38 @@ Zentrale Ziele:
 2. Zielarchitektur
 
 Browser
-  React / React Flow
-  Yjs Collaborative Document
-  Presence / Cursors / Selection
-        │
-        ▼
+React / React Flow
+Yjs Collaborative Document
+Presence / Cursors / Selection
+      │
+      ▼
 Collaboration Gateway
-  WebSocket
-  Awareness
-  Persistence Adapter
-        │
-        ▼
+WebSocket
+Awareness
+Persistence Adapter
+      │
+      ▼
 Workflow Service
-  Validation
-  Type Checking
-  Execution Planning
-  Snapshot Export
-        │
-        ├──────────────► JGit Repository
-        │                   Branches
-        │                   Commits
-        │                   Model Merge
-        │                   History
-        │
-        ▼
+Validation
+Type Checking
+Execution Planning
+Snapshot Export
+      │
+      ├──────────────► JGit Repository
+      │                   Branches
+      │                   Commits
+      │                   Model Merge
+      │                   History
+      │
+      ▼
 Execution Engine
-  Audio Analyzer Core
-  Dataset Import
-  Feature Extraction
-  Classification
-  Localization
-  Benchmarking
-  Reporting
+Audio Analyzer Core
+Dataset Import
+Feature Extraction
+Classification
+Localization
+Benchmarking
+Reporting
 
 3. Grundprinzip
 
@@ -669,7 +669,7 @@ The long-term product is a collaborative, browser-based workflow platform with a
 * Should comments be versioned or only collaborative UI state?
 * Should layout be versioned together with semantics?
 * Should unresolved merge conflicts be represented as first-class workflow objects?
-* Can Taxonomy’s model-merge logic be extracted into a shared library?
+* Can Taxonomy's model-merge logic be extracted into a shared library?
 
 24. First milestone
 
