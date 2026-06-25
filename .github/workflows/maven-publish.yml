@@ -129,13 +129,17 @@ jobs:
               raise SystemExit(f'.zenodo.json version {actual!r} does not match {expected!r}')
           PY
 
-      - name: Check release tag does not exist
+      - name: Check release tag and release do not exist
         shell: bash
         run: |
           set -euo pipefail
           git fetch --tags --force
           if git rev-parse "v${{ inputs.release_version }}" >/dev/null 2>&1; then
             echo "::error::Tag v${{ inputs.release_version }} already exists"
+            exit 1
+          fi
+          if gh release view "v${{ inputs.release_version }}" >/dev/null 2>&1; then
+            echo "::error::GitHub release v${{ inputs.release_version }} already exists"
             exit 1
           fi
 
@@ -292,15 +296,55 @@ jobs:
             -exec cp {} target/release-artifacts/ \;
           ls -la target/release-artifacts
 
-      - name: Push release commit and tag
+      - name: Push release commit to protected branch
         if: ${{ !inputs.dry_run }}
         shell: bash
         run: |
           set -euo pipefail
           RELEASE_COMMIT=$(git rev-parse HEAD)
-          git tag -a "v${{ inputs.release_version }}" -m "Release version ${{ inputs.release_version }}" "$RELEASE_COMMIT"
-          git push origin "HEAD:${{ github.ref_name }}"
-          git push origin "v${{ inputs.release_version }}"
+          TEMP_BRANCH="release-temp-${{ inputs.release_version }}-${{ github.run_id }}"
+          TEMP_PUSHED=false
+
+          cleanup() {
+            if [[ "$TEMP_PUSHED" == "true" ]]; then
+              git push origin ":refs/heads/${TEMP_BRANCH}" || true
+            fi
+          }
+          trap cleanup EXIT
+
+          git push origin ":refs/heads/${TEMP_BRANCH}" || true
+          git push origin "HEAD:refs/heads/${TEMP_BRANCH}"
+          TEMP_PUSHED=true
+
+          gh api "repos/${{ github.repository }}/git/refs/heads/${{ github.ref_name }}" \
+            --method PATCH \
+            -f sha="$RELEASE_COMMIT" \
+            -F force=false
+
+          echo "Fast-forwarded ${{ github.ref_name }} to $RELEASE_COMMIT"
+
+      - name: Create and push Git tag
+        if: ${{ !inputs.dry_run }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          RELEASE_COMMIT=$(git rev-parse HEAD)
+          TAG_NAME="v${{ inputs.release_version }}"
+
+          TAG_SHA=$(gh api "repos/${{ github.repository }}/git/tags" \
+            --method POST \
+            -f tag="$TAG_NAME" \
+            -f message="Release version ${{ inputs.release_version }}" \
+            -f object="$RELEASE_COMMIT" \
+            -f type="commit" \
+            --jq '.sha')
+
+          gh api "repos/${{ github.repository }}/git/refs" \
+            --method POST \
+            -f ref="refs/tags/${TAG_NAME}" \
+            -f sha="$TAG_SHA"
+
+          echo "Created annotated tag ${TAG_NAME} for $RELEASE_COMMIT"
 
       - name: Create GitHub release
         if: ${{ !inputs.dry_run }}
@@ -402,7 +446,7 @@ jobs:
           set -euo pipefail
           NEXT_VERSION='${{ needs.preflight.outputs.next_development_version }}'
           NEXT_BRANCH="release/prepare-next-${NEXT_VERSION}"
-          git checkout -b "$NEXT_BRANCH"
+          git checkout -B "$NEXT_BRANCH"
           git add pom.xml */pom.xml CITATION.cff .zenodo.json
           git commit -m "Prepare next development version ${NEXT_VERSION}"
 
