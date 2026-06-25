@@ -5,6 +5,7 @@ type: software
 authors:
   - family-names: "Hammer"
     given-names: "Carsten"
+    orcid: "https://orcid.org/0009-0005-1047-6381"
 repository-code: "https://github.com/carstenartur/audio-analyzer"
 url: "https://github.com/carstenartur/audio-analyzer"
 abstract: >-
