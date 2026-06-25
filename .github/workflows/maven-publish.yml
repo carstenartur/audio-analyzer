@@ -74,7 +74,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
           RELEASE_VERSION='${{ inputs.release_version }}'
           if ! [[ "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "::error::release_version must use semantic version format X.Y.Z without leading v"
@@ -83,7 +82,6 @@ jobs:
 
           CURRENT_VERSION=$(./mvnw -q -DforceStdout help:evaluate -Dexpression=project.version)
           echo "current_version=$CURRENT_VERSION" >> "$GITHUB_OUTPUT"
-
           if [[ "$CURRENT_VERSION" != *-SNAPSHOT ]]; then
             echo "::error::Current Maven version must be a SNAPSHOT version, but was $CURRENT_VERSION"
             exit 1
@@ -101,12 +99,10 @@ jobs:
             IFS='.' read -r MAJOR MINOR PATCH <<< "$RELEASE_VERSION"
             NEXT_VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))-SNAPSHOT"
           fi
-
           if ! [[ "$NEXT_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+-SNAPSHOT$ ]]; then
             echo "::error::next_development_version must use X.Y.Z-SNAPSHOT"
             exit 1
           fi
-
           echo "next_development_version=$NEXT_VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Verify repository metadata matches current development version
@@ -129,17 +125,23 @@ jobs:
               raise SystemExit(f'.zenodo.json version {actual!r} does not match {expected!r}')
           PY
 
-      - name: Check release tag and release do not exist
+      - name: Check release refs do not exist
         shell: bash
         run: |
           set -euo pipefail
+          TAG_NAME="v${{ inputs.release_version }}"
+          RELEASE_BRANCH="release/${TAG_NAME}"
           git fetch --tags --force
-          if git rev-parse "v${{ inputs.release_version }}" >/dev/null 2>&1; then
-            echo "::error::Tag v${{ inputs.release_version }} already exists"
+          if git rev-parse "$TAG_NAME" >/dev/null 2>&1; then
+            echo "::error::Tag ${TAG_NAME} already exists"
             exit 1
           fi
-          if gh release view "v${{ inputs.release_version }}" >/dev/null 2>&1; then
-            echo "::error::GitHub release v${{ inputs.release_version }} already exists"
+          if gh release view "$TAG_NAME" >/dev/null 2>&1; then
+            echo "::error::GitHub release ${TAG_NAME} already exists"
+            exit 1
+          fi
+          if git ls-remote --exit-code --heads origin "$RELEASE_BRANCH" >/dev/null 2>&1; then
+            echo "::error::Release branch ${RELEASE_BRANCH} already exists"
             exit 1
           fi
 
@@ -202,7 +204,6 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           from __future__ import annotations
-
           import datetime
           import json
           import os
@@ -260,7 +261,6 @@ jobs:
           expected = os.environ['EXPECTED_VERSION']
           with open('.zenodo.json', encoding='utf-8') as fh:
               data = json.load(fh)
-
           if data.get('version') != expected:
               raise SystemExit(f'.zenodo.json version {data.get("version")!r} does not match {expected!r}')
           if not data.get('publication_date'):
@@ -296,40 +296,16 @@ jobs:
             -exec cp {} target/release-artifacts/ \;
           ls -la target/release-artifacts
 
-      - name: Push release commit to protected branch
-        if: ${{ !inputs.dry_run }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          RELEASE_COMMIT=$(git rev-parse HEAD)
-          TEMP_BRANCH="release-temp-${{ inputs.release_version }}-${{ github.run_id }}"
-          TEMP_PUSHED=false
-
-          cleanup() {
-            if [[ "$TEMP_PUSHED" == "true" ]]; then
-              git push origin ":refs/heads/${TEMP_BRANCH}" || true
-            fi
-          }
-          trap cleanup EXIT
-
-          git push origin ":refs/heads/${TEMP_BRANCH}" || true
-          git push origin "HEAD:refs/heads/${TEMP_BRANCH}"
-          TEMP_PUSHED=true
-
-          gh api "repos/${{ github.repository }}/git/refs/heads/${{ github.ref_name }}" \
-            --method PATCH \
-            -f sha="$RELEASE_COMMIT" \
-            -F force=false
-
-          echo "Fast-forwarded ${{ github.ref_name }} to $RELEASE_COMMIT"
-
-      - name: Create and push Git tag
+      - name: Push release branch and tag
         if: ${{ !inputs.dry_run }}
         shell: bash
         run: |
           set -euo pipefail
           RELEASE_COMMIT=$(git rev-parse HEAD)
           TAG_NAME="v${{ inputs.release_version }}"
+          RELEASE_BRANCH="release/${TAG_NAME}"
+
+          git push origin "HEAD:refs/heads/${RELEASE_BRANCH}"
 
           TAG_SHA=$(gh api "repos/${{ github.repository }}/git/tags" \
             --method POST \
@@ -344,7 +320,7 @@ jobs:
             -f ref="refs/tags/${TAG_NAME}" \
             -f sha="$TAG_SHA"
 
-          echo "Created annotated tag ${TAG_NAME} for $RELEASE_COMMIT"
+          echo "Created ${RELEASE_BRANCH} and annotated tag ${TAG_NAME} for ${RELEASE_COMMIT}"
 
       - name: Create GitHub release
         if: ${{ !inputs.dry_run }}
@@ -354,10 +330,12 @@ jobs:
           mapfile -d '' ARTIFACTS < <(find target/release-artifacts -type f -print0)
           if [[ ${#ARTIFACTS[@]} -eq 0 ]]; then
             gh release create "v${{ inputs.release_version }}" \
+              --target "v${{ inputs.release_version }}" \
               --title "Audio Analyzer ${{ inputs.release_version }}" \
               --generate-notes
           else
             gh release create "v${{ inputs.release_version }}" \
+              --target "v${{ inputs.release_version }}" \
               --title "Audio Analyzer ${{ inputs.release_version }}" \
               --generate-notes \
               "${ARTIFACTS[@]}"
@@ -375,7 +353,6 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           from __future__ import annotations
-
           import datetime
           import json
           import os
@@ -433,7 +410,6 @@ jobs:
           expected = os.environ['EXPECTED_VERSION']
           with open('.zenodo.json', encoding='utf-8') as fh:
               data = json.load(fh)
-
           if data.get('version') != expected:
               raise SystemExit(f'.zenodo.json version {data.get("version")!r} does not match {expected!r}')
           if 'publication_date' in data:
