@@ -137,3 +137,4 @@ java.util.logging.ConsoleHandler.formatter=java.util.logging.SimpleFormatter
 ```
 
 > Avoid enabling `FINE` in production; it generates substantial output during real-time capture.
+
