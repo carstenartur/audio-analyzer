@@ -55,10 +55,10 @@ Requires **Java 21** or higher. The Maven Wrapper is included.
 ./mvnw clean verify
 
 # Run the Swing app after package/verify
-java -jar audio-app/target/audio-app-0.0.1-SNAPSHOT.jar
+java -jar audio-app/target/audio-app-0.0.2-SNAPSHOT.jar
 
 # Regenerate README + feature screenshots headlessly
-java -cp "audio-app/target/audio-app-0.0.1-SNAPSHOT.jar:audio-app/target/lib/*" \
+java -cp "audio-app/target/audio-app-0.0.2-SNAPSHOT.jar:audio-app/target/lib/*" \
   org.hammer.tools.DocImageRenderer docs/images
 
 # Optional JMH benchmarks
