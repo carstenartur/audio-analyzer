@@ -6,6 +6,7 @@
 [![CodeQL](https://github.com/carstenartur/audio-analyzer/actions/workflows/codeql.yml/badge.svg?branch=master)](https://github.com/carstenartur/audio-analyzer/actions/workflows/codeql.yml)
 [![License](https://img.shields.io/github/license/carstenartur/audio-analyzer)](LICENSE)
 [![SBOM](https://img.shields.io/badge/SBOM-CycloneDX-informational?logo=owasp)](https://github.com/carstenartur/audio-analyzer/dependency-graph/sbom)
+[![DOI](https://zenodo.org/badge/7397122.svg)](https://zenodo.org/badge/latestdoi/7397122)
 
 **Audio Analyzer** is a Java 21 / Swing **research platform for acoustic analysis and
 localization**. It provides reproducible benchmarking, dataset analysis, feature engineering,
