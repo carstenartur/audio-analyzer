@@ -1,7 +1,7 @@
 {
   "title": "Audio Analyzer",
   "upload_type": "software",
-  "description": "Audio Analyzer is a Java 21 research platform for reproducible acoustic analysis, digital signal processing experiments, dataset analysis, benchmarking and experimental acoustic localization workflows.",
+  "description": "Audio Analyzer is a Java 21 research platform for reproducible acoustic analysis, digital signal processing experiments, dataset analysis, benchmarking and experimental acoustic localization workflows. It provides a modular Maven architecture with core audio-domain types, DSP analyzers, recording and evidence export, plugin contracts, and an experimental acoustic-localization module for microphone-array research.",
   "creators": [
     {
       "name": "Hammer, Carsten",
