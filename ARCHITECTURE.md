@@ -114,6 +114,8 @@ Boundary rules:
 | `org.hammer.audio.core`                  | `audio-core`                  | Immutable audio-domain models: `AudioBlock`, `AudioFormatDescriptor`                                                                                |
 | `org.hammer.audio.buffer`                | `audio-core`                  | `AudioRingBuffer<T>` — bounded lock-free SPSC ring buffer                                                                                           |
 | `org.hammer.audio.snapshot`              | `audio-core`                  | UI-friendly immutable snapshots: `WaveformSnapshot`, `PhaseScopeSnapshot`                                                                           |
+| `org.hammer.audio.workflow`              | `audio-core`                  | Immutable workflow domain model: `Workflow`, `Node`, `Port`, `Edge`, `Metadata`; `WorkflowValidator`                                                |
+| `org.hammer.audio.workflow.execution`    | `audio-core`                  | Execution model: `ExecutionSnapshot`, `ExecutionPlan`, `ExecutionContext`, `ExecutionResult`, `ExecutionStatus`                                     |
 | `org.hammer.audio.geometry`              | `audio-geometry`              | Reusable 2D positions, rays and localization constraints                                                                                            |
 | `org.hammer.audio.acquisition`           | `audio-acquisition`           | API-neutral synchronized multichannel source, microphone metadata and sample clock APIs                                                             |
 | `org.hammer.audio.capture`               | `audio-dsp`                   | Sample decoding utilities (`SampleDecoder`)                                                                                                         |
@@ -200,6 +202,44 @@ For backwards compatibility the capture worker still builds a legacy `WaveformMo
 `WaveformRenderer` so existing Swing panels keep working without changes; new consumers should
 prefer `getRingBuffer()` / `getLatestBlock()` and call `WaveformRenderer` themselves at the UI
 layer.
+
+### 8. Workflow / execution separation
+
+The workflow model (`org.hammer.audio.workflow`) describes *what* should be executed — it is
+immutable and framework-independent. Execution-specific state lives exclusively in
+`org.hammer.audio.workflow.execution` and is never mixed into the workflow model:
+
+```
+Workflow (immutable, design-time)
+  │
+  └─ ExecutionSnapshot.of(snapshotId, workflow, now)
+       │  freezes node/edge lists at a point in time
+       ▼
+     ExecutionSnapshot (immutable)
+       │
+       └─ ExecutionPlan.of(planId, snapshot)
+            │  derives topological node order (Kahn's algorithm)
+            ▼
+          ExecutionPlan (immutable, ordered node IDs)
+            │
+            └─ new ExecutionContext(executionId, plan, startedAt)
+                 │  tracks per-node status (IDLE → QUEUED → RUNNING → terminal)
+                 ▼
+               ExecutionContext (mutable runtime state)
+                 │
+                 └─ context.toResult(completedAt)
+                      ▼
+                    ExecutionResult (immutable, per-node terminal statuses)
+```
+
+This separation enables:
+
+- **Reproducible execution** — any number of independent executions can reference the same
+  `ExecutionSnapshot`.
+- **Concurrent editing** — users may continue editing the `Workflow` while a prior snapshot is
+  being executed; the two are completely decoupled.
+- **Simpler testing** — the workflow model is testable without any execution machinery.
+- **Framework independence** — no UI, persistence or scheduling framework leaks into the domain.
 
 ## Capture lifecycle
 
