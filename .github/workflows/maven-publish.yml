@@ -71,4 +71,7 @@ jobs:
           DRY_RUN: ${{ inputs.dry_run }}
           SOURCE_BRANCH: ${{ github.ref_name }}
           METADATA_HELPER: ${{ runner.temp }}/update-release-metadata.py
-        run: "$RUNNER_TEMP/release.sh"
+        run: |
+          git config user.name 'Audio Analyzer Release'
+          git config user.email '3164220+carstenartur@users.noreply.github.com'
+          "$RUNNER_TEMP/release.sh"
