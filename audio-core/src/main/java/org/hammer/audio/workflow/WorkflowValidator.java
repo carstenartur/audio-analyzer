@@ -3,6 +3,7 @@ package org.hammer.audio.workflow;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 
 /** Structural workflow validation for the pure domain model. */
@@ -11,6 +12,7 @@ public final class WorkflowValidator {
   private static final String EDGE_PREFIX = "Edge ";
 
   public List<String> validate(Workflow workflow) {
+    Objects.requireNonNull(workflow, "workflow");
     Set<String> nodeIds = new LinkedHashSet<>();
     Set<String> edgeIds = new LinkedHashSet<>();
     List<String> violations = new ArrayList<>();
@@ -19,8 +21,11 @@ public final class WorkflowValidator {
       if (!nodeIds.add(node.id())) {
         violations.add("Duplicate node id: " + node.id());
       }
-      validatePorts(node, node.inputPorts(), PortDirection.INPUT, "inputPorts", violations);
-      validatePorts(node, node.outputPorts(), PortDirection.OUTPUT, "outputPorts", violations);
+      Set<String> portIds = new LinkedHashSet<>();
+      validatePorts(
+          node, node.inputPorts(), PortDirection.INPUT, "inputPorts", portIds, violations);
+      validatePorts(
+          node, node.outputPorts(), PortDirection.OUTPUT, "outputPorts", portIds, violations);
     }
 
     for (Edge edge : workflow.edges()) {
@@ -42,8 +47,8 @@ public final class WorkflowValidator {
       List<Port> ports,
       PortDirection expectedDirection,
       String collectionName,
+      Set<String> portIds,
       List<String> violations) {
-    Set<String> portIds = new LinkedHashSet<>();
     for (Port port : ports) {
       if (port.direction() != expectedDirection) {
         violations.add(

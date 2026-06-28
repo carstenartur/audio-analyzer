@@ -1,6 +1,7 @@
 package org.hammer.audio.workflow;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
@@ -114,5 +115,47 @@ class WorkflowValidatorTest {
             "Duplicate edge id: edge.shared",
             "Edge edge.shared references missing source node node.missing"),
         violations);
+  }
+
+  @Test
+  void reportsDuplicatePortIdsAcrossPortCollections() {
+    Workflow workflow =
+        new Workflow(
+            "workflow.duplicate-port",
+            "Duplicate Port Workflow",
+            List.of(
+                new Node(
+                    "node.shared-port",
+                    "transform",
+                    "Transform",
+                    List.of(
+                        new Port(
+                            "port.shared",
+                            "input",
+                            PortDirection.INPUT,
+                            "Dataset",
+                            true,
+                            PortMultiplicity.SINGLE)),
+                    List.of(
+                        new Port(
+                            "port.shared",
+                            "output",
+                            PortDirection.OUTPUT,
+                            "Dataset",
+                            true,
+                            PortMultiplicity.SINGLE)))),
+            List.of());
+
+    assertEquals(
+        List.of("Node node.shared-port has duplicate port id: port.shared"),
+        validator.validate(workflow));
+  }
+
+  @Test
+  void rejectsNullWorkflow() {
+    NullPointerException exception =
+        assertThrows(NullPointerException.class, () -> validator.validate(null));
+
+    assertEquals("workflow", exception.getMessage());
   }
 }

@@ -14,6 +14,9 @@ public record Metadata(Map<String, String> entries) {
 
   public Metadata {
     Objects.requireNonNull(entries, "entries");
+    for (String key : entries.keySet()) {
+      StableIds.requireStable(key, "metadata key");
+    }
     entries = Map.copyOf(entries);
   }
 
