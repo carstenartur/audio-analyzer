@@ -25,14 +25,8 @@ public record ExecutionResult(
     Instant completedAt) {
 
   public ExecutionResult {
-    Objects.requireNonNull(executionId, "executionId");
-    if (executionId.isBlank()) {
-      throw new IllegalArgumentException("executionId must not be blank");
-    }
-    Objects.requireNonNull(planId, "planId");
-    if (planId.isBlank()) {
-      throw new IllegalArgumentException("planId must not be blank");
-    }
+    StableExecutionIds.requireStable(executionId, "executionId");
+    StableExecutionIds.requireStable(planId, "planId");
     Objects.requireNonNull(nodeStatuses, "nodeStatuses");
     Objects.requireNonNull(startedAt, "startedAt");
     Objects.requireNonNull(completedAt, "completedAt");

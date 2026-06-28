@@ -1,8 +1,8 @@
 package org.hammer.audio.workflow.execution;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.LinkedList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -25,14 +25,8 @@ import org.hammer.audio.workflow.Node;
 public record ExecutionPlan(String planId, String snapshotId, List<String> orderedNodeIds) {
 
   public ExecutionPlan {
-    Objects.requireNonNull(planId, "planId");
-    if (planId.isBlank()) {
-      throw new IllegalArgumentException("planId must not be blank");
-    }
-    Objects.requireNonNull(snapshotId, "snapshotId");
-    if (snapshotId.isBlank()) {
-      throw new IllegalArgumentException("snapshotId must not be blank");
-    }
+    StableExecutionIds.requireStable(planId, "planId");
+    StableExecutionIds.requireStable(snapshotId, "snapshotId");
     Objects.requireNonNull(orderedNodeIds, "orderedNodeIds");
     orderedNodeIds = List.copyOf(orderedNodeIds);
   }
@@ -54,8 +48,8 @@ public record ExecutionPlan(String planId, String snapshotId, List<String> order
   }
 
   private static List<String> topologicalSort(List<Node> nodes, List<Edge> edges) {
-    Map<String, Integer> inDegree = new HashMap<>();
-    Map<String, List<String>> successors = new HashMap<>();
+    Map<String, Integer> inDegree = new LinkedHashMap<>();
+    Map<String, List<String>> successors = new LinkedHashMap<>();
 
     for (Node node : nodes) {
       inDegree.put(node.id(), 0);
@@ -63,13 +57,17 @@ public record ExecutionPlan(String planId, String snapshotId, List<String> order
     }
 
     for (Edge edge : edges) {
+      if (!inDegree.containsKey(edge.sourceNodeId())) {
+        throw new IllegalArgumentException("Edge source node is not part of the snapshot: " + edge);
+      }
+      if (!inDegree.containsKey(edge.targetNodeId())) {
+        throw new IllegalArgumentException("Edge target node is not part of the snapshot: " + edge);
+      }
       inDegree.merge(edge.targetNodeId(), 1, Integer::sum);
-      successors
-          .computeIfAbsent(edge.sourceNodeId(), k -> new ArrayList<>())
-          .add(edge.targetNodeId());
+      successors.get(edge.sourceNodeId()).add(edge.targetNodeId());
     }
 
-    Queue<String> ready = new LinkedList<>();
+    Queue<String> ready = new ArrayDeque<>();
     for (Map.Entry<String, Integer> entry : inDegree.entrySet()) {
       if (entry.getValue() == 0) {
         ready.add(entry.getKey());

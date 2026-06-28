@@ -124,4 +124,21 @@ class ExecutionSnapshotTest {
     Workflow workflow = buildWorkflow();
     assertThrows(IllegalArgumentException.class, () -> ExecutionSnapshot.of("  ", workflow, NOW));
   }
+
+  @Test
+  void rejectsInvalidSnapshotIdFormat() {
+    Workflow workflow = buildWorkflow();
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> ExecutionSnapshot.of("snapshot with spaces", workflow, NOW));
+  }
+
+  @Test
+  void rejectsInvalidWorkflowIdFormat() {
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            new ExecutionSnapshot(
+                "snap.1", "workflow invalid", List.of(), List.of(), Metadata.empty(), NOW));
+  }
 }

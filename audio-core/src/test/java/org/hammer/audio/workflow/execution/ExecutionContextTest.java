@@ -135,6 +135,17 @@ class ExecutionContextTest {
   }
 
   @Test
+  void toResultRejectsIncompleteExecution() {
+    ExecutionPlan plan = buildTwoNodePlan();
+    ExecutionContext context = new ExecutionContext("exec.incomplete", plan, START);
+
+    context.updateNodeStatus("node.source", ExecutionStatus.COMPLETED);
+    context.updateNodeStatus("node.sink", ExecutionStatus.RUNNING);
+
+    assertThrows(IllegalStateException.class, () -> context.toResult(END));
+  }
+
+  @Test
   void rejectsUnknownNodeOnStatusRead() {
     ExecutionPlan plan = buildTwoNodePlan();
     ExecutionContext context = new ExecutionContext("exec.8", plan, START);
@@ -155,7 +166,14 @@ class ExecutionContextTest {
   @Test
   void rejectsNullExecutionId() {
     ExecutionPlan plan = buildTwoNodePlan();
-    assertThrows(NullPointerException.class, () -> new ExecutionContext(null, plan, START));
+    assertThrows(IllegalArgumentException.class, () -> new ExecutionContext(null, plan, START));
+  }
+
+  @Test
+  void rejectsInvalidExecutionIdFormat() {
+    ExecutionPlan plan = buildTwoNodePlan();
+    assertThrows(
+        IllegalArgumentException.class, () -> new ExecutionContext("exec invalid", plan, START));
   }
 
   @Test

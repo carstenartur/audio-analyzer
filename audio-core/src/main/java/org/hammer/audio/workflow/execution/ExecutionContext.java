@@ -40,10 +40,7 @@ public final class ExecutionContext {
    * @param startedAt instant at which execution started
    */
   public ExecutionContext(String executionId, ExecutionPlan plan, Instant startedAt) {
-    Objects.requireNonNull(executionId, "executionId");
-    if (executionId.isBlank()) {
-      throw new IllegalArgumentException("executionId must not be blank");
-    }
+    StableExecutionIds.requireStable(executionId, "executionId");
     this.executionId = executionId;
     this.plan = Objects.requireNonNull(plan, "plan");
     this.startedAt = Objects.requireNonNull(startedAt, "startedAt");
@@ -115,6 +112,10 @@ public final class ExecutionContext {
    */
   public ExecutionResult toResult(Instant completedAt) {
     Objects.requireNonNull(completedAt, "completedAt");
+    if (!isComplete()) {
+      throw new IllegalStateException(
+          "Execution is not complete and cannot be converted to result");
+    }
     return new ExecutionResult(
         executionId, plan.planId(), Map.copyOf(nodeStatuses), startedAt, completedAt);
   }

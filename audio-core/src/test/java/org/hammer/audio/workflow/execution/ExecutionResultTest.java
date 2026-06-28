@@ -96,10 +96,23 @@ class ExecutionResultTest {
   @Test
   void rejectsNullPlanId() {
     assertThrows(
-        NullPointerException.class,
+        IllegalArgumentException.class,
         () ->
             new ExecutionResult(
                 "exec.7", null, Map.of("node.a", ExecutionStatus.COMPLETED), STARTED, COMPLETED));
+  }
+
+  @Test
+  void rejectsInvalidPlanIdFormat() {
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            new ExecutionResult(
+                "exec.7",
+                "plan invalid",
+                Map.of("node.a", ExecutionStatus.COMPLETED),
+                STARTED,
+                COMPLETED));
   }
 
   @Test

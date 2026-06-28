@@ -30,14 +30,8 @@ public record ExecutionSnapshot(
     Instant createdAt) {
 
   public ExecutionSnapshot {
-    Objects.requireNonNull(snapshotId, "snapshotId");
-    if (snapshotId.isBlank()) {
-      throw new IllegalArgumentException("snapshotId must not be blank");
-    }
-    Objects.requireNonNull(workflowId, "workflowId");
-    if (workflowId.isBlank()) {
-      throw new IllegalArgumentException("workflowId must not be blank");
-    }
+    StableExecutionIds.requireStable(snapshotId, "snapshotId");
+    StableExecutionIds.requireStable(workflowId, "workflowId");
     Objects.requireNonNull(nodes, "nodes");
     Objects.requireNonNull(edges, "edges");
     Objects.requireNonNull(createdAt, "createdAt");

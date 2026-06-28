@@ -88,6 +88,21 @@ class ExecutionPlanTest {
   }
 
   @Test
+  void preservesSnapshotNodeOrderWhenMultipleNodesAreReady() {
+    Workflow workflow =
+        new Workflow(
+            "workflow.ready-order",
+            "Ready Order Workflow",
+            List.of(sinkNode(), sourceNode(), transformNode()),
+            List.of());
+
+    ExecutionSnapshot snapshot = ExecutionSnapshot.of("snap.order", workflow, NOW);
+    ExecutionPlan plan = ExecutionPlan.of("plan.order", snapshot);
+
+    assertEquals(List.of("node.sink", "node.source", "node.transform"), plan.orderedNodeIds());
+  }
+
+  @Test
   void recordsSnapshotId() {
     Workflow workflow = new Workflow("workflow.id", "ID Test", List.of(sourceNode()), List.of());
 
@@ -151,10 +166,33 @@ class ExecutionPlanTest {
   }
 
   @Test
+  void rejectsEdgesThatReferenceUnknownNodes() {
+    ExecutionSnapshot invalidSnapshot =
+        new ExecutionSnapshot(
+            "snap.invalid-edge",
+            "workflow.invalid-edge",
+            List.of(sourceNode()),
+            List.of(new Edge("edge.invalid", "node.source", "out", "node.missing", "in")),
+            null,
+            NOW);
+
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> ExecutionPlan.of("plan.invalid-edge", invalidSnapshot));
+  }
+
+  @Test
   void rejectsNullPlanId() {
     Workflow workflow = new Workflow("workflow.np", "NP", List.of(sourceNode()), List.of());
     ExecutionSnapshot snapshot = ExecutionSnapshot.of("snap.np", workflow, NOW);
     assertThrows(NullPointerException.class, () -> ExecutionPlan.of(null, snapshot));
+  }
+
+  @Test
+  void rejectsInvalidPlanIdFormat() {
+    Workflow workflow = new Workflow("workflow.ip", "IP", List.of(sourceNode()), List.of());
+    ExecutionSnapshot snapshot = ExecutionSnapshot.of("snap.ip", workflow, NOW);
+    assertThrows(IllegalArgumentException.class, () -> ExecutionPlan.of("plan invalid", snapshot));
   }
 
   @Test
