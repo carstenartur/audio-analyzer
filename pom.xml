@@ -38,6 +38,7 @@
     <junit.version>6.1.0</junit.version>
     <mockito.version>5.23.0</mockito.version>
     <flatlaf.version>3.7.1</flatlaf.version>
+    <jackson.version>2.22.0</jackson.version>
 
     <maven-compiler-plugin.version>3.15.0</maven-compiler-plugin.version>
     <maven-jar-plugin.version>3.5.0</maven-jar-plugin.version>
@@ -63,6 +64,11 @@
         <version>${junit.version}</version>
         <type>pom</type>
         <scope>import</scope>
+      </dependency>
+      <dependency>
+        <groupId>com.fasterxml.jackson.core</groupId>
+        <artifactId>jackson-databind</artifactId>
+        <version>${jackson.version}</version>
       </dependency>
       <dependency>
         <groupId>${project.groupId}</groupId>
