@@ -4,7 +4,7 @@
   <parent>
     <groupId>audioin</groupId>
     <artifactId>audioin-parent</artifactId>
-    <version>0.0.2-SNAPSHOT</version>
+    <version>0.0.3-SNAPSHOT</version>
   </parent>
   <artifactId>audio-acquisition</artifactId>
   <name>Audio Analyzer Acquisition</name>
