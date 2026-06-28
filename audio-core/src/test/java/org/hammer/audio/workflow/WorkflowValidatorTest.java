@@ -160,7 +160,7 @@ class WorkflowValidatorTest {
             List.of(
                 new Node(
                     "node.dataset",
-                    "source",
+                    "dataset-source",
                     "Dataset Source",
                     List.of(),
                     List.of(
@@ -173,7 +173,7 @@ class WorkflowValidatorTest {
                             PortMultiplicity.SINGLE))),
                 new Node(
                     "node.report",
-                    "sink",
+                    "report-sink",
                     "Report Sink",
                     List.of(
                         new Port(
@@ -202,7 +202,7 @@ class WorkflowValidatorTest {
             List.of(
                 new Node(
                     "node.source",
-                    "source",
+                    "custom-source",
                     "Source",
                     List.of(),
                     List.of(
@@ -215,7 +215,7 @@ class WorkflowValidatorTest {
                             PortMultiplicity.SINGLE))),
                 new Node(
                     "node.sink",
-                    "sink",
+                    "custom-sink",
                     "Sink",
                     List.of(
                         new Port(

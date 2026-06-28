@@ -13,11 +13,11 @@ public final class TypeRegistry {
   private TypeRegistry(
       Map<String, DataType> types, Map<String, Set<String>> compatibilityBySource) {
     this.types = Map.copyOf(types);
-    Map<String, Set<String>> immutableCompatibility = new ConcurrentHashMap<>();
+    Map<String, Set<String>> compatibilityCopy = new ConcurrentHashMap<>();
     compatibilityBySource.forEach(
         (sourceType, compatibleTargets) ->
-            immutableCompatibility.put(sourceType, Set.copyOf(compatibleTargets)));
-    this.compatibilityBySource = Map.copyOf(immutableCompatibility);
+            compatibilityCopy.put(sourceType, Set.copyOf(compatibleTargets)));
+    this.compatibilityBySource = Map.copyOf(compatibilityCopy);
   }
 
   public static TypeRegistry defaultRegistry() {
