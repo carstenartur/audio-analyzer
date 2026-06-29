@@ -1,0 +1,48 @@
+{
+  "@context": "https://doi.org/10.5063/schema/codemeta-2.0",
+  "@type": "SoftwareSourceCode",
+  "name": "Audio Analyzer",
+  "description": "Audio Analyzer is a Java 21 research platform for reproducible acoustic analysis, digital signal processing experiments, dataset analysis, benchmarking and experimental acoustic localization workflows.",
+  "codeRepository": "https://github.com/carstenartur/audio-analyzer",
+  "issueTracker": "https://github.com/carstenartur/audio-analyzer/issues",
+  "license": "https://spdx.org/licenses/MIT",
+  "version": "0.0.3-SNAPSHOT",
+  "programmingLanguage": [
+    "Java",
+    "Shell",
+    "Python"
+  ],
+  "runtimePlatform": "Java 21, Maven",
+  "applicationCategory": "Audio Analysis, Digital Signal Processing, Research Software",
+  "keywords": [
+    "audio analysis",
+    "digital signal processing",
+    "acoustic localization",
+    "FFT",
+    "spectrogram",
+    "bioacoustics",
+    "microphone array",
+    "dataset analysis",
+    "benchmarking",
+    "Java"
+  ],
+  "author": {
+    "@type": "Person",
+    "@id": "https://orcid.org/0009-0005-1047-6381",
+    "givenName": "Carsten",
+    "familyName": "Hammer",
+    "url": "https://github.com/carstenartur"
+  },
+  "maintainer": {
+    "@type": "Person",
+    "@id": "https://orcid.org/0009-0005-1047-6381",
+    "givenName": "Carsten",
+    "familyName": "Hammer",
+    "url": "https://github.com/carstenartur"
+  },
+  "developmentStatus": "active",
+  "softwareRequirements": [
+    "Java 21+",
+    "Maven"
+  ]
+}
