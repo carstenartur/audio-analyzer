@@ -50,22 +50,58 @@ verify_metadata() {
   local maven_version
   maven_version=$(./mvnw -q -DforceStdout help:evaluate -Dexpression=project.version)
   test "$maven_version" = "$expected"
-  grep -q "^version: \"${expected}\"$" CITATION.cff
+
   EXPECTED_VERSION="$expected" RELEASE_MODE="$release_mode" python3 - <<'PY'
 import json
 import os
+import re
+from pathlib import Path
+
+expected = os.environ['EXPECTED_VERSION']
+release_mode = os.environ['RELEASE_MODE'] == 'true'
+
+citation = Path('CITATION.cff').read_text(encoding='utf-8')
+version_match = re.search(r'^version: "([^"]+)"$', citation, flags=re.MULTILINE)
+if not version_match or version_match.group(1) != expected:
+    raise SystemExit(f'CITATION.cff version does not match {expected!r}')
+has_date_released = bool(re.search(r'^date-released: ', citation, flags=re.MULTILINE))
+if release_mode and not has_date_released:
+    raise SystemExit('CITATION.cff date-released is missing')
+if not release_mode and has_date_released:
+    raise SystemExit('CITATION.cff still contains date-released for a development snapshot')
+
+citation_md = Path('CITATION.md').read_text(encoding='utf-8')
+preferred = re.search(r'Audio Analyzer\*\*\. Version ([^.]+(?:\.[^.]+){1,2}(?:-SNAPSHOT)?)\.', citation_md)
+bibtex = re.search(r'^\s*version\s+= \{([^}]+)\},$', citation_md, flags=re.MULTILINE)
+if not preferred or preferred.group(1) != expected:
+    raise SystemExit(f'CITATION.md preferred citation version does not match {expected!r}')
+if not bibtex or bibtex.group(1) != expected:
+    raise SystemExit(f'CITATION.md BibTeX version does not match {expected!r}')
+has_bibtex_date = bool(re.search(r'^\s*date\s+= \{[^}]+\},$', citation_md, flags=re.MULTILINE))
+if release_mode and not has_bibtex_date:
+    raise SystemExit('CITATION.md BibTeX release date is missing')
+if not release_mode and has_bibtex_date:
+    raise SystemExit('CITATION.md still contains a BibTeX release date for a development snapshot')
 
 with open('.zenodo.json', encoding='utf-8') as handle:
-    data = json.load(handle)
-expected = os.environ['EXPECTED_VERSION']
-if data.get('version') != expected:
-    raise SystemExit(f'.zenodo.json version {data.get("version")!r} != {expected!r}')
-if os.environ['RELEASE_MODE'] == 'true':
-    if not data.get('publication_date'):
-        raise SystemExit('.zenodo.json publication_date is missing')
-else:
-    if 'publication_date' in data:
-        raise SystemExit('.zenodo.json still contains publication_date')
+    zenodo = json.load(handle)
+if zenodo.get('version') != expected:
+    raise SystemExit(f'.zenodo.json version {zenodo.get("version")!r} != {expected!r}')
+has_publication_date = 'publication_date' in zenodo
+if release_mode and not has_publication_date:
+    raise SystemExit('.zenodo.json publication_date is missing')
+if not release_mode and has_publication_date:
+    raise SystemExit('.zenodo.json still contains publication_date')
+
+with open('codemeta.json', encoding='utf-8') as handle:
+    codemeta = json.load(handle)
+if codemeta.get('version') != expected:
+    raise SystemExit(f'codemeta.json version {codemeta.get("version")!r} != {expected!r}')
+has_date_published = 'datePublished' in codemeta
+if release_mode and not has_date_published:
+    raise SystemExit('codemeta.json datePublished is missing')
+if not release_mode and has_date_published:
+    raise SystemExit('codemeta.json still contains datePublished for a development snapshot')
 PY
 }
 
@@ -119,7 +155,7 @@ if [[ "$STATE" == "new" ]]; then
   ./mvnw -B versions:set -DnewVersion="$RELEASE_VERSION" -DgenerateBackupPoms=false
   python3 "$METADATA_HELPER" "$RELEASE_VERSION" --release
   verify_metadata "$RELEASE_VERSION" true
-  git add pom.xml */pom.xml CITATION.cff .zenodo.json
+  git add pom.xml */pom.xml CITATION.cff CITATION.md .zenodo.json codemeta.json
   git commit -m "Release version $RELEASE_VERSION"
 else
   git checkout --detach "$TAG_NAME"
@@ -185,7 +221,7 @@ verify_metadata "$NEXT_VERSION" false
 
 NEXT_BRANCH="release/prepare-next-${NEXT_VERSION}"
 git switch -C "$NEXT_BRANCH"
-git add pom.xml */pom.xml CITATION.cff .zenodo.json
+git add pom.xml */pom.xml CITATION.cff CITATION.md .zenodo.json codemeta.json
 git commit -m "Prepare next development version $NEXT_VERSION"
 
 if [[ "$DRY_RUN" != "true" ]]; then
@@ -204,7 +240,9 @@ Automated follow-up after release ${RELEASE_VERSION}.
 ## Changes
 - Bump all Maven modules to ${NEXT_VERSION}
 - Update CITATION.cff to ${NEXT_VERSION}
+- Update CITATION.md to ${NEXT_VERSION}
 - Update .zenodo.json to ${NEXT_VERSION}
+- Update codemeta.json to ${NEXT_VERSION}
 - Remove release-only date metadata from the development snapshot
 EOF
 

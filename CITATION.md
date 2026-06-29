@@ -30,3 +30,4 @@ Carsten Hammer's ORCID iD is https://orcid.org/0009-0005-1047-6381.
 - Cite the Zenodo DOI for stable archival reference once available.
 - Cite the GitHub repository when referring to the active development version.
 - Cite specific commits or release tags when reproducibility depends on the exact implementation state.
+
