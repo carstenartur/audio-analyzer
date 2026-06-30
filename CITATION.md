@@ -13,6 +13,7 @@ When a Zenodo DOI is minted for a release, prefer the Zenodo citation shown on t
 ```bibtex
 @software{hammer_audio_analyzer_2026,
   author       = {Hammer, Carsten},
+  orcid        = {https://orcid.org/0009-0005-1047-6381},
   title        = {Audio Analyzer},
   version      = {0.0.3-SNAPSHOT},
   publisher    = {GitHub and Zenodo},
@@ -23,7 +24,7 @@ When a Zenodo DOI is minted for a release, prefer the Zenodo citation shown on t
 
 ## Author identifier
 
-Carsten Hammer's ORCID iD is https://orcid.org/0009-0005-1047-6381.
+Carsten Hammer's ORCID iD is [https://orcid.org/0009-0005-1047-6381](https://orcid.org/0009-0005-1047-6381).
 
 ## What to cite
 
