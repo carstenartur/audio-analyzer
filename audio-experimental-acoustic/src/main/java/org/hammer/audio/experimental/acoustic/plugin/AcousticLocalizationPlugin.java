@@ -151,8 +151,7 @@ public final class AcousticLocalizationPlugin implements AudioAnalyzerPlugin {
         pipeline(
             "mosquito-localization",
             "Mosquito Localization Pipeline",
-            "Full end-to-end pipeline: peak detection, frequency clustering, TDOA, beamforming,"
-                + " Kalman tracking.",
+            "End-to-end: peak detection, frequency clustering, TDOA, beamforming, Kalman tracking.",
             "peak-detection, frequency-clustering, TDOA, delay-and-sum, Kalman-tracking"),
         pipeline(
             "wingbeat-classification",
@@ -207,8 +206,7 @@ public final class AcousticLocalizationPlugin implements AudioAnalyzerPlugin {
         calibration(
             "generator-calibration",
             "Generator Calibration",
-            "Tunes synthetic-signal generator parameters to match real HumBugDB recording"
-                + " statistics.",
+            "Tunes generator parameters to match real HumBugDB recording statistics.",
             "generator"),
         calibration(
             "feature-normalization",
@@ -223,8 +221,7 @@ public final class AcousticLocalizationPlugin implements AudioAnalyzerPlugin {
         benchmark(
             "localization-position-error",
             "Localization Position Error",
-            "Mean / median / 95th-percentile Euclidean error between estimated and ground-truth"
-                + " positions.",
+            "Mean / median / 95th-percentile Euclidean position error against ground truth.",
             "metres"),
         benchmark(
             "doppler-velocity-error",

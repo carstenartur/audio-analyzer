@@ -7,7 +7,7 @@ package org.hammer.audio.plugin;
  * generator to match observed real-world data (e.g. tuning synthetic-signal parameters from a
  * real-recording corpus, compensating microphone sensitivities, or normalizing feature
  * distributions). Plugins expose calibration contributions through this interface so the host can
- * list, persist and replay them without depending on the concrete calibration domain.
+ * enumerate, persist and replay them without depending on the concrete calibration domain.
  *
  * <p>This is a pure metadata/identity interface.
  */
