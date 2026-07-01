@@ -653,7 +653,13 @@ public sealed interface WorkflowOperation
     public Optional<WorkflowOperation> inverseOperation() {
       return Optional.of(
           new UngroupNodes(
-              operationId + UNDO_SUFFIX, timestamp, author, groupId, nodeIds, previousGroupIds));
+              operationId + UNDO_SUFFIX,
+              timestamp,
+              author,
+              groupId,
+              groupLabel,
+              nodeIds,
+              previousGroupIds));
     }
 
     @Override
@@ -690,6 +696,7 @@ public sealed interface WorkflowOperation
    * @param timestamp operation timestamp
    * @param author operation author
    * @param groupId group id being removed
+   * @param groupLabel group label to preserve for undo
    * @param nodeIds node ids to ungroup
    * @param previousGroupIds previous group id per node
    */
@@ -698,6 +705,7 @@ public sealed interface WorkflowOperation
       Instant timestamp,
       String author,
       String groupId,
+      String groupLabel,
       List<String> nodeIds,
       Map<String, String> previousGroupIds)
       implements WorkflowOperation {
@@ -708,6 +716,9 @@ public sealed interface WorkflowOperation
     public UngroupNodes {
       requireOperationMetadata(operationId, timestamp, author, "UngroupNodes");
       StableIds.requireStable(groupId, "UngroupNodes.groupId");
+      if (groupLabel == null || groupLabel.isBlank()) {
+        throw new IllegalArgumentException("UngroupNodes.groupLabel must not be blank");
+      }
       Objects.requireNonNull(nodeIds, "nodeIds");
       if (nodeIds.isEmpty()) {
         throw new IllegalArgumentException("UngroupNodes.nodeIds must not be empty");
@@ -728,7 +739,13 @@ public sealed interface WorkflowOperation
 
     @Override
     public Map<String, String> payload() {
-      return Map.of("groupId", groupId, "nodeCount", String.valueOf(nodeIds.size()));
+      return Map.of(
+          "groupId",
+          groupId,
+          "groupLabel",
+          groupLabel,
+          "nodeCount",
+          String.valueOf(nodeIds.size()));
     }
 
     @Override
@@ -739,7 +756,7 @@ public sealed interface WorkflowOperation
               timestamp,
               author,
               groupId,
-              groupId,
+              groupLabel,
               nodeIds,
               previousGroupIds));
     }

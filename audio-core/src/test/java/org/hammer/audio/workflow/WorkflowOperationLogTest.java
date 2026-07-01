@@ -81,6 +81,7 @@ class WorkflowOperationLogTest {
                 NOW.plusSeconds(6),
                 "alice",
                 "group.processing",
+                "Processing",
                 List.of("node.dataset", "node.analyze"),
                 nullableGroupMap("node.dataset", null, "node.analyze", null)),
             new WorkflowOperation.DisconnectPorts(
