@@ -241,6 +241,31 @@ This separation enables:
 - **Simpler testing** — the workflow model is testable without any execution machinery.
 - **Framework independence** — no UI, persistence or scheduling framework leaks into the domain.
 
+### 9. Semantic workflow operations
+
+Workflow edits are represented as explicit semantic operations in
+`org.hammer.audio.workflow.WorkflowOperation` and executed through
+`org.hammer.audio.workflow.WorkflowOperationLog`.
+
+Supported operations are:
+
+- `CreateNode`
+- `DeleteNode`
+- `MoveNode`
+- `RenameNode`
+- `ConnectPorts`
+- `DisconnectPorts`
+- `UpdateProperty`
+- `GroupNodes`
+- `UngroupNodes`
+
+Each operation carries a stable operation id, timestamp, author, affected object ids, payload and
+an inverse operation (when undo is possible). This keeps workflow changes deterministic and
+enables operation logging, replay and undo without direct object mutation.
+
+The same operation contract can later be reused for collaboration, semantic merge and Taxonomy or
+other graph-based applications without coupling to a specific UI toolkit.
+
 ## Capture lifecycle
 
 ```
