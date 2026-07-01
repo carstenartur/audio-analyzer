@@ -8,7 +8,7 @@ import java.util.Objects;
  * @param id stable port identifier
  * @param name human-readable port name
  * @param direction direction of data flow
- * @param dataType workflow-level data type identifier
+ * @param dataType workflow-level data type
  * @param required whether the port must be connected
  * @param multiplicity whether the port accepts one or many connections
  * @param metadata extensible metadata for visualization or persistence adapters
@@ -17,7 +17,7 @@ public record Port(
     String id,
     String name,
     PortDirection direction,
-    String dataType,
+    DataType dataType,
     boolean required,
     PortMultiplicity multiplicity,
     Metadata metadata) {
@@ -28,11 +28,19 @@ public record Port(
       throw new IllegalArgumentException("name must not be blank");
     }
     Objects.requireNonNull(direction, "direction");
-    if (dataType == null || dataType.isBlank()) {
-      throw new IllegalArgumentException("dataType must not be blank");
-    }
+    Objects.requireNonNull(dataType, "dataType");
     Objects.requireNonNull(multiplicity, "multiplicity");
     metadata = metadata == null ? Metadata.empty() : metadata;
+  }
+
+  public Port(
+      String id,
+      String name,
+      PortDirection direction,
+      DataType dataType,
+      boolean required,
+      PortMultiplicity multiplicity) {
+    this(id, name, direction, dataType, required, multiplicity, Metadata.empty());
   }
 
   public Port(
@@ -42,6 +50,17 @@ public record Port(
       String dataType,
       boolean required,
       PortMultiplicity multiplicity) {
-    this(id, name, direction, dataType, required, multiplicity, Metadata.empty());
+    this(id, name, direction, new DataType(dataType), required, multiplicity, Metadata.empty());
+  }
+
+  public Port(
+      String id,
+      String name,
+      PortDirection direction,
+      String dataType,
+      boolean required,
+      PortMultiplicity multiplicity,
+      Metadata metadata) {
+    this(id, name, direction, new DataType(dataType), required, multiplicity, metadata);
   }
 }

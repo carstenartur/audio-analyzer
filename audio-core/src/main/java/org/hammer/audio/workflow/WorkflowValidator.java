@@ -10,6 +10,15 @@ import java.util.Set;
 public final class WorkflowValidator {
 
   private static final String EDGE_PREFIX = "Edge ";
+  private final TypeRegistry typeRegistry;
+
+  public WorkflowValidator() {
+    this(TypeRegistry.defaultRegistry());
+  }
+
+  public WorkflowValidator(TypeRegistry typeRegistry) {
+    this.typeRegistry = Objects.requireNonNull(typeRegistry, "typeRegistry");
+  }
 
   public List<String> validate(Workflow workflow) {
     Objects.requireNonNull(workflow, "workflow");
@@ -42,7 +51,7 @@ public final class WorkflowValidator {
     return validate(workflow).isEmpty();
   }
 
-  private static void validatePorts(
+  private void validatePorts(
       Node node,
       List<Port> ports,
       PortDirection expectedDirection,
@@ -64,10 +73,21 @@ public final class WorkflowValidator {
       if (!portIds.add(port.id())) {
         violations.add("Node " + node.id() + " has duplicate port id: " + port.id());
       }
+      if (!typeRegistry.isRegistered(port.dataType())) {
+        violations.add(
+            "Node "
+                + node.id()
+                + " has "
+                + collectionName
+                + " port "
+                + port.id()
+                + " with unknown data type "
+                + port.dataType().id());
+      }
     }
   }
 
-  private static void validateEdge(Edge edge, Workflow workflow, List<String> violations) {
+  private void validateEdge(Edge edge, Workflow workflow, List<String> violations) {
     Node sourceNode = findNode(workflow, edge.sourceNodeId());
     if (sourceNode == null) {
       violations.add(
@@ -109,6 +129,17 @@ public final class WorkflowValidator {
               + edge.targetNodeId()
               + ":"
               + edge.targetPortId());
+    }
+    if (sourcePort != null
+        && targetPort != null
+        && !typeRegistry.areCompatible(sourcePort.dataType(), targetPort.dataType())) {
+      violations.add(
+          EDGE_PREFIX
+              + edge.id()
+              + " connects incompatible data types "
+              + sourcePort.dataType().id()
+              + " -> "
+              + targetPort.dataType().id());
     }
   }
 

@@ -152,6 +152,91 @@ class WorkflowValidatorTest {
   }
 
   @Test
+  void rejectsIncompatiblePortConnectionTypes() {
+    Workflow workflow =
+        new Workflow(
+            "workflow.incompatible-types",
+            "Incompatible Types",
+            List.of(
+                new Node(
+                    "node.dataset",
+                    "dataset-source",
+                    "Dataset Source",
+                    List.of(),
+                    List.of(
+                        new Port(
+                            "dataset-out",
+                            "dataset",
+                            PortDirection.OUTPUT,
+                            "Dataset",
+                            true,
+                            PortMultiplicity.SINGLE))),
+                new Node(
+                    "node.report",
+                    "report-sink",
+                    "Report Sink",
+                    List.of(
+                        new Port(
+                            "report-in",
+                            "report",
+                            PortDirection.INPUT,
+                            "Report",
+                            true,
+                            PortMultiplicity.SINGLE)),
+                    List.of())),
+            List.of(
+                new Edge(
+                    "edge.bad-types", "node.dataset", "dataset-out", "node.report", "report-in")));
+
+    assertEquals(
+        List.of("Edge edge.bad-types connects incompatible data types Dataset -> Report"),
+        validator.validate(workflow));
+  }
+
+  @Test
+  void rejectsUnknownPortDataTypes() {
+    Workflow workflow =
+        new Workflow(
+            "workflow.unknown-type",
+            "Unknown Type",
+            List.of(
+                new Node(
+                    "node.source",
+                    "custom-source",
+                    "Source",
+                    List.of(),
+                    List.of(
+                        new Port(
+                            "out",
+                            "output",
+                            PortDirection.OUTPUT,
+                            "CustomType",
+                            true,
+                            PortMultiplicity.SINGLE))),
+                new Node(
+                    "node.sink",
+                    "custom-sink",
+                    "Sink",
+                    List.of(
+                        new Port(
+                            "in",
+                            "input",
+                            PortDirection.INPUT,
+                            "CustomType",
+                            true,
+                            PortMultiplicity.SINGLE)),
+                    List.of())),
+            List.of(new Edge("edge.custom", "node.source", "out", "node.sink", "in")));
+
+    assertEquals(
+        List.of(
+            "Node node.source has outputPorts port out with unknown data type CustomType",
+            "Node node.sink has inputPorts port in with unknown data type CustomType",
+            "Edge edge.custom connects incompatible data types CustomType -> CustomType"),
+        validator.validate(workflow));
+  }
+
+  @Test
   void rejectsNullWorkflow() {
     NullPointerException exception =
         assertThrows(NullPointerException.class, () -> validator.validate(null));
