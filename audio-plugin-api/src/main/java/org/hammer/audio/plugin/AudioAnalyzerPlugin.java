@@ -48,4 +48,68 @@ public interface AudioAnalyzerPlugin {
   default List<DemoSignalContribution> demoSignalContributions() {
     return List.of();
   }
+
+  /**
+   * Returns signal-source contributions provided by this plugin (e.g. microphone arrays, synthetic
+   * generators, dataset replay sources). Default: empty.
+   */
+  default List<SignalSourceContribution> signalSourceContributions() {
+    return List.of();
+  }
+
+  /**
+   * Returns experiment contributions provided by this plugin (named, repeatable experimental
+   * scenarios). Default: empty.
+   */
+  default List<ExperimentContribution> experimentContributions() {
+    return List.of();
+  }
+
+  /**
+   * Returns processing-pipeline contributions provided by this plugin (DSP + analysis stage
+   * chains). Default: empty.
+   */
+  default List<PipelineContribution> pipelineContributions() {
+    return List.of();
+  }
+
+  /**
+   * Returns snapshot-stream contributions provided by this plugin (per-frame result streams).
+   * Default: empty.
+   */
+  default List<SnapshotStreamContribution> snapshotStreamContributions() {
+    return List.of();
+  }
+
+  /**
+   * Returns UI-independent visualization contributions provided by this plugin (descriptions of
+   * visual representations without a specific rendering technology). Default: empty.
+   */
+  default List<VisualizationContribution> visualizationContributions() {
+    return List.of();
+  }
+
+  /**
+   * Returns calibration contributions provided by this plugin (calibration procedures or persistent
+   * calibration states). Default: empty.
+   */
+  default List<CalibrationContribution> calibrationContributions() {
+    return List.of();
+  }
+
+  /**
+   * Returns benchmark contributions provided by this plugin (quality metrics and evaluation
+   * procedures). Default: empty.
+   */
+  default List<BenchmarkContribution> benchmarkContributions() {
+    return List.of();
+  }
+
+  /**
+   * Returns export-format contributions provided by this plugin (serialization capabilities such as
+   * Markdown, CSV, JSON-lines). Default: empty.
+   */
+  default List<ExportFormatContribution> exportFormatContributions() {
+    return List.of();
+  }
 }

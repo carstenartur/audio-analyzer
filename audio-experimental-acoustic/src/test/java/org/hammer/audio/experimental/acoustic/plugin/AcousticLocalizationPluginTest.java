@@ -46,6 +46,91 @@ class AcousticLocalizationPluginTest {
   }
 
   @Test
+  void workbenchContributionsAreNonEmpty() {
+    AcousticLocalizationPlugin plugin = new AcousticLocalizationPlugin();
+    assertFalse(
+        plugin.signalSourceContributions().isEmpty(),
+        "plugin must expose at least one signal source");
+    assertFalse(
+        plugin.experimentContributions().isEmpty(), "plugin must expose at least one experiment");
+    assertFalse(
+        plugin.pipelineContributions().isEmpty(), "plugin must expose at least one pipeline");
+    assertFalse(
+        plugin.snapshotStreamContributions().isEmpty(),
+        "plugin must expose at least one snapshot stream");
+    assertFalse(
+        plugin.visualizationContributions().isEmpty(),
+        "plugin must expose at least one visualization");
+    assertFalse(
+        plugin.calibrationContributions().isEmpty(), "plugin must expose at least one calibration");
+    assertFalse(
+        plugin.benchmarkContributions().isEmpty(), "plugin must expose at least one benchmark");
+    assertFalse(
+        plugin.exportFormatContributions().isEmpty(),
+        "plugin must expose at least one export format");
+  }
+
+  @Test
+  void signalSourceContributionsHaveUniqueIds() {
+    AcousticLocalizationPlugin plugin = new AcousticLocalizationPlugin();
+    long distinctIds =
+        plugin.signalSourceContributions().stream().map(s -> s.id()).distinct().count();
+    assertEquals(
+        plugin.signalSourceContributions().size(), distinctIds, "signal source IDs must be unique");
+  }
+
+  @Test
+  void experimentContributionsHaveUniqueIds() {
+    AcousticLocalizationPlugin plugin = new AcousticLocalizationPlugin();
+    long distinctIds =
+        plugin.experimentContributions().stream().map(e -> e.id()).distinct().count();
+    assertEquals(
+        plugin.experimentContributions().size(), distinctIds, "experiment IDs must be unique");
+  }
+
+  @Test
+  void pipelineContributionsHaveUniqueIds() {
+    AcousticLocalizationPlugin plugin = new AcousticLocalizationPlugin();
+    long distinctIds = plugin.pipelineContributions().stream().map(p -> p.id()).distinct().count();
+    assertEquals(plugin.pipelineContributions().size(), distinctIds, "pipeline IDs must be unique");
+  }
+
+  @Test
+  void exportFormatsIncludeExpectedFileExtensions() {
+    AcousticLocalizationPlugin plugin = new AcousticLocalizationPlugin();
+    boolean hasMd =
+        plugin.exportFormatContributions().stream().anyMatch(e -> "md".equals(e.fileExtension()));
+    boolean hasCsv =
+        plugin.exportFormatContributions().stream().anyMatch(e -> "csv".equals(e.fileExtension()));
+    boolean hasJsonl =
+        plugin.exportFormatContributions().stream()
+            .anyMatch(e -> "jsonl".equals(e.fileExtension()));
+    assertTrue(hasMd, "plugin must expose a Markdown export format");
+    assertTrue(hasCsv, "plugin must expose a CSV export format");
+    assertTrue(hasJsonl, "plugin must expose a JSON-lines export format");
+  }
+
+  @Test
+  void benchmarkContributionsIncludeLocalizationAndClassification() {
+    AcousticLocalizationPlugin plugin = new AcousticLocalizationPlugin();
+    boolean hasLocalization =
+        plugin.benchmarkContributions().stream().anyMatch(b -> b.id().contains("localization"));
+    boolean hasClassification =
+        plugin.benchmarkContributions().stream().anyMatch(b -> b.id().contains("classification"));
+    assertTrue(hasLocalization, "plugin must expose a localization benchmark");
+    assertTrue(hasClassification, "plugin must expose a classification benchmark");
+  }
+
+  @Test
+  void visualizationContributionsInclude2dSpatialRenderKind() {
+    AcousticLocalizationPlugin plugin = new AcousticLocalizationPlugin();
+    boolean hasSpatial =
+        plugin.visualizationContributions().stream()
+            .anyMatch(v -> "2d-spatial".equals(v.renderKind()));
+    assertTrue(hasSpatial, "plugin must expose a 2d-spatial visualization for the room map");
+  }
+
+  @Test
   void viewContributionProducesUniqueComponents() {
     AcousticLocalizationPlugin plugin = new AcousticLocalizationPlugin();
     for (ViewContribution view : plugin.viewContributions()) {
