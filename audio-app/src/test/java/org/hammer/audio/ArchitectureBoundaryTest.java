@@ -17,6 +17,10 @@ class ArchitectureBoundaryTest {
   private static final List<String> STABLE_MODULES =
       List.of("audio-core", "audio-geometry", "audio-acquisition", "audio-dsp");
 
+  /** Matches any import from {@code org.hammer.*} that is not under {@code org.hammer.audio.*}. */
+  private static final String NON_AUDIO_HAMMER_IMPORT_REGEX =
+      "import org\\.hammer\\.(?!audio\\.).*";
+
   @Test
   void stableAudioPackagesDoNotDependOnExperimentalPackages() throws IOException {
     List<String> violations = new ArrayList<>();
@@ -52,7 +56,7 @@ class ArchitectureBoundaryTest {
                             line -> {
                               String trimmed = line.trim();
                               if (trimmed.startsWith("import org.hammer.audio.ui.")
-                                  || trimmed.matches("import org\\.hammer\\.(?!audio\\.).*")) {
+                                  || trimmed.matches(NON_AUDIO_HAMMER_IMPORT_REGEX)) {
                                 violations.add(path + ": " + trimmed);
                               }
                             }));
@@ -132,7 +136,123 @@ class ArchitectureBoundaryTest {
                             String trimmed = line.trim();
                             if (trimmed.startsWith("import org.hammer.audio.experimental.")
                                 || trimmed.startsWith("import org.hammer.audio.pluginhost.")
-                                || trimmed.matches("import org\\.hammer\\.(?!audio\\.).*")) {
+                                || trimmed.matches(NON_AUDIO_HAMMER_IMPORT_REGEX)) {
+                              violations.add(path + ": " + trimmed);
+                            }
+                          }));
+    }
+    assertNoViolations(violations);
+  }
+
+  /**
+   * Bounded-context rule: the Workflow domain model must not depend on the Execution sub-context.
+   *
+   * <p>Workflow describes <em>what</em> to execute (design-time model). Execution state belongs
+   * exclusively in {@code org.hammer.audio.workflow.execution}. The reverse dependency (execution →
+   * workflow) is intentional and allowed.
+   */
+  @Test
+  void workflowContextDoesNotDependOnExecutionSubpackage() throws IOException {
+    Path workflowRoot = mainJava("audio-core").resolve("org/hammer/audio/workflow");
+    List<String> violations = new ArrayList<>();
+    try (Stream<Path> files = Files.walk(workflowRoot)) {
+      files
+          .filter(path -> path.toString().endsWith(".java"))
+          .filter(path -> !path.toString().contains("/org/hammer/audio/workflow/execution/"))
+          .forEach(
+              path ->
+                  importLines(path).stream()
+                      .forEach(
+                          line -> {
+                            if (line.trim()
+                                .startsWith("import org.hammer.audio.workflow.execution.")) {
+                              violations.add(path + ": " + line.trim());
+                            }
+                          }));
+    }
+    assertNoViolations(violations);
+  }
+
+  /**
+   * Bounded-context rule: the Execution context must not depend on Persistence or Visualization.
+   *
+   * <p>Execution is a pure runtime-state model. It must never import recording/persistence
+   * utilities or Swing/UI packages.
+   */
+  @Test
+  void executionContextDoesNotDependOnPersistenceOrVisualization() throws IOException {
+    Path executionRoot = mainJava("audio-core").resolve("org/hammer/audio/workflow/execution");
+    List<String> violations = new ArrayList<>();
+    try (Stream<Path> files = Files.walk(executionRoot)) {
+      files
+          .filter(path -> path.toString().endsWith(".java"))
+          .forEach(
+              path ->
+                  importLines(path).stream()
+                      .forEach(
+                          line -> {
+                            String trimmed = line.trim();
+                            if (trimmed.startsWith("import org.hammer.audio.recording.")
+                                || trimmed.startsWith("import org.hammer.audio.ui.")
+                                || trimmed.matches(NON_AUDIO_HAMMER_IMPORT_REGEX)) {
+                              violations.add(path + ": " + trimmed);
+                            }
+                          }));
+    }
+    assertNoViolations(violations);
+  }
+
+  /**
+   * Bounded-context rule: the Persistence context must not depend on Visualization.
+   *
+   * <p>The audio recording package stores {@code AudioBlock} data to disk. It must not import
+   * Swing/UI packages; rendering is exclusively the responsibility of the Visualization context.
+   */
+  @Test
+  void persistenceContextDoesNotDependOnVisualization() throws IOException {
+    Path recordingRoot = mainJava("audio-dsp").resolve("org/hammer/audio/recording");
+    List<String> violations = new ArrayList<>();
+    try (Stream<Path> files = Files.walk(recordingRoot)) {
+      files
+          .filter(path -> path.toString().endsWith(".java"))
+          .forEach(
+              path ->
+                  importLines(path).stream()
+                      .forEach(
+                          line -> {
+                            String trimmed = line.trim();
+                            if (trimmed.startsWith("import org.hammer.audio.ui.")
+                                || trimmed.matches(NON_AUDIO_HAMMER_IMPORT_REGEX)) {
+                              violations.add(path + ": " + trimmed);
+                            }
+                          }));
+    }
+    assertNoViolations(violations);
+  }
+
+  /**
+   * Bounded-context rule: the Benchmarking context must not depend on Visualization.
+   *
+   * <p>Benchmark metrics and evaluation runners are headless by design. They must not import Swing
+   * or UI packages; results are consumed as plain data (reports, CSV, JSON).
+   */
+  @Test
+  void benchmarkingContextDoesNotDependOnVisualization() throws IOException {
+    Path benchmarkRoot =
+        mainJava("audio-experimental-acoustic")
+            .resolve("org/hammer/audio/experimental/acoustic/benchmark");
+    List<String> violations = new ArrayList<>();
+    try (Stream<Path> files = Files.walk(benchmarkRoot)) {
+      files
+          .filter(path -> path.toString().endsWith(".java"))
+          .forEach(
+              path ->
+                  importLines(path).stream()
+                      .forEach(
+                          line -> {
+                            String trimmed = line.trim();
+                            if (trimmed.startsWith("import org.hammer.audio.ui.")
+                                || trimmed.matches(NON_AUDIO_HAMMER_IMPORT_REGEX)) {
                               violations.add(path + ": " + trimmed);
                             }
                           }));

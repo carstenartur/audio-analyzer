@@ -107,6 +107,10 @@ Boundary rules:
 - Tests live with the module that owns the production code they exercise. The app module keeps the
   cross-module `ArchitectureBoundaryTest` to verify both source imports and POM dependencies.
 
+See [`docs/architecture/bounded-contexts.md`](docs/architecture/bounded-contexts.md) for the
+explicit bounded-context definitions including per-context package boundaries, dependency-direction
+rules, public APIs and ownership annotations.
+
 ## Packages
 
 |                 Package                  |            Module             |                                                                         Responsibility                                                                          |
