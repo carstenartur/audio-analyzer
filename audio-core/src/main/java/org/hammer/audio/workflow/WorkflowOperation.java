@@ -27,6 +27,9 @@ public sealed interface WorkflowOperation
   String UNDO_SUFFIX = ":undo";
   String NODE_ID = "nodeId";
   String WORKFLOW_FIELD = "workflow";
+  String SOURCE = "source";
+  String TARGET = "target";
+  String CONNECT_PORTS = "ConnectPorts";
 
   String operationId();
 
@@ -63,6 +66,59 @@ public sealed interface WorkflowOperation
         .filter(edge -> edge.id().equals(edgeId))
         .findFirst()
         .orElseThrow(() -> new IllegalArgumentException(fieldName + " edge not found: " + edgeId));
+  }
+
+  static void requireNodeSnapshot(Workflow workflow, Node expectedNode, String fieldName) {
+    Node actualNode = requireNode(workflow, expectedNode.id(), fieldName);
+    if (!actualNode.equals(expectedNode)) {
+      throw new IllegalStateException(
+          fieldName + " expected node snapshot to match workflow: " + expectedNode.id());
+    }
+  }
+
+  static void requireEdgeSnapshot(Workflow workflow, Edge expectedEdge, String fieldName) {
+    Edge actualEdge = requireEdge(workflow, expectedEdge.id(), fieldName);
+    if (!actualEdge.equals(expectedEdge)) {
+      throw new IllegalStateException(
+          fieldName + " expected edge snapshot to match workflow: " + expectedEdge.id());
+    }
+  }
+
+  static void requirePort(Node node, String portId, boolean inputPort, String fieldName) {
+    List<Port> ports = inputPort ? node.inputPorts() : node.outputPorts();
+    boolean exists = ports.stream().anyMatch(port -> port.id().equals(portId));
+    if (!exists) {
+      String endpoint = inputPort ? TARGET : SOURCE;
+      throw new IllegalArgumentException(
+          fieldName + " missing " + endpoint + " port: " + node.id() + ":" + portId);
+    }
+  }
+
+  static void requireNodeIds(Workflow workflow, List<String> nodeIds, String fieldName) {
+    for (String nodeId : nodeIds) {
+      requireNode(workflow, nodeId, fieldName);
+    }
+  }
+
+  static void requireConnectedEdges(
+      Workflow workflow, String nodeId, List<Edge> expectedEdges, String fieldName) {
+    Set<String> actualEdgeIds = new LinkedHashSet<>();
+    for (Edge edge : workflow.edges()) {
+      if (edge.sourceNodeId().equals(nodeId) || edge.targetNodeId().equals(nodeId)) {
+        actualEdgeIds.add(edge.id());
+      }
+    }
+    Set<String> expectedEdgeIds = new LinkedHashSet<>();
+    for (Edge edge : expectedEdges) {
+      expectedEdgeIds.add(edge.id());
+    }
+    if (!actualEdgeIds.equals(expectedEdgeIds)) {
+      throw new IllegalStateException(
+          fieldName + " deletedEdges must match connected edges for node " + nodeId);
+    }
+    for (Edge edge : expectedEdges) {
+      requireEdgeSnapshot(workflow, edge, fieldName);
+    }
   }
 
   static Metadata updateMetadata(Metadata metadata, String key, String value) {
@@ -107,6 +163,15 @@ public sealed interface WorkflowOperation
       normalizedGroups.put(nodeId, previousGroupId == null ? NO_GROUP : previousGroupId);
     }
     return Map.copyOf(normalizedGroups);
+  }
+
+  static List<String> affectedIdsForDelete(Node deletedNode, List<Edge> deletedEdges) {
+    List<String> affectedIds = new ArrayList<>();
+    affectedIds.add(deletedNode.id());
+    for (Edge deletedEdge : deletedEdges) {
+      affectedIds.add(deletedEdge.id());
+    }
+    return List.copyOf(affectedIds);
   }
 
   /**
@@ -183,8 +248,17 @@ public sealed interface WorkflowOperation
       Objects.requireNonNull(deletedNode, "deletedNode");
       Objects.requireNonNull(deletedEdges, "deletedEdges");
       deletedEdges = List.copyOf(deletedEdges);
-      Objects.requireNonNull(affectedObjectIds, "affectedObjectIds");
-      affectedObjectIds = List.copyOf(affectedObjectIds);
+      List<String> derivedAffectedObjectIds = affectedIdsForDelete(deletedNode, deletedEdges);
+      if (derivedAffectedObjectIds.equals(affectedObjectIds)) {
+        affectedObjectIds = List.copyOf(affectedObjectIds);
+      } else {
+        affectedObjectIds = derivedAffectedObjectIds;
+      }
+    }
+
+    @Override
+    public List<String> affectedObjectIds() {
+      return List.copyOf(affectedObjectIds);
     }
 
     @Override
@@ -202,7 +276,8 @@ public sealed interface WorkflowOperation
     @Override
     public Workflow apply(Workflow workflow) {
       Objects.requireNonNull(workflow, WORKFLOW_FIELD);
-      requireNode(workflow, deletedNode.id(), "DeleteNode");
+      requireNodeSnapshot(workflow, deletedNode, "DeleteNode");
+      requireConnectedEdges(workflow, deletedNode.id(), deletedEdges, "DeleteNode");
 
       List<Node> nodes =
           workflow.nodes().stream().filter(node -> !node.id().equals(deletedNode.id())).toList();
@@ -210,14 +285,8 @@ public sealed interface WorkflowOperation
       for (Edge edge : deletedEdges) {
         deletedEdgeIds.add(edge.id());
       }
-      List<Edge> edges = new ArrayList<>();
-      for (Edge edge : workflow.edges()) {
-        if (!edge.sourceNodeId().equals(deletedNode.id())
-            && !edge.targetNodeId().equals(deletedNode.id())
-            && !deletedEdgeIds.contains(edge.id())) {
-          edges.add(edge);
-        }
-      }
+      List<Edge> edges =
+          workflow.edges().stream().filter(edge -> !deletedEdgeIds.contains(edge.id())).toList();
       return new Workflow(workflow.id(), workflow.name(), nodes, edges, workflow.metadata());
     }
   }
@@ -380,7 +449,7 @@ public sealed interface WorkflowOperation
       implements WorkflowOperation {
 
     public ConnectPorts {
-      requireOperationMetadata(operationId, timestamp, author, "ConnectPorts");
+      requireOperationMetadata(operationId, timestamp, author, CONNECT_PORTS);
       Objects.requireNonNull(edge, "edge");
     }
 
@@ -394,9 +463,9 @@ public sealed interface WorkflowOperation
       return Map.of(
           "edgeId",
           edge.id(),
-          "source",
+          SOURCE,
           edge.sourceNodeId() + ":" + edge.sourcePortId(),
-          "target",
+          TARGET,
           edge.targetNodeId() + ":" + edge.targetPortId());
     }
 
@@ -409,8 +478,10 @@ public sealed interface WorkflowOperation
     @Override
     public Workflow apply(Workflow workflow) {
       Objects.requireNonNull(workflow, WORKFLOW_FIELD);
-      requireNode(workflow, edge.sourceNodeId(), "ConnectPorts");
-      requireNode(workflow, edge.targetNodeId(), "ConnectPorts");
+      Node sourceNode = requireNode(workflow, edge.sourceNodeId(), CONNECT_PORTS);
+      Node targetNode = requireNode(workflow, edge.targetNodeId(), CONNECT_PORTS);
+      requirePort(sourceNode, edge.sourcePortId(), false, CONNECT_PORTS);
+      requirePort(targetNode, edge.targetPortId(), true, CONNECT_PORTS);
       boolean edgeExists =
           workflow.edges().stream().anyMatch(existingEdge -> existingEdge.id().equals(edge.id()));
       if (edgeExists) {
@@ -464,7 +535,7 @@ public sealed interface WorkflowOperation
     @Override
     public Workflow apply(Workflow workflow) {
       Objects.requireNonNull(workflow, WORKFLOW_FIELD);
-      requireEdge(workflow, edgeId, "DisconnectPorts");
+      requireEdgeSnapshot(workflow, disconnectedEdge, "DisconnectPorts");
       List<Edge> edges =
           workflow.edges().stream().filter(edge -> !edge.id().equals(edgeId)).toList();
       return new Workflow(
@@ -497,7 +568,7 @@ public sealed interface WorkflowOperation
 
     public UpdateProperty {
       requireOperationMetadata(operationId, timestamp, author, "UpdateProperty");
-      Objects.requireNonNull(target, "target");
+      Objects.requireNonNull(target, TARGET);
       StableIds.requireStable(targetId, "UpdateProperty.targetId");
       StableIds.requireStable(propertyKey, "UpdateProperty.propertyKey");
     }
@@ -510,7 +581,7 @@ public sealed interface WorkflowOperation
     @Override
     public Map<String, String> payload() {
       Map<String, String> payload = new ConcurrentHashMap<>();
-      payload.put("target", target.name());
+      payload.put(TARGET, target.name());
       payload.put("targetId", targetId);
       payload.put("propertyKey", propertyKey);
       payload.put("newValue", String.valueOf(newValue));
@@ -665,6 +736,7 @@ public sealed interface WorkflowOperation
     @Override
     public Workflow apply(Workflow workflow) {
       Objects.requireNonNull(workflow, WORKFLOW_FIELD);
+      requireNodeIds(workflow, nodeIds, "GroupNodes");
       Set<String> nodeSet = new LinkedHashSet<>(nodeIds);
       List<Node> nodes = new ArrayList<>(workflow.nodes().size());
       for (Node node : workflow.nodes()) {
@@ -764,6 +836,7 @@ public sealed interface WorkflowOperation
     @Override
     public Workflow apply(Workflow workflow) {
       Objects.requireNonNull(workflow, WORKFLOW_FIELD);
+      requireNodeIds(workflow, nodeIds, "UngroupNodes");
       Set<String> nodeSet = new LinkedHashSet<>(nodeIds);
       List<Node> nodes = new ArrayList<>(workflow.nodes().size());
       for (Node node : workflow.nodes()) {
@@ -784,7 +857,12 @@ public sealed interface WorkflowOperation
         }
       }
       String groupLabelKey = GROUP_LABEL_PREFIX + groupId + ".label";
-      Metadata workflowMetadata = updateMetadata(workflow.metadata(), groupLabelKey, null);
+      boolean hasRemainingGroupMembers =
+          nodes.stream().anyMatch(node -> groupId.equals(node.metadata().entries().get(GROUP_KEY)));
+      Metadata workflowMetadata =
+          hasRemainingGroupMembers
+              ? workflow.metadata()
+              : updateMetadata(workflow.metadata(), groupLabelKey, null);
       return new Workflow(
           workflow.id(), workflow.name(), nodes, workflow.edges(), workflowMetadata);
     }

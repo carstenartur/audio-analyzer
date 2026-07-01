@@ -41,6 +41,14 @@ class WorkflowOperationLogTest {
                     "Report",
                     true,
                     PortMultiplicity.SINGLE)));
+    Node deletedAnalyzeNode =
+        new Node(
+            "node.analyze",
+            "analyze",
+            "Analyze Dataset",
+            nodeAnalyze.inputPorts(),
+            nodeAnalyze.outputPorts(),
+            new Metadata(Map.of("layout.x", "10.5", "layout.y", "20.5", "note", "important")));
     Edge edgeAnalyzeToReport =
         new Edge(
             "edge.analyze-to-report", "node.analyze", "report-out", "node.report", "report-in");
@@ -94,7 +102,7 @@ class WorkflowOperationLogTest {
                 "op.delete",
                 NOW.plusSeconds(8),
                 "alice",
-                nodeAnalyze,
+                deletedAnalyzeNode,
                 List.of(),
                 List.of("node.analyze")));
 
@@ -106,8 +114,7 @@ class WorkflowOperationLogTest {
     }
 
     Workflow result = log.currentWorkflow();
-    assertEquals(initial.nodes(), result.nodes());
-    assertEquals(initial.edges(), result.edges());
+    assertEquals(initial, result);
     assertEquals(operations, log.operations());
   }
 
@@ -186,6 +193,143 @@ class WorkflowOperationLogTest {
   }
 
   @Test
+  void deleteNodeDerivesAffectedIdsAndRequiresExactConnectedEdges() {
+    Workflow initial = initialWorkflow();
+    Node reportNode = findNode(initial, "node.report");
+    Edge edge = findEdge(initial, "edge.dataset-to-report");
+
+    WorkflowOperation.DeleteNode delete =
+        new WorkflowOperation.DeleteNode(
+            "op.delete", NOW, "alice", reportNode, List.of(edge), List.of("ignored"));
+    assertEquals(List.of("node.report", "edge.dataset-to-report"), delete.affectedObjectIds());
+
+    WorkflowOperation.DeleteNode missingEdgeSnapshot =
+        new WorkflowOperation.DeleteNode(
+            "op.delete.missing", NOW, "alice", reportNode, List.of(), List.of());
+    IllegalStateException exception =
+        assertThrows(IllegalStateException.class, () -> missingEdgeSnapshot.apply(initial));
+    assertEquals(
+        "DeleteNode deletedEdges must match connected edges for node node.report",
+        exception.getMessage());
+  }
+
+  @Test
+  void connectPortsRequiresExistingPorts() {
+    Workflow initial = initialWorkflow();
+    WorkflowOperation.ConnectPorts missingSourcePort =
+        new WorkflowOperation.ConnectPorts(
+            "op.connect",
+            NOW,
+            "alice",
+            new Edge("edge.invalid", "node.dataset", "missing", "node.report", "report-in"));
+
+    IllegalArgumentException exception =
+        assertThrows(IllegalArgumentException.class, () -> missingSourcePort.apply(initial));
+
+    assertEquals("ConnectPorts missing source port: node.dataset:missing", exception.getMessage());
+  }
+
+  @Test
+  void disconnectPortsRequiresMatchingEdgeSnapshot() {
+    Workflow initial = initialWorkflow();
+    Edge edge = findEdge(initial, "edge.dataset-to-report");
+    WorkflowOperation.DisconnectPorts disconnect =
+        new WorkflowOperation.DisconnectPorts(
+            "op.disconnect",
+            NOW,
+            "alice",
+            edge.id(),
+            new Edge(
+                edge.id(),
+                edge.sourceNodeId(),
+                edge.sourcePortId(),
+                edge.targetNodeId(),
+                edge.targetPortId(),
+                new Metadata(Map.of("note", "stale"))));
+
+    IllegalStateException exception =
+        assertThrows(IllegalStateException.class, () -> disconnect.apply(initial));
+
+    assertEquals(
+        "DisconnectPorts expected edge snapshot to match workflow: edge.dataset-to-report",
+        exception.getMessage());
+  }
+
+  @Test
+  void groupAndUngroupFailForUnknownNodes() {
+    Workflow initial = initialWorkflow();
+    WorkflowOperation.GroupNodes group =
+        new WorkflowOperation.GroupNodes(
+            "op.group",
+            NOW,
+            "alice",
+            "group.processing",
+            "Processing",
+            List.of("node.dataset", "node.missing"),
+            nullableGroupMap("node.dataset", null, "node.missing", null));
+
+    IllegalArgumentException groupException =
+        assertThrows(IllegalArgumentException.class, () -> group.apply(initial));
+    assertEquals("GroupNodes node not found: node.missing", groupException.getMessage());
+
+    Workflow grouped =
+        new WorkflowOperation.GroupNodes(
+                "op.group.valid",
+                NOW,
+                "alice",
+                "group.processing",
+                "Processing",
+                List.of("node.dataset", "node.report"),
+                nullableGroupMap("node.dataset", null, "node.report", null))
+            .apply(initial);
+    WorkflowOperation.UngroupNodes ungroup =
+        new WorkflowOperation.UngroupNodes(
+            "op.ungroup",
+            NOW,
+            "alice",
+            "group.processing",
+            "Processing",
+            List.of("node.dataset", "node.missing"),
+            nullableGroupMap("node.dataset", null, "node.missing", null));
+
+    IllegalArgumentException ungroupException =
+        assertThrows(IllegalArgumentException.class, () -> ungroup.apply(grouped));
+    assertEquals("UngroupNodes node not found: node.missing", ungroupException.getMessage());
+  }
+
+  @Test
+  void ungroupPreservesGroupLabelWhileGroupStillHasMembers() {
+    Workflow initial = initialWorkflow();
+    Workflow grouped =
+        new WorkflowOperation.GroupNodes(
+                "op.group",
+                NOW,
+                "alice",
+                "group.processing",
+                "Processing",
+                List.of("node.dataset", "node.report"),
+                nullableGroupMap("node.dataset", null, "node.report", null))
+            .apply(initial);
+
+    Workflow ungrouped =
+        new WorkflowOperation.UngroupNodes(
+                "op.ungroup",
+                NOW.plusSeconds(1),
+                "alice",
+                "group.processing",
+                "Processing",
+                List.of("node.dataset"),
+                nullableGroupMap("node.dataset", null))
+            .apply(grouped);
+
+    assertEquals("Processing", ungrouped.metadata().entries().get("group.group.processing.label"));
+    assertEquals(
+        "group.processing",
+        findNode(ungrouped, "node.report").metadata().entries().get("group.id"));
+    assertFalse(findNode(ungrouped, "node.dataset").metadata().entries().containsKey("group.id"));
+  }
+
+  @Test
   void undoFailsWhenNoOperationExists() {
     WorkflowOperationLog log = new WorkflowOperationLog(initialWorkflow());
 
@@ -246,6 +390,12 @@ class WorkflowOperationLogTest {
         .filter(edge -> edge.id().equals(edgeId))
         .findFirst()
         .orElseThrow();
+  }
+
+  private static Map<String, String> nullableGroupMap(String nodeId, String groupId) {
+    Map<String, String> groups = new LinkedHashMap<>();
+    groups.put(nodeId, groupId);
+    return groups;
   }
 
   private static Map<String, String> nullableGroupMap(
