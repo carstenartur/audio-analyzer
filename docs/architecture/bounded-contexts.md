@@ -337,7 +337,25 @@ The Maven module dependency graph enforces coarse-grained boundaries automatical
 - `audio-app` must declare `audio-experimental-acoustic` as `runtime` scope only (ServiceLoader
   discovery); never as `compile`.
 
-### 2. Source-level import checks (fitness tests)
+### 2. ArchUnit fitness tests (bytecode-level)
+
+`ArchitectureFitnessTest` in `audio-app` uses [ArchUnit](https://www.archunit.org) to analyse
+compiled bytecode and enforces the following rules automatically on every `mvn verify` run:
+
+|                    Test method                    |                                  Bounded-context rule                                  |
+|---------------------------------------------------|----------------------------------------------------------------------------------------|
+| `workflowContextDoesNotDependOnSwing`             | Workflow must not depend on `javax.swing` / `java.awt`                                 |
+| `workflowContextDoesNotDependOnJGit`              | Workflow must not depend on `org.eclipse.jgit`                                         |
+| `workflowContextDoesNotDependOnPersistence`       | Workflow (incl. Validation) must not depend on `org.hammer.audio.recording`            |
+| `executionContextDoesNotDependOnPersistence`      | Execution must not depend on `org.hammer.audio.recording`                              |
+| `executionContextDoesNotDependOnVisualization`    | Execution must not depend on `org.hammer.audio.ui` / Swing / AWT                       |
+| `noCyclicDependenciesBetweenBoundedContextSlices` | No cyclic dependencies between bounded-context package slices under `org.hammer.audio` |
+
+Note: React and Yjs are JavaScript frameworks with no Java package equivalent in this project.
+The Workflow context is protected from any Java-based UI or collaboration framework by the rules
+above. The Collaboration context is future; its rules will be added when the package is created.
+
+### 3. Source-level import checks (fitness tests)
 
 `ArchitectureBoundaryTest` in `audio-app` walks all Java source files and asserts that:
 
@@ -350,10 +368,7 @@ The Maven module dependency graph enforces coarse-grained boundaries automatical
   does not import from the Execution context (`org.hammer.audio.workflow.execution`).
 - The Execution context does not import from Persistence or Visualization.
 - The Persistence context (`org.hammer.audio.recording`) does not import Visualization.
-
-These fitness tests are aligned with the ArchUnit-based checks tracked in
-[issue #171](https://github.com/carstenartur/audio-analyzer/issues/171) and will be migrated
-to full ArchUnit rules when that issue is resolved.
+- The Benchmarking context does not import Visualization.
 
 ---
 
