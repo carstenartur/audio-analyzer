@@ -352,8 +352,9 @@ compiled bytecode and enforces the following rules automatically on every `mvn v
 | `noCyclicDependenciesBetweenBoundedContextSlices` | No cyclic dependencies between bounded-context package slices under `org.hammer.audio` |
 
 Note: React and Yjs are JavaScript frameworks with no Java package equivalent in this project.
-The Workflow context is protected from any Java-based UI or collaboration framework by the rules
-above. The Collaboration context is future; its rules will be added when the package is created.
+The Workflow context is protected from Java UI dependencies plus JGit / Persistence dependencies by
+the rules above. The Collaboration context is future; its rules will be added when the package is
+created.
 
 ### 3. Source-level import checks (fitness tests)
 

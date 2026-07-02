@@ -23,8 +23,8 @@ import org.junit.jupiter.api.Test;
  * </ul>
  *
  * <p>Note: React and Yjs are JavaScript frameworks without a Java package equivalent in this
- * project. The workflow domain model is already protected from any Java-based UI or collaboration
- * framework by the rules in this class.
+ * project. The workflow domain model is protected from Java UI dependencies and from JGit /
+ * persistence dependencies by the rules in this class.
  *
  * <p>Module-level POM dependency rules are enforced separately in {@link
  * ArchitectureBoundaryTest#modulePomDependenciesPreserveStableBoundaries()}.
@@ -38,11 +38,15 @@ class ArchitectureFitnessTest {
   private static final String JAVAX_SWING = "javax.swing..";
   private static final String JAVA_AWT = "java.awt..";
   private static final String JGIT_PKG = "org.eclipse.jgit..";
+  private static final ClassFileImporter PRODUCTION_IMPORTER =
+      new ClassFileImporter().withImportOption(ImportOption.Predefined.DO_NOT_INCLUDE_TESTS);
+  private static final JavaClasses WORKFLOW_CLASSES = importProduction("org.hammer.audio.workflow");
+  private static final JavaClasses EXECUTION_CLASSES =
+      importProduction("org.hammer.audio.workflow.execution");
+  private static final JavaClasses ROOT_CLASSES = importProduction("org.hammer.audio");
 
   private static JavaClasses importProduction(String... packages) {
-    return new ClassFileImporter()
-        .withImportOption(ImportOption.Predefined.DO_NOT_INCLUDE_TESTS)
-        .importPackages(packages);
+    return PRODUCTION_IMPORTER.importPackages(packages);
   }
 
   /**
@@ -54,14 +58,13 @@ class ArchitectureFitnessTest {
    */
   @Test
   void workflowContextDoesNotDependOnSwing() {
-    JavaClasses classes = importProduction("org.hammer.audio.workflow");
     noClasses()
         .that()
         .resideInAPackage(WORKFLOW_PKG)
         .should()
         .dependOnClassesThat()
         .resideInAnyPackage(JAVAX_SWING, JAVA_AWT)
-        .check(classes);
+        .check(WORKFLOW_CLASSES);
   }
 
   /**
@@ -72,14 +75,13 @@ class ArchitectureFitnessTest {
    */
   @Test
   void workflowContextDoesNotDependOnJGit() {
-    JavaClasses classes = importProduction("org.hammer.audio.workflow");
     noClasses()
         .that()
         .resideInAPackage(WORKFLOW_PKG)
         .should()
         .dependOnClassesThat()
         .resideInAPackage(JGIT_PKG)
-        .check(classes);
+        .check(WORKFLOW_CLASSES);
   }
 
   /**
@@ -91,14 +93,13 @@ class ArchitectureFitnessTest {
    */
   @Test
   void workflowContextDoesNotDependOnPersistence() {
-    JavaClasses classes = importProduction("org.hammer.audio.workflow");
     noClasses()
         .that()
         .resideInAPackage(WORKFLOW_PKG)
         .should()
         .dependOnClassesThat()
         .resideInAPackage(RECORDING_PKG)
-        .check(classes);
+        .check(WORKFLOW_CLASSES);
   }
 
   /**
@@ -109,14 +110,13 @@ class ArchitectureFitnessTest {
    */
   @Test
   void executionContextDoesNotDependOnPersistence() {
-    JavaClasses classes = importProduction("org.hammer.audio.workflow.execution");
     noClasses()
         .that()
         .resideInAPackage(EXECUTION_PKG)
         .should()
         .dependOnClassesThat()
         .resideInAPackage(RECORDING_PKG)
-        .check(classes);
+        .check(EXECUTION_CLASSES);
   }
 
   /**
@@ -126,14 +126,13 @@ class ArchitectureFitnessTest {
    */
   @Test
   void executionContextDoesNotDependOnVisualization() {
-    JavaClasses classes = importProduction("org.hammer.audio.workflow.execution");
     noClasses()
         .that()
         .resideInAPackage(EXECUTION_PKG)
         .should()
         .dependOnClassesThat()
         .resideInAnyPackage(UI_PKG, JAVAX_SWING, JAVA_AWT)
-        .check(classes);
+        .check(EXECUTION_CLASSES);
   }
 
   /**
@@ -149,7 +148,6 @@ class ArchitectureFitnessTest {
    */
   @Test
   void noCyclicDependenciesBetweenBoundedContextSlices() {
-    JavaClasses classes = importProduction("org.hammer.audio");
-    slices().matching("org.hammer.audio.(*)..").should().beFreeOfCycles().check(classes);
+    slices().matching("org.hammer.audio.(*)..").should().beFreeOfCycles().check(ROOT_CLASSES);
   }
 }
