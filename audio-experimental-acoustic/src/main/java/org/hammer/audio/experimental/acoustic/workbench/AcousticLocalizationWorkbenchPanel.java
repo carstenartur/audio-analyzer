@@ -30,6 +30,7 @@ import javax.swing.JComboBox;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
+import javax.swing.JSlider;
 import javax.swing.JSpinner;
 import javax.swing.JSplitPane;
 import javax.swing.JTabbedPane;
@@ -38,6 +39,7 @@ import javax.swing.SpinnerListModel;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingUtilities;
 import javax.swing.SwingWorker;
+import javax.swing.Timer;
 import org.hammer.audio.acquisition.Microphone;
 import org.hammer.audio.experimental.acoustic.benchmark.AlignedSourceObservation;
 import org.hammer.audio.experimental.acoustic.benchmark.SnapshotAlignment;
@@ -123,11 +125,26 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
   private final JLabel statusLabel;
   private final RoomMapPanel roomMapPanel;
 
+  // --- playback controls ---
+  private final JButton firstButton;
+  private final JButton stepBackButton;
+  private final JButton playPauseButton;
+  private final JButton stepForwardButton;
+  private final JButton lastButton;
+  private final JSlider timelineSlider;
+  private final JLabel frameLabel;
+  private final JTextArea playbackDetailArea;
+
   // --- state ---
   private transient volatile WorkbenchRunResult lastRunResult;
   private final AtomicBoolean running = new AtomicBoolean(false);
   private volatile SwingWorker<WorkbenchRunResult, String> currentWorker;
   private volatile SwingWorker<AnalysisTabContent, Void> analysisWorker;
+  private transient PlaybackModel playbackModel;
+  private transient Timer playTimer;
+
+  /** Guard flag to prevent slider change listener from re-entering on programmatic updates. */
+  private boolean updatingSlider;
 
   private static final class AnalysisTabContent {
     private final String featureRankingText;
@@ -198,6 +215,24 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
     calibrationArea = newReadOnlyTextArea(20, 60);
     statusLabel = new JLabel("Ready — select a scenario and press Run.");
     roomMapPanel = new RoomMapPanel();
+
+    // --- playback controls (disabled until run completes) ---
+    firstButton = new JButton("|<");
+    stepBackButton = new JButton("<<");
+    playPauseButton = new JButton("▶");
+    stepForwardButton = new JButton(">>");
+    lastButton = new JButton(">|");
+    timelineSlider = new JSlider(0, 0, 0);
+    frameLabel = new JLabel("Frame: — / —");
+    playbackDetailArea = newReadOnlyTextArea(10, 60);
+    setPlaybackControlsEnabled(false);
+
+    firstButton.addActionListener(e -> onPlaybackFirst());
+    stepBackButton.addActionListener(e -> onPlaybackStepBack());
+    playPauseButton.addActionListener(e -> onPlaybackPlayPause());
+    stepForwardButton.addActionListener(e -> onPlaybackStepForward());
+    lastButton.addActionListener(e -> onPlaybackLast());
+    timelineSlider.addChangeListener(e -> onTimelineSliderChanged());
 
     // --- layout ---
     add(buildTopPanel(), BorderLayout.NORTH);
@@ -288,6 +323,7 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
   private JTabbedPane buildOutputTabs() {
     JTabbedPane tabs = new JTabbedPane();
     tabs.addTab("Log", new JScrollPane(logArea));
+    tabs.addTab("Playback", buildPlaybackTab());
     tabs.addTab("Benchmark", new JScrollPane(benchmarkArea));
     tabs.addTab("Markdown", new JScrollPane(markdownArea));
     tabs.addTab("CSV", new JScrollPane(csvArea));
@@ -299,6 +335,33 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
     tabs.addTab("Localization Comparison", new JScrollPane(localizationComparisonArea));
     tabs.addTab("Generator Calibration", new JScrollPane(calibrationArea));
     return tabs;
+  }
+
+  private JPanel buildPlaybackTab() {
+    JPanel tab = new JPanel(new BorderLayout(4, 4));
+    tab.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
+
+    // Controls row
+    JPanel controls = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
+    controls.add(firstButton);
+    controls.add(stepBackButton);
+    controls.add(playPauseButton);
+    controls.add(stepForwardButton);
+    controls.add(lastButton);
+    controls.add(frameLabel);
+
+    // Slider row
+    JPanel sliderRow = new JPanel(new BorderLayout(4, 0));
+    sliderRow.add(new JLabel("Timeline:"), BorderLayout.WEST);
+    sliderRow.add(timelineSlider, BorderLayout.CENTER);
+
+    JPanel top = new JPanel(new BorderLayout(0, 2));
+    top.add(controls, BorderLayout.NORTH);
+    top.add(sliderRow, BorderLayout.SOUTH);
+
+    tab.add(top, BorderLayout.NORTH);
+    tab.add(new JScrollPane(playbackDetailArea), BorderLayout.CENTER);
+    return tab;
   }
 
   private JPanel buildStatusBar() {
@@ -415,8 +478,244 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
   }
 
   // -------------------------------------------------------------------------
-  // Analysis tab helpers
+  // Playback logic
   // -------------------------------------------------------------------------
+
+  private void loadPlayback(WorkbenchRunResult result) {
+    SwingUtilities.invokeLater(
+        () -> {
+          stopPlayTimer();
+          playbackModel = new PlaybackModel(result);
+          int last = Math.max(0, result.snapshots().size() - 1);
+          timelineSlider.setMinimum(0);
+          timelineSlider.setMaximum(last);
+          syncSliderToModel(playbackModel);
+          setPlaybackControlsEnabled(!result.snapshots().isEmpty());
+          if (result.snapshots().isEmpty()) {
+            frameLabel.setText("Frame: — / —");
+            playbackDetailArea.setText("No frames in this run.");
+          } else {
+            refreshPlaybackFrame(0);
+          }
+        });
+  }
+
+  private void setPlaybackControlsEnabled(boolean enabled) {
+    firstButton.setEnabled(enabled);
+    stepBackButton.setEnabled(enabled);
+    playPauseButton.setEnabled(enabled);
+    stepForwardButton.setEnabled(enabled);
+    lastButton.setEnabled(enabled);
+    timelineSlider.setEnabled(enabled);
+  }
+
+  private void onPlaybackFirst() {
+    PlaybackModel model = playbackModel;
+    if (model == null) {
+      return;
+    }
+    model.first();
+    syncSliderToModel(model);
+    refreshPlaybackFrame(model.currentFrame());
+  }
+
+  private void onPlaybackLast() {
+    PlaybackModel model = playbackModel;
+    if (model == null) {
+      return;
+    }
+    model.last();
+    syncSliderToModel(model);
+    refreshPlaybackFrame(model.currentFrame());
+  }
+
+  private void onPlaybackStepBack() {
+    PlaybackModel model = playbackModel;
+    if (model == null) {
+      return;
+    }
+    model.stepBack();
+    syncSliderToModel(model);
+    refreshPlaybackFrame(model.currentFrame());
+  }
+
+  private void onPlaybackStepForward() {
+    PlaybackModel model = playbackModel;
+    if (model == null) {
+      return;
+    }
+    model.stepForward();
+    syncSliderToModel(model);
+    refreshPlaybackFrame(model.currentFrame());
+  }
+
+  private void onPlaybackPlayPause() {
+    if (playTimer != null && playTimer.isRunning()) {
+      stopPlayTimer();
+    } else {
+      startPlayTimer();
+    }
+  }
+
+  private void startPlayTimer() {
+    if (playbackModel == null || playbackModel.isEmpty()) {
+      return;
+    }
+    playPauseButton.setText("⏸");
+    playTimer =
+        new Timer(
+            150,
+            e -> {
+              PlaybackModel model = playbackModel;
+              if (model == null) {
+                stopPlayTimer();
+                return;
+              }
+              boolean advanced = model.stepForward();
+              syncSliderToModel(model);
+              refreshPlaybackFrame(model.currentFrame());
+              if (!advanced) {
+                stopPlayTimer();
+              }
+            });
+    playTimer.start();
+  }
+
+  private void stopPlayTimer() {
+    if (playTimer != null) {
+      playTimer.stop();
+      playTimer = null;
+    }
+    playPauseButton.setText("▶");
+  }
+
+  private void onTimelineSliderChanged() {
+    if (updatingSlider) {
+      return;
+    }
+    PlaybackModel model = playbackModel;
+    if (model == null || model.isEmpty()) {
+      return;
+    }
+    int value = timelineSlider.getValue();
+    model.seekTo(value);
+    refreshPlaybackFrame(model.currentFrame());
+  }
+
+  // PMD cannot see that updatingSlider is read by onTimelineSliderChanged, which is triggered
+  // as a side-effect of timelineSlider.setValue() firing the registered ChangeListener.
+  @SuppressWarnings("PMD.UnusedAssignment")
+  private void syncSliderToModel(PlaybackModel model) {
+    updatingSlider = true;
+    try {
+      timelineSlider.setValue(model.currentFrame());
+    } finally {
+      updatingSlider = false;
+    }
+  }
+
+  @SuppressWarnings("PMD.ConsecutiveAppendsShouldReuse")
+  private void refreshPlaybackFrame(int frameIndex) {
+    PlaybackModel model = playbackModel;
+    if (model == null || model.isEmpty()) {
+      return;
+    }
+    TrackingSnapshot snap = model.result().snapshots().get(frameIndex);
+    int total = model.frameCount();
+    frameLabel.setText(
+        String.format(
+            Locale.ROOT,
+            "Frame: %d / %d  (t=%.1f ms)",
+            frameIndex + 1,
+            total,
+            snap.sourceTimestampNanos() / 1_000_000.0));
+
+    // Update room map to show state up to this frame
+    roomMapPanel.setFrame(model.result(), frameIndex);
+
+    // Build per-frame detail text
+    StringBuilder sb = new StringBuilder(512);
+    sb.append(String.format(Locale.ROOT, "Frame %d / %d%n", frameIndex + 1, total));
+    sb.append(
+        String.format(
+            Locale.ROOT, "Timestamp:   %.3f ms%n", snap.sourceTimestampNanos() / 1_000_000.0));
+    sb.append(String.format(Locale.ROOT, "Source frame: %d%n", snap.sourceFrameIndex()));
+    sb.append(
+        String.format(Locale.ROOT, "Processing:  %.1f µs%n", snap.processingNanos() / 1_000.0));
+    sb.append(String.format(Locale.ROOT, "Clusters:    %d%n", snap.clusters().size()));
+    sb.append(String.format(Locale.ROOT, "Tracks:      %d%n", snap.tracks().size()));
+
+    if (!snap.tracks().isEmpty()) {
+      sb.append("\n--- Estimated tracks ---\n");
+      for (org.hammer.audio.experimental.acoustic.tracking.TrackedSource t : snap.tracks()) {
+        sb.append(
+            String.format(
+                Locale.ROOT,
+                "  id=%d  freq=%.0f Hz  pos=(%.3f, %.3f) m  conf=%.2f  obs=%d%n",
+                t.id(),
+                t.frequencyHz(),
+                t.positionMeters().x(),
+                t.positionMeters().y(),
+                t.confidence(),
+                t.observationCount()));
+        if (!snap.classificationResults().isEmpty()) {
+          org.hammer.audio.experimental.acoustic.wingbeat.ClassificationResult cls =
+              snap.classificationResults().get(t.id());
+          if (cls != null) {
+            sb.append(
+                String.format(
+                    Locale.ROOT,
+                    "    classification: %s (confidence=%.3f)%n",
+                    cls.label(),
+                    cls.confidence()));
+          }
+        }
+      }
+    }
+
+    // Ground-truth comparison using SnapshotGroundTruthAligner
+    try {
+      org.hammer.audio.experimental.acoustic.scenario.Scenario truth =
+          model.result().scenario().groundTruth();
+      long startTs = model.result().snapshots().get(0).sourceTimestampNanos();
+      SnapshotAlignment alignment = new SnapshotGroundTruthAligner().align(truth, snap, startTs);
+      sb.append("\n--- Ground-truth alignment ---\n");
+      sb.append(
+          String.format(
+              Locale.ROOT,
+              "t=%.3f s  matched=%d  missing=%d  spurious=%d%n",
+              alignment.timestampSeconds(),
+              alignment.matchedSources().size(),
+              alignment.missingSources().size(),
+              alignment.spuriousTracks().size()));
+      for (AlignedSourceObservation obs : alignment.matchedSources()) {
+        if (obs.groundTruth().hasPositionTruth()) {
+          double posErr =
+              obs.groundTruth()
+                  .expectedPositionMeters()
+                  .distanceTo(obs.trackedSource().positionMeters());
+          sb.append(
+              String.format(
+                  Locale.ROOT,
+                  "  src=%s → track %d  posErr=%.3f m",
+                  obs.groundTruth().source().sourceId(),
+                  obs.trackedSource().id(),
+                  posErr));
+        }
+        if (obs.groundTruth().hasFrequencyTruth()) {
+          double freqErr =
+              Math.abs(obs.trackedSource().frequencyHz() - obs.groundTruth().expectedFrequencyHz());
+          sb.append(String.format(Locale.ROOT, "  freqErr=%.1f Hz", freqErr));
+        }
+        sb.append('\n');
+      }
+    } catch (RuntimeException ignored) {
+      // alignment failure is non-critical; skip the ground-truth section
+    }
+
+    playbackDetailArea.setText(sb.toString());
+    playbackDetailArea.setCaretPosition(0);
+  }
 
   private AnalysisTabContent buildAnalysisTabContent(SimulationScenario completedScenario) {
     // Build a small deterministic demo dataset for feature analysis.
@@ -798,6 +1097,7 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
         jsonArea.setText(WorkbenchRunExporter.toJsonLines(result));
         benchmarkArea.setText(WorkbenchRunExporter.toBenchmarkMarkdown(result));
         roomMapPanel.setResult(result);
+        loadPlayback(result);
         populateAnalysisTabsAsync(result.scenario());
       } catch (ExecutionException ex) {
         LOGGER.log(Level.WARNING, "Workbench run failed", ex);
@@ -879,6 +1179,10 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
     /** Alignment of the last snapshot against ground truth (for error lines). */
     private transient SnapshotAlignment lastAlignment;
 
+    private transient WorkbenchRunResult cachedPlaybackResult;
+    private int cachedHistoryFrameIndex = -1;
+    private Map<Integer, List<Vector2>> cachedPlaybackHistory = new ConcurrentHashMap<>();
+
     RoomMapPanel() {
       setPreferredSize(new Dimension(300, 300));
       setBorder(BorderFactory.createTitledBorder("Room map (2D, experimental)"));
@@ -891,6 +1195,9 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
       this.gridPoints = List.of();
       this.trackHistory = new ConcurrentHashMap<>();
       this.lastAlignment = null;
+      this.cachedPlaybackResult = null;
+      this.cachedHistoryFrameIndex = -1;
+      this.cachedPlaybackHistory = new ConcurrentHashMap<>();
       repaint();
     }
 
@@ -937,6 +1244,78 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
         }
       }
       this.gridPoints = List.copyOf(grid);
+      this.cachedPlaybackResult = null;
+      this.cachedHistoryFrameIndex = -1;
+      this.cachedPlaybackHistory = new ConcurrentHashMap<>();
+      repaint();
+    }
+
+    /**
+     * Render the room map for a specific frame index, showing track history up to that frame.
+     *
+     * @param result the completed run result
+     * @param frameIndex 0-based index of the frame to display; silently clamped to valid range
+     */
+    void setFrame(WorkbenchRunResult result, int frameIndex) {
+      this.scenario = result.scenario();
+      if (result.snapshots().isEmpty()) {
+        this.lastTracks = List.of();
+        this.trackHistory = new ConcurrentHashMap<>();
+        this.lastAlignment = null;
+        this.gridPoints = List.of();
+        this.cachedPlaybackResult = null;
+        this.cachedHistoryFrameIndex = -1;
+        this.cachedPlaybackHistory = new ConcurrentHashMap<>();
+        repaint();
+        return;
+      }
+      boolean newResult = !Objects.equals(this.cachedPlaybackResult, result);
+      if (newResult) {
+        this.cachedPlaybackResult = result;
+        this.cachedHistoryFrameIndex = -1;
+        this.cachedPlaybackHistory = new ConcurrentHashMap<>();
+
+        List<Vector2> grid = new ArrayList<>();
+        int steps = result.parameters().candidateGridSteps();
+        double w = result.scenario().room().widthMeters();
+        double h = result.scenario().room().heightMeters();
+        for (int xi = 0; xi <= steps; xi++) {
+          for (int yi = 0; yi <= steps; yi++) {
+            grid.add(new Vector2(w * xi / steps, h * yi / steps));
+          }
+        }
+        this.gridPoints = List.copyOf(grid);
+      }
+      int idx = Math.max(0, Math.min(frameIndex, result.snapshots().size() - 1));
+      TrackingSnapshot snap = result.snapshots().get(idx);
+      this.lastTracks = snap.tracks();
+
+      if (idx < cachedHistoryFrameIndex) {
+        cachedPlaybackHistory = new ConcurrentHashMap<>();
+        cachedHistoryFrameIndex = -1;
+      }
+      if (idx > cachedHistoryFrameIndex) {
+        for (int i = cachedHistoryFrameIndex + 1; i <= idx; i++) {
+          for (TrackedSource track : result.snapshots().get(i).tracks()) {
+            cachedPlaybackHistory
+                .computeIfAbsent(track.id(), ignored -> new ArrayList<>())
+                .add(track.positionMeters());
+          }
+        }
+        cachedHistoryFrameIndex = idx;
+      }
+      this.trackHistory = cachedPlaybackHistory;
+
+      // Compute alignment for this specific frame
+      this.lastAlignment = null;
+      try {
+        Scenario truth = result.scenario().groundTruth();
+        long startTs = result.snapshots().get(0).sourceTimestampNanos();
+        this.lastAlignment = new SnapshotGroundTruthAligner().align(truth, snap, startTs);
+      } catch (RuntimeException ignored) {
+        // alignment failure is non-critical; error lines will simply not be drawn
+      }
+
       repaint();
     }
 
