@@ -17,9 +17,12 @@ class ArchitectureBoundaryTest {
   private static final List<String> STABLE_MODULES =
       List.of("audio-core", "audio-geometry", "audio-acquisition", "audio-dsp");
 
-  /** Matches any import from {@code org.hammer.*} that is not under {@code org.hammer.audio.*}. */
+  /**
+   * Matches any import (including {@code import static}) from {@code org.hammer.*} that is not
+   * under {@code org.hammer.audio.*}.
+   */
   private static final String NON_AUDIO_HAMMER_IMPORT_REGEX =
-      "import org\\.hammer\\.(?!audio\\.).*";
+      "import (static )?org\\.hammer\\.(?!audio\\.).*";
 
   @Test
   void stableAudioPackagesDoNotDependOnExperimentalPackages() throws IOException {
@@ -56,6 +59,7 @@ class ArchitectureBoundaryTest {
                             line -> {
                               String trimmed = line.trim();
                               if (trimmed.startsWith("import org.hammer.audio.ui.")
+                                  || trimmed.startsWith("import static org.hammer.audio.ui.")
                                   || trimmed.matches(NON_AUDIO_HAMMER_IMPORT_REGEX)) {
                                 violations.add(path + ": " + trimmed);
                               }
@@ -114,7 +118,9 @@ class ArchitectureBoundaryTest {
                       .forEach(
                           line -> {
                             String trimmed = line.trim();
-                            if (trimmed.startsWith("import org.hammer.audio.experimental.")) {
+                            if (trimmed.startsWith("import org.hammer.audio.experimental.")
+                                || trimmed.startsWith(
+                                    "import static org.hammer.audio.experimental.")) {
                               violations.add(path + ": " + trimmed);
                             }
                           }));
@@ -135,7 +141,10 @@ class ArchitectureBoundaryTest {
                           line -> {
                             String trimmed = line.trim();
                             if (trimmed.startsWith("import org.hammer.audio.experimental.")
+                                || trimmed.startsWith(
+                                    "import static org.hammer.audio.experimental.")
                                 || trimmed.startsWith("import org.hammer.audio.pluginhost.")
+                                || trimmed.startsWith("import static org.hammer.audio.pluginhost.")
                                 || trimmed.matches(NON_AUDIO_HAMMER_IMPORT_REGEX)) {
                               violations.add(path + ": " + trimmed);
                             }
@@ -158,14 +167,17 @@ class ArchitectureBoundaryTest {
     try (Stream<Path> files = Files.walk(workflowRoot)) {
       files
           .filter(path -> path.toString().endsWith(".java"))
-          .filter(path -> !path.toString().contains("/org/hammer/audio/workflow/execution/"))
+          .filter(path -> !path.startsWith(workflowRoot.resolve("execution")))
           .forEach(
               path ->
                   importLines(path).stream()
                       .forEach(
                           line -> {
                             if (line.trim()
-                                .startsWith("import org.hammer.audio.workflow.execution.")) {
+                                    .startsWith("import org.hammer.audio.workflow.execution.")
+                                || line.trim()
+                                    .startsWith(
+                                        "import static org.hammer.audio.workflow.execution.")) {
                               violations.add(path + ": " + line.trim());
                             }
                           }));
@@ -193,7 +205,9 @@ class ArchitectureBoundaryTest {
                           line -> {
                             String trimmed = line.trim();
                             if (trimmed.startsWith("import org.hammer.audio.recording.")
+                                || trimmed.startsWith("import static org.hammer.audio.recording.")
                                 || trimmed.startsWith("import org.hammer.audio.ui.")
+                                || trimmed.startsWith("import static org.hammer.audio.ui.")
                                 || trimmed.matches(NON_AUDIO_HAMMER_IMPORT_REGEX)) {
                               violations.add(path + ": " + trimmed);
                             }
@@ -222,6 +236,7 @@ class ArchitectureBoundaryTest {
                           line -> {
                             String trimmed = line.trim();
                             if (trimmed.startsWith("import org.hammer.audio.ui.")
+                                || trimmed.startsWith("import static org.hammer.audio.ui.")
                                 || trimmed.matches(NON_AUDIO_HAMMER_IMPORT_REGEX)) {
                               violations.add(path + ": " + trimmed);
                             }
@@ -252,6 +267,7 @@ class ArchitectureBoundaryTest {
                           line -> {
                             String trimmed = line.trim();
                             if (trimmed.startsWith("import org.hammer.audio.ui.")
+                                || trimmed.startsWith("import static org.hammer.audio.ui.")
                                 || trimmed.matches(NON_AUDIO_HAMMER_IMPORT_REGEX)) {
                               violations.add(path + ": " + trimmed);
                             }

@@ -9,18 +9,24 @@ are prohibited.
 
 ## Context overview
 
-```
-Audio Processing ◄── Workflow ◄── Execution ◄── Validation
-       │                                              │
-       │                                              │
-       ▼                                              ▼
- Persistence                                   Collaboration (future)
-       │
-       ▼
- Benchmarking ◄── Visualization (terminal: imports from many; exported to nothing)
-```
-
 Dependency direction: `A ◄── B` means B may import from A. The reverse is forbidden.
+
+```
+  Foundation layer (no project-internal imports):
+    Audio Processing            Workflow
+          ◄── Persistence           ◄── Execution
+          ◄── Benchmarking          ◄── Validation
+          ◄── Visualization         ◄── Benchmarking
+                                    ◄── Visualization
+                                    ◄── Collaboration (future)
+
+  Persistence ◄── Visualization
+  Persistence ◄── Collaboration (future)
+  Execution   ◄── Visualization
+  Validation  ◄── Visualization
+
+  Visualization: terminal context — nothing may import from it.
+```
 
 | Bounded Context  |                        Module(s)                         |                                                                                                                                                                     Root package(s)                                                                                                                                                                     |                    Status                    |
 |------------------|----------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------|
