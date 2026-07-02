@@ -389,8 +389,9 @@ public final class ImportedRecordingWorkbenchPanel extends JPanel {
           LOGGER.log(Level.WARNING, "Calibration failed", ex);
           Throwable cause = ex.getCause() == null ? ex : ex.getCause();
           String message = cause.getMessage();
+          String fallback = cause.getClass().getSimpleName();
           calibrationArea.setText(
-              "Calibration failed: " + (message == null || message.isBlank() ? cause : message));
+              "Calibration failed: " + (message == null || message.isBlank() ? fallback : message));
         } catch (InterruptedException ex) {
           Thread.currentThread().interrupt();
           calibrationArea.setText("Calibration was interrupted.");
@@ -419,9 +420,10 @@ public final class ImportedRecordingWorkbenchPanel extends JPanel {
       throws IOException {
     List<DatasetWingbeatEvaluationWorkflow.RecordingAnalysis> analyses =
         selectedOnly ? analyzeSelectedOnly(manifest, selectedRecording) : preloadedAnalyses;
-    if (!selectedOnly && analyses.isEmpty() && !manifest.recordings().isEmpty()) {
+    boolean shouldRecomputeAnalyses =
+        !selectedOnly && analyses.isEmpty() && !manifest.recordings().isEmpty();
+    if (shouldRecomputeAnalyses) {
       analyses = workflow.analyzeAll(manifest, null);
-      loadedAnalyses = analyses;
     }
     return buildCalibrationReport(manifest, analyses, selectedOnly);
   }
@@ -636,6 +638,11 @@ public final class ImportedRecordingWorkbenchPanel extends JPanel {
     return sb.toString();
   }
 
+  /**
+   * Restore transient cached analyses state after deserialization.
+   *
+   * <p>Analyses are derived data and are intentionally recomputed from a manifest when needed.
+   */
   private void readObject(ObjectInputStream in) throws IOException, ClassNotFoundException {
     in.defaultReadObject();
     loadedAnalyses = List.of();
