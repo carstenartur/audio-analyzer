@@ -27,9 +27,14 @@ import org.hammer.audio.experimental.acoustic.dataset.DatasetAnalytics;
 import org.hammer.audio.experimental.acoustic.dataset.DatasetManifest;
 import org.hammer.audio.experimental.acoustic.dataset.DatasetRecording;
 import org.hammer.audio.experimental.acoustic.dataset.HumBugDbImporter;
+import org.hammer.audio.experimental.acoustic.feature.comparison.FeatureDifference;
+import org.hammer.audio.experimental.acoustic.simulation.WingbeatSignalParameters;
+import org.hammer.audio.experimental.acoustic.simulation.calibration.CalibrationResult;
+import org.hammer.audio.experimental.acoustic.simulation.calibration.GeneratorCalibrationService;
 import org.hammer.audio.experimental.acoustic.wingbeat.DatasetWingbeatEvaluationWorkflow;
 import org.hammer.audio.experimental.acoustic.wingbeat.RuleBasedWingbeatClassifier;
 import org.hammer.audio.experimental.acoustic.wingbeat.WingbeatDataset;
+import org.hammer.audio.experimental.acoustic.wingbeat.WingbeatFeatureVector;
 
 /**
  * Small Swing workbench for browsing imported dataset recordings and replaying analysis on them.
@@ -47,6 +52,8 @@ public final class ImportedRecordingWorkbenchPanel extends JPanel {
   private final JTextArea histogramArea;
   private final JTextArea recordingArea;
   private final JTextArea evaluationArea;
+  private final JTextArea calibrationArea;
+  private final JComboBox<String> calibrationScopeCombo;
 
   private final transient HumBugDbImporter importer;
   private final transient DatasetWingbeatEvaluationWorkflow workflow;
@@ -86,6 +93,9 @@ public final class ImportedRecordingWorkbenchPanel extends JPanel {
     histogramArea = newTextArea();
     recordingArea = newTextArea();
     evaluationArea = newTextArea();
+    calibrationArea = newTextArea();
+    calibrationScopeCombo =
+        new JComboBox<>(new String[] {"All imported recordings", "Selected recording only"});
 
     add(buildTopPanel(), BorderLayout.NORTH);
     add(buildCenterPanel(), BorderLayout.CENTER);
@@ -114,6 +124,12 @@ public final class ImportedRecordingWorkbenchPanel extends JPanel {
     JButton replayButton = new JButton("Replay analysis");
     replayButton.addActionListener(e -> refreshSelectedRecording());
     selectRow.add(replayButton);
+    selectRow.add(new JLabel("Calibration scope:"));
+    calibrationScopeCombo.setPreferredSize(new Dimension(220, 24));
+    selectRow.add(calibrationScopeCombo);
+    JButton calibrationButton = new JButton("Run calibration");
+    calibrationButton.addActionListener(e -> runCalibration());
+    selectRow.add(calibrationButton);
 
     panel.add(importRow, BorderLayout.NORTH);
     panel.add(selectRow, BorderLayout.SOUTH);
@@ -144,13 +160,17 @@ public final class ImportedRecordingWorkbenchPanel extends JPanel {
   }
 
   private JSplitPane buildRightPanel() {
-    JSplitPane split =
+    JSplitPane upper =
         new JSplitPane(
             JSplitPane.VERTICAL_SPLIT,
             new JScrollPane(recordingArea),
             new JScrollPane(evaluationArea));
-    split.setResizeWeight(0.55);
-    split.setDividerLocation(300);
+    upper.setResizeWeight(0.55);
+    upper.setDividerLocation(300);
+    JSplitPane split =
+        new JSplitPane(JSplitPane.VERTICAL_SPLIT, upper, new JScrollPane(calibrationArea));
+    split.setResizeWeight(0.7);
+    split.setDividerLocation(520);
     return split;
   }
 
@@ -208,6 +228,7 @@ public final class ImportedRecordingWorkbenchPanel extends JPanel {
           recordingArea.setText("");
           evaluationArea.setText("");
           histogramArea.setText("");
+          calibrationArea.setText("");
           recordingCombo.removeAllItems();
           recordingCombo.setEnabled(false);
         } catch (InterruptedException ex) {
@@ -240,10 +261,12 @@ public final class ImportedRecordingWorkbenchPanel extends JPanel {
     } else {
       evaluationArea.setText("No recordings to evaluate.");
     }
+    calibrationArea.setText("Select a calibration scope and run calibration.");
     if (recordingCombo.getItemCount() > 0) {
       recordingCombo.setSelectedIndex(0);
     } else {
       recordingArea.setText("No recordings imported.");
+      calibrationArea.setText("Calibration unavailable: dataset contains no recordings.");
     }
   }
 
@@ -267,6 +290,7 @@ public final class ImportedRecordingWorkbenchPanel extends JPanel {
       if (loadedManifest.recordings().isEmpty()) {
         evaluationArea.setText("No recordings to evaluate.");
         histogramArea.setText("No recordings to analyze.");
+        calibrationArea.setText("Calibration unavailable: dataset contains no recordings.");
       } else {
         WingbeatDataset.Evaluation evaluation = workflow.evaluate(loadedManifest, classifier);
         evaluationArea.setText(DatasetWingbeatEvaluationWorkflow.toMarkdownReport(evaluation));
@@ -275,6 +299,7 @@ public final class ImportedRecordingWorkbenchPanel extends JPanel {
         histogramArea.setText(
             DatasetWingbeatEvaluationWorkflow.toHistogramMarkdown(
                 DatasetWingbeatEvaluationWorkflow.computeHistograms(analyses)));
+        calibrationArea.setText(buildCalibrationReport(loadedManifest, analyses, false));
       }
       if (recordingCombo.getItemCount() > 0) {
         recordingCombo.setSelectedIndex(0);
@@ -325,6 +350,191 @@ public final class ImportedRecordingWorkbenchPanel extends JPanel {
         }
       }
     }.execute();
+  }
+
+  private void runCalibration() {
+    if (loadedManifest == null) {
+      calibrationArea.setText("Import a dataset first.");
+      return;
+    }
+    if (loadedManifest.recordings().isEmpty()) {
+      calibrationArea.setText("Calibration unavailable: dataset contains no recordings.");
+      return;
+    }
+    calibrationArea.setText("Running calibration …");
+    final boolean selectedOnly = calibrationScopeCombo.getSelectedIndex() == 1;
+    final DatasetManifest currentManifest = loadedManifest;
+    final DatasetRecording selectedRecording = selectedRecording();
+    new SwingWorker<String, Void>() {
+      @Override
+      protected String doInBackground() throws IOException {
+        return buildCalibrationReportForScope(currentManifest, selectedRecording, selectedOnly);
+      }
+
+      @Override
+      protected void done() {
+        try {
+          calibrationArea.setText(get());
+        } catch (ExecutionException ex) {
+          LOGGER.log(Level.WARNING, "Calibration failed", ex);
+          calibrationArea.setText("Calibration failed: " + ex.getCause().getMessage());
+        } catch (InterruptedException ex) {
+          Thread.currentThread().interrupt();
+          calibrationArea.setText("Calibration was interrupted.");
+        }
+      }
+    }.execute();
+  }
+
+  /**
+   * Run calibration synchronously for tests/headless usage.
+   *
+   * @param selectedOnly when true, calibrates only against the currently selected recording
+   */
+  void runCalibrationHeadless(boolean selectedOnly) throws IOException {
+    DatasetManifest manifest = Objects.requireNonNull(loadedManifest, "loadedManifest");
+    DatasetRecording selected = selectedRecording();
+    calibrationArea.setText(buildCalibrationReportForScope(manifest, selected, selectedOnly));
+  }
+
+  private String buildCalibrationReportForScope(
+      DatasetManifest manifest, DatasetRecording selectedRecording, boolean selectedOnly)
+      throws IOException {
+    List<DatasetWingbeatEvaluationWorkflow.RecordingAnalysis> analyses =
+        selectedOnly
+            ? analyzeSelectedOnly(manifest, selectedRecording)
+            : workflow.analyzeAll(manifest, null);
+    return buildCalibrationReport(manifest, analyses, selectedOnly);
+  }
+
+  private List<DatasetWingbeatEvaluationWorkflow.RecordingAnalysis> analyzeSelectedOnly(
+      DatasetManifest manifest, DatasetRecording selectedRecording) throws IOException {
+    if (selectedRecording == null) {
+      throw new IllegalArgumentException("select one recording for subset calibration");
+    }
+    return List.of(workflow.analyzeRecording(manifest, selectedRecording, null));
+  }
+
+  private DatasetRecording selectedRecording() {
+    RecordingItem item = (RecordingItem) recordingCombo.getSelectedItem();
+    return item == null ? null : item.recording();
+  }
+
+  @SuppressWarnings("PMD.ConsecutiveAppendsShouldReuse")
+  private static String buildCalibrationReport(
+      DatasetManifest manifest,
+      List<DatasetWingbeatEvaluationWorkflow.RecordingAnalysis> analyses,
+      boolean selectedOnly) {
+    if (analyses.isEmpty()) {
+      return "Calibration unavailable: no extracted features were produced.";
+    }
+    List<WingbeatFeatureVector> real = analyses.stream().map(a -> a.features()).toList();
+    WingbeatSignalParameters baseline = WingbeatSignalParameters.mosquitoLike(500.0);
+    CalibrationResult calibrationResult = new GeneratorCalibrationService().calibrate(baseline, real);
+
+    int missingSpeciesCount = 0;
+    int missingGenderCount = 0;
+    int missingAnnotationCount = 0;
+    for (DatasetWingbeatEvaluationWorkflow.RecordingAnalysis analysis : analyses) {
+      DatasetRecording recording = analysis.recording();
+      if (!recording.labels().containsKey("species")) {
+        missingSpeciesCount++;
+      }
+      if (!recording.labels().containsKey("gender")) {
+        missingGenderCount++;
+      }
+      if (recording.annotations().isEmpty()) {
+        missingAnnotationCount++;
+      }
+    }
+    StringBuilder sb = new StringBuilder(1024);
+    sb.append("# Generator Calibration (Imported Dataset)\n\n");
+    sb.append("## Dataset Provenance\n\n");
+    sb.append("- Dataset ID: ").append(manifest.descriptor().id()).append('\n');
+    sb.append("- Dataset name: ").append(manifest.descriptor().name()).append('\n');
+    sb.append("- Dataset source: ").append(manifest.descriptor().source()).append('\n');
+    sb.append("- Dataset root: ").append(manifest.descriptor().localRootPath()).append('\n');
+    sb.append("- Scope: ")
+        .append(selectedOnly ? "Selected recording only" : "All imported recordings")
+        .append('\n');
+    sb.append("- Imported recordings: ").append(manifest.recordings().size()).append('\n');
+    sb.append("- Calibrated recordings: ").append(analyses.size()).append('\n');
+    sb.append("- Extracted feature vectors: ").append(real.size()).append('\n');
+    sb.append("- Feature extraction: ")
+        .append(DatasetWingbeatEvaluationWorkflow.defaultFeatureExtractionProvenance())
+        .append('\n');
+
+    sb.append("\n## Dataset Warnings\n\n");
+    if (analyses.size() < 3) {
+      sb.append(
+          "- Tiny dataset warning: fewer than 3 recordings; calibration may be unstable but remains deterministic.\n");
+    }
+    if (missingSpeciesCount > 0 || missingGenderCount > 0 || missingAnnotationCount > 0) {
+      sb.append("- Partial annotation warning: ");
+      if (missingSpeciesCount > 0) {
+        sb.append(missingSpeciesCount).append(" missing species label(s); ");
+      }
+      if (missingGenderCount > 0) {
+        sb.append(missingGenderCount).append(" missing gender label(s); ");
+      }
+      if (missingAnnotationCount > 0) {
+        sb.append(missingAnnotationCount).append(" without annotation span(s); ");
+      }
+      sb.append('\n');
+    }
+    if (sb.toString().endsWith("## Dataset Warnings\n\n")) {
+      sb.append("- No warnings.\n");
+    }
+
+    sb.append("\n## Baseline Parameters\n\n");
+    appendParamRow(
+        sb, "fundamentalFrequencyHz", calibrationResult.baselineParameters().fundamentalFrequencyHz());
+    appendParamRow(sb, "harmonicCount", calibrationResult.baselineParameters().harmonicCount());
+    appendParamRow(sb, "jitterHz", calibrationResult.baselineParameters().jitterHz());
+    appendParamRow(sb, "modulationDepth", calibrationResult.baselineParameters().modulationDepth());
+    appendParamRow(sb, "noiseAmplitude", calibrationResult.baselineParameters().noiseAmplitude());
+    sb.append("\n## Calibrated Parameters\n\n");
+    appendParamRow(
+        sb,
+        "fundamentalFrequencyHz",
+        calibrationResult.calibratedParameters().fundamentalFrequencyHz());
+    appendParamRow(sb, "harmonicCount", calibrationResult.calibratedParameters().harmonicCount());
+    appendParamRow(sb, "jitterHz", calibrationResult.calibratedParameters().jitterHz());
+    appendParamRow(sb, "modulationDepth", calibrationResult.calibratedParameters().modulationDepth());
+    appendParamRow(sb, "noiseAmplitude", calibrationResult.calibratedParameters().noiseAmplitude());
+    sb.append("\n## Feature Deviation Report\n\n");
+    sb.append(
+        String.format(
+            Locale.ROOT, "%-30s %10s %10s %10s%n", "Feature", "Before", "After", "Improvement"));
+    sb.append("-".repeat(65)).append('\n');
+    List<FeatureDifference> beforeDiffs = calibrationResult.beforeCalibration().differences();
+    List<FeatureDifference> afterDiffs = calibrationResult.afterCalibration().differences();
+    int size = Math.min(beforeDiffs.size(), afterDiffs.size());
+    for (int i = 0; i < size; i++) {
+      double before = beforeDiffs.get(i).relativeDifference();
+      double after = afterDiffs.get(i).relativeDifference();
+      sb.append(
+          String.format(
+              Locale.ROOT,
+              "%-30s %9.1f%% %9.1f%% %9.1f%%%n",
+              beforeDiffs.get(i).featureName(),
+              before * 100.0,
+              after * 100.0,
+              (before - after) * 100.0));
+    }
+    sb.append('\n');
+    sb.append(
+        String.format(
+            Locale.ROOT, "Overall improvement: %.1f%%%n", calibrationResult.improvement() * 100.0));
+    return sb.toString();
+  }
+
+  private static void appendParamRow(StringBuilder sb, String name, double value) {
+    sb.append(String.format(Locale.ROOT, "  %-30s %.6f%n", name + ":", value));
+  }
+
+  private static void appendParamRow(StringBuilder sb, String name, int value) {
+    sb.append(String.format(Locale.ROOT, "  %-30s %d%n", name + ":", value));
   }
 
   @SuppressWarnings({"PMD.ConsecutiveAppendsShouldReuse", "PMD.ConsecutiveLiteralAppends"})
@@ -407,6 +617,10 @@ public final class ImportedRecordingWorkbenchPanel extends JPanel {
 
   String histogramText() {
     return histogramArea.getText();
+  }
+
+  String calibrationText() {
+    return calibrationArea.getText();
   }
 
   private record RecordingItem(DatasetRecording recording) {
