@@ -182,7 +182,7 @@ public final class WorkbenchRunExporter {
           .append(MARKDOWN_PIPE_SEPARATOR)
           .append(String.format(Locale.ROOT, "%.1f", snap.processingNanos() / 1_000.0))
           .append(MARKDOWN_PIPE_SEPARATOR)
-          .append(result.isFrameOverBudget(snap) ? "⚠ OVER" : "OK")
+          .append(formatBudgetStatus(result, snap))
           .append(" |\n");
     }
     return sb.toString();
@@ -204,7 +204,6 @@ public final class WorkbenchRunExporter {
         "frameIndex,timestampNs,trackId,frequencyHz,observedFrequencyHz,"
             + "posX,posY,velX,velY,confidence,observations,processingNs,budgetExceeded\n");
     for (TrackingSnapshot snap : result.snapshots()) {
-      boolean over = result.isFrameOverBudget(snap);
       for (TrackedSource track : snap.tracks()) {
         sb.append(snap.sourceFrameIndex())
             .append(',')
@@ -230,7 +229,7 @@ public final class WorkbenchRunExporter {
             .append(',')
             .append(snap.processingNanos())
             .append(',')
-            .append(over)
+            .append(formatBudgetExceededCsv(result, snap))
             .append('\n');
       }
     }
@@ -258,7 +257,7 @@ public final class WorkbenchRunExporter {
           .append(",\"processingNs\":")
           .append(snap.processingNanos())
           .append(",\"budgetExceeded\":")
-          .append(result.isFrameOverBudget(snap))
+          .append(formatBudgetExceededJson(result, snap))
           .append(",\"clusters\":[");
       appendClustersJson(sb, snap.clusters());
       sb.append("],\"tracks\":[");
@@ -319,6 +318,27 @@ public final class WorkbenchRunExporter {
       }
     }
     return new ArrayList<>(seen);
+  }
+
+  private static String formatBudgetStatus(WorkbenchRunResult result, TrackingSnapshot snap) {
+    if (result.frameSchedule() == null) {
+      return "N/A";
+    }
+    return result.isFrameOverBudget(snap) ? "⚠ OVER" : "OK";
+  }
+
+  private static String formatBudgetExceededCsv(WorkbenchRunResult result, TrackingSnapshot snap) {
+    if (result.frameSchedule() == null) {
+      return "";
+    }
+    return Boolean.toString(result.isFrameOverBudget(snap));
+  }
+
+  private static String formatBudgetExceededJson(WorkbenchRunResult result, TrackingSnapshot snap) {
+    if (result.frameSchedule() == null) {
+      return "null";
+    }
+    return Boolean.toString(result.isFrameOverBudget(snap));
   }
 
   private static String formatMetric(String fmt, Double value) {

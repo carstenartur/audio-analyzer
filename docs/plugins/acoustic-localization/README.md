@@ -87,7 +87,7 @@ Block   17  frame=  17408  time=1088.0 ms  clusters=1  tracks=1  proc=28000.0 µ
 If any frames exceeded the budget, the run-complete summary line also reports the count:
 
 ```
-⚠ 3 frame(s) exceeded the real-time budget (budget=18.6 µs per block).
+⚠ 3 frame(s) exceeded the real-time budget (budget=18600.0 µs per block).
 ```
 
 > **Note:** Budget warnings are **experimental**. They indicate that the configured

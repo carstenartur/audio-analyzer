@@ -124,7 +124,7 @@ latency(t) = t_obs − snapshot.sourceTimestampNanos() + snapshot.processingNano
   `ProcessingBudget#exceeded()`.
 - `WorkbenchRunResult` accumulates per-frame budget compliance:
   - `overBudgetFrameCount()` returns the number of frames where
-    `processingNanos > frameSchedule.maxProcessingNanos()`.
+    `snapshot.processingNanos() > frameSchedule.maxProcessingNanos()`.
   - `isFrameOverBudget(snapshot)` checks a single frame.
 - The workbench log annotates over-budget frames with `⚠ OVER BUDGET` and
   includes the aggregate count in the run-complete summary line.

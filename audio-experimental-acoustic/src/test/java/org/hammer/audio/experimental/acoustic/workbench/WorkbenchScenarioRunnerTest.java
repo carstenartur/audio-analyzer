@@ -11,7 +11,10 @@ import java.util.List;
 import org.hammer.audio.experimental.acoustic.simulation.SimulationScenarios;
 import org.hammer.audio.experimental.acoustic.simulation.SimulationScenarios.SimulationScenario;
 import org.hammer.audio.experimental.acoustic.tracking.FrameSchedule;
+import org.hammer.audio.experimental.acoustic.tracking.TrackedSource;
 import org.hammer.audio.experimental.acoustic.tracking.TrackingSnapshot;
+import org.hammer.audio.geometry.Vector2;
+import org.hammer.audio.geometry.Vector3;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -369,11 +372,28 @@ class WorkbenchScenarioRunnerTest {
   }
 
   @Test
+  void markdownExportShowsBudgetAsNaWhenScheduleIsUnavailable() {
+    TrackingSnapshot snap = new TrackingSnapshot(0L, 0L, List.of(), List.of(), 1L);
+    WorkbenchRunResult result =
+        new WorkbenchRunResult(
+            SimulationScenarios.singleSource(),
+            WorkbenchParameters.defaults().build(),
+            List.of(snap),
+            1L,
+            null);
+
+    String md = WorkbenchRunExporter.toMarkdown(result);
+    assertTrue(md.contains("N/A"), "markdown must render unknown budget state as N/A");
+    assertFalse(md.contains("⚠ OVER"), "unknown budget state must not be marked as OVER");
+  }
+
+  @Test
   void csvExportIncludesBudgetExceededColumn() {
     FrameSchedule schedule = new FrameSchedule(44100.0, 1024, 0.001);
     long budgetNanos = schedule.maxProcessingNanos();
+    TrackedSource track = trackedSource(1);
     TrackingSnapshot snap =
-        new TrackingSnapshot(0L, 0L, List.of(), List.of(), budgetNanos + 1_000_000L);
+        new TrackingSnapshot(0L, 0L, List.of(), List.of(track), budgetNanos + 1_000_000L);
     WorkbenchRunResult result =
         new WorkbenchRunResult(
             SimulationScenarios.singleSource(),
@@ -385,6 +405,23 @@ class WorkbenchScenarioRunnerTest {
 
     String csv = WorkbenchRunExporter.toCsv(result);
     assertTrue(csv.contains("budgetExceeded"), "csv must have budgetExceeded header column");
+    assertTrue(csv.contains(",true\n"), "csv must export true for over-budget tracked rows");
+  }
+
+  @Test
+  void csvExportLeavesBudgetExceededEmptyWhenScheduleIsUnavailable() {
+    TrackedSource track = trackedSource(1);
+    TrackingSnapshot snap = new TrackingSnapshot(0L, 0L, List.of(), List.of(track), 1L);
+    WorkbenchRunResult result =
+        new WorkbenchRunResult(
+            SimulationScenarios.singleSource(),
+            WorkbenchParameters.defaults().build(),
+            List.of(snap),
+            1L,
+            null);
+
+    String csv = WorkbenchRunExporter.toCsv(result);
+    assertTrue(csv.endsWith(",\n"), "csv must leave budgetExceeded empty when schedule is unknown");
   }
 
   @Test
@@ -404,5 +441,26 @@ class WorkbenchScenarioRunnerTest {
 
     String json = WorkbenchRunExporter.toJsonLines(result);
     assertTrue(json.contains("\"budgetExceeded\":true"), "json must include budgetExceeded:true");
+  }
+
+  @Test
+  void jsonLinesExportUsesNullBudgetExceededWhenScheduleIsUnavailable() {
+    TrackingSnapshot snap = new TrackingSnapshot(0L, 0L, List.of(), List.of(), 1L);
+    WorkbenchRunResult result =
+        new WorkbenchRunResult(
+            SimulationScenarios.singleSource(),
+            WorkbenchParameters.defaults().build(),
+            List.of(snap),
+            1L,
+            null);
+
+    String json = WorkbenchRunExporter.toJsonLines(result);
+    assertTrue(
+        json.contains("\"budgetExceeded\":null"), "json must encode unknown budget state as null");
+  }
+
+  private static TrackedSource trackedSource(int id) {
+    return new TrackedSource(
+        id, 512.0, 512.0, Vector2.ZERO, Vector2.ZERO, Vector3.ZERO, 0.0, 0.0, 1.0, 0L, 1);
   }
 }
