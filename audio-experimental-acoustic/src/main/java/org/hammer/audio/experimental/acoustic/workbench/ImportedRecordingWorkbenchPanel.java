@@ -8,6 +8,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.StringJoiner;
 import java.util.concurrent.ExecutionException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -39,6 +40,7 @@ import org.hammer.audio.experimental.acoustic.wingbeat.WingbeatFeatureVector;
 /**
  * Small Swing workbench for browsing imported dataset recordings and replaying analysis on them.
  */
+@SuppressWarnings("PMD.CouplingBetweenObjects")
 public final class ImportedRecordingWorkbenchPanel extends JPanel {
 
   private static final Logger LOGGER =
@@ -410,7 +412,8 @@ public final class ImportedRecordingWorkbenchPanel extends JPanel {
   private List<DatasetWingbeatEvaluationWorkflow.RecordingAnalysis> analyzeSelectedOnly(
       DatasetManifest manifest, DatasetRecording selectedRecording) throws IOException {
     if (selectedRecording == null) {
-      throw new IllegalArgumentException("select one recording for subset calibration");
+      throw new IllegalArgumentException(
+          "Please select a recording before running calibration on a subset.");
     }
     return List.of(workflow.analyzeRecording(manifest, selectedRecording, null));
   }
@@ -420,7 +423,12 @@ public final class ImportedRecordingWorkbenchPanel extends JPanel {
     return item == null ? null : item.recording();
   }
 
-  @SuppressWarnings("PMD.ConsecutiveAppendsShouldReuse")
+  @SuppressWarnings({
+    "PMD.ConsecutiveAppendsShouldReuse",
+    "PMD.ConsecutiveLiteralAppends",
+    "PMD.NcssCount",
+    "PMD.NPathComplexity"
+  })
   private static String buildCalibrationReport(
       DatasetManifest manifest,
       List<DatasetWingbeatEvaluationWorkflow.RecordingAnalysis> analyses,
@@ -428,9 +436,13 @@ public final class ImportedRecordingWorkbenchPanel extends JPanel {
     if (analyses.isEmpty()) {
       return "Calibration unavailable: no extracted features were produced.";
     }
-    List<WingbeatFeatureVector> real = analyses.stream().map(a -> a.features()).toList();
+    List<WingbeatFeatureVector> real =
+        analyses.stream()
+            .map(DatasetWingbeatEvaluationWorkflow.RecordingAnalysis::features)
+            .toList();
     WingbeatSignalParameters baseline = WingbeatSignalParameters.mosquitoLike(500.0);
-    CalibrationResult calibrationResult = new GeneratorCalibrationService().calibrate(baseline, real);
+    CalibrationResult calibrationResult =
+        new GeneratorCalibrationService().calibrate(baseline, real);
 
     int missingSpeciesCount = 0;
     int missingGenderCount = 0;
@@ -465,30 +477,37 @@ public final class ImportedRecordingWorkbenchPanel extends JPanel {
         .append('\n');
 
     sb.append("\n## Dataset Warnings\n\n");
+    boolean hasWarnings = false;
     if (analyses.size() < 3) {
       sb.append(
-          "- Tiny dataset warning: fewer than 3 recordings; calibration may be unstable but remains deterministic.\n");
+          "- Tiny dataset warning: fewer than 3 recordings; calibration may be unstable but remains"
+              + " deterministic.\n");
+      hasWarnings = true;
     }
     if (missingSpeciesCount > 0 || missingGenderCount > 0 || missingAnnotationCount > 0) {
-      sb.append("- Partial annotation warning: ");
+      StringJoiner joiner = new StringJoiner("; ");
       if (missingSpeciesCount > 0) {
-        sb.append(missingSpeciesCount).append(" missing species label(s); ");
+        joiner.add(String.format(Locale.ROOT, "%d missing species label(s)", missingSpeciesCount));
       }
       if (missingGenderCount > 0) {
-        sb.append(missingGenderCount).append(" missing gender label(s); ");
+        joiner.add(String.format(Locale.ROOT, "%d missing gender label(s)", missingGenderCount));
       }
       if (missingAnnotationCount > 0) {
-        sb.append(missingAnnotationCount).append(" without annotation span(s); ");
+        joiner.add(
+            String.format(Locale.ROOT, "%d without annotation span(s)", missingAnnotationCount));
       }
-      sb.append('\n');
+      sb.append("- Partial annotation warning: ").append(joiner).append('\n');
+      hasWarnings = true;
     }
-    if (sb.toString().endsWith("## Dataset Warnings\n\n")) {
+    if (!hasWarnings) {
       sb.append("- No warnings.\n");
     }
 
     sb.append("\n## Baseline Parameters\n\n");
     appendParamRow(
-        sb, "fundamentalFrequencyHz", calibrationResult.baselineParameters().fundamentalFrequencyHz());
+        sb,
+        "fundamentalFrequencyHz",
+        calibrationResult.baselineParameters().fundamentalFrequencyHz());
     appendParamRow(sb, "harmonicCount", calibrationResult.baselineParameters().harmonicCount());
     appendParamRow(sb, "jitterHz", calibrationResult.baselineParameters().jitterHz());
     appendParamRow(sb, "modulationDepth", calibrationResult.baselineParameters().modulationDepth());
@@ -500,7 +519,8 @@ public final class ImportedRecordingWorkbenchPanel extends JPanel {
         calibrationResult.calibratedParameters().fundamentalFrequencyHz());
     appendParamRow(sb, "harmonicCount", calibrationResult.calibratedParameters().harmonicCount());
     appendParamRow(sb, "jitterHz", calibrationResult.calibratedParameters().jitterHz());
-    appendParamRow(sb, "modulationDepth", calibrationResult.calibratedParameters().modulationDepth());
+    appendParamRow(
+        sb, "modulationDepth", calibrationResult.calibratedParameters().modulationDepth());
     appendParamRow(sb, "noiseAmplitude", calibrationResult.calibratedParameters().noiseAmplitude());
     sb.append("\n## Feature Deviation Report\n\n");
     sb.append(

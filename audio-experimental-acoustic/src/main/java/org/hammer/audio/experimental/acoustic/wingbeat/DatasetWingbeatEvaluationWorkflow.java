@@ -62,7 +62,8 @@ public final class DatasetWingbeatEvaluationWorkflow {
   public static String defaultFeatureExtractionProvenance() {
     return String.format(
         Locale.ROOT,
-        "WingbeatFrequencyTracker fft=%d band=[%.1f, %.1f] Hz; WingbeatFeatureExtractor fft=%d band=[%.1f, %.1f] Hz",
+        "WingbeatFrequencyTracker fft=%d band=[%.1f, %.1f] Hz; WingbeatFeatureExtractor fft=%d"
+            + " band=[%.1f, %.1f] Hz",
         DEFAULT_FFT_SIZE,
         DEFAULT_BAND.lowHz(),
         DEFAULT_BAND.highHz(),

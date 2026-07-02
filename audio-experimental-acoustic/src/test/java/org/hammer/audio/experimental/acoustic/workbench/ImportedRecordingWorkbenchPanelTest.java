@@ -17,6 +17,7 @@ import javax.sound.sampled.AudioInputStream;
 import javax.sound.sampled.AudioSystem;
 import org.hammer.audio.experimental.acoustic.dataset.DatasetDescriptor;
 import org.hammer.audio.experimental.acoustic.dataset.DatasetManifest;
+import org.hammer.audio.experimental.acoustic.dataset.DatasetRecording;
 import org.hammer.audio.experimental.acoustic.dataset.HumBugDbImporter;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -104,7 +105,40 @@ class ImportedRecordingWorkbenchPanelTest {
     ImportedRecordingWorkbenchPanel panel = new ImportedRecordingWorkbenchPanel();
     panel.loadManifest(manifest);
     assertTrue(
-        panel.calibrationText().contains("Calibration unavailable: dataset contains no recordings."));
+        panel
+            .calibrationText()
+            .contains("Calibration unavailable: dataset contains no recordings."));
+  }
+
+  @Test
+  void calibrationWarnsWhenRecordingHasNoAnnotationSpans() throws IOException {
+    Path root = tempDir.resolve("no-annotations");
+    Path audioDir = Files.createDirectories(root.resolve("data/audio"));
+    createSineWave(audioDir.resolve("clip.wav"), 8_192, 520.0, 1.0);
+    DatasetManifest manifest =
+        new DatasetManifest(
+            new DatasetDescriptor(
+                "annotation-fixture",
+                "Annotation fixture",
+                URI.create("https://example.org/annotation-fixture"),
+                "test-only",
+                root.toAbsolutePath(),
+                Map.of("id", "fixture id")),
+            List.of(
+                new DatasetRecording(
+                    "clip-no-annotation",
+                    Path.of("data/audio/clip.wav"),
+                    8_192.0,
+                    1.0,
+                    Map.of("species", "anopheles gambiae", "gender", "female"),
+                    List.of(),
+                    Map.of("sound_type", "mosquito"))));
+
+    ImportedRecordingWorkbenchPanel panel = new ImportedRecordingWorkbenchPanel();
+    panel.loadManifest(manifest);
+    panel.runCalibrationHeadless(false);
+
+    assertTrue(panel.calibrationText().contains("without annotation span(s)"));
   }
 
   private static void createSineWave(Path file, int sampleRate, double frequencyHz, double seconds)
