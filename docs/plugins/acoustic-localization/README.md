@@ -78,19 +78,57 @@ Block   12  frame=  12288  time=  768.0 ms  clusters=1  tracks=1  proc=142.3 µs
          [600 Hz]  {id=0 f=600 Hz pos=(1.50,1.00) conf=0.92 n=13}
 ```
 
-Processing time exceeding the per-block budget (block duration × 0.8) is reported in the final
-summary.
+When a frame exceeds the per-block real-time budget, the log line is annotated:
+
+```
+Block   17  frame=  17408  time=1088.0 ms  clusters=1  tracks=1  proc=28000.0 µs  ⚠ OVER BUDGET
+```
+
+If any frames exceeded the budget, the run-complete summary line also reports the count:
+
+```
+⚠ 3 frame(s) exceeded the real-time budget (budget=18600.0 µs per block).
+```
+
+> **Note:** Budget warnings are **experimental**. They indicate that the configured
+> `FrameSchedule` deadline was not met for those frames, but do not abort processing.
+> On a development machine, budget overruns are normal and expected — the per-block budget
+> assumes a real-time-capable system running at the configured sample rate. See
+> [How to interpret budget warnings](#how-to-interpret-budget-warnings) for details.
 
 ### Export
 
 After a run completes the three export tabs are populated:
 
-- **Markdown** — human-readable summary with scenario metadata, parameter table and per-block table.
+- **Markdown** — human-readable summary with scenario metadata, parameter table, aggregate
+  budget statistics (*Budget per block*, *Over-budget frames*) and a per-block table where
+  over-budget rows are annotated with `⚠ OVER`.
 - **CSV** — one row per tracked source per frame (`frameIndex`, `timestampNs`, `trackId`,
-  `frequencyHz`, `posX`, `posY`, …).
-- **JSON-lines** — one JSON object per frame, suitable for offline analysis.
+  `frequencyHz`, `posX`, `posY`, …, `budgetExceeded`). The `budgetExceeded` column is
+  `true` for frames that exceeded the per-block deadline, `false` otherwise.
+- **JSON-lines** — one JSON object per frame, with a `"budgetExceeded"` boolean field for
+  each frame, suitable for offline analysis.
 
 Copy the content to a file for archiving.
+
+### How to interpret budget warnings
+
+The `FrameSchedule` is configured with 80 % of the block period as the real-time deadline
+(`maxLoadFraction = 0.8`). For a 1024-sample block at 44 100 Hz, the budget is roughly 18.6 ms
+(0.8 × 23.2 ms).
+
+Budget warnings do **not** imply incorrect results:
+
+- The pipeline is observational: it records `processingNanos` per frame but never skips or
+  aborts processing.
+- On a typical development machine the per-frame wall-clock time is far below the budget.
+  Occasional spikes (JIT warmup, GC pauses, OS scheduling) may trigger a warning.
+- Repeated warnings across many frames on a target real-time system indicate that the
+  pipeline configuration should be simplified (smaller FFT, fewer grid steps, lower block rate)
+  or the hardware upgraded.
+
+The `WorkbenchRunResult.overBudgetFrameCount()` and `isFrameOverBudget(snapshot)` methods
+provide programmatic access to the same information.
 
 ### Headless / programmatic use
 

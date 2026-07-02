@@ -63,6 +63,7 @@ import org.hammer.audio.experimental.acoustic.simulation.SimulationScenarios.Sim
 import org.hammer.audio.experimental.acoustic.simulation.WingbeatSignalParameters;
 import org.hammer.audio.experimental.acoustic.simulation.calibration.CalibrationResult;
 import org.hammer.audio.experimental.acoustic.simulation.calibration.GeneratorCalibrationService;
+import org.hammer.audio.experimental.acoustic.tracking.FrameSchedule;
 import org.hammer.audio.experimental.acoustic.tracking.FrequencyCluster;
 import org.hammer.audio.experimental.acoustic.tracking.TrackedSource;
 import org.hammer.audio.experimental.acoustic.tracking.TrackingSnapshot;
@@ -642,6 +643,9 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
     sb.append(String.format(Locale.ROOT, "Source frame: %d%n", snap.sourceFrameIndex()));
     sb.append(
         String.format(Locale.ROOT, "Processing:  %.1f µs%n", snap.processingNanos() / 1_000.0));
+    if (model.result().isFrameOverBudget(snap)) {
+      sb.append("⚠ Frame exceeded real-time budget\n");
+    }
     sb.append(String.format(Locale.ROOT, "Clusters:    %d%n", snap.clusters().size()));
     sb.append(String.format(Locale.ROOT, "Tracks:      %d%n", snap.tracks().size()));
 
@@ -1036,11 +1040,18 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
 
     private final SimulationScenario scenario;
     private final WorkbenchParameters params;
+    private final long budgetNanos;
     private int blockIndex;
 
     ScenarioWorker(SimulationScenario scenario, WorkbenchParameters params) {
       this.scenario = scenario;
       this.params = params;
+      this.budgetNanos =
+          new FrameSchedule(
+                  scenario.sampleRate(),
+                  params.blockSize(),
+                  WorkbenchScenarioRunner.PIPELINE_MAX_LOAD_FRACTION)
+              .maxProcessingNanos();
     }
 
     @Override
@@ -1085,6 +1096,17 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
                 result.maxTracksInAnyFrame(),
                 result.distinctTrackCount(),
                 result.averageProcessingNanosPerBlock() / 1_000.0));
+        long overBudget = result.overBudgetFrameCount();
+        if (overBudget > 0) {
+          appendLog(
+              String.format(
+                  Locale.ROOT,
+                  "⚠ %d frame(s) exceeded the real-time budget (budget=%.1f µs per block).",
+                  overBudget,
+                  result.frameSchedule() != null
+                      ? result.frameSchedule().maxProcessingNanos() / 1_000.0
+                      : 0.0));
+        }
         updateStatus(
             String.format(
                 Locale.ROOT,
@@ -1121,6 +1143,9 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
               snapshot.clusters().size(),
               snapshot.tracks().size(),
               snapshot.processingNanos() / 1_000.0));
+      if (snapshot.processingNanos() > budgetNanos) {
+        sb.append("  ⚠ OVER BUDGET");
+      }
       for (FrequencyCluster c : snapshot.clusters()) {
         sb.append(String.format(Locale.ROOT, "  [%.0f Hz]", c.centerFrequencyHz()));
       }
