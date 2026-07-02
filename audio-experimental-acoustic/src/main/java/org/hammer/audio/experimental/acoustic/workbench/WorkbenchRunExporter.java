@@ -157,11 +157,19 @@ public final class WorkbenchRunExporter {
         sb,
         "Max processing / block",
         String.format(Locale.ROOT, "%.2f µs", result.maxProcessingNanosPerBlock() / 1_000.0));
+    if (result.frameSchedule() != null) {
+      appendRow(
+          sb,
+          "Budget per block",
+          String.format(
+              Locale.ROOT, "%.2f µs", result.frameSchedule().maxProcessingNanos() / 1_000.0));
+      appendRow(sb, "Over-budget frames", result.overBudgetFrameCount());
+    }
 
     sb.append(
         "\n## Frame-by-frame summary\n\n"
-            + "| Frame | Time (ms) | Clusters | Tracks | Proc. (µs) |\n"
-            + "|---|---|---|---|---|\n");
+            + "| Frame | Time (ms) | Clusters | Tracks | Proc. (µs) | Budget |\n"
+            + "|---|---|---|---|---|---|\n");
     for (TrackingSnapshot snap : result.snapshots()) {
       sb.append("| ")
           .append(snap.sourceFrameIndex())
@@ -173,6 +181,8 @@ public final class WorkbenchRunExporter {
           .append(snap.tracks().size())
           .append(MARKDOWN_PIPE_SEPARATOR)
           .append(String.format(Locale.ROOT, "%.1f", snap.processingNanos() / 1_000.0))
+          .append(MARKDOWN_PIPE_SEPARATOR)
+          .append(result.isFrameOverBudget(snap) ? "⚠ OVER" : "OK")
           .append(" |\n");
     }
     return sb.toString();
@@ -192,8 +202,9 @@ public final class WorkbenchRunExporter {
     StringBuilder sb = new StringBuilder(1024);
     sb.append(
         "frameIndex,timestampNs,trackId,frequencyHz,observedFrequencyHz,"
-            + "posX,posY,velX,velY,confidence,observations,processingNs\n");
+            + "posX,posY,velX,velY,confidence,observations,processingNs,budgetExceeded\n");
     for (TrackingSnapshot snap : result.snapshots()) {
+      boolean over = result.isFrameOverBudget(snap);
       for (TrackedSource track : snap.tracks()) {
         sb.append(snap.sourceFrameIndex())
             .append(',')
@@ -218,6 +229,8 @@ public final class WorkbenchRunExporter {
             .append(track.observationCount())
             .append(',')
             .append(snap.processingNanos())
+            .append(',')
+            .append(over)
             .append('\n');
       }
     }
@@ -244,6 +257,8 @@ public final class WorkbenchRunExporter {
           .append(snap.sourceTimestampNanos())
           .append(",\"processingNs\":")
           .append(snap.processingNanos())
+          .append(",\"budgetExceeded\":")
+          .append(result.isFrameOverBudget(snap))
           .append(",\"clusters\":[");
       appendClustersJson(sb, snap.clusters());
       sb.append("],\"tracks\":[");

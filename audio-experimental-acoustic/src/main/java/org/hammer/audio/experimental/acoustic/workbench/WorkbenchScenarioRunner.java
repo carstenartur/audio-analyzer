@@ -42,6 +42,13 @@ public final class WorkbenchScenarioRunner {
 
   private static final Logger LOGGER = Logger.getLogger(WorkbenchScenarioRunner.class.getName());
 
+  /**
+   * Maximum fraction of one block period that the pipeline may consume ({@value}). This value is
+   * used to configure the {@link FrameSchedule} and is intentionally shared with the UI so both log
+   * annotations and the result's budget compliance checks use the same threshold.
+   */
+  static final double PIPELINE_MAX_LOAD_FRACTION = 0.8;
+
   /** Called after each audio block is processed during an incremental run. */
   @FunctionalInterface
   public interface ProgressCallback {
@@ -113,7 +120,8 @@ public final class WorkbenchScenarioRunner {
           parameters,
           snapshots,
           totalProcessingNanos,
-          computeBenchmarkReport(scenario, snapshots));
+          computeBenchmarkReport(scenario, snapshots),
+          pipeline.schedule());
     } catch (java.io.IOException e) {
       throw new IllegalStateException("Unexpected close failure on simulation source", e);
     }
@@ -164,7 +172,8 @@ public final class WorkbenchScenarioRunner {
             params.trackerConfidenceDecay(),
             params.trackerConfidenceGain());
     List<Vector2> grid = buildCandidateGrid(scenario, params.candidateGridSteps());
-    FrameSchedule schedule = new FrameSchedule(scenario.sampleRate(), params.blockSize(), 0.8);
+    FrameSchedule schedule =
+        new FrameSchedule(scenario.sampleRate(), params.blockSize(), PIPELINE_MAX_LOAD_FRACTION);
     return new TrackingPipeline(
         detector, clusterer, tdoaEstimator, beamformer, tracker, grid, schedule);
   }

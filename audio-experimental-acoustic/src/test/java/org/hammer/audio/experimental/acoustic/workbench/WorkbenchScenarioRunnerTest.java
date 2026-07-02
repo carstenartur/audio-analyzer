@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.List;
 import org.hammer.audio.experimental.acoustic.simulation.SimulationScenarios;
 import org.hammer.audio.experimental.acoustic.simulation.SimulationScenarios.SimulationScenario;
+import org.hammer.audio.experimental.acoustic.tracking.FrameSchedule;
 import org.hammer.audio.experimental.acoustic.tracking.TrackingSnapshot;
 import org.junit.jupiter.api.Test;
 
@@ -227,5 +228,181 @@ class WorkbenchScenarioRunnerTest {
           result.benchmarkReport(),
           "benchmark report must not be null for scenario: " + scenario.name());
     }
+  }
+
+  // -------------------------------------------------------------------------
+  // Budget compliance tests
+  // -------------------------------------------------------------------------
+
+  @Test
+  void fullRunResultCarriesFrameSchedule() {
+    SimulationScenario scenario = SimulationScenarios.singleSource();
+    WorkbenchRunResult result =
+        WorkbenchScenarioRunner.run(scenario, WorkbenchParameters.defaults().build());
+
+    assertNotNull(result.frameSchedule(), "runner must record frame schedule in result");
+    assertTrue(result.frameSchedule().maxProcessingNanos() > 0);
+    assertTrue(result.overBudgetFrameCount() >= 0);
+    assertTrue(
+        result.overBudgetFrameCount() <= result.blockCount(),
+        "over-budget count must not exceed total block count");
+  }
+
+  @Test
+  void allFramesUnderBudgetWhenProcessingNanosIsSmall() {
+    FrameSchedule schedule = new FrameSchedule(44100.0, 1024, 0.8);
+    long budgetNanos = schedule.maxProcessingNanos();
+    TrackingSnapshot snap0 = new TrackingSnapshot(0L, 0L, List.of(), List.of(), budgetNanos / 2);
+    TrackingSnapshot snap1 =
+        new TrackingSnapshot(1024L, 23_219_954L, List.of(), List.of(), budgetNanos / 2);
+    WorkbenchRunResult result =
+        new WorkbenchRunResult(
+            SimulationScenarios.singleSource(),
+            WorkbenchParameters.defaults().build(),
+            List.of(snap0, snap1),
+            budgetNanos,
+            null,
+            schedule);
+
+    assertEquals(0L, result.overBudgetFrameCount(), "no frames should be over budget");
+    assertFalse(result.isFrameOverBudget(snap0), "snap0 must be under budget");
+    assertFalse(result.isFrameOverBudget(snap1), "snap1 must be under budget");
+  }
+
+  @Test
+  void overBudgetFramesAreDetectedDeterministically() {
+    FrameSchedule schedule = new FrameSchedule(44100.0, 1024, 0.8);
+    long budgetNanos = schedule.maxProcessingNanos();
+    TrackingSnapshot underBudget =
+        new TrackingSnapshot(0L, 0L, List.of(), List.of(), budgetNanos / 2);
+    TrackingSnapshot overBudget =
+        new TrackingSnapshot(1024L, 23_219_954L, List.of(), List.of(), budgetNanos + 1);
+    WorkbenchRunResult result =
+        new WorkbenchRunResult(
+            SimulationScenarios.singleSource(),
+            WorkbenchParameters.defaults().build(),
+            List.of(underBudget, overBudget),
+            budgetNanos / 2 + budgetNanos + 1,
+            null,
+            schedule);
+
+    assertEquals(1L, result.overBudgetFrameCount(), "exactly one frame should be over budget");
+    assertFalse(result.isFrameOverBudget(underBudget), "underBudget snap must not be flagged");
+    assertTrue(result.isFrameOverBudget(overBudget), "overBudget snap must be flagged");
+  }
+
+  @Test
+  void overBudgetCountIsZeroWhenNoScheduleIsSet() {
+    TrackingSnapshot snap = new TrackingSnapshot(0L, 0L, List.of(), List.of(), Long.MAX_VALUE - 1L);
+    WorkbenchRunResult result =
+        new WorkbenchRunResult(
+            SimulationScenarios.singleSource(),
+            WorkbenchParameters.defaults().build(),
+            List.of(snap),
+            Long.MAX_VALUE - 1L,
+            null);
+
+    assertEquals(0L, result.overBudgetFrameCount(), "no schedule means zero over-budget count");
+    assertFalse(
+        result.isFrameOverBudget(snap), "no schedule means isFrameOverBudget must return false");
+  }
+
+  @Test
+  void allFramesOverBudgetWhenProcessingNanosExceedsBudget() {
+    FrameSchedule schedule = new FrameSchedule(44100.0, 1024, 0.001);
+    long budgetNanos = schedule.maxProcessingNanos();
+    long overNanos = budgetNanos + 1L;
+    TrackingSnapshot snap0 = new TrackingSnapshot(0L, 0L, List.of(), List.of(), overNanos);
+    TrackingSnapshot snap1 = new TrackingSnapshot(1024L, 0L, List.of(), List.of(), overNanos);
+    WorkbenchRunResult result =
+        new WorkbenchRunResult(
+            SimulationScenarios.singleSource(),
+            WorkbenchParameters.defaults().build(),
+            List.of(snap0, snap1),
+            overNanos * 2,
+            null,
+            schedule);
+
+    assertEquals(2L, result.overBudgetFrameCount(), "all frames should be over budget");
+    assertTrue(result.isFrameOverBudget(snap0));
+    assertTrue(result.isFrameOverBudget(snap1));
+  }
+
+  @Test
+  void markdownExportIncludesBudgetSection() {
+    FrameSchedule schedule = new FrameSchedule(44100.0, 1024, 0.001);
+    long budgetNanos = schedule.maxProcessingNanos();
+    TrackingSnapshot snap =
+        new TrackingSnapshot(0L, 0L, List.of(), List.of(), budgetNanos + 1_000_000L);
+    WorkbenchRunResult result =
+        new WorkbenchRunResult(
+            SimulationScenarios.singleSource(),
+            WorkbenchParameters.defaults().build(),
+            List.of(snap),
+            budgetNanos + 1_000_000L,
+            null,
+            schedule);
+
+    String md = WorkbenchRunExporter.toMarkdown(result);
+    assertTrue(md.contains("Budget per block"), "markdown must show budget per block metric");
+    assertTrue(md.contains("Over-budget frames"), "markdown must show over-budget frame count");
+    assertTrue(md.contains("⚠ OVER"), "markdown must mark over-budget frame rows");
+  }
+
+  @Test
+  void markdownExportShowsOkForUnderBudgetFrames() {
+    FrameSchedule schedule = new FrameSchedule(44100.0, 1024, 0.8);
+    long budgetNanos = schedule.maxProcessingNanos();
+    TrackingSnapshot snap = new TrackingSnapshot(0L, 0L, List.of(), List.of(), 1L);
+    WorkbenchRunResult result =
+        new WorkbenchRunResult(
+            SimulationScenarios.singleSource(),
+            WorkbenchParameters.defaults().build(),
+            List.of(snap),
+            1L,
+            null,
+            schedule);
+
+    String md = WorkbenchRunExporter.toMarkdown(result);
+    assertTrue(md.contains("OK"), "markdown must mark under-budget frame rows as OK");
+    assertFalse(md.contains("⚠ OVER"), "markdown must not mark under-budget frames as OVER");
+  }
+
+  @Test
+  void csvExportIncludesBudgetExceededColumn() {
+    FrameSchedule schedule = new FrameSchedule(44100.0, 1024, 0.001);
+    long budgetNanos = schedule.maxProcessingNanos();
+    TrackingSnapshot snap =
+        new TrackingSnapshot(0L, 0L, List.of(), List.of(), budgetNanos + 1_000_000L);
+    WorkbenchRunResult result =
+        new WorkbenchRunResult(
+            SimulationScenarios.singleSource(),
+            WorkbenchParameters.defaults().build(),
+            List.of(snap),
+            budgetNanos + 1_000_000L,
+            null,
+            schedule);
+
+    String csv = WorkbenchRunExporter.toCsv(result);
+    assertTrue(csv.contains("budgetExceeded"), "csv must have budgetExceeded header column");
+  }
+
+  @Test
+  void jsonLinesExportIncludesBudgetExceededField() {
+    FrameSchedule schedule = new FrameSchedule(44100.0, 1024, 0.001);
+    long budgetNanos = schedule.maxProcessingNanos();
+    TrackingSnapshot snap =
+        new TrackingSnapshot(0L, 0L, List.of(), List.of(), budgetNanos + 1_000_000L);
+    WorkbenchRunResult result =
+        new WorkbenchRunResult(
+            SimulationScenarios.singleSource(),
+            WorkbenchParameters.defaults().build(),
+            List.of(snap),
+            budgetNanos + 1_000_000L,
+            null,
+            schedule);
+
+    String json = WorkbenchRunExporter.toJsonLines(result);
+    assertTrue(json.contains("\"budgetExceeded\":true"), "json must include budgetExceeded:true");
   }
 }

@@ -121,9 +121,18 @@ latency(t) = t_obs − snapshot.sourceTimestampNanos() + snapshot.processingNano
 
 - Unit: milliseconds (after dividing by 1e6).
 - `FrameSchedule` / `ProcessingBudget` expose a per-frame deadline via
-  `ProcessingBudget#exceeded()`. The pipeline does not itself log or
-  accumulate deadline overruns today; benchmark harnesses that consume
-  `processingNanos()` are expected to count and report them.
+  `ProcessingBudget#exceeded()`.
+- `WorkbenchRunResult` accumulates per-frame budget compliance:
+  - `overBudgetFrameCount()` returns the number of frames where
+    `processingNanos > frameSchedule.maxProcessingNanos()`.
+  - `isFrameOverBudget(snapshot)` checks a single frame.
+- The workbench log annotates over-budget frames with `⚠ OVER BUDGET` and
+  includes the aggregate count in the run-complete summary line.
+- Markdown, CSV (`budgetExceeded` column) and JSON-lines (`"budgetExceeded"` field)
+  exports all include enough data to identify over-budget frames offline.
+- Budget warnings are **experimental**: the pipeline never aborts processing;
+  warnings reflect wall-clock measurements and may be triggered by JIT warmup,
+  GC pauses or OS scheduling jitter on development machines.
 
 ---
 
