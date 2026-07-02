@@ -286,6 +286,25 @@ class PlaybackModelTest {
     assertFalse(notified.isEmpty(), "listener must be called after stepBack");
   }
 
+  @Test
+  void listenerCanRemoveItselfDuringNotification() {
+    WorkbenchRunResult result = runScenario();
+    PlaybackModel model = new PlaybackModel(result);
+    List<Integer> notified = new ArrayList<>();
+    PlaybackModel.FrameChangeListener[] selfRemoving = new PlaybackModel.FrameChangeListener[1];
+    selfRemoving[0] =
+        frameIndex -> {
+          notified.add(frameIndex);
+          model.removeListener(selfRemoving[0]);
+        };
+    model.addListener(selfRemoving[0]);
+
+    model.stepForward();
+    model.stepForward();
+
+    assertEquals(List.of(1), notified, "self-removing listener must be invoked once without error");
+  }
+
   // -------------------------------------------------------------------------
   // Snapshot content tests
   // -------------------------------------------------------------------------

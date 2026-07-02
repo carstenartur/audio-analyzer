@@ -160,7 +160,7 @@ public final class PlaybackModel {
   }
 
   private void notifyListeners() {
-    for (FrameChangeListener listener : listeners) {
+    for (FrameChangeListener listener : List.copyOf(listeners)) {
       listener.onFrameChanged(currentFrameIndex);
     }
   }

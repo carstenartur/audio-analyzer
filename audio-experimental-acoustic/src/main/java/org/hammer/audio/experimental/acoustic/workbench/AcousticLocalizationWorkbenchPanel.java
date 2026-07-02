@@ -489,7 +489,7 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
           int last = Math.max(0, result.snapshots().size() - 1);
           timelineSlider.setMinimum(0);
           timelineSlider.setMaximum(last);
-          timelineSlider.setValue(0);
+          syncSliderToModel(playbackModel);
           setPlaybackControlsEnabled(!result.snapshots().isEmpty());
           if (result.snapshots().isEmpty()) {
             frameLabel.setText("Frame: — / —");
@@ -1179,6 +1179,10 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
     /** Alignment of the last snapshot against ground truth (for error lines). */
     private transient SnapshotAlignment lastAlignment;
 
+    private transient WorkbenchRunResult cachedPlaybackResult;
+    private int cachedHistoryFrameIndex = -1;
+    private Map<Integer, List<Vector2>> cachedPlaybackHistory = new ConcurrentHashMap<>();
+
     RoomMapPanel() {
       setPreferredSize(new Dimension(300, 300));
       setBorder(BorderFactory.createTitledBorder("Room map (2D, experimental)"));
@@ -1191,6 +1195,9 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
       this.gridPoints = List.of();
       this.trackHistory = new ConcurrentHashMap<>();
       this.lastAlignment = null;
+      this.cachedPlaybackResult = null;
+      this.cachedHistoryFrameIndex = -1;
+      this.cachedPlaybackHistory = new ConcurrentHashMap<>();
       repaint();
     }
 
@@ -1237,6 +1244,9 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
         }
       }
       this.gridPoints = List.copyOf(grid);
+      this.cachedPlaybackResult = null;
+      this.cachedHistoryFrameIndex = -1;
+      this.cachedPlaybackHistory = new ConcurrentHashMap<>();
       repaint();
     }
 
@@ -1253,23 +1263,48 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
         this.trackHistory = new ConcurrentHashMap<>();
         this.lastAlignment = null;
         this.gridPoints = List.of();
+        this.cachedPlaybackResult = null;
+        this.cachedHistoryFrameIndex = -1;
+        this.cachedPlaybackHistory = new ConcurrentHashMap<>();
         repaint();
         return;
+      }
+      boolean newResult = !Objects.equals(this.cachedPlaybackResult, result);
+      if (newResult) {
+        this.cachedPlaybackResult = result;
+        this.cachedHistoryFrameIndex = -1;
+        this.cachedPlaybackHistory = new ConcurrentHashMap<>();
+
+        List<Vector2> grid = new ArrayList<>();
+        int steps = result.parameters().candidateGridSteps();
+        double w = result.scenario().room().widthMeters();
+        double h = result.scenario().room().heightMeters();
+        for (int xi = 0; xi <= steps; xi++) {
+          for (int yi = 0; yi <= steps; yi++) {
+            grid.add(new Vector2(w * xi / steps, h * yi / steps));
+          }
+        }
+        this.gridPoints = List.copyOf(grid);
       }
       int idx = Math.max(0, Math.min(frameIndex, result.snapshots().size() - 1));
       TrackingSnapshot snap = result.snapshots().get(idx);
       this.lastTracks = snap.tracks();
 
-      // Accumulate track history up to and including this frame
-      Map<Integer, List<Vector2>> history = new ConcurrentHashMap<>();
-      for (int i = 0; i <= idx; i++) {
-        for (TrackedSource track : result.snapshots().get(i).tracks()) {
-          history
-              .computeIfAbsent(track.id(), ignored -> new ArrayList<>())
-              .add(track.positionMeters());
-        }
+      if (idx < cachedHistoryFrameIndex) {
+        cachedPlaybackHistory = new ConcurrentHashMap<>();
+        cachedHistoryFrameIndex = -1;
       }
-      this.trackHistory = history;
+      if (idx > cachedHistoryFrameIndex) {
+        for (int i = cachedHistoryFrameIndex + 1; i <= idx; i++) {
+          for (TrackedSource track : result.snapshots().get(i).tracks()) {
+            cachedPlaybackHistory
+                .computeIfAbsent(track.id(), ignored -> new ArrayList<>())
+                .add(track.positionMeters());
+          }
+        }
+        cachedHistoryFrameIndex = idx;
+      }
+      this.trackHistory = cachedPlaybackHistory;
 
       // Compute alignment for this specific frame
       this.lastAlignment = null;
@@ -1281,17 +1316,6 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
         // alignment failure is non-critical; error lines will simply not be drawn
       }
 
-      // Build candidate grid for display
-      List<Vector2> grid = new ArrayList<>();
-      int steps = result.parameters().candidateGridSteps();
-      double w = result.scenario().room().widthMeters();
-      double h = result.scenario().room().heightMeters();
-      for (int xi = 0; xi <= steps; xi++) {
-        for (int yi = 0; yi <= steps; yi++) {
-          grid.add(new Vector2(w * xi / steps, h * yi / steps));
-        }
-      }
-      this.gridPoints = List.copyOf(grid);
       repaint();
     }
 
