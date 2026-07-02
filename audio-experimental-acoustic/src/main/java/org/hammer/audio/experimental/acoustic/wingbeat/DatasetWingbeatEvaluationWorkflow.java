@@ -56,6 +56,23 @@ public final class DatasetWingbeatEvaluationWorkflow {
   }
 
   /**
+   * Return deterministic provenance text for the default feature-extraction configuration used by
+   * this workflow.
+   */
+  public static String defaultFeatureExtractionProvenance() {
+    return String.format(
+        Locale.ROOT,
+        "WingbeatFrequencyTracker fft=%d band=[%.1f, %.1f] Hz; WingbeatFeatureExtractor fft=%d"
+            + " band=[%.1f, %.1f] Hz",
+        DEFAULT_FFT_SIZE,
+        DEFAULT_BAND.lowHz(),
+        DEFAULT_BAND.highHz(),
+        DEFAULT_FFT_SIZE,
+        DEFAULT_BAND.lowHz(),
+        DEFAULT_BAND.highHz());
+  }
+
+  /**
    * Build a wingbeat evaluation dataset from an imported manifest.
    *
    * @param manifest imported dataset manifest
