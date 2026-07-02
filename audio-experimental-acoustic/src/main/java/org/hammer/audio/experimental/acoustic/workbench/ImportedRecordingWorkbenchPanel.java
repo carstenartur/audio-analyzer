@@ -4,6 +4,7 @@ import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.io.IOException;
+import java.io.ObjectInputStream;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Locale;
@@ -63,6 +64,9 @@ public final class ImportedRecordingWorkbenchPanel extends JPanel {
 
   /** Both fields are read and written exclusively on the Swing event dispatch thread. */
   private transient DatasetManifest loadedManifest;
+
+  private transient List<DatasetWingbeatEvaluationWorkflow.RecordingAnalysis> loadedAnalyses =
+      List.of();
 
   /** Suppresses the combo-box action listener during programmatic setup. */
   private transient boolean programmaticUpdate;
@@ -208,16 +212,16 @@ public final class ImportedRecordingWorkbenchPanel extends JPanel {
         DatasetManifest manifest = importer.importFrom(root);
         WingbeatDataset.Evaluation evaluation = null;
         String histogramsReport = "";
+        List<DatasetWingbeatEvaluationWorkflow.RecordingAnalysis> analyses = List.of();
         if (!manifest.recordings().isEmpty()) {
           evaluation = workflow.evaluate(manifest, classifier);
-          List<DatasetWingbeatEvaluationWorkflow.RecordingAnalysis> analyses =
-              workflow.analyzeAll(manifest, null);
+          analyses = workflow.analyzeAll(manifest, null);
           histogramsReport =
               DatasetWingbeatEvaluationWorkflow.toHistogramMarkdown(
                   DatasetWingbeatEvaluationWorkflow.computeHistograms(analyses));
         }
         String analyticsReport = DatasetAnalytics.compute(manifest).toMarkdownReport();
-        return new ImportResult(manifest, evaluation, analyticsReport, histogramsReport);
+        return new ImportResult(manifest, evaluation, analyses, analyticsReport, histogramsReport);
       }
 
       @Override
@@ -246,6 +250,7 @@ public final class ImportedRecordingWorkbenchPanel extends JPanel {
   @SuppressWarnings("PMD.UnusedAssignment")
   private void applyImportResult(ImportResult result) {
     loadedManifest = result.manifest();
+    loadedAnalyses = result.analyses();
     programmaticUpdate = true;
     recordingCombo.removeAllItems();
     for (DatasetRecording recording : loadedManifest.recordings()) {
@@ -290,18 +295,18 @@ public final class ImportedRecordingWorkbenchPanel extends JPanel {
       manifestArea.setText(renderManifest(loadedManifest));
       analyticsArea.setText(DatasetAnalytics.compute(loadedManifest).toMarkdownReport());
       if (loadedManifest.recordings().isEmpty()) {
+        loadedAnalyses = List.of();
         evaluationArea.setText("No recordings to evaluate.");
         histogramArea.setText("No recordings to analyze.");
         calibrationArea.setText("Calibration unavailable: dataset contains no recordings.");
       } else {
         WingbeatDataset.Evaluation evaluation = workflow.evaluate(loadedManifest, classifier);
         evaluationArea.setText(DatasetWingbeatEvaluationWorkflow.toMarkdownReport(evaluation));
-        List<DatasetWingbeatEvaluationWorkflow.RecordingAnalysis> analyses =
-            workflow.analyzeAll(loadedManifest, null);
+        loadedAnalyses = workflow.analyzeAll(loadedManifest, null);
         histogramArea.setText(
             DatasetWingbeatEvaluationWorkflow.toHistogramMarkdown(
-                DatasetWingbeatEvaluationWorkflow.computeHistograms(analyses)));
-        calibrationArea.setText(buildCalibrationReport(loadedManifest, analyses, false));
+                DatasetWingbeatEvaluationWorkflow.computeHistograms(loadedAnalyses)));
+        calibrationArea.setText(buildCalibrationReport(loadedManifest, loadedAnalyses, false));
       }
       if (recordingCombo.getItemCount() > 0) {
         recordingCombo.setSelectedIndex(0);
@@ -367,10 +372,13 @@ public final class ImportedRecordingWorkbenchPanel extends JPanel {
     final boolean selectedOnly = calibrationScopeCombo.getSelectedIndex() == 1;
     final DatasetManifest currentManifest = loadedManifest;
     final DatasetRecording selectedRecording = selectedRecording();
+    final List<DatasetWingbeatEvaluationWorkflow.RecordingAnalysis> currentAnalyses =
+        loadedAnalyses;
     new SwingWorker<String, Void>() {
       @Override
       protected String doInBackground() throws IOException {
-        return buildCalibrationReportForScope(currentManifest, selectedRecording, selectedOnly);
+        return buildCalibrationReportForScope(
+            currentManifest, selectedRecording, selectedOnly, currentAnalyses);
       }
 
       @Override
@@ -379,7 +387,10 @@ public final class ImportedRecordingWorkbenchPanel extends JPanel {
           calibrationArea.setText(get());
         } catch (ExecutionException ex) {
           LOGGER.log(Level.WARNING, "Calibration failed", ex);
-          calibrationArea.setText("Calibration failed: " + ex.getCause().getMessage());
+          Throwable cause = ex.getCause() == null ? ex : ex.getCause();
+          String message = cause.getMessage();
+          calibrationArea.setText(
+              "Calibration failed: " + (message == null || message.isBlank() ? cause : message));
         } catch (InterruptedException ex) {
           Thread.currentThread().interrupt();
           calibrationArea.setText("Calibration was interrupted.");
@@ -396,16 +407,22 @@ public final class ImportedRecordingWorkbenchPanel extends JPanel {
   void runCalibrationHeadless(boolean selectedOnly) throws IOException {
     DatasetManifest manifest = Objects.requireNonNull(loadedManifest, "loadedManifest");
     DatasetRecording selected = selectedRecording();
-    calibrationArea.setText(buildCalibrationReportForScope(manifest, selected, selectedOnly));
+    calibrationArea.setText(
+        buildCalibrationReportForScope(manifest, selected, selectedOnly, loadedAnalyses));
   }
 
   private String buildCalibrationReportForScope(
-      DatasetManifest manifest, DatasetRecording selectedRecording, boolean selectedOnly)
+      DatasetManifest manifest,
+      DatasetRecording selectedRecording,
+      boolean selectedOnly,
+      List<DatasetWingbeatEvaluationWorkflow.RecordingAnalysis> preloadedAnalyses)
       throws IOException {
     List<DatasetWingbeatEvaluationWorkflow.RecordingAnalysis> analyses =
-        selectedOnly
-            ? analyzeSelectedOnly(manifest, selectedRecording)
-            : workflow.analyzeAll(manifest, null);
+        selectedOnly ? analyzeSelectedOnly(manifest, selectedRecording) : preloadedAnalyses;
+    if (!selectedOnly && analyses.isEmpty() && !manifest.recordings().isEmpty()) {
+      analyses = workflow.analyzeAll(manifest, null);
+      loadedAnalyses = analyses;
+    }
     return buildCalibrationReport(manifest, analyses, selectedOnly);
   }
 
@@ -619,6 +636,11 @@ public final class ImportedRecordingWorkbenchPanel extends JPanel {
     return sb.toString();
   }
 
+  private void readObject(ObjectInputStream in) throws IOException, ClassNotFoundException {
+    in.defaultReadObject();
+    loadedAnalyses = List.of();
+  }
+
   DatasetManifest manifest() {
     return loadedManifest;
   }
@@ -656,11 +678,13 @@ public final class ImportedRecordingWorkbenchPanel extends JPanel {
   private record ImportResult(
       DatasetManifest manifest,
       WingbeatDataset.Evaluation evaluation,
+      List<DatasetWingbeatEvaluationWorkflow.RecordingAnalysis> analyses,
       String analyticsReport,
       String histogramsReport) {
 
     private ImportResult {
       Objects.requireNonNull(manifest, "manifest");
+      Objects.requireNonNull(analyses, "analyses");
       Objects.requireNonNull(analyticsReport, "analyticsReport");
       Objects.requireNonNull(histogramsReport, "histogramsReport");
       // evaluation is intentionally nullable for empty manifests.
