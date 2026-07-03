@@ -1,69 +1,60 @@
-# Spectrum: peak hold and exponential averaging
+# Spectrum peak hold and exponential averaging
 
-The spectrum panel can present its data with two optional display modes layered on top of the
-live FFT magnitudes:
-
-- **Exponential averaging** smooths short-term variations so steady-state tones become easier to
-  read.
-- **Peak hold** keeps the highest magnitude ever observed at each frequency bin so transient or
-  intermittent peaks remain visible after they have decayed in the live trace.
+The spectrum panel can display the live FFT together with two optional overlays: exponential averaging
+and peak hold. Together they make it easier to distinguish stable tones from short transients.
 
 ![Spectrum with averaging and peak hold](../images/features/spectrum-peak-hold.png)
 
-In the screenshot above the solid trace is the averaged live spectrum (a 1.2 kHz tone), while the
-dashed trace shows a brief burst at ~4.4 kHz that has since decayed but is still pinned by peak
-hold.
+## Concepts
+
+**Exponential averaging** smooths short-term movement in each frequency bin. A steady signal becomes
+easier to read because the trace changes less from refresh to refresh.
+
+**Peak hold** remembers the highest magnitude observed in each frequency bin. A short burst remains
+visible after the live trace has moved on.
+
+These are display modes. They do not change the raw FFT snapshot used by other analysis components or
+recording/export paths.
 
 ## When to use averaging
 
 Use averaging when:
 
-- The input is steady but noisy and you want a stable read of dominant frequencies.
-- You want to read off relative levels (the ratio between two peaks) without their values jumping
-  every refresh.
+- the signal is steady but noisy;
+- you need a stable read of dominant frequencies;
+- relative peak levels are hard to compare because the live trace jumps too much.
 
-Avoid averaging when you specifically want to see fast transients — they will be visibly
-attenuated.
+Avoid averaging when the timing of short transients matters. Averaging intentionally smooths fast
+changes.
 
 ## When to use peak hold
 
 Use peak hold when:
 
-- You are hunting for **intermittent** content: clicks, mosquito-like bursts, or rare alarms.
-- You want a quick visual record of the loudest tones encountered over a session before resetting
-  for a fresh measurement.
+- you are looking for intermittent clicks, alarms or insect-like bursts;
+- you want to remember the loudest spectral content encountered during a measurement;
+- you are comparing a current live trace with the worst-case trace from the recent session.
 
-Peak hold values decay very slowly so you can leave the analyzer running and come back to a
-permanent "envelope of worst case" over the recent run. Reset whenever you want to discard the
-history.
+Reset peak hold before a new measurement so old session data does not contaminate the current view.
 
 ## How to use it
 
-In the **File** menu of the main window:
+In the **File** menu:
 
-- Enable / disable **Spectrum: averaging** to toggle the exponential averager.
-- Enable / disable **Spectrum: peak hold** to toggle the peak-hold overlay.
-- Pick **Spectrum: reset peak hold** to clear the held envelope without leaving peak-hold mode.
+- enable or disable **Spectrum: averaging**;
+- enable or disable **Spectrum: peak hold**;
+- choose **Spectrum: reset peak hold** to clear remembered peaks without disabling the mode.
 
-## What it actually does
+## Implementation notes
 
-- [`SpectrumAverager`](../../audio-dsp/src/main/java/org/hammer/audio/analysis/SpectrumAverager.java)
-  maintains an exponential moving average per frequency bin
-  (`avg = alpha * avg + (1 - alpha) * sample`). A small alpha tracks the live signal closely; a
-  larger alpha smooths more aggressively.
-- [`PeakHoldSpectrum`](../../audio-dsp/src/main/java/org/hammer/audio/analysis/PeakHoldSpectrum.java)
-  keeps the per-bin maximum seen so far, with an optional configurable decay factor (`peaks *=
-  decay`) so very old maxima eventually fade if a session runs for hours.
-- Both run inside `SpectrumDisplayState`, which is read by the spectrum panel each refresh. The
-  raw FFT snapshot is unchanged — the rest of the pipeline (diagnosis, evidence export) keeps
-  seeing untouched magnitudes.
+`SpectrumAverager` maintains an exponential moving average for each frequency bin.
+`PeakHoldSpectrum` stores per-bin maxima and can apply a slow decay so old peaks fade over long
+sessions. `SpectrumDisplayState` provides the display-layer view consumed by the spectrum panel.
 
-## Tips
+## Limitations
 
-- Combine averaging *and* peak hold for the classic "stable live + remembered transients" view.
-- Use **reset peak hold** before each new measurement so old session data does not bias the
-  current trace.
-- Peak hold is independent of the [diagnosis panel's](../../README.md) intermittent-burst
-  detection, but the two complement each other: peak hold gives you the *spectral content* of a
-  transient, diagnosis tells you *how often* and *when* it happened.
-
+- Peak hold is visual evidence, not a classifier.
+- Averaging can hide fast changes.
+- Very low-level peaks can still be dominated by windowing, noise or FFT resolution.
+- The screenshot is generated documentation evidence; regenerate it when plot labels, colors or layout
+  change.
