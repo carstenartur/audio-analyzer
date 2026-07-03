@@ -107,6 +107,23 @@ Boundary rules:
 - Tests live with the module that owns the production code they exercise. The app module keeps the
   cross-module `ArchitectureBoundaryTest` to verify both source imports and POM dependencies.
 
+### Automated boundary enforcement
+
+Two JUnit test classes in `audio-app` enforce these rules on every `mvn verify` run:
+
+- **`ArchitectureBoundaryTest`** — source-level checks that scan every `.java` file in the four
+  stable modules for forbidden import patterns (experimental package, Swing/AWT, app-layer
+  packages) and verify that POM `<dependency>` declarations respect the allowed dependency graph.
+  The nine test methods cover: stable modules never import experimental or UI code; app module
+  never imports from concrete plugin packages; plugin API has no audio-domain imports; modules
+  have no compile-scope dependency on forbidden peers.
+- **`ArchitectureFitnessTest`** — ArchUnit 1.4.0 rules that scan compiled bytecode to ensure the
+  Workflow bounded context (`org.hammer.audio.workflow..`) and Execution bounded context
+  (`org.hammer.audio.workflow.execution..`) never depend on Swing/AWT or JGit, and that no
+  cyclic package-slice dependencies exist across bounded contexts.
+
+Both tests run in the `test` phase and fail the build on any violation.
+
 See [`docs/architecture/bounded-contexts.md`](docs/architecture/bounded-contexts.md) for the
 explicit bounded-context definitions including per-context package boundaries, dependency-direction
 rules, public APIs and ownership annotations.

@@ -31,10 +31,10 @@ Artifacts use a fixed `project.build.outputTimestamp`, so repeated builds from t
 
 ```bash
 ./mvnw clean package
-sha256sum audio-app/target/audio-app-0.0.2-SNAPSHOT.jar
+sha256sum audio-app/target/audio-app-*.jar
 
 ./mvnw clean package
-sha256sum audio-app/target/audio-app-0.0.2-SNAPSHOT.jar
+sha256sum audio-app/target/audio-app-*.jar
 # Both checksums must match.
 ```
 
@@ -105,7 +105,7 @@ The README and feature screenshots are generated headlessly by `DocImageRenderer
 verify build:
 
 ```bash
-java -cp "audio-app/target/audio-app-0.0.2-SNAPSHOT.jar:audio-app/target/lib/*" \
+java -cp "audio-app/target/classes:audio-app/target/lib/*" \
   org.hammer.tools.DocImageRenderer docs/images
 ```
 
