@@ -165,3 +165,4 @@ Before opening a PR:
 3. review Checkstyle, PMD and SpotBugs output for new findings;
 4. update documentation and screenshots when behavior changes;
 5. document deferred warnings, missing QA or known limitations in the PR description.
+
