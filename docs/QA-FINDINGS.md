@@ -3,7 +3,19 @@
 This document records the QA/product-hardening state of the repository. It reflects the current code
 and CI configuration; it should not be read as a claim that all static-analysis findings are fixed.
 
-## Changes made in this QA pass
+## Current QA focus
+
+A new detailed QA plan for application and documentation hardening is maintained in
+[`docs/qa/application-documentation-qa-plan.md`](qa/application-documentation-qa-plan.md). That plan
+covers documentation inventory, screenshot regeneration, visual readability criteria, automated image
+checks, manual Swing application QA and release-quality gates.
+
+The current priority is to bring screenshots and end-user documentation to professional quality:
+regenerate images from the current codebase, remove stale version-specific commands, visually inspect
+all generated images for overlapping labels or clipped text, and add automated guards so these issues
+cannot silently regress.
+
+## Changes made in the previous QA pass
 
 - **README.md**: shortened and restructured the opening, moved project status near the top, grouped
   features, clarified stable vs. experimental areas and states that this is a Java audio/DSP
@@ -53,6 +65,17 @@ static-analysis state.
 
 ## Remaining technical debt
 
+### Documentation and screenshots
+
+- README and development docs contain snapshot-version command examples. Prefer version-independent
+  commands or keep them synchronized with release automation.
+- Documentation screenshots are generated from manual drawing code with fixed coordinates. All images
+  need visual QA for overlapping labels, clipped axis/tick labels and unreadable legends.
+- Only the dashboard screenshot currently has a minimal smoke test; feature images and workbench
+  images need broader automated checks.
+- The application documentation lacks a completed manual QA matrix covering main dashboard,
+  recording/replay, evidence export, plugin discovery and workbench flows.
+
 ### Static analysis and coverage
 
 - Checkstyle, PMD and SpotBugs still have existing findings. They are report-only in local Maven
@@ -62,7 +85,7 @@ static-analysis state.
 
 ### UI
 
-- The new screenshot generator validates documentation output, not every live Swing layout state.
+- The screenshot generator validates documentation output, not every live Swing layout state.
   Additional panel-level tests should be added as controls are introduced.
 - HiDPI scale-factor testing remains manual.
 
@@ -82,9 +105,15 @@ static-analysis state.
 
 ## Prioritized follow-up recommendations
 
-1. Reduce `quality-baseline.properties` module by module as findings are fixed.
-2. Add a documentation link checker that runs offline against repository files.
-3. Add a focused `SampleClock` drift/jitter test or issue reference.
-4. Resolve the `org.hammer.audio` split package before adding JPMS descriptors.
-5. Raise JaCoCo thresholds after adding tests for capture, replay/export and UI panel edge cases.
-
+1. Regenerate all documentation screenshots from the current codebase and review them visually.
+2. Fix unreadable screenshot labels, clipped axes and overlapping captions before using images in the
+   README or public project materials.
+3. Remove hard-coded stale snapshot versions from documentation commands.
+4. Add automated screenshot/image QA for all generated documentation images.
+5. Execute and record the manual application QA matrix from
+   `docs/qa/application-documentation-qa-plan.md`.
+6. Reduce `quality-baseline.properties` module by module as findings are fixed.
+7. Add a documentation link checker that runs offline against repository files.
+8. Add a focused `SampleClock` drift/jitter test or issue reference.
+9. Resolve the `org.hammer.audio` split package before adding JPMS descriptors.
+10. Raise JaCoCo thresholds after adding tests for capture, replay/export and UI panel edge cases.
