@@ -80,9 +80,9 @@ Implemented research foundations include:
 
 Open technical research work is tracked in issues:
 
-- #136 — synchronization and calibration framework for microphone-array experiments;
-- #138 — algorithm improvements beyond baseline GCC-PHAT and grid beamforming;
-- #139 — complete real-world microphone-array workflow from hardware to localization.
+- Issue #136 — synchronization and calibration framework for microphone-array experiments;
+- Issue #138 — algorithm improvements beyond baseline GCC-PHAT and grid beamforming;
+- Issue #139 — complete real-world microphone-array workflow from hardware to localization.
 
 Research directions after the documentation QA pass:
 
