@@ -113,3 +113,4 @@ state.
 6. Resolve the `org.hammer.audio` split package before adding JPMS descriptors.
 7. Raise JaCoCo thresholds only after adding tests for capture, replay/export and UI edge cases.
 8. Reduce `quality-baseline.properties` module by module as findings are fixed.
+
