@@ -30,7 +30,7 @@
   <suppress files=".*audio\-acquisition/src/main/java/org/hammer/audio/acquisition/SampleClock\.java" checks="com\.puppycrawl\.tools\.checkstyle\.checks\.javadoc\.JavadocTypeCheck" lines="4"/>
   <suppress files=".*audio\-app/src/main/java/org/hammer/audio/ui/theme/PlotRenderTheme\.java" checks="com\.puppycrawl\.tools\.checkstyle\.checks\.whitespace\.WhitespaceAroundCheck" lines="46"/>
   <suppress files=".*audio\-app/src/main/java/org/hammer/audio/ui/theme/UiTheme\.java" checks="com\.puppycrawl\.tools\.checkstyle\.checks\.whitespace\.WhitespaceAroundCheck" lines="18"/>
-  <suppress files=".*audio\-app/src/main/java/org/hammer/tools/DocImageRenderer\.java" checks="com\.puppycrawl\.tools\.checkstyle\.checks\.whitespace\.WhitespaceAroundCheck" lines="71"/>
+  <suppress files=".*audio\-app/src/main/java/org/hammer/tools/DocImageRenderer\.java" checks="com\.puppycrawl\.tools\.checkstyle\.checks\.whitespace\.WhitespaceAroundCheck" lines="73"/>
   <suppress files=".*audio\-dsp/src/main/java/org/hammer/audio/analysis/MeasurementSnapshot\.java" checks="com\.puppycrawl\.tools\.checkstyle\.checks\.javadoc\.JavadocTypeCheck" lines="4"/>
   <suppress files=".*audio\-dsp/src/main/java/org/hammer/audio/analysis/MeasurementSnapshot\.java" checks="com\.puppycrawl\.tools\.checkstyle\.checks\.whitespace\.WhitespaceAroundCheck" lines="10"/>
   <suppress files=".*audio\-dsp/src/main/java/org/hammer/audio/diagnosis/DiagnosisAnalyzer\.java" checks="com\.puppycrawl\.tools\.checkstyle\.checks\.whitespace\.WhitespaceAroundCheck" lines="547"/>

@@ -22,10 +22,10 @@ On Windows, use `;` instead of `:` in the classpath.
 - [ ] `docs/images/features/spectrum-peak-hold.png`
 - [ ] `docs/images/features/recording-format.png`
 - [ ] `docs/images/features/ab-comparison.png`
-- [ ] acoustic localization workbench image, once added
-- [ ] imported recording workbench image, once added
-- [ ] playback explorer image, once added
-- [ ] generator calibration image, once added
+- [ ] `docs/images/features/simulation-workbench.png`
+- [ ] `docs/images/features/imported-recording-workbench.png`
+- [ ] `docs/images/features/playback-explorer.png`
+- [ ] `docs/images/features/generator-calibration.png`
 
 ## Visual checks
 

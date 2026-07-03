@@ -18,6 +18,42 @@ class DocImageRendererTest {
     assertTrue(hasBrightContent(image));
   }
 
+  @Test
+  void simulationWorkbenchHasExpectedSizeAndVisibleContent() {
+    BufferedImage image = DocImageRenderer.renderSimulationWorkbench();
+
+    assertEquals(760, image.getWidth());
+    assertEquals(480, image.getHeight());
+    assertTrue(hasBrightContent(image));
+  }
+
+  @Test
+  void playbackExplorerHasExpectedSizeAndVisibleContent() {
+    BufferedImage image = DocImageRenderer.renderPlaybackExplorer();
+
+    assertEquals(760, image.getWidth());
+    assertEquals(320, image.getHeight());
+    assertTrue(hasBrightContent(image));
+  }
+
+  @Test
+  void importedRecordingWorkbenchHasExpectedSizeAndVisibleContent() {
+    BufferedImage image = DocImageRenderer.renderImportedRecordingWorkbench();
+
+    assertEquals(760, image.getWidth());
+    assertEquals(480, image.getHeight());
+    assertTrue(hasBrightContent(image));
+  }
+
+  @Test
+  void generatorCalibrationHasExpectedSizeAndVisibleContent() {
+    BufferedImage image = DocImageRenderer.renderGeneratorCalibration();
+
+    assertEquals(760, image.getWidth());
+    assertEquals(480, image.getHeight());
+    assertTrue(hasBrightContent(image));
+  }
+
   private static boolean hasBrightContent(BufferedImage image) {
     for (int y = 0; y < image.getHeight(); y += 20) {
       for (int x = 0; x < image.getWidth(); x += 20) {
