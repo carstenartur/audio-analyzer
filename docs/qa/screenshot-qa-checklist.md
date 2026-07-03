@@ -9,7 +9,7 @@ documentation; commands should either use the current version property or a stab
 
 ```bash
 ./mvnw clean verify
-java -cp "audio-app/target/audio-app-*-SNAPSHOT.jar:audio-app/target/lib/*" \
+java -cp "audio-app/target/classes:audio-app/target/lib/*" \
   org.hammer.tools.DocImageRenderer docs/images
 ```
 
@@ -57,4 +57,3 @@ For every image:
 3. Regenerate the screenshot from the fixed code.
 4. Update the corresponding documentation page if the visible UI state changed.
 5. Record remaining limitations in `docs/QA-FINDINGS.md` or a linked issue.
-

@@ -55,19 +55,20 @@ Requires **Java 21** or higher. The Maven Wrapper is included.
 # Build, test, run configured quality checks and produce reports
 ./mvnw clean verify
 
-# Run the Swing app after package/verify
-java -jar audio-app/target/audio-app-0.0.2-SNAPSHOT.jar
+# Run the Swing app after package/verify (POSIX shells expand the wildcard)
+java -jar audio-app/target/audio-app-*.jar
 
-# Regenerate README + feature screenshots headlessly
-java -cp "audio-app/target/audio-app-0.0.2-SNAPSHOT.jar:audio-app/target/lib/*" \
+# Regenerate README + feature screenshots headlessly from compiled classes
+java -cp "audio-app/target/classes:audio-app/target/lib/*" \
   org.hammer.tools.DocImageRenderer docs/images
 
 # Optional JMH benchmarks
 ./mvnw -pl audio-dsp -Pjmh package
 ```
 
-On Windows use `mvnw.cmd` instead of `./mvnw`; adapt the classpath separator from `:` to `;` for
-manual `java -cp` commands.
+On Windows use `mvnw.cmd` instead of `./mvnw`; replace `audio-app/target/audio-app-*.jar` with the
+current built JAR name and adapt the classpath separator from `:` to `;` for manual `java -cp`
+commands.
 
 ## Dashboard screenshot
 

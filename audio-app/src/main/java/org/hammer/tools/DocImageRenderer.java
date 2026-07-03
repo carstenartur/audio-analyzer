@@ -39,7 +39,7 @@ import org.hammer.audio.ui.theme.PlotRenderTheme;
  *
  * <pre>
  *   ./mvnw -pl audio-app -am package -DskipTests
- *   java -cp "audio-app/target/audio-app-0.0.1-SNAPSHOT.jar:audio-app/target/lib/*" \
+ *   java -cp "audio-app/target/classes:audio-app/target/lib/*" \
  *        org.hammer.tools.DocImageRenderer docs/images
  * </pre>
  *
