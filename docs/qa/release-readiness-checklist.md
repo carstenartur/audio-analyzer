@@ -48,3 +48,4 @@ Use this checklist before publishing a GitHub release, Zenodo archive or public 
 - [ ] No blocking QA issues remain open.
 - [ ] Non-blocking limitations are documented.
 - [ ] Release owner explicitly approves publication.
+
