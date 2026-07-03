@@ -335,7 +335,7 @@ public final class DocImageRenderer {
     return spectrum.frequencyOfBin(peakBin);
   }
 
-  private static BufferedImage renderTrigger() {
+  static BufferedImage renderTrigger() {
     SineGenerator gen = new SineGenerator(MONO_44K, 220.0, 0.7f);
     AudioBlock block = gen.nextBlock(4096);
     WaveformTrigger trigger = new WaveformTrigger(1024);
@@ -394,7 +394,7 @@ public final class DocImageRenderer {
     return img;
   }
 
-  private static BufferedImage renderSpectrumPeakHold() {
+  static BufferedImage renderSpectrumPeakHold() {
     SineGenerator gen = new SineGenerator(MONO_44K, 1200.0, 0.6f);
     SpectrumAnalyzer analyzer = new SpectrumAnalyzer(FFT, 0, MONO_44K.sampleRate());
     SpectrumAverager avg = new SpectrumAverager(0.3f);
@@ -466,7 +466,7 @@ public final class DocImageRenderer {
     return img;
   }
 
-  private static BufferedImage renderRecordingFormat() {
+  static BufferedImage renderRecordingFormat() {
     BufferedImage img = createImage();
     Graphics2D g = img.createGraphics();
     try {
@@ -537,7 +537,7 @@ public final class DocImageRenderer {
     g.drawString(label, x + 6, y + 16);
   }
 
-  private static BufferedImage renderAbComparison() {
+  static BufferedImage renderAbComparison() {
     SpectrumAnalyzer analyzer = new SpectrumAnalyzer(FFT, 0, MONO_44K.sampleRate());
     SineGenerator a = new SineGenerator(MONO_44K, 440.0, 0.6f);
     SineGenerator b = new SineGenerator(MONO_44K, 880.0, 0.6f);
