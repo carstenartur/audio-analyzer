@@ -8,57 +8,48 @@
 [![SBOM](https://img.shields.io/badge/SBOM-CycloneDX-informational?logo=owasp)](https://github.com/carstenartur/audio-analyzer/dependency-graph/sbom)
 [![DOI](https://zenodo.org/badge/7397122.svg)](https://zenodo.org/badge/latestdoi/7397122)
 
-**Audio Analyzer** is a Java 21 / Swing **research platform for acoustic analysis and
-localization**. It provides reproducible benchmarking, dataset analysis, feature engineering,
-interactive workbenches and a full experimental acoustic-localization pipeline. It is useful for
-signal analysis research, algorithm development, DSP experiments and UI visualization. It is
-**not** a finished production platform for mosquito tracking.
+**Audio Analyzer** is a Java 21 / Swing workbench for reproducible audio analysis, DSP experiments
+and acoustic-localization research. It combines a desktop dashboard, deterministic signal pipelines,
+recording/replay tooling, evidence export and an optional experimental plugin for microphone-array
+localization.
 
-The root Maven parent is `audioin-parent`; the runnable desktop application is `audio-app`.
+The repository is useful for algorithm development, measurement experiments, UI prototyping and
+research documentation. It is **not** a validated production detector for mosquitoes, species
+classification or safety-critical tracking.
 
-## Project status
+## Current status
 
-Stable infrastructure today:
+Stable application and library foundations:
 
-- immutable `AudioBlock` / format models, SPSC ring buffer and deterministic signal generators;
-- sample decoding, DSP pipelines, FFT spectrum, RMS/peak measurement, spectrogram and diagnosis
-  analyzers;
+- immutable audio-domain models, ring buffer and deterministic signal generators;
+- sample decoding, FFT spectrum, measurements, spectrogram and diagnosis analyzers;
 - Swing dashboard panels for waveform, phase, spectrum, spectrogram, measurements and diagnosis;
-- recording/replay, evidence export and Markdown A/B comparison tooling;
-- Maven module-boundary tests, unit tests, Spotless, JaCoCo reports/check, Checkstyle/PMD/SpotBugs
-  reports and CI baseline checks.
+- `.aar` recording/replay, evidence export and Markdown A/B comparison reports;
+- Maven, Spotless, unit tests, architecture fitness tests, JaCoCo, Checkstyle, PMD, SpotBugs and
+  CodeQL integration.
 
-Experimental / research-oriented:
+Experimental research areas:
 
-- **Acoustic-localization plugin** for microphone-array experiments: end-to-end tracking pipeline
-  (multi-peak detection, frequency clustering, TDOA, beamforming, Kalman tracking), deterministic
-  room-acoustics simulation with moving sources and reflections, Doppler estimation;
-- **Dataset analysis infrastructure**: HumBugDB dataset import, feature extraction
-  (`WingbeatFeatureVector`), feature evaluation and distribution analysis, feature ranking for
-  classifier development;
-- **Synthetic-vs-real comparison**: feature distribution comparison between synthetic scenarios and
-  real recordings, generator calibration from real datasets, statistical validation;
-- **Benchmark framework**: classification metrics (accuracy, precision/recall, confusion matrices),
-  localization metrics (position/velocity error, frequency stability, tracking continuity);
-- **Dual interactive workbenches**: simulation workbench with nine deterministic scenarios, imported
-  recording workbench for HumBugDB dataset inspection and classification evaluation;
-- **Rule-based classification baseline**: transparent frequency-threshold classifier for reproducible
-  evaluation (not a trained model);
-- Plugin UI contributions and localization workflows. These are explicitly not validated as a
-  production mosquito detector.
+- acoustic-localization plugin with simulation and imported-recording workbenches;
+- multi-peak detection, frequency clustering, TDOA estimation, beamforming and Kalman tracking;
+- HumBugDB import, wingbeat feature extraction and rule-based classification baseline;
+- synthetic-vs-real comparison, generator calibration and localization benchmark metrics.
 
 ## Quickstart
 
-Requires **Java 21** or higher. The Maven Wrapper is included.
+Requirements:
+
+- Java 21 or newer;
+- a POSIX shell for the commands below, or `mvnw.cmd` on Windows.
 
 ```bash
-# Build, test, run configured quality checks and produce reports
+# Build, test and run all configured quality gates
 ./mvnw clean verify
 
-# Run the Swing app after package/verify
+# Run the packaged Swing application
 java -jar audio-app/target/audio-app-*.jar
 
-# Regenerate README + feature screenshots headlessly from compiled classes
+# Regenerate README and feature screenshots from compiled classes
 java -cp "audio-app/target/classes:audio-app/target/lib/*" \
   org.hammer.tools.DocImageRenderer docs/images
 
@@ -66,87 +57,85 @@ java -cp "audio-app/target/classes:audio-app/target/lib/*" \
 ./mvnw -pl audio-dsp -Pjmh package
 ```
 
-On Windows use `mvnw.cmd` instead of `./mvnw`; replace `audio-app/target/audio-app-*.jar` with the
-current built JAR name because wildcard expansion is shell-dependent, and adapt the classpath
-separator from `:` to `;` for manual `java -cp` commands.
+On Windows, replace `./mvnw` with `mvnw.cmd`, use `;` instead of `:` in classpaths and substitute the
+concrete built JAR name if the shell does not expand `audio-app/target/audio-app-*.jar`.
 
 ## Dashboard screenshot
 
 ![Audio Analyzer dashboard showing a reproducible 440 Hz sine demo](docs/images/screenshot.png)
 
-_Reproducible documentation screenshot generated headlessly by `DocImageRenderer`: demo mode with a
-440 Hz sine signal, waveform, spectrum peak, measurements, spectrogram and diagnosis panels visible
-without clipped labels or empty regions._
+The screenshot is generated headlessly by `DocImageRenderer`. It is intended as release evidence as
+well as documentation, so it should be regenerated and visually reviewed whenever the dashboard layout
+changes.
 
-## Feature groups
+## Main workflows
 
-### Core audio / DSP platform
+- **Inspect audio live or from deterministic demo sources.** Use waveform, phase, spectrum,
+  spectrogram, measurement and diagnosis panels to inspect signal behavior.
+- **Stabilize periodic waveforms.** Enable oscilloscope-style triggering to lock a repeating signal to
+  a readable position.
+- **Analyze spectra over time.** Use exponential averaging and peak hold to separate steady tones from
+  intermittent transients.
+- **Record and replay sessions.** Capture `.aar` recordings and replay them through the same analysis
+  pipeline for reproducible debugging.
+- **Export evidence.** Create CSV/PNG/evidence bundles and Markdown A/B comparisons for regression
+  notes or QA tickets.
+- **Run experimental localization scenarios.** The optional acoustic plugin provides deterministic
+  microphone-array simulations, dataset import and benchmarking. Treat those workflows as research
+  tools unless synchronized hardware and calibration evidence are available.
 
-- layered capture → ring buffer → DSP → analysis → snapshot flow;
-- immutable audio-domain types and UI-independent analysis snapshots;
-- deterministic sine/square/chirp/demo generators for tests and demos;
-- FFT spectrum, RMS/peak measurement, stereo delay, spectrogram and diagnosis analyzers;
-- JMH benchmarks for selected hot paths.
+## Documentation map
 
-### Swing dashboard
+Start here:
 
-- live/demo input selection, waveform, phase, spectrum, spectrogram, measurements and diagnosis;
-- pause/freeze, oscilloscope-style trigger, peak hold and spectrum averaging;
-- JavaSound microphone input plus deterministic demo mode.
+- [Architecture](ARCHITECTURE.md) — module boundaries, package structure and plugin/workbench design.
+- [Development](docs/development.md) — build, tests, CI, screenshot generation and contribution notes.
+- [Quality gates and coverage](docs/quality.md) — what fails the build and what remains baseline debt.
+- [Feature guides](docs/features/README.md) — user-facing dashboard, recording and comparison features.
+- [Experimental acoustic localization](docs/plugins/acoustic-localization.md) — plugin overview,
+  capabilities and limitations.
+- [Roadmap](ROADMAP.md) — open next steps and research directions.
+- [QA findings](docs/QA-FINDINGS.md) — current product-hardening risks and follow-up actions.
+- [Release QA checklists](docs/qa/README.md) — manual QA, screenshot QA and release readiness.
 
-### Recording / export / comparison
-
-- `.aar` recording and replay through the normal analysis pipeline;
-- CSV/PNG and evidence-bundle export;
-- Markdown A/B comparison reports for two recordings.
-
-### Plugin / experimental acoustic localization
-
-- `audio-plugin-api` contracts discovered by the app host via Java `ServiceLoader`;
-- optional `audio-experimental-acoustic` runtime plugin for research workflows;
-- details and limits: [Experimental Acoustic Localization](docs/plugins/acoustic-localization.md).
-
-### Quality / tooling
-
-- Maven multi-module build with Java 21 enforcement;
-- Spotless formatting, unit tests and architecture-boundary tests;
-- JaCoCo report plus a low 5% bundle line-coverage check;
-- Checkstyle, PMD and SpotBugs run during `mvn verify` and fail the build on violations;
-- CodeQL workflow with an explicit Maven build.
-
-## Maven modules
+## Module overview
 
 ```text
-audio-core
-audio-geometry
-audio-acquisition           -> audio-core, audio-geometry
-audio-dsp                   -> audio-core
-audio-plugin-api            (stable plugin contracts; no audio-* dependencies)
-audio-experimental-acoustic -> audio-core, audio-geometry, audio-acquisition,
-                               audio-dsp, audio-plugin-api
-audio-app                   -> audio-core, audio-dsp, audio-plugin-api
-                               runtime: audio-experimental-acoustic plugin
+audio-core                  immutable audio-domain types, snapshots and ring buffer
+audio-geometry              reusable 2D geometry and localization constraints
+audio-acquisition           microphone metadata, arrays, multichannel sources and clocks
+audio-dsp                   FFT, DSP pipelines, analyzers, diagnosis and recording format
+audio-plugin-api            stable host-facing plugin contracts
+audio-experimental-acoustic optional research plugin for localization and datasets
+audio-app                   Swing UI, JavaSound/demo wiring, export and plugin host
 ```
 
-- `audio-core` — immutable audio-domain types, snapshots and ring buffer.
-- `audio-geometry` — reusable 2D geometry and localization constraints.
-- `audio-acquisition` — microphone metadata, arrays, multichannel sources and sample clocks.
-- `audio-dsp` — FFT, DSP pipeline, analyzers, diagnostics, spectrogram and stereo-delay logic.
-- `audio-plugin-api` — plugin contracts only.
-- `audio-experimental-acoustic` — isolated acoustic-localization research plugin.
-- `audio-app` — Swing UI, JavaSound/demo wiring, export, plugin host and entry point.
+The application should depend on stable contracts and load experimental plugins through the plugin
+host. Production-ready primitives belong in the stable modules; research code belongs in
+`audio-experimental-acoustic` until it has stable API, tests and documentation.
 
-## Documentation
+## Quality expectations
 
-- [Architecture](ARCHITECTURE.md)
-- [Quality gates & coverage](docs/quality.md)
-- [QA findings & technical debt](docs/QA-FINDINGS.md)
-- [Development](docs/development.md)
-- [Feature guides](docs/features/README.md)
-- [Stereo localization](docs/use-cases/stereo-localization.md)
-- [Acoustic localization plugin](docs/plugins/acoustic-localization.md)
-- [Roadmap](ROADMAP.md)
+The repository treats formatting, tests and architecture checks as part of the product:
+
+- `./mvnw clean verify` is the default validation command;
+- Spotless formats Java, POM and Markdown files;
+- static analysis is baseline-gated in CI;
+- generated screenshots are tracked and should be regenerated from the release candidate;
+- public documentation must not make stronger claims than the implemented tests and QA evidence
+  support.
+
+## Important limitations
+
+- Acoustic localization is currently experimental and mostly validated through deterministic synthetic
+  scenarios.
+- Real microphone-array localization requires synchronized channels, calibrated geometry and timing
+  error budgets.
+- The HumBugDB workflows operate on local dataset exports; the project does not automatically download
+  third-party datasets.
+- The rule-based wingbeat classifier is a transparent baseline, not a trained species classifier.
+- Documentation screenshots are generated assets and still require visual QA before public release.
 
 ## License
 
-This project is licensed under the MIT License. See LICENSE.
+This project is licensed under the MIT License. See [LICENSE](LICENSE).
