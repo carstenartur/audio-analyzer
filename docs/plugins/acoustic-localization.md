@@ -1,212 +1,145 @@
-# Experimental Acoustic Localization
+# Experimental acoustic localization
 
-This is the entry page for the optional acoustic-localization plugin. The plugin is a research/demo
-extension for microphone-array experiments with weak, intermittent or insect-like sound sources. It
-is **not** a production mosquito detector, species classifier or validated tracking product.
+This page is the entry point for the optional acoustic-localization plugin. The plugin is a research
+extension for microphone-array experiments, deterministic simulations, wingbeat-feature analysis and
+benchmarking. It is **not** a production mosquito detector, species classifier or validated tracking
+product.
 
-## Status at a glance
+## Status
 
-|     Property     |                                          Value                                           |
-|------------------|------------------------------------------------------------------------------------------|
-| Module           | `audio-experimental-acoustic`                                                            |
-| Plugin API       | `audio-plugin-api`                                                                       |
-| Discovery        | Java `ServiceLoader` via `META-INF/services/org.hammer.audio.plugin.AudioAnalyzerPlugin` |
-| Host integration | `audio-app` depends on the concrete plugin at runtime only                               |
-| Stability        | Experimental research code; stable reusable primitives stay in core modules              |
+The plugin is useful for reproducible experiments because it makes localization assumptions executable:
+geometry, frequency detection, TDOA estimation, beamforming, tracking, benchmark metrics and dataset
+features can all be inspected in code and through workbench views.
+
+Stable host-facing integration:
+
+- provided by `audio-plugin-api` contracts;
+- discovered through Java `ServiceLoader`;
+- loaded by `audio-app` as an optional runtime plugin;
+- kept separate from stable audio/DSP modules through module and architecture boundaries.
+
+Research status:
+
+- deterministic simulation scenarios are implemented;
+- imported-recording and feature-evaluation workflows exist;
+- benchmark and generator-calibration infrastructure exists;
+- real-world microphone-array reliability still depends on synchronized hardware, calibration data and
+  benchmark evidence that are not yet complete.
 
 ## Current capabilities
 
-**Implemented:**
-- **Interactive simulation workbench** — run any of nine deterministic scenarios through the full
-tracking pipeline directly from the Plugins menu, with live per-frame log, 2-D room map and
-Markdown / CSV / JSON export;
-- **HumBugDB import workbench** — local offline-first import of HumBugDB dataset, recording
-inspection, feature extraction, rule-based classification and dataset-level evaluation;
-- **End-to-end tracking pipeline** — multi-peak detection, frequency clustering, TDOA estimation,
-beamforming, Kalman-based source tracking with identity persistence;
-- **Synthetic signal generation** — deterministic room acoustics simulation with moving emitters,
-reflections, noise and Doppler;
-- **Benchmark infrastructure** — localization metrics, classification evaluation, confusion matrices
-and feature distribution analysis;
-- Plugin descriptor, menu/view contributions and generic host integration;
-- Cross-correlation and GCC-PHAT TDOA estimators;
-- Delay-and-sum beamforming over 2D candidate grids;
-- Doppler radial-velocity estimation and multi-sensor velocity reconstruction.
+Implemented capabilities:
 
-**Experimental:**
-- Feature ranking and comparison workflows for classifier development;
-- Synthetic-vs-real signal distribution comparison;
-- Generator calibration for realistic synthetic data.
+- simulation workbench with deterministic room-acoustics scenarios;
+- imported-recording workbench for local HumBugDB exports;
+- multi-peak frequency detection and cross-channel clustering;
+- GCC-PHAT and cross-correlation TDOA estimators;
+- 2D delay-and-sum beamforming over configurable candidate grids;
+- Kalman-based source tracking with stable track IDs;
+- Doppler-related velocity experiments;
+- rule-based wingbeat classification baseline;
+- classification and localization benchmark metrics;
+- Markdown, CSV and JSON-lines export for workbench runs;
+- real-time processing-budget diagnostics for workbench frames.
 
-**Known limitations:**
-- No guaranteed mosquito detection or species classification;
-- No guaranteed exact AR overlay; any display-time prediction is model-dependent;
-- Synthetic validation does not prove real-world reliability;
-- Reflections, noise, microphone mismatch and multiple weak sources can dominate results;
-- Accurate TDOA requires calibrated geometry and a shared sample clock across channels;
-- `SampleClock` currently records nominal timing only and does not compensate drift or USB buffering
-jitter;
-- Sub-sample TDOA interpolation not implemented;
-- 3D geometry and multi-story array configurations are future work.
+Experimental or incomplete areas:
 
-## Architecture overview
+- sub-sample TDOA interpolation;
+- robust confidence calibration for reflections and ambiguous peaks;
+- 3D geometry and calibrated array files;
+- real synchronized multi-device capture workflow;
+- trained species classification;
+- production-grade mosquito or insect tracking.
 
-The plugin implements a full real-time tracking pipeline:
-
-```text
-AudioBlock (multi-channel synchronized frame)
-  → MultiPeakDetector (FFT + parabolic refinement)
-  → FrequencyClusterer (cross-channel grouping)
-  → TdoaEstimator (GCC-PHAT or cross-correlation)
-  → DelayAndSumBeamformer (2D candidate grid scoring)
-  → SourceTracker (Kalman smoothing + identity persistence)
-  → TrackingSnapshot (immutable per-frame output)
-```
-
-The pipeline is deterministic, allocation-free per frame, and respects a configurable real-time
-budget. See [Tracking pipeline](acoustic-localization/tracking.md) for details.
-
-## Workbench usage
+## Workbenches
 
 ### Simulation workbench
 
-Run **Plugins > Experimental Acoustic Localization > Open: Acoustic Localization Workbench
-(experimental)** to:
+Open **Plugins > Experimental Acoustic Localization > Open: Acoustic Localization Workbench
+(experimental)** to run deterministic scenarios through the tracking pipeline. The view provides:
 
-1. Select a scenario from nine deterministic presets (single source, moving source, two sources,
-   reflections, noise, etc.)
-2. Configure pipeline parameters (FFT size, frequency band, TDOA estimator)
-3. Run the scenario and view live per-frame logs
-4. Inspect the 2D room map with microphones, ground truth and tracked positions
-5. Export results as Markdown, CSV or JSON-lines
+- scenario selection;
+- core pipeline parameters;
+- per-frame log output;
+- 2D room map with microphones, ground truth and estimated tracks;
+- playback controls for completed runs;
+- budget-overrun diagnostics;
+- Markdown, CSV and JSON-lines export.
 
-All scenarios use deterministic synthetic data for reproducibility. See
-[How to run the workbench](acoustic-localization/README.md#how-to-run-the-workbench) for details.
+Use this workbench for algorithm inspection and reproducible demonstration, not for real-world claims.
 
-### HumBugDB import workbench
+### Imported recording workbench
 
-Run **Plugins > Experimental Acoustic Localization > Open: Imported Recording Workbench
-(experimental)** to:
+Open **Plugins > Experimental Acoustic Localization > Open: Imported Recording Workbench
+(experimental)** to inspect a local HumBugDB export. The workflow is offline-first: the application
+expects the user to provide a local dataset directory and does not download third-party data.
 
-1. Import a local HumBugDB export directory (offline-first, no automatic downloads)
-2. Browse imported recordings with metadata and labels
-3. Re-run feature extraction and rule-based classification on individual clips
-4. Review dataset-level evaluation metrics (accuracy, precision/recall, confusion matrix)
-5. Inspect feature distributions across the dataset
+The workbench supports:
 
-See [HumBugDB import](acoustic-localization/datasets.md#humbugdb-importer-implementation) and
-[Evaluation baseline](acoustic-localization/evaluation-baseline.md) for details.
+- local dataset import;
+- recording metadata inspection;
+- feature extraction;
+- rule-based classification evaluation;
+- feature distribution analysis;
+- generator calibration from imported feature vectors where available.
 
-## Synthetic signal generation
+## Pipeline overview
 
-The `audio-experimental-acoustic` module provides a deterministic room-acoustics simulator:
+```text
+AudioBlock
+  -> MultiPeakDetector
+  -> FrequencyClusterer
+  -> TdoaEstimator
+  -> DelayAndSumBeamformer
+  -> SourceTracker
+  -> TrackingSnapshot
+```
 
-- **Room2D** — configurable dimensions, reflection gain and broadband noise
-- **SoundEmitter2D** — position, velocity, frequency and amplitude
-- **SimulatedMicrophoneArraySource** — timestamped multi-channel AudioBlock generation
+The pipeline is designed to be deterministic and benchmarkable. It records processing time and budget
+compliance, but it does not guarantee real-time scheduling on all hardware.
 
-Nine validation scenarios are provided in `SimulationScenarios`: single source, moving source, two
-close frequencies, noisy room, reflections, Doppler experiments and wingbeat pairs. All scenarios
-are covered by `TrackingPipelineScenarioTest`.
+## Data and benchmarks
 
-## Ground truth and benchmarking
+The plugin separates three evidence levels:
 
-The plugin includes benchmark infrastructure for:
+1. **Synthetic scenarios** — deterministic, reproducible and suitable for regression tests.
+2. **Imported real recordings** — useful for feature statistics and baseline classification when the
+   dataset license and provenance are handled by the user.
+3. **Real microphone-array experiments** — future work that requires calibrated geometry,
+   synchronized channels and explicit timing-error budgets.
 
-- **Localization metrics** — position error, velocity error, frequency stability, tracking
-  continuity (see [Evaluation metrics](acoustic-localization/research/evaluation-metrics.md))
-- **Classification metrics** — accuracy, per-label precision/recall, confusion matrices
-- **Feature analysis** — dominant frequency, SNR, harmonic ratios, distribution statistics
+Do not treat synthetic success as proof of real-world localization reliability.
 
-Benchmark results are exported as Markdown reports with tables and summary statistics.
+## Hardware and synchronization limits
 
-## HumBugDB import
+Accurate TDOA requires synchronized samples across channels. The current `SampleClock` model stores
+nominal timing; it does not compensate arbitrary USB buffering, inter-device drift or per-channel
+latency.
 
-The `HumBugDbImporter` provides local offline import of HumBugDB datasets:
+For credible real-world localization, experiments need:
 
-1. User provides absolute path to local HumBugDB export root
-2. Importer reads metadata CSVs and resolves WAV file paths
-3. Normalized `DatasetManifest` is created with recordings, labels and annotations
-4. Manifest can be used for classification evaluation and feature distribution analysis
+- known microphone positions;
+- a shared sample clock or measured inter-device timing model;
+- calibration recordings before and after experiments;
+- residual-error estimates;
+- rejection or downgrading of results when the synchronization error exceeds the localization budget.
 
-No automatic downloads. Users must obtain HumBugDB from the upstream project and accept its license
-terms before using it. See [Real-world dataset strategy](acoustic-localization/datasets.md).
+This work is tracked separately in #136 and #139.
 
-## Dataset evaluation
+## Documentation
 
-The `DatasetWingbeatEvaluationWorkflow` provides:
+Detailed pages:
 
-- **Dataset analytics** — recording count, duration/sample-rate distributions, label distributions
-- **Classification baseline** — rule-based classifier evaluation with precision/recall per label
-- **Feature distribution** — dominant frequency, SNR and harmonic ratio statistics across recordings
-- **Confusion matrix** — ground-truth vs predicted label comparison
-
-Evaluation reports are generated as Markdown tables. The rule-based classifier uses fixed frequency
-thresholds from published literature as a transparent baseline (not a trained model).
-
-## Feature evaluation and ranking
-
-**Experimental**: The plugin includes `FeatureRanker` and `FeatureComparison` classes for:
-
-- Ranking features by discriminative power for classification
-- Comparing feature distributions across labels
-- Identifying redundant or low-information features
-
-This infrastructure supports future classifier development but is not yet integrated into the
-workbench UI.
-
-## Synthetic-vs-real comparison
-
-**Experimental**: The plugin supports comparing feature distributions between:
-
-- Synthetic scenarios from `SimulationScenarios`
-- Real recordings from imported datasets
-
-This helps validate whether synthetic data captures the statistical properties of real recordings.
-Standard deviation differences indicate natural variation not yet modeled.
-
-## Generator calibration
-
-**Experimental**: The `simulation.calibration` package provides utilities for:
-
-- Calibrating synthetic emitter parameters to match real recording statistics
-- Tuning noise levels, reflection gains and frequency distributions
-- Validating synthetic data realism against imported datasets
-
-This is future work for improving synthetic training data quality.
-
-## Remaining limitations
-
-- **No production-ready detector**: The plugin is research code, not a validated product
-- **No species classifier**: The rule-based classifier is a baseline; no trained model is included
-- **No AR overlay guarantee**: Display-time predictions are model-dependent
-- **Synthetic-only validation**: Real-world reliability is not proven
-- **2D only**: 3D arrays and multi-story configurations are future work
-- **Integer-sample TDOA**: Sub-sample interpolation not implemented
-- **Nominal timing**: SampleClock does not compensate drift or jitter
-- **No GPU acceleration**: All computation is single-threaded CPU
-
-## Roadmap
-
-The roadmap for acoustic-localization research is tracked in repository issues. Current open work
-includes:
-
-1. Sub-sample GCC-PHAT peak interpolation
-2. Multi-source separation using probabilistic data association
-3. 3D geometry and calibrated array file formats
-4. Improved reflection models and room impulse responses
-5. Expanded benchmark corpus with more real recordings
-
-See the main [Roadmap](../../ROADMAP.md#experimental-acoustic-localization) for details.
-
-## Detailed documentation
-
-- [**How to run the workbench**](acoustic-localization/README.md#how-to-run-the-workbench)
-- [Plugin details, pipeline and boundaries](acoustic-localization/README.md)
-- [Physics and latency limits](acoustic-localization/physics-and-latency-limits.md)
+- [Workbench and pipeline details](acoustic-localization/README.md)
 - [Synchronization requirements](acoustic-localization/synchronization.md)
 - [Tracking pipeline](acoustic-localization/tracking.md)
 - [Real-world dataset strategy](acoustic-localization/datasets.md)
 - [HumBugDB evaluation baseline](acoustic-localization/evaluation-baseline.md)
-- [Research notes and datasets](acoustic-localization/research/README.md)
+- [Physics and latency limits](acoustic-localization/physics-and-latency-limits.md)
+- [Research notes](acoustic-localization/research/README.md)
 
+Related roadmap items:
+
+- #136 — synchronization and calibration framework;
+- #138 — improved localization algorithms;
+- #139 — complete real-world microphone-array workflow.
