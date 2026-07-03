@@ -1,13 +1,23 @@
 # Development
 
+This guide explains how to build, validate and document Audio Analyzer from a clean checkout. The
+project is a Java 21 multi-module Maven build with a Swing application, stable audio/DSP modules and
+an optional experimental acoustic-localization plugin.
+
 ## Prerequisites
 
-- **Java 21** or higher (enforced by `maven-enforcer-plugin`).
-- The project ships a Maven Wrapper (`mvnw`) that downloads the correct Maven version (3.9.9) automatically.
+Required:
 
-## Build & Test
+- Java 21 or newer;
+- the included Maven Wrapper (`mvnw` / `mvnw.cmd`);
+- a shell capable of running the commands below.
 
-Using the Maven Wrapper (recommended):
+The wrapper downloads the configured Maven version automatically. A system Maven installation can be
+used for local convenience, but CI uses the wrapper configuration.
+
+## Build and validation
+
+Use the full verification command before opening or merging a PR:
 
 ```bash
 ./mvnw clean verify
@@ -19,15 +29,30 @@ On Windows:
 mvnw.cmd clean verify
 ```
 
-Using a system Maven installation:
+The command compiles all modules, runs tests, checks formatting, executes static analysis, generates
+coverage reports and enforces architecture checks.
+
+For a faster package-only build while iterating locally:
 
 ```bash
-mvn clean verify
+./mvnw clean package
 ```
 
-### Reproducible Builds
+## Running the application
 
-Artifacts use a fixed `project.build.outputTimestamp`, so repeated builds from the same sources produce byte-for-byte identical JARs.
+After `package` or `verify`, run the desktop app from the generated JAR:
+
+```bash
+java -jar audio-app/target/audio-app-*.jar
+```
+
+If the shell does not expand `audio-app/target/audio-app-*.jar`, replace it with the concrete file
+name in `audio-app/target/`.
+
+## Reproducible artifacts
+
+The build uses a fixed `project.build.outputTimestamp`. Rebuilding the same sources should produce the
+same app JAR checksum:
 
 ```bash
 ./mvnw clean package
@@ -35,56 +60,47 @@ sha256sum audio-app/target/audio-app-*.jar
 
 ./mvnw clean package
 sha256sum audio-app/target/audio-app-*.jar
-# Both checksums must match.
 ```
 
-### Updating the Maven Wrapper
+Both checksums should match when inputs and build environment are unchanged.
+
+## Code style and formatting
+
+Spotless formats Java, POM and Markdown files. The default `verify` phase checks formatting.
 
 ```bash
-mvn -N wrapper:wrapper -Dmaven=3.9.9
+./mvnw spotless:apply
+./mvnw spotless:check
 ```
 
-### Dependency Management
+Use `spotless:apply` before committing documentation changes. Markdown tables are formatted by
+Spotless; for long QA matrices, prefer checklists or bullet lists when table readability becomes
+fragile.
 
-JUnit dependencies are managed via the JUnit BOM, so no explicit JUnit version numbers appear in the regular `<dependencies>` section.
+The repository also contains an `.editorconfig` file for UTF-8 encoding, LF line endings, indentation,
+trailing-whitespace removal and final newlines.
 
-## Code Style
+## Continuous integration
 
-The project uses [Spotless](https://github.com/diffplug/spotless) with [google-java-format](https://github.com/google/google-java-format).
+GitHub Actions runs the Maven build on pushes and pull requests to `master`.
 
-```bash
-mvn spotless:apply   # auto-format
-mvn spotless:check   # verify only (also runs in `verify`)
-```
+Current CI expectations:
 
-Spotless formats Java sources, `pom.xml`, and Markdown files. An `.editorconfig` file pins encoding (UTF-8), line endings (LF), indentation, trailing-whitespace removal, and final-newline insertion.
+- Java 21 is required by Maven Enforcer;
+- Surefire tests run with `java.awt.headless=true`;
+- Spotless must pass for Java, POM and Markdown files;
+- Checkstyle, PMD and SpotBugs are baseline-gated;
+- JaCoCo generates reports and enforces the configured minimum line coverage;
+- architecture fitness tests protect package boundaries;
+- CodeQL uses an explicit Maven package build.
 
-## Continuous Integration
+Workflow artifacts include JUnit XML, raw Surefire output, HTML test reports when generated, JaCoCo
+coverage reports and static-analysis XML reports.
 
-GitHub Actions runs the build on every push and pull request to `master`:
+## Headless Swing testing
 
-- **Build/Test** ([`maven.yml`](../.github/workflows/maven.yml)) on Java 21 with Maven dependency caching.
-- **Static analysis**: Checkstyle, SpotBugs, PMD reports uploaded as artifacts; CI fails only when
-  report counts exceed `quality-baseline.properties`.
-- **Coverage**: JaCoCo report plus a 5% bundle line-coverage check; reports are uploaded to
-  [Codecov](https://codecov.io/gh/carstenartur/javarepos), but Codecov upload itself is not a hard
-  gate.
-- **Security scanning**: CodeQL ([`codeql.yml`](../.github/workflows/codeql.yml)) with an explicit
-  Maven package build.
-
-Test artifacts uploaded by the workflow:
-
-|                       Artifact                       |                         Contents                         |
-|------------------------------------------------------|----------------------------------------------------------|
-| `junit-xml`                                          | Surefire JUnit XML reports                               |
-| `surefire-raw`                                       | Raw `.txt` console output and thread dumps               |
-| `surefire-html`                                      | HTML test summary (when generated)                       |
-| `jacoco-report`                                      | JaCoCo HTML coverage report                              |
-| `checkstyle-report`, `spotbugs-report`, `pmd-report` | Static analysis XML output used by the CI baseline check |
-
-## Headless Testing
-
-Tests run with `java.awt.headless=true` (configured in `pom.xml` under `maven-surefire-plugin`). In headless mode, Swing components don't auto-dispatch `ComponentEvent.COMPONENT_RESIZED`, so resize-aware tests dispatch the event manually:
+Tests run with `java.awt.headless=true`. Swing code that depends on resize events may need to dispatch
+the event explicitly:
 
 ```java
 SwingUtilities.invokeAndWait(() -> {
@@ -93,42 +109,59 @@ SwingUtilities.invokeAndWait(() -> {
 });
 ```
 
-Testing tips:
+Guidelines:
 
-- Use `SwingUtilities.invokeAndWait()` for actions that must run on the EDT.
-- Mock `AudioCaptureService` with Mockito to isolate UI logic from real audio hardware.
-- Verify method invocations (e.g. `verify(svc).recomputeLayout(width, height)`) instead of pixel output.
+- use `SwingUtilities.invokeAndWait()` for UI mutations that must run on the EDT;
+- mock `AudioCaptureService` when testing UI logic;
+- assert model state and rendered output contracts rather than relying only on manual screenshots;
+- add targeted tests when controls introduce long labels, dynamic layout or resizing behavior.
 
 ## Documentation screenshots
 
-The README and feature screenshots are generated headlessly by `DocImageRenderer` after a package or
-verify build:
+README and feature screenshots are generated headlessly by `DocImageRenderer`:
 
 ```bash
+./mvnw -pl audio-app -am package -DskipTests
 java -cp "audio-app/target/classes:audio-app/target/lib/*" \
   org.hammer.tools.DocImageRenderer docs/images
 ```
 
 The command writes `docs/images/screenshot.png` and feature images under `docs/images/features/`.
-On Windows, use `;` instead of `:` in the classpath.
+Use `;` instead of `:` in the classpath on Windows.
 
-## JMH Benchmarks
+Screenshot changes require visual review. Follow:
 
-An opt-in JMH profile benchmarks sample decoding on synthetic buffers (no audio device required). Benchmark sources live under `src/jmh/java`.
+- [Screenshot QA checklist](qa/screenshot-qa-checklist.md)
+- [Application and documentation QA plan](qa/application-documentation-qa-plan.md)
+
+## Documentation standards
+
+Public documentation should be accurate, testable and conservative:
+
+- separate stable application features from experimental research features;
+- avoid production claims for acoustic localization unless supported by calibration and benchmark
+  evidence;
+- keep command examples version-tolerant;
+- link to source files or docs rather than duplicating long explanations;
+- update screenshots and surrounding text together;
+- record known limitations in `docs/QA-FINDINGS.md` or a linked issue.
+
+## Optional benchmarks
+
+An opt-in JMH profile benchmarks selected DSP paths on synthetic buffers. Benchmark sources live under
+`src/jmh/java`.
 
 ```bash
-# Compile with the JMH profile
-mvn clean verify -Pjmh
-
-# Run benchmarks
-mvn exec:java -Pjmh
+./mvnw clean verify -Pjmh
+./mvnw exec:java -Pjmh
 ```
 
-## Contributing
+## Contribution checklist
 
-1. **Format first** — run `mvn spotless:apply` before committing.
-2. **Review warnings** — check Checkstyle, SpotBugs, and PMD output for new findings.
-3. **Fix high-severity issues** flagged by SpotBugs or PMD.
-4. **Document deferred low-severity warnings** in your PR description.
+Before opening a PR:
 
-CI runs every check automatically and uploads the resulting reports.
+1. run `./mvnw spotless:apply`;
+2. run `./mvnw clean verify` when practical;
+3. review Checkstyle, PMD and SpotBugs output for new findings;
+4. update documentation and screenshots when behavior changes;
+5. document deferred warnings, missing QA or known limitations in the PR description.
