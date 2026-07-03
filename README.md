@@ -55,7 +55,7 @@ Requires **Java 21** or higher. The Maven Wrapper is included.
 # Build, test, run configured quality checks and produce reports
 ./mvnw clean verify
 
-# Run the Swing app after package/verify (POSIX shells expand the wildcard)
+# Run the Swing app after package/verify
 java -jar audio-app/target/audio-app-*.jar
 
 # Regenerate README + feature screenshots headlessly from compiled classes
@@ -67,8 +67,8 @@ java -cp "audio-app/target/classes:audio-app/target/lib/*" \
 ```
 
 On Windows use `mvnw.cmd` instead of `./mvnw`; replace `audio-app/target/audio-app-*.jar` with the
-current built JAR name and adapt the classpath separator from `:` to `;` for manual `java -cp`
-commands.
+current built JAR name because wildcard expansion is shell-dependent, and adapt the classpath
+separator from `:` to `;` for manual `java -cp` commands.
 
 ## Dashboard screenshot
 
