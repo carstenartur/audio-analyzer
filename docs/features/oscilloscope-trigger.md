@@ -51,3 +51,4 @@ seeing the unmodified `AudioBlock` sequence.
 - Very short transients may be hidden by holdoff settings.
 - Trigger level and holdoff are available programmatically but are not yet exposed as full UI sliders.
 - Directional stereo cues are better inspected with phase or stereo-delay views.
+
