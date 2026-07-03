@@ -85,18 +85,17 @@ Add checks for:
 
 Run the packaged application and inspect:
 
-|             Area             |                                   Checks                                   |
-|------------------------------|----------------------------------------------------------------------------|
-| Main dashboard               | startup, demo mode, live/mocked input, resizing, HiDPI, dark theme readability |
-| Waveform / trigger           | trigger mode, slope, fallback behavior, overlay readability                |
-| Spectrum                     | averaging, peak hold, reset, axis/tick readability                         |
-| Spectrogram                  | history rendering, labels, color scale readability                         |
-| Recording / replay           | record, stop, open, replay completion, large-file warning behavior          |
-| Evidence export              | CSV/PNG/evidence bundle filenames, metadata, readable exported image        |
-| Plugin menu                  | plugin discovery, overview view, workbench view, no host dependency leakage |
-| Acoustic workbench           | scenario run, playback controls, frame selection, budget warnings, exports  |
-| Imported recording workbench | import errors, empty dataset, selected recording analysis, calibration path |
-| Error handling               | missing files, invalid directories, unsupported devices, cancelled operations |
+- Main dashboard: startup, demo mode, live/mocked input, resizing, HiDPI, dark theme readability.
+- Waveform / trigger: trigger mode, slope, fallback behavior, overlay readability.
+- Spectrum: averaging, peak hold, reset, axis/tick readability.
+- Spectrogram: history rendering, labels, color scale readability.
+- Recording / replay: record, stop, open, replay completion, large-file warning behavior.
+- Evidence export: CSV/PNG/evidence bundle filenames, metadata, readable exported image.
+- Plugin menu: plugin discovery, overview view, workbench view, no host dependency leakage.
+- Acoustic workbench: scenario run, playback controls, frame selection, budget warnings, exports.
+- Imported recording workbench: import errors, empty dataset, selected recording analysis, calibration
+  path.
+- Error handling: missing files, invalid directories, unsupported devices, cancelled operations.
 
 ### Release-quality gate
 
