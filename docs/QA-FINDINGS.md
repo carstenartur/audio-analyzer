@@ -117,3 +117,4 @@ static-analysis state.
 8. Add a focused `SampleClock` drift/jitter test or issue reference.
 9. Resolve the `org.hammer.audio` split package before adding JPMS descriptors.
 10. Raise JaCoCo thresholds after adding tests for capture, replay/export and UI panel edge cases.
+
