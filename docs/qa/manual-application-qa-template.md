@@ -24,89 +24,79 @@ Use this template for release-candidate manual QA. Copy it to a dated file, for 
 
 ## Main dashboard
 
-| Check | Result | Notes |
-|---|---|---|
-| Application starts without exception |  |  |
-| Demo mode renders waveform, phase, spectrum, spectrogram, measurements and diagnosis |  |  |
-| Resize to small/medium/large window keeps labels readable |  |  |
-| HiDPI / scaling tested |  |  |
-| Dark-theme contrast acceptable |  |  |
+- [ ] Application starts without exception — Result: / Notes:
+- [ ] Demo mode renders waveform, phase, spectrum, spectrogram, measurements and diagnosis — Result:
+  / Notes:
+- [ ] Resize to small/medium/large window keeps labels readable — Result: / Notes:
+- [ ] HiDPI / scaling tested — Result: / Notes:
+- [ ] Dark-theme contrast acceptable — Result: / Notes:
 
 ## Feature panels
 
-| Check | Result | Notes |
-|---|---|---|
-| Waveform trigger: auto mode |  |  |
-| Waveform trigger: normal mode |  |  |
-| Spectrum averaging toggle |  |  |
-| Spectrum peak hold toggle/reset |  |  |
-| Spectrogram labels and color scale readable |  |  |
-| Measurement/diagnosis panels readable under resizing |  |  |
+- [ ] Waveform trigger: auto mode — Result: / Notes:
+- [ ] Waveform trigger: normal mode — Result: / Notes:
+- [ ] Spectrum averaging toggle — Result: / Notes:
+- [ ] Spectrum peak hold toggle/reset — Result: / Notes:
+- [ ] Spectrogram labels and color scale readable — Result: / Notes:
+- [ ] Measurement/diagnosis panels readable under resizing — Result: / Notes:
 
 ## Recording, replay and export
 
-| Check | Result | Notes |
-|---|---|---|
-| Start/stop `.aar` recording |  |  |
-| Open and replay `.aar` recording |  |  |
-| Evidence bundle export |  |  |
-| CSV export |  |  |
-| PNG export / screenshot capture |  |  |
-| A/B comparison report |  |  |
+- [ ] Start/stop `.aar` recording — Result: / Notes:
+- [ ] Open and replay `.aar` recording — Result: / Notes:
+- [ ] Evidence bundle export — Result: / Notes:
+- [ ] CSV export — Result: / Notes:
+- [ ] PNG export / screenshot capture — Result: / Notes:
+- [ ] A/B comparison report — Result: / Notes:
 
 ## Plugin and workbench flows
 
-| Check | Result | Notes |
-|---|---|---|
-| Plugin menu discovers acoustic-localization plugin |  |  |
-| Plugin overview opens |  |  |
-| Acoustic localization workbench opens |  |  |
-| Simulation scenario runs to completion |  |  |
-| Playback controls step through frames |  |  |
-| Budget warning display is understandable |  |  |
-| Workbench Markdown/CSV/JSON exports readable |  |  |
-| Imported recording workbench handles invalid path |  |  |
-| Imported recording workbench handles empty/partial dataset |  |  |
-| Generator calibration path is visible and understandable |  |  |
+- [ ] Plugin menu discovers acoustic-localization plugin — Result: / Notes:
+- [ ] Plugin overview opens — Result: / Notes:
+- [ ] Acoustic localization workbench opens — Result: / Notes:
+- [ ] Simulation scenario runs to completion — Result: / Notes:
+- [ ] Playback controls step through frames — Result: / Notes:
+- [ ] Budget warning display is understandable — Result: / Notes:
+- [ ] Workbench Markdown/CSV/JSON exports readable — Result: / Notes:
+- [ ] Imported recording workbench handles invalid path — Result: / Notes:
+- [ ] Imported recording workbench handles empty/partial dataset — Result: / Notes:
+- [ ] Generator calibration path is visible and understandable — Result: / Notes:
 
 ## Documentation screenshots
 
-| Image | Regenerated | Visual QA result | Notes |
-|---|---:|---|---|
-| `docs/images/screenshot.png` |  |  |  |
-| `docs/images/features/waveform-trigger.png` |  |  |  |
-| `docs/images/features/spectrum-peak-hold.png` |  |  |  |
-| `docs/images/features/recording-format.png` |  |  |  |
-| `docs/images/features/ab-comparison.png` |  |  |  |
-| Acoustic localization workbench screenshot |  |  |  |
-| Imported recording workbench screenshot |  |  |  |
+- [ ] `docs/images/screenshot.png` — Regenerated: / Visual QA result: / Notes:
+- [ ] `docs/images/features/waveform-trigger.png` — Regenerated: / Visual QA result: / Notes:
+- [ ] `docs/images/features/spectrum-peak-hold.png` — Regenerated: / Visual QA result: / Notes:
+- [ ] `docs/images/features/recording-format.png` — Regenerated: / Visual QA result: / Notes:
+- [ ] `docs/images/features/ab-comparison.png` — Regenerated: / Visual QA result: / Notes:
+- [ ] Acoustic localization workbench screenshot — Regenerated: / Visual QA result: / Notes:
+- [ ] Imported recording workbench screenshot — Regenerated: / Visual QA result: / Notes:
 
 ## Documentation review
 
-| Page | Result | Notes |
-|---|---|---|
-| `README.md` |  |  |
-| `ARCHITECTURE.md` |  |  |
-| `ROADMAP.md` |  |  |
-| `docs/development.md` |  |  |
-| `docs/quality.md` |  |  |
-| `docs/QA-FINDINGS.md` |  |  |
-| `docs/features/README.md` |  |  |
-| `docs/features/*.md` |  |  |
-| `docs/plugins/acoustic-localization.md` |  |  |
-| `docs/plugins/acoustic-localization/**/*.md` |  |  |
-| `docs/use-cases/**/*.md` |  |  |
+- [ ] `README.md` — Result: / Notes:
+- [ ] `ARCHITECTURE.md` — Result: / Notes:
+- [ ] `ROADMAP.md` — Result: / Notes:
+- [ ] `docs/development.md` — Result: / Notes:
+- [ ] `docs/quality.md` — Result: / Notes:
+- [ ] `docs/QA-FINDINGS.md` — Result: / Notes:
+- [ ] `docs/features/README.md` — Result: / Notes:
+- [ ] `docs/features/*.md` — Result: / Notes:
+- [ ] `docs/plugins/acoustic-localization.md` — Result: / Notes:
+- [ ] `docs/plugins/acoustic-localization/**/*.md` — Result: / Notes:
+- [ ] `docs/use-cases/**/*.md` — Result: / Notes:
 
 ## Findings
 
 ### Blocking
 
-- 
+- None recorded yet.
 
 ### Non-blocking
 
-- 
+- None recorded yet.
 
 ### Deferred with rationale
 
-- 
+- None recorded yet.
+
