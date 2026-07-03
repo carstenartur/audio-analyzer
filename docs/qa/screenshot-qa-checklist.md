@@ -57,3 +57,4 @@ For every image:
 3. Regenerate the screenshot from the fixed code.
 4. Update the corresponding documentation page if the visible UI state changed.
 5. Record remaining limitations in `docs/QA-FINDINGS.md` or a linked issue.
+
