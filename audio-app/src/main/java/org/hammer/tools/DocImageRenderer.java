@@ -43,6 +43,9 @@ import org.hammer.audio.ui.theme.PlotRenderTheme;
  *        org.hammer.tools.DocImageRenderer docs/images
  * </pre>
  *
+ * <p>On Windows, replace {@code :} with {@code ;} in the classpath and use {@code ^} instead of
+ * {@code \} for line continuation (or run the command on a single line).
+ *
  * <p>The output directory defaults to {@code docs/images} when no argument is given. The README
  * screenshot is written to {@code screenshot.png}; feature images are written to the {@code
  * features/} child directory.
