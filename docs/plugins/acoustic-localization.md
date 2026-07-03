@@ -140,6 +140,7 @@ Detailed pages:
 
 Related roadmap items:
 
-- #136 — synchronization and calibration framework;
-- #138 — improved localization algorithms;
-- #139 — complete real-world microphone-array workflow.
+- Issue #136 — synchronization and calibration framework;
+- Issue #138 — improved localization algorithms;
+- Issue #139 — complete real-world microphone-array workflow.
+
