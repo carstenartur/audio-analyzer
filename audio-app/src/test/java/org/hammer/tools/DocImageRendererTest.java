@@ -1,7 +1,6 @@
 package org.hammer.tools;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.awt.Color;
@@ -243,84 +242,70 @@ class DocImageRendererTest {
   // -------------------------------------------------------------------------
 
   @Test
-  void clippedStringShortTextPassesThroughUnchanged() {
-    BufferedImage img = new BufferedImage(400, 40, BufferedImage.TYPE_INT_RGB);
-    Graphics2D g = img.createGraphics();
-    g.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 12));
-    FontMetrics fm = g.getFontMetrics();
+  void clipStringShortTextPassesThroughUnchanged() {
+    FontMetrics fm = fontMetrics(Font.SANS_SERIF, 12);
     String text = "Hello";
-    int textWidth = fm.stringWidth(text);
+    int maxWidth = fm.stringWidth(text) + 10;
 
-    // Draw into a scratch image to verify the method does not throw
-    DocImageRenderer.drawClippedString(g, text, 0, 20, textWidth + 10);
-    g.dispose();
-    // If no exception was thrown the short text passed through; the exact pixel
-    // result is renderer-dependent but the behaviour is smoke-tested.
-    assertTrue(textWidth > 0, "Font metrics must produce a positive width for non-empty text");
+    String result = DocImageRenderer.clipString(fm, text, maxWidth);
+
+    assertEquals(text, result, "Short text that fits must be returned unchanged");
   }
 
   @Test
-  void clippedStringLongTextIsTruncatedWithEllipsis() {
-    BufferedImage img = new BufferedImage(400, 40, BufferedImage.TYPE_INT_RGB);
-    Graphics2D g = img.createGraphics();
-    g.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 12));
-    FontMetrics fm = g.getFontMetrics();
-
-    // Build a string that is definitely wider than maxWidth=40
+  void clipStringLongTextIsTruncatedWithEllipsis() {
+    FontMetrics fm = fontMetrics(Font.SANS_SERIF, 12);
     String longText = "This is a very long string that will not fit";
     int maxWidth = 40;
-
-    // The long string must exceed maxWidth for this test to be meaningful
     assertTrue(
         fm.stringWidth(longText) > maxWidth,
-        "Long text must be wider than maxWidth to exercise truncation");
+        "Precondition: long text must exceed maxWidth to exercise truncation");
 
-    // Verify the method runs without throwing even when truncation is needed
-    DocImageRenderer.drawClippedString(g, longText, 0, 20, maxWidth);
-    g.dispose();
+    String result = DocImageRenderer.clipString(fm, longText, maxWidth);
+
+    assertTrue(result.endsWith("…"), "Truncated text must end with an ellipsis");
+    assertTrue(fm.stringWidth(result) <= maxWidth, "Truncated text width must not exceed maxWidth");
   }
 
   @Test
-  void clippedStringDoesNotExceedMaxWidth() {
-    // Verify that very long text does not cause the method to draw beyond maxWidth.
-    // We use a narrow constraint and confirm the method completes without error.
-    BufferedImage img = new BufferedImage(400, 40, BufferedImage.TYPE_INT_RGB);
-    Graphics2D g = img.createGraphics();
-    g.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 14));
-    FontMetrics fm = g.getFontMetrics();
-
+  void clipStringResultNeverExceedsMaxWidth() {
+    FontMetrics fm = fontMetrics(Font.MONOSPACED, 14);
     String text = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
-    int maxWidth = fm.stringWidth("AA"); // just wide enough for two characters
+    int maxWidth = fm.stringWidth("AA");
     assertTrue(fm.stringWidth(text) > maxWidth, "Precondition: text must exceed maxWidth");
 
-    // Must not throw even with a very narrow maxWidth
-    DocImageRenderer.drawClippedString(g, text, 0, 20, maxWidth);
-    g.dispose();
+    String result = DocImageRenderer.clipString(fm, text, maxWidth);
+
+    assertTrue(fm.stringWidth(result) <= maxWidth, "Clipped string width must not exceed maxWidth");
   }
 
   @Test
-  void clippedStringEmptyTextDoesNotThrow() {
-    BufferedImage img = new BufferedImage(200, 40, BufferedImage.TYPE_INT_RGB);
-    Graphics2D g = img.createGraphics();
-    g.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 12));
-    // Empty string — should complete without exception
-    DocImageRenderer.drawClippedString(g, "", 0, 20, 100);
-    g.dispose();
+  void clipStringEmptyTextReturnsEmpty() {
+    FontMetrics fm = fontMetrics(Font.SANS_SERIF, 12);
+
+    String result = DocImageRenderer.clipString(fm, "", 100);
+
+    assertEquals("", result, "Empty input must produce empty output");
   }
 
   @Test
-  void clippedStringFitsWhenMaxWidthIsLarge() {
-    BufferedImage img = new BufferedImage(800, 40, BufferedImage.TYPE_INT_RGB);
-    Graphics2D g = img.createGraphics();
-    g.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 12));
-    FontMetrics fm = g.getFontMetrics();
+  void clipStringFitsUnchangedWhenMaxWidthIsLarge() {
+    FontMetrics fm = fontMetrics(Font.SANS_SERIF, 12);
     String text = "Short";
-    int textWidth = fm.stringWidth(text);
-    // With a very large maxWidth the text should always fit without truncation
-    assertFalse(fm.stringWidth(text) > 1000, "Precondition: 'Short' must fit within 1000 px");
-    DocImageRenderer.drawClippedString(g, text, 0, 20, 1000);
-    g.dispose();
-    assertTrue(textWidth > 0);
+
+    String result = DocImageRenderer.clipString(fm, text, 1000);
+
+    assertEquals(text, result, "Text that easily fits must be returned unchanged");
+  }
+
+  @Test
+  void clipStringNarrowMaxWidthYieldsEllipsisOnly() {
+    FontMetrics fm = fontMetrics(Font.SANS_SERIF, 12);
+    // maxWidth=1 is narrower than even the ellipsis; the ellipsis is always returned as a
+    // safe fallback.
+    String result = DocImageRenderer.clipString(fm, "Hello", 1);
+
+    assertEquals("…", result, "When maxWidth is narrower than the ellipsis, return ellipsis only");
   }
 
   // -------------------------------------------------------------------------
@@ -344,5 +329,15 @@ class DocImageRendererTest {
       }
     }
     return false;
+  }
+
+  /** Returns a {@link FontMetrics} for the given font family and size. */
+  private static FontMetrics fontMetrics(String family, int size) {
+    BufferedImage scratch = new BufferedImage(1, 1, BufferedImage.TYPE_INT_RGB);
+    Graphics2D g = scratch.createGraphics();
+    g.setFont(new Font(family, Font.PLAIN, size));
+    FontMetrics fm = g.getFontMetrics();
+    g.dispose();
+    return fm;
   }
 }

@@ -23,8 +23,8 @@ that a release owner can complete them with the packaged application.
 - Blocking issues: none found from code inspection and test runs
 - Non-blocking issues: interactive UI checks not performed (headless environment); see Deferred
   section
-- Screenshots regenerated: no (requires compiled classes + display or `-cp` invocation; not run
-  in this pass — existing checked-in images are used)
+- Screenshots regenerated: no (existing checked-in images used in this pass; regeneration can be
+  run headlessly via `java -Djava.awt.headless=true -cp "audio-app/target/classes:audio-app/target/lib/*" org.hammer.tools.DocImageRenderer docs/images`)
 - Documentation reviewed: yes — all documentation files listed in the template were read and
   compared against the current codebase
 
@@ -182,9 +182,10 @@ that a release owner can complete them with the packaged application.
   packaged JAR (`java -jar audio-app/target/audio-app-*.jar`) on a workstation and complete the
   deferred items before marking the release as fully QA-cleared.
 - **Screenshot regeneration** — regeneration requires compiled classes plus a writable output
-  directory; this can be done with `./mvnw package -DskipTests` followed by
-  `java -cp "audio-app/target/classes:audio-app/target/lib/*" org.hammer.tools.DocImageRenderer docs/images`
-  on a machine with a display or in a virtual framebuffer (e.g. `Xvfb`).
+  directory; `DocImageRenderer` renders only to `BufferedImage` (no Swing UI), so it runs in the
+  same `java.awt.headless=true` environment as CI without a display or virtual framebuffer:
+  `./mvnw package -DskipTests` followed by
+  `java -Djava.awt.headless=true -cp "audio-app/target/classes:audio-app/target/lib/*" org.hammer.tools.DocImageRenderer docs/images`
 - **HiDPI / scale-factor visual check** — requires physical hardware or a display server that
   supports scale factors greater than 1.
 

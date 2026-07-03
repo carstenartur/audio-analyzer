@@ -1146,26 +1146,24 @@ public final class DocImageRenderer {
   }
 
   /**
-   * Draws a string, truncating with {@code …} if it exceeds {@code maxWidth} pixels.
+   * Returns the string to draw, truncated with {@code …} when its pixel width exceeds {@code
+   * maxWidth}. The returned string always has a measured width {@code ≤ maxWidth}.
    *
-   * @param g graphics context
-   * @param text the text to draw
-   * @param x left edge of the text baseline
-   * @param y baseline y position
-   * @param maxWidth maximum allowed pixel width; text is clipped with an ellipsis if exceeded
+   * @param fm font metrics to use for measurement
+   * @param text the text to clip
+   * @param maxWidth maximum allowed pixel width
+   * @return the original string when it fits, otherwise the longest prefix followed by {@code …}
+   *     that fits within {@code maxWidth}
    */
-  static void drawClippedString(Graphics2D g, String text, int x, int y, int maxWidth) {
-    FontMetrics fm = g.getFontMetrics();
+  static String clipString(FontMetrics fm, String text, int maxWidth) {
     if (fm.stringWidth(text) <= maxWidth) {
-      g.drawString(text, x, y);
-      return;
+      return text;
     }
     String ellipsis = "…";
     int ellipsisW = fm.stringWidth(ellipsis);
     int available = maxWidth - ellipsisW;
     if (available <= 0) {
-      g.drawString(ellipsis, x, y);
-      return;
+      return ellipsis;
     }
     // Binary-search for the longest prefix that fits
     int lo = 0;
@@ -1175,7 +1173,20 @@ public final class DocImageRenderer {
       if (fm.stringWidth(text.substring(0, mid)) <= available) lo = mid;
       else hi = mid;
     }
-    g.drawString(text.substring(0, lo) + ellipsis, x, y);
+    return text.substring(0, lo) + ellipsis;
+  }
+
+  /**
+   * Draws a string, truncating with {@code …} if it exceeds {@code maxWidth} pixels.
+   *
+   * @param g graphics context
+   * @param text the text to draw
+   * @param x left edge of the text baseline
+   * @param y baseline y position
+   * @param maxWidth maximum allowed pixel width; text is clipped with an ellipsis if exceeded
+   */
+  static void drawClippedString(Graphics2D g, String text, int x, int y, int maxWidth) {
+    g.drawString(clipString(g.getFontMetrics(), text, maxWidth), x, y);
   }
 
   private static void applyHints(Graphics2D g) {
