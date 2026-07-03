@@ -58,3 +58,4 @@ sessions. `SpectrumDisplayState` provides the display-layer view consumed by the
 - Very low-level peaks can still be dominated by windowing, noise or FFT resolution.
 - The screenshot is generated documentation evidence; regenerate it when plot labels, colors or layout
   change.
+
