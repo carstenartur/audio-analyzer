@@ -91,3 +91,4 @@ Research directions after the documentation QA pass:
 3. improve TDOA confidence, sub-sample precision and reflection handling;
 4. expand benchmark evidence with real recordings and reproducible fixtures;
 5. document supported and unsupported hardware paths without overstating reliability.
+
