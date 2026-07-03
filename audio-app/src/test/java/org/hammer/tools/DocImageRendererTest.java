@@ -23,7 +23,7 @@ class DocImageRendererTest {
 
     assertEquals(1600, image.getWidth());
     assertEquals(1000, image.getHeight());
-    assertTrue(hasBrightContent(image));
+    assertTrue(hasBrightContentInRegion(image, 0, 0, image.getWidth(), image.getHeight()));
   }
 
   @Test
@@ -58,7 +58,7 @@ class DocImageRendererTest {
 
     assertEquals(760, image.getWidth());
     assertEquals(480, image.getHeight());
-    assertTrue(hasBrightContent(image));
+    assertTrue(hasBrightContentInRegion(image, 0, 0, image.getWidth(), image.getHeight()));
   }
 
   @Test
@@ -84,7 +84,7 @@ class DocImageRendererTest {
 
     assertEquals(760, image.getWidth());
     assertEquals(320, image.getHeight());
-    assertTrue(hasBrightContent(image));
+    assertTrue(hasBrightContentInRegion(image, 0, 0, image.getWidth(), image.getHeight()));
   }
 
   @Test
@@ -112,7 +112,7 @@ class DocImageRendererTest {
 
     assertEquals(760, image.getWidth());
     assertEquals(480, image.getHeight());
-    assertTrue(hasBrightContent(image));
+    assertTrue(hasBrightContentInRegion(image, 0, 0, image.getWidth(), image.getHeight()));
   }
 
   @Test
@@ -141,7 +141,7 @@ class DocImageRendererTest {
 
     assertEquals(760, image.getWidth());
     assertEquals(480, image.getHeight());
-    assertTrue(hasBrightContent(image));
+    assertTrue(hasBrightContentInRegion(image, 0, 0, image.getWidth(), image.getHeight()));
   }
 
   @Test
@@ -163,7 +163,7 @@ class DocImageRendererTest {
 
     assertEquals(760, image.getWidth());
     assertEquals(320, image.getHeight());
-    assertTrue(hasBrightContent(image));
+    assertTrue(hasBrightContentInRegion(image, 0, 0, image.getWidth(), image.getHeight()));
   }
 
   @Test
@@ -185,7 +185,7 @@ class DocImageRendererTest {
 
     assertEquals(760, image.getWidth());
     assertEquals(320, image.getHeight());
-    assertTrue(hasBrightContent(image));
+    assertTrue(hasBrightContentInRegion(image, 0, 0, image.getWidth(), image.getHeight()));
   }
 
   @Test
@@ -204,7 +204,7 @@ class DocImageRendererTest {
 
     assertEquals(760, image.getWidth());
     assertEquals(320, image.getHeight());
-    assertTrue(hasBrightContent(image));
+    assertTrue(hasBrightContentInRegion(image, 0, 0, image.getWidth(), image.getHeight()));
   }
 
   @Test
@@ -219,7 +219,7 @@ class DocImageRendererTest {
 
     assertEquals(760, image.getWidth());
     assertEquals(320, image.getHeight());
-    assertTrue(hasBrightContent(image));
+    assertTrue(hasBrightContentInRegion(image, 0, 0, image.getWidth(), image.getHeight()));
   }
 
   @Test
@@ -326,11 +326,6 @@ class DocImageRendererTest {
   // -------------------------------------------------------------------------
   // Helpers
   // -------------------------------------------------------------------------
-
-  /** Returns true if any sampled pixel in the image has a bright channel (> 120). */
-  private static boolean hasBrightContent(BufferedImage image) {
-    return hasBrightContentInRegion(image, 0, 0, image.getWidth(), image.getHeight());
-  }
 
   /**
    * Returns true if any sampled pixel within the given rectangle has a bright channel (> 120).
