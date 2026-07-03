@@ -183,3 +183,4 @@ When adding new functionality:
   cleaner.
 - Real microphone-array calibration is not yet a first-class stable subsystem.
 - Documentation screenshots need continued visual QA as the Swing layout evolves.
+
