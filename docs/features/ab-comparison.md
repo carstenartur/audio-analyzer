@@ -64,3 +64,4 @@ This makes it possible to build CI or scripted checks around known recordings la
 - Very short recordings may not produce a full FFT snapshot.
 - Large sample-rate differences can dominate spectral deltas.
 - The report currently describes differences; it does not apply configurable pass/fail thresholds.
+
