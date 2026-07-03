@@ -1,14 +1,34 @@
 # Feature documentation
 
-These pages describe end-user-visible features in more depth than the README. They are organized
-per feature so each one can be linked from a release note, a bug report or the in-app help text.
+These pages document user-visible application features in more depth than the README. They focus on
+what a user can do, how the feature behaves, what evidence it can export and where the current limits
+are.
 
-|                                    Page                                     |                                    Topic                                     |
-|-----------------------------------------------------------------------------|------------------------------------------------------------------------------|
-| [Oscilloscope-style waveform trigger](oscilloscope-trigger.md)              | Lock the waveform display to a stable point in a repeating signal.           |
-| [Spectrum: peak hold and exponential averaging](peak-hold-and-averaging.md) | Display-mode overlays for steady-state and transient inspection.             |
-| [Recording and replay](recording-and-replay.md)                             | Capture `AudioBlock`s to a `.aar` file and replay them as if they were live. |
-| [A/B comparison](ab-comparison.md)                                          | Compare two recordings and render a Markdown report of the differences.      |
+## Dashboard and inspection features
 
-The broader [use cases](../use-cases/) directory groups *what* a measurement can be used for
-(e.g. stereo localization); this directory documents *how* a specific UI feature works.
+- [Oscilloscope-style waveform trigger](oscilloscope-trigger.md) — stabilize a repeating waveform so
+  the visible trace does not slide across the panel.
+- [Spectrum: peak hold and exponential averaging](peak-hold-and-averaging.md) — combine stable
+  steady-state inspection with remembered transient peaks.
+
+## Reproducibility and QA features
+
+- [Recording and replay](recording-and-replay.md) — capture produced `AudioBlock`s into a `.aar` file
+  and replay them through the same analysis pipeline.
+- [A/B comparison](ab-comparison.md) — compare two recordings and render a Markdown report for QA,
+  regression notes or bug tickets.
+
+## Related documentation
+
+- The [README](../../README.md) gives the project overview and quickstart.
+- The [development guide](../development.md) explains build, test and screenshot generation.
+- The [QA plan](../qa/application-documentation-qa-plan.md) defines the manual and screenshot QA
+  expectations for release-quality documentation.
+- The [use cases](../use-cases/) directory describes what a measurement can be used for, such as
+  stereo localization.
+
+## Documentation quality rule
+
+Whenever a feature changes, update the feature page, regenerate affected screenshots and verify that
+labels, legends and axes remain readable. Do not manually edit generated screenshots; fix the renderer
+or the UI layout and regenerate the image from code.
