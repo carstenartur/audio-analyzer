@@ -67,3 +67,4 @@ Non-UI code can use the same components:
 - Very long recordings can exceed memory if fully loaded; stream with the reader for larger files.
 - The current format version is strict: unsupported versions are rejected.
 - Recording/replay preserves analysis input, not complete application UI state.
+
