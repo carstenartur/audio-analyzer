@@ -1,65 +1,103 @@
-# Quality Gates & Coverage
+# Quality gates and coverage
 
-This page describes the quality checks that are enforced in Maven/CI.
+This page documents the checks that protect the repository during local development and CI. The goal
+is not to claim that every warning has already been eliminated. The goal is to make quality visible,
+prevent regressions and gradually reduce remaining technical debt.
 
-## Current gates
+## Required validation command
 
-|          Gate           |                                      Configuration                                      |                Fails build/CI?                 |
-|-------------------------|-----------------------------------------------------------------------------------------|------------------------------------------------|
-| Java version            | Maven Enforcer requires Java `[21,)`                                                    | **Yes**, in `mvn verify`                       |
-| Unit tests              | Surefire, `java.awt.headless=true`                                                      | **Yes**, in `mvn verify`                       |
-| Spotless                | Java, POM and Markdown format check                                                     | **Yes**, in `mvn verify`                       |
-| Architecture boundaries | JUnit test in `audio-app`                                                               | **Yes**, in `mvn verify`                       |
-| JaCoCo                  | `prepare-agent`, `report`, `check`; `BUNDLE` line coverage minimum `0.05`               | **Yes**, in `mvn verify`                       |
-| Checkstyle              | `checkstyle.xml`, severity `warning`, `failOnViolation=true`                            | **Yes**, in `mvn verify`                       |
-| PMD                     | `pmd-ruleset.xml`, `failOnViolation=true`                                               | **Yes**, in `mvn verify`                       |
-| SpotBugs                | `effort=Max`, `threshold=Low`, exclusions in `spotbugs-exclude.xml`, `failOnError=true` | **Yes**, in `mvn verify`                       |
-| Codecov upload          | `codecov/codecov-action`, `fail_ci_if_error=false`                                      | **No**; upload failures are not a quality gate |
-| CodeQL                  | GitHub workflow with explicit Maven package build                                       | **Yes** when the CodeQL workflow runs          |
+Run the full Maven verification before merging release-facing changes:
 
-## Current coverage snapshot
+```bash
+./mvnw clean verify
+```
 
-Observed JaCoCo line coverage from a full verification run:
+This command runs the core build, tests, formatting checks, static analysis, coverage checks and
+architecture fitness tests.
 
-|            Module             | Line coverage |
-|-------------------------------|--------------:|
-| `audio-core`                  |        69.56% |
-| `audio-plugin-api`            |       100.00% |
-| `audio-geometry`              |        61.05% |
-| `audio-acquisition`           |     no report |
-| `audio-dsp`                   |        78.65% |
-| `audio-app`                   |        29.96% |
-| `audio-experimental-acoustic` |        86.03% |
+## Build gates
 
-`audio-acquisition` is included in the Maven reactor and JaCoCo configuration, but this run
-did not produce a module JaCoCo XML/HTML report for it because there was no test execution data in
-that module.
+The following gates are expected to pass in `mvn verify`:
 
-The 5% JaCoCo floor is deliberately low because its purpose is to prove the gate and prevent
-coverage from disappearing, not to claim comprehensive test coverage.
+- **Java version** — Maven Enforcer requires Java 21 or newer.
+- **Unit tests** — Surefire runs module tests with `java.awt.headless=true`.
+- **Spotless** — Java, POM and Markdown formatting must match the configured formatter.
+- **Architecture fitness tests** — package and dependency boundaries are checked by tests.
+- **JaCoCo** — coverage reports are generated and the configured minimum is enforced.
+- **Checkstyle** — style findings are baseline-gated through the Maven/CI setup.
+- **PMD** — code-quality findings are baseline-gated through the Maven/CI setup.
+- **SpotBugs** — bug-pattern findings are baseline-gated through the Maven/CI setup.
+- **CodeQL** — the GitHub workflow performs a separate security-analysis build.
+
+Codecov upload is intentionally not a hard gate. Upload failures should be investigated, but they do
+not automatically mean that the build artifact is invalid.
+
+## Current coverage position
+
+The JaCoCo line-coverage floor is intentionally low. It proves that coverage cannot disappear and that
+reports are generated consistently, but it is not a claim of comprehensive test coverage.
+
+Coverage should be raised gradually only when new tests exercise behavior that matters:
+
+1. keep the current gate green;
+2. add focused tests for critical paths;
+3. raise the threshold in small steps;
+4. avoid coverage-only tests that do not protect behavior.
+
+High-value coverage targets:
+
+- `SampleDecoder` format and partial-buffer paths;
+- `AudioRingBuffer` boundary behavior and SPSC stress cases;
+- waveform trigger and spectrum display-state edge cases;
+- `SpectrumAnalyzer`, `StereoDelayAnalyzer`, `SpectrogramAnalyzer` and `DiagnosisAnalyzer` rejection
+  and threshold paths;
+- recording/replay and evidence-bundle assembly;
+- `SampleClock` drift/jitter assumptions before stronger synchronized-array claims are made;
+- workbench model tests that do not depend on live audio hardware.
+
+## Static-analysis baseline
+
+The repository may still contain existing Checkstyle, PMD or SpotBugs findings. CI should prevent the
+number of findings from increasing beyond the committed baseline while the project reduces debt module
+by module.
+
+When touching a file with existing findings:
+
+- do not introduce new findings;
+- fix local findings when the fix is low-risk;
+- document intentionally deferred findings in the PR;
+- prefer small, reviewable cleanup PRs over broad mechanical rewrites.
+
+## Documentation and screenshot quality
+
+Documentation is part of the product. Public-facing documentation changes should satisfy the QA plan:
+
+- command examples must work from a clean checkout or clearly state prerequisites;
+- generated screenshots must be regenerated from the current codebase;
+- screenshots must be visually reviewed for overlapping labels, clipped text and misleading states;
+- experimental acoustic-localization claims must be limited to what tests, calibration and benchmark
+  evidence support;
+- remaining limitations must be recorded in `docs/QA-FINDINGS.md` or linked issues.
+
+See:
+
+- [Application and documentation QA plan](qa/application-documentation-qa-plan.md)
+- [Screenshot QA checklist](qa/screenshot-qa-checklist.md)
+- [Release-readiness checklist](qa/release-readiness-checklist.md)
 
 ## Report locations after `mvn verify`
+
+Common report locations:
 
 - Checkstyle: `*/target/checkstyle-result.xml`
 - PMD: `*/target/pmd.xml`
 - SpotBugs: `*/target/spotbugsXml.xml`
 - JaCoCo HTML: `*/target/site/jacoco/index.html`
 - JaCoCo XML: `*/target/site/jacoco/jacoco.xml`
+- Surefire XML: `*/target/surefire-reports/*.xml`
 
-## Hardening roadmap
+## Release readiness
 
-1. Keep static-analysis and formatting/test gates green in regular `mvn verify` runs.
-2. Raise JaCoCo line coverage in small steps: **5% → 10% → 20% → 30%**, backed by tests for behavior
-   rather than coverage-only assertions.
-
-## Target areas for increased coverage
-
-- `SampleDecoder` format and partial-buffer paths.
-- `AudioRingBuffer` boundary and SPSC stress behavior.
-- `WaveformRenderer`, trigger and spectrum display-state edge cases.
-- `SpectrumAnalyzer`, `StereoDelayAnalyzer`, `SpectrogramAnalyzer` and `DiagnosisAnalyzer` rejection
-  and threshold paths.
-- Recording/replay and evidence-bundle assembly.
-- `SampleClock` drift/jitter assumptions: currently documented as a limitation and should become a
-  focused test or tracked issue before real synchronized-array claims are made.
-
+Before a public release or announcement, complete the release-readiness checklist and either close or
+explicitly defer blocking QA findings. A release should not rely only on CI: manual app QA and visual
+screenshot review are required for user-facing quality.

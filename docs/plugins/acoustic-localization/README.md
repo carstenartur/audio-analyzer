@@ -1,390 +1,215 @@
-# Acoustic localization plugin details
+# Acoustic localization plugin guide
 
-This detail page expands the [plugin entry page](../acoustic-localization.md). The package is an
-experimental research subsystem for real-time localization and tracking of weak or insect-like sound
-sources. It is not a production mosquito detector.
+This guide expands the [plugin overview](../acoustic-localization.md). It documents how to use the
+experimental workbenches, what evidence they produce and which limitations must be respected when
+interpreting results.
 
-## How to run the workbench
+The plugin is a research subsystem. It is designed for reproducible experiments and benchmarkable
+algorithm development, not for production mosquito tracking or species classification.
 
-The Plugins menu in Audio Analyzer exposes an interactive **Acoustic Localization Workbench
-(experimental)** that lets you run deterministic simulation scenarios through the full tracking
-pipeline without a microphone array. The same plugin also exposes an **Imported Recording
-Workbench (experimental)** for local HumBugDB inspection and evaluation.
+## Workbench entry points
 
-### Opening the workbench
+Start the Swing app and open the **Plugins** menu. Under **Experimental Acoustic Localization** there
+are two main views:
 
-1. Start Audio Analyzer.
-2. Open the **Plugins** menu in the menu bar.
-3. Expand the **Experimental Acoustic Localization** submenu.
-4. Click **Open: Acoustic Localization Workbench (experimental)** for simulation scenarios, or
-   **Open: Imported Recording Workbench (experimental)** for local HumBugDB recordings.
+- **Acoustic Localization Workbench (experimental)** — deterministic simulation scenarios, tracking,
+  playback and export.
+- **Imported Recording Workbench (experimental)** — local HumBugDB import, feature extraction,
+  baseline classification and dataset analysis.
 
-A dialog opens with three areas:
+Both views run inside the host application. Stable plugin contracts stay in `audio-plugin-api`; the
+experimental implementation stays in `audio-experimental-acoustic`.
 
-- **Top** — scenario selector, pipeline parameter controls and Run / Stop buttons.
-- **Centre left** — log, Markdown, CSV and JSON-lines tabs showing live and post-run output.
-- **Centre right** — 2-D room map: room rectangle, microphone positions (blue circles), emitter
-  ground-truth positions (green triangles), candidate grid (grey dots) and estimated track
-  positions (red circles, labeled by track ID).
+## Simulation workbench
 
-### Imported recording workbench
+Use the simulation workbench when you need a reproducible localization run without live hardware.
 
-The imported-recording workbench is intentionally local-only and offline-first.
+Typical workflow:
 
-1. Open **Imported Recording Workbench (experimental)** from the same plugin submenu.
-2. Paste or browse to a local HumBugDB root directory.
-3. Click **Import** to build a `DatasetManifest` from the local WAV/CSV export.
-4. Browse the imported recordings in the combo box.
-5. Use **Replay analysis** to re-run dominant-frequency tracking, feature extraction and baseline
-   rule-based classification for the selected clip.
+1. choose a deterministic scenario;
+2. configure block size, FFT size, peak detection, frequency band, candidate grid and TDOA estimator;
+3. run the scenario;
+4. inspect the log and room map;
+5. step through completed frames with playback controls;
+6. export Markdown, CSV or JSON-lines evidence.
 
-The left pane shows the imported manifest, the upper-right pane shows one recording's metadata and
-analysis summary, and the lower-right pane shows a dataset-level evaluation report.
+The room map shows the room boundary, microphone positions, candidate grid, ground-truth positions
+where available and estimated tracks. Track IDs are stable within the run so identity persistence can
+be inspected frame by frame.
 
-### Available scenarios
+## Available scenarios
 
-All scenarios from `SimulationScenarios.all()` are listed in the dropdown:
+The scenario list is provided by `SimulationScenarios.all()`. Current scenario families include:
 
-|         Scenario         |                         Description                          |
-|--------------------------|--------------------------------------------------------------|
-| `single-source`          | One stationary 600 Hz tone in an anechoic room               |
-| `two-close-frequencies`  | Two sources at 600 Hz and 640 Hz — challenges naive trackers |
-| `noisy-room`             | Single source with broadband background noise                |
-| `moving-source`          | Source crossing the room at constant velocity                |
-| `moving-toward-array`    | Source approaching the array (Doppler validation)            |
-| `moving-across-array`    | Source moving laterally across the array                     |
-| `two-moving-sources`     | Two tones with distinct velocities                           |
-| `reflected-environment`  | Single source with wall reflections enabled                  |
-| `two-mosquito-wingbeats` | Two deterministic wingbeat emitters at close frequencies     |
+- a stationary single source;
+- two close frequencies that challenge naive clustering;
+- a noisy room;
+- a moving source;
+- Doppler-oriented movement toward and across the array;
+- two moving sources;
+- a reflected environment;
+- two deterministic mosquito-like wingbeat emitters.
 
-### Configurable parameters
+These scenarios are synthetic. They are valuable for regression tests and algorithm comparison, but
+they do not prove real-world performance.
 
-|   Parameter    |    Default    |                            Meaning                            |
-|----------------|---------------|---------------------------------------------------------------|
-| Block size     | 1024          | Frames per processing block                                   |
-| FFT size       | 1024          | FFT window length (power of two)                              |
-| Max peaks      | 3             | Peaks detected per channel per block                          |
-| Min SNR        | 2.0           | Minimum peak-to-median SNR                                    |
-| Band min / max | 150 – 2500 Hz | Frequency search band                                         |
-| Grid steps     | 8             | Steps per room axis; total grid is (steps+1)×(steps+1) points |
-| TDOA estimator | GCC-PHAT      | `GCC_PHAT` or `CROSS_CORRELATION`                             |
+## Configurable simulation parameters
 
-### Log output format
+Common workbench parameters:
 
-Each processed block prints one line:
+- **Block size** — frames processed per block.
+- **FFT size** — frequency-analysis window length.
+- **Max peaks** — number of detected peaks per channel per block.
+- **Minimum SNR** — minimum peak-to-median ratio for accepting peaks.
+- **Frequency band** — lower and upper bound for peak search.
+- **Candidate grid** — number of 2D grid steps used by beamforming.
+- **TDOA estimator** — GCC-PHAT or cross-correlation.
 
-```
-Block   12  frame=  12288  time=  768.0 ms  clusters=1  tracks=1  proc=142.3 µs
-         [600 Hz]  {id=0 f=600 Hz pos=(1.50,1.00) conf=0.92 n=13}
-```
+Prefer small, deterministic parameter changes when comparing algorithms. Large changes can alter
+runtime budget, peak selection and tracking behavior at the same time.
 
-When a frame exceeds the per-block real-time budget, the log line is annotated:
+## Log and budget output
 
-```
-Block   17  frame=  17408  time=1088.0 ms  clusters=1  tracks=1  proc=28000.0 µs  ⚠ OVER BUDGET
-```
+Each processed block produces a compact log entry with frame index, timestamp, detected clusters,
+tracked sources and processing time. Completed runs also expose aggregate budget statistics.
 
-If any frames exceeded the budget, the run-complete summary line also reports the count:
+When a frame exceeds the configured `FrameSchedule` processing budget, the log and exports mark it as
+over budget. Budget warnings are diagnostic information; they do not abort processing and do not, by
+themselves, imply an incorrect result.
 
-```
-⚠ 3 frame(s) exceeded the real-time budget (budget=18600.0 µs per block).
-```
+Budget warnings are most useful for comparing configurations:
 
-> **Note:** Budget warnings are **experimental**. They indicate that the configured
-> `FrameSchedule` deadline was not met for those frames, but do not abort processing.
-> On a development machine, budget overruns are normal and expected — the per-block budget
-> assumes a real-time-capable system running at the configured sample rate. See
-> [How to interpret budget warnings](#how-to-interpret-budget-warnings) for details.
+- repeated warnings suggest that FFT size, grid resolution or peak count may be too expensive;
+- occasional spikes can be caused by JIT warmup, garbage collection or host scheduling;
+- real-time claims require target-hardware evidence, not only development-machine timings.
 
-### Export
+Programmatic access is available through `WorkbenchRunResult.overBudgetFrameCount()` and
+`isFrameOverBudget(snapshot)`.
 
-After a run completes the three export tabs are populated:
+## Export formats
 
-- **Markdown** — human-readable summary with scenario metadata, parameter table, aggregate
-  budget statistics (*Budget per block*, *Over-budget frames*) and a per-block table where
-  over-budget rows are annotated with `⚠ OVER`.
-- **CSV** — one row per tracked source per frame (`frameIndex`, `timestampNs`, `trackId`,
-  `frequencyHz`, `posX`, `posY`, …, `budgetExceeded`). The `budgetExceeded` column is
-  `true` for frames that exceeded the per-block deadline, `false` otherwise.
-- **JSON-lines** — one JSON object per frame, with a `"budgetExceeded"` boolean field for
-  each frame, suitable for offline analysis.
+After a simulation run, the workbench can export:
 
-Copy the content to a file for archiving.
+- **Markdown** — human-readable run summary, parameters, timing/budget statistics and tracked-source
+  table;
+- **CSV** — one row per tracked source per frame, including position, confidence and budget flag;
+- **JSON-lines** — one JSON object per frame for offline processing.
 
-### How to interpret budget warnings
+Use these exports as reviewable evidence in issues, PRs and benchmark notes.
 
-The `FrameSchedule` is configured with 80 % of the block period as the real-time deadline
-(`maxLoadFraction = 0.8`). For a 1024-sample block at 44 100 Hz, the budget is roughly 18.6 ms
-(0.8 × 23.2 ms).
+## Imported recording workbench
 
-Budget warnings do **not** imply incorrect results:
+The imported-recording workbench is local-only and offline-first. It expects a local HumBugDB export
+root and does not download data automatically.
 
-- The pipeline is observational: it records `processingNanos` per frame but never skips or
-  aborts processing.
-- On a typical development machine the per-frame wall-clock time is far below the budget.
-  Occasional spikes (JIT warmup, GC pauses, OS scheduling) may trigger a warning.
-- Repeated warnings across many frames on a target real-time system indicate that the
-  pipeline configuration should be simplified (smaller FFT, fewer grid steps, lower block rate)
-  or the hardware upgraded.
+Typical workflow:
 
-The `WorkbenchRunResult.overBudgetFrameCount()` and `isFrameOverBudget(snapshot)` methods
-provide programmatic access to the same information.
+1. open the imported-recording workbench from the plugin menu;
+2. select a local HumBugDB export directory;
+3. import metadata and WAV references into a `DatasetManifest`;
+4. inspect recordings, labels and metadata;
+5. replay feature extraction and rule-based classification for selected recordings;
+6. review dataset-level evaluation metrics and feature distributions;
+7. run generator calibration from extracted feature vectors where available.
 
-### Headless / programmatic use
+Users are responsible for obtaining datasets legally and respecting upstream licenses.
 
-`WorkbenchScenarioRunner` runs scenarios without Swing:
+## Classification baseline
 
-```java
-SimulationScenario scenario = SimulationScenarios.singleSource();
-WorkbenchParameters params = WorkbenchParameters.defaults().build();
-WorkbenchRunResult result = WorkbenchScenarioRunner.run(scenario, params);
-System.out.println(WorkbenchRunExporter.toMarkdown(result));
-```
+The rule-based classifier is intentionally simple and transparent. It uses frequency-oriented rules to
+produce a reproducible baseline for evaluation workflows. It is not a trained model and should not be
+presented as species-level classifier accuracy.
 
-All five required acceptance-criteria scenarios (`singleSource`, `twoCloseFrequencies`,
-`movingSource`, `noisyRoom`, `reflectedEnvironment`) are covered by
-`WorkbenchScenarioRunnerTest` and `AcousticLocalizationWorkbenchPanelTest` in
-`audio-experimental-acoustic`.
+Evaluation outputs include:
 
-For imported recordings, see `HumBugDbImporter`, `DatasetWingbeatEvaluationWorkflow` and
-`ImportedRecordingWorkbenchPanel` in `audio-experimental-acoustic`.
-
----
+- overall accuracy for the available labels;
+- per-label precision and recall;
+- confusion matrix;
+- feature distribution statistics such as dominant frequency, SNR and harmonic ratios.
 
 ## Pipeline overview
 
 ```text
-AudioBlock (multi-channel synchronized frame)
-  → MultiPeakDetector (FFT + parabolic refinement per channel)
-  → FrequencyClusterer (group peaks across channels)
-  → TdoaEstimator (GCC-PHAT or cross-correlation, all microphone pairs)
-  → DelayAndSumBeamformer (2D candidate grid scoring)
-  → SourceTracker (Kalman smoothing + identity persistence)
-  → TrackingSnapshot (immutable per-frame output)
+AudioBlock
+  -> MultiPeakDetector
+  -> FrequencyClusterer
+  -> TdoaEstimator
+  -> DelayAndSumBeamformer
+  -> SourceTracker
+  -> TrackingSnapshot
 ```
 
-**Implemented:**
+Implemented components:
 
-- Multi-peak frequency detection with parabolic refinement;
-- Cross-channel frequency clustering with Hz and cents tolerance;
-- GCC-PHAT and cross-correlation TDOA estimators;
-- Delay-and-sum beamforming over configurable 2D grids;
-- Kalman-based source tracking with identity persistence and confidence decay;
-- Doppler radial-velocity estimation and multi-sensor velocity reconstruction;
-- Real-time budget tracking via `FrameSchedule` and `ProcessingBudget`;
-- Deterministic simulation with moving emitters, reflections and noise;
-- HumBugDB dataset import and classification evaluation;
-- Benchmark infrastructure with localization and classification metrics.
+- multi-peak frequency detection with parabolic peak refinement;
+- cross-channel frequency clustering;
+- GCC-PHAT and cross-correlation TDOA estimation;
+- delay-and-sum beamforming over 2D candidate grids;
+- Kalman-style tracking with identity persistence and confidence decay;
+- deterministic simulation with moving emitters, reflections and noise;
+- benchmark metrics for localization and classification.
 
-**Experimental:**
+Experimental components:
 
-- Feature ranking and comparison for classifier development;
-- Synthetic-vs-real signal distribution comparison;
-- Generator calibration for realistic synthetic data;
-- Additional heatmap/confidence visualizations in plugin views.
+- feature ranking and comparison;
+- synthetic-vs-real distribution comparison;
+- generator calibration from imported feature statistics;
+- richer visualization and confidence displays.
 
-**Future work:**
+## Practical hardware notes
 
-- Sub-sample TDOA peak interpolation;
-- Probabilistic multi-target data association;
-- 3D geometry and multi-story arrays;
-- Room impulse-response modeling;
-- Trained species classifier.
+The simulation workbench does not require hardware. Real microphone-array experiments do.
 
----
+For credible real-world localization, prefer:
 
-## HumBugDB dataset import
+- a synchronized multi-channel audio interface;
+- rigid microphone geometry with measured coordinates;
+- known channel mapping;
+- calibration clicks or chirps before and after recording;
+- residual timing-error estimates;
+- rejection criteria when the timing error exceeds the spatial error budget.
 
-The `HumBugDbImporter` provides local offline-first import of the HumBugDB mosquito dataset:
+Independent USB microphones are not reliable by default. They need an explicit timing model for offset,
+drift and buffering jitter. That work is tracked in #136 and is not complete.
 
-**How it works:**
+## Synchronization limits
 
-1. User provides an absolute path to a local HumBugDB export directory
-2. Importer reads metadata CSVs (`data/metadata/*.csv`) and resolves WAV file paths
-3. Creates a normalized `DatasetManifest` with recordings, labels and annotations
-4. Labels include species, gender, fed status, age when available
-5. Manifest can be used for classification evaluation and feature analysis
+TDOA is very sensitive to timing. A one-sample error at 48 kHz corresponds to roughly 7 mm of acoustic
+path difference in air. For small arrays and weak sources, clock drift, channel latency and buffering
+jitter can dominate the signal.
 
-**No automatic downloads.** Users must obtain HumBugDB from the upstream project and accept its
-license terms before using it. See [Real-world dataset strategy](datasets.md) for details.
+The current `SampleClock` stores nominal timestamps. It does not compensate arbitrary inter-device
+drift or per-channel latency. Treat uncompensated multi-device recordings as demonstration-grade only.
 
-**Workbench integration:**
+## Interpretation rules
 
-The **Imported Recording Workbench (experimental)** provides:
+Use these rules when reading results:
 
-- Import UI with directory browser
-- Recording list with metadata and labels
-- Per-recording feature extraction and classification
-- Dataset-level evaluation with accuracy, precision/recall and confusion matrices
-- Feature distribution analysis across the dataset
+- synthetic success is regression evidence, not field validation;
+- a precise coordinate is not a precise measurement unless timing and geometry errors are bounded;
+- confidence values are algorithm diagnostics, not calibrated probabilities;
+- rule-based classification is a baseline, not a biological identification claim;
+- exported evidence should include scenario, parameters and limitations.
 
-See [HumBugDB Evaluation Baseline](evaluation-baseline.md) for usage instructions and output format.
+## Related documentation
 
----
-
-## Classification and benchmarking
-
-The plugin includes baseline classification and evaluation infrastructure:
-
-**RuleBasedWingbeatClassifier:**
-
-- Transparent rule-based classifier using fixed frequency thresholds from published literature
-- Not a trained model — intended as a reproducible baseline
-- Classifies recordings as: `female-likely`, `male-likely`, `possibly-blood-fed-female`,
-  `mosquito-like`, `unknown`
-- Based on dominant wingbeat frequency and harmonic analysis
-
-**Evaluation metrics:**
-
-- Overall accuracy
-- Per-label precision and recall
-- Confusion matrix (ground-truth vs predicted)
-- Feature distribution statistics (dominant frequency, SNR, harmonic ratios)
-
-**Localization metrics:**
-
-- Position error (mean, median, 95th percentile)
-- Velocity error
-- Frequency stability (variance over time)
-- Tracking continuity (identity persistence, track switching frequency)
-- Processing latency and real-time budget compliance
-
-See [Evaluation metrics](research/evaluation-metrics.md) for detailed definitions.
-
----
-
-## Synthetic vs real comparison
-
-**Experimental**: The plugin supports comparing feature distributions between synthetic scenarios
-and real imported recordings:
-
-- Run `SimulationScenarios` to generate synthetic data
-- Import real recordings via `HumBugDbImporter`
-- Use `DatasetWingbeatEvaluationWorkflow` to extract features from both
-- Compare distribution statistics to validate synthetic realism
-
-Higher standard deviation in real recordings vs synthetic indicates natural variation not yet
-captured by the simulator. This workflow guides generator calibration.
-
----
-
-## Generator calibration
-
-**Experimental**: The `simulation.calibration` package provides utilities for:
-
-- Calibrating synthetic emitter parameters to match real recording statistics
-- Tuning noise levels, reflection gains and frequency distributions
-- Validating synthetic data realism against imported datasets
-
-This is future work for improving synthetic training data quality.
-
----
-
-## Practical microphone setup
-
-- Use a synchronized multi-channel interface when possible — this is the **currently supported**
-  hardware path. A research-grade low-cost alternative using a set of stereo USB microphones with
-  known local baselines plus an ultrasonic reference beacon for inter-device offset, drift and
-  cycle-slip estimation is described in
-  [Physics and latency limits](physics-and-latency-limits.md#independent-usb-microphones-and-ultrasonic-reference-beacon-calibration);
-  it is an **experimental proposal that requires external processing and is not implemented in the
-  current plugin**.
-- Start with 2D arrays on a rigid frame and known coordinates in meters.
-- Keep microphone spacing large enough for measurable delay but below room-reflection dominance.
-- Record calibration clicks or chirps to estimate channel polarity, gain and sample offsets.
-
-## Synchronization requirements
-
-TDOA assumes one sample clock across channels. A one-sample error at 48 kHz is roughly 7.1 mm of
-path difference in air, so clock drift and buffering jitter quickly dominate small arrays.
-
-For long recordings, sample-clock drift must be measured or bounded. The current `SampleClock`
-stores nominal timestamps only; it does not compensate for drift, USB buffering jitter or
-per-channel latency. Real microphone rigs should capture calibration impulses before and after the
-experiment and reject data when drift exceeds the localization error budget.
-
-See [Physics and latency limits](physics-and-latency-limits.md) for the hard physical limits,
-consumer-hardware constraints, ultrasonic reference-beacon calibration, calibration-reducible errors
-and AR-display implications behind these requirements.
-
-## DSP concepts
-
-- **STFT / frequency analysis:** inspect short windows to find narrow-band wingbeat energy.
-- **Harmonic detection:** insects often create harmonics; experiments should track fundamental and
-  harmonics independently instead of hardcoding a species range.
-- **Frequency tracking:** `WingbeatFrequencyTracker` finds a dominant peak in a configurable band.
-- **Multiple insects:** frequency separation is only a first heuristic. Two insects with overlapping
-  fundamentals or harmonics require multi-target tracking that is not implemented here.
-- **Cross-correlation:** robust for clean delayed copies but weak under reflections and multi-source
-  mixtures.
-- **GCC-PHAT:** `GccPhatTdoaEstimator` uses a dependency-free frequency-domain implementation with
-  PHAT weighting. It still reports integer-sample delays only and does not perform sub-sample peak
-  interpolation.
-- **Beamforming:** `DelayAndSumBeamformer` scores candidate positions and returns a heatmap.
-
-## Room acoustics considerations
-
-Reflections, standing waves, air absorption, microphone frequency response and fan noise can be
-larger than the target signal. The simulator includes configurable reflection gain and noise so
-algorithms can be validated before real recordings are available.
-
-## Simulation
-
-`SimulatedMicrophoneArraySource` generates timestamped multi-channel `AudioBlock` values from:
-
-- `Room2D` dimensions, reflection gain and noise;
-- one or more `SoundEmitter2D` instances with position, velocity, frequency and amplitude;
-- a deterministic random seed for repeatable tests.
-
-Use it to evaluate localization precision, robustness and multi-source separation before collecting
-real insect recordings.
-
-## Visualization outputs
-
-`AcousticLocalizationSnapshot` and `AcousticDebugFrame` expose:
-
-- tracked frequency;
-- TDOA estimates and path-difference constraints;
-- beamforming heatmap points;
-- estimated source position.
-
-They are UI-agnostic and can drive Swing panels, web dashboards or offline notebooks.
-
-## Limitations and non-goals
-
-- No species classifier or production mosquito tracker is implemented.
-- No guaranteed exact AR overlay is implied; display-time predictions remain model-dependent.
-- 2D geometry is supported first; 3D arrays are future work.
-- GCC-PHAT, TDOA and beamforming are tested on synthetic delayed/noisy signals but remain
-  experimental. Reflections, microphone mismatch, non-point sources and multiple insects can create
-  false peaks.
-- The pipeline exposes configurable reference-channel frequency tracking and optional multi-channel
-  aggregation. It does not decide automatically which insect a frequency peak belongs to.
-- No GPU, distributed processing or real-time scheduler integration is included.
-- No Python bridge is added; future interoperability should remain behind stable interfaces.
-- Uncertainty should be surfaced explicitly in debugging/calibration workflows and should not be
-  hidden behind false point precision when latency or tracking confidence is poor.
-
-## Package boundaries
-
-- Stable reusable infrastructure lives under `org.hammer.audio.core`,
-  `org.hammer.audio.acquisition`, `org.hammer.audio.geometry`, `org.hammer.audio.dsp` and
-  `org.hammer.audio.analysis`.
-- Experimental mosquito/insect localization logic lives under
-  `org.hammer.audio.experimental.acoustic`.
-- UI and Swing code live in `org.hammer.audio.ui` and `org.hammer`.
-- `ArchitectureBoundaryTest` enforces that stable audio packages do not import
-  `org.hammer.audio.experimental.*`, and that DSP/acquisition/geometry do not depend on UI/app
-  packages.
+- [Synchronization requirements](synchronization.md)
+- [Tracking pipeline](tracking.md)
+- [Real-world dataset strategy](datasets.md)
+- [HumBugDB evaluation baseline](evaluation-baseline.md)
+- [Physics and latency limits](physics-and-latency-limits.md)
+- [Evaluation metrics](research/evaluation-metrics.md)
+- [Research notes](research/README.md)
 
 ## Future research directions
 
-- Multi-source separation using harmonic grouping and probabilistic frequency tracks.
-- Sub-sample GCC-PHAT interpolation and confidence calibration from real recordings.
-- 3D geometry and calibrated array files.
-- Better reflection models and measured room impulse responses.
-- Benchmark corpus with real and synthetic mosquito-like recordings.
+Open research work includes:
 
-See the [`research/`](research/README.md) folder for the paper outline,
-reproducible experiments, evaluation metrics, demo scenarios, hardware setup
-notes and JSON simulation datasets.
+- sub-sample TDOA interpolation;
+- reflection-aware confidence and consistency checks;
+- probabilistic multi-source tracking;
+- calibrated array profile files;
+- 3D geometry;
+- benchmark corpora with measured real-world recordings;
+- clearer uncertainty propagation into workbench visualizations.
+

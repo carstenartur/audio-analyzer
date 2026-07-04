@@ -1,79 +1,70 @@
 # Recording and replay
 
-Audio Analyzer can capture every produced `AudioBlock` into a small binary file (`.aar`) and later
-replay that file as if it were a live capture source. This is useful for:
+Audio Analyzer can capture produced `AudioBlock`s into a small `.aar` recording and replay that file
+through the same analysis pipeline later. This makes short-lived issues reproducible and gives QA or
+research work a durable evidence format.
 
-- Reproducing an issue you only saw briefly on real hardware.
-- Sending a minimal reproduction to a teammate without sharing the original microphone or room.
-- Building a regression set: record a known good and a known bad session, then A/B compare them
-  (see [A/B comparison](ab-comparison.md)).
+## Use cases
 
-## How to record
+Use recording and replay to:
 
-1. Start any capture source as usual — live microphone or a demo signal.
-2. From the **File** menu, choose **Start recording...** and pick a destination file.
-3. Continue analyzing as long as you like. Every block produced by the capture service is appended
-   to the file.
-4. Choose **Stop recording** when you are done. The dialog reports the number of blocks written.
+- reproduce a UI or analysis issue that only appears with a specific signal;
+- share a minimal example without sharing the original hardware setup;
+- build regression examples from known-good and known-bad sessions;
+- run A/B comparisons after a code, hardware or configuration change.
 
-The recording is best-effort: blocks are deduplicated by frame index, but in extreme conditions
-(very fast capture rates combined with a paused UI) a few blocks may be missed. For the bundled
-live capture (~10 ms blocks) the default UI poll interval is comfortably fast enough.
+## Recording a session
 
-## How to replay
+1. Start a capture source, either live input or deterministic demo mode.
+2. Choose **File > Start recording...**.
+3. Select a destination `.aar` file.
+4. Continue analyzing normally.
+5. Choose **File > Stop recording** when done.
 
-1. From the **File** menu, choose **Open recording...** and pick a `.aar` file.
-2. The active capture service is stopped and replaced with a
-   [`RecordedAudioCaptureService`](../../audio-app/src/main/java/org/hammer/audio/RecordedAudioCaptureService.java)
-   that publishes the file's blocks at their natural sample-rate pace.
-3. Every panel (waveform, spectrum, spectrogram, phase, diagnosis, measurement) behaves exactly as
-   it would for live audio. Evidence export and screenshot capture work normally.
+Recording is best effort. Blocks are deduplicated by frame index, but extreme capture rates or a
+paused UI may still miss some blocks. For typical bundled live capture settings, the default polling
+interval is intended to be sufficient.
 
-Replay does not loop by default — when the file is exhausted the service simply stops, mirroring
-"Stop" on a live capture. Reopen the file to replay again.
+## Replaying a session
+
+1. Choose **File > Open recording...**.
+2. Select a `.aar` file.
+3. The active capture service is stopped and replaced by a replay service.
+4. Waveform, spectrum, spectrogram, phase, diagnosis and measurement panels process the replayed
+   blocks as normal input.
+
+Replay does not loop automatically. When the file is exhausted, replay stops. Reopen the file to run
+it again.
 
 ## File format
 
 ![Recording file layout](../images/features/recording-format.png)
 
-The on-disk layout is documented on
-[`AudioBlockRecordingFormat`](../../audio-dsp/src/main/java/org/hammer/audio/recording/AudioBlockRecordingFormat.java).
-All integers are big-endian, samples are IEEE-754 32-bit floats in the same normalized
-`[-1, 1]` convention used everywhere else in the codebase.
+The format is implemented by `AudioBlockRecordingFormat`, `AudioBlockRecordingWriter` and
+`AudioBlockRecordingReader` in `audio-dsp`.
 
-|       Region       |           Bytes            |                                   Contents                                   |
-|--------------------|----------------------------|------------------------------------------------------------------------------|
-| Header             | 16                         | magic `AAR1`, version, channel count, sample rate, bits-per-sample, reserved |
-| Frame record (× N) | 20 + frames × channels × 4 | frame count, frame index, timestamp (ns), channel-major samples              |
+The file contains:
 
-The format is intentionally simple — it is *not* a substitute for WAV/AIFF. It exists to faithfully
-round-trip blocks together with their original timestamps and frame indices so replay is
-deterministic and snapshots compare identically to live captures.
+- a fixed header with magic value, version, channel count, sample rate and sample format;
+- one frame record per written block;
+- normalized 32-bit float samples stored with frame index and timestamp metadata.
 
-## API surface
+The format is intentionally simple. It is not a replacement for WAV or AIFF; it exists to preserve the
+analysis pipeline's block-level view of audio for deterministic replay.
 
-The same building blocks are usable from non-UI code:
+## Programmatic use
 
-- [`AudioBlockRecordingWriter`](../../audio-dsp/src/main/java/org/hammer/audio/recording/AudioBlockRecordingWriter.java)
-  — writes blocks to any `OutputStream`.
-- [`AudioBlockRecordingReader`](../../audio-dsp/src/main/java/org/hammer/audio/recording/AudioBlockRecordingReader.java)
-  — streams or fully loads a recording.
-- [`RecordingTap`](../../audio-app/src/main/java/org/hammer/audio/RecordingTap.java)
-  — Swing-friendly wrapper that polls the current capture service.
-- [`RecordedAudioCaptureService`](../../audio-app/src/main/java/org/hammer/audio/RecordedAudioCaptureService.java)
-  — implements `AudioCaptureService` so a recording behaves like any other source.
+Non-UI code can use the same components:
 
-Headless tools (CI gates, batch analyzers, scripted demos) can use the writer/reader directly with
-no UI dependency.
+- `AudioBlockRecordingWriter` writes blocks to an `OutputStream`;
+- `AudioBlockRecordingReader` loads or streams recording blocks;
+- `RecordedAudioCaptureService` makes a recording behave like a capture source;
+- `RecordingTap` connects the Swing app's current capture source to the recording writer.
 
 ## Limitations
 
-- The format stores the *normalized* float samples that the capture service produced. It does not
-  preserve the original mixer device name, the lossless source bits beyond the level information,
-  or any DSP pipeline state.
-- Versioning is a 16-bit field in the header: a future incompatible change must bump `VERSION`,
-  and the reader refuses any file whose version does not match the supported one (not only older
-  versions). The format is stable from version 1.
-- Replay is from in-memory blocks — extremely long recordings may exceed available heap. Stream
-  with `AudioBlockRecordingReader.next()` for those cases.
+- The file stores normalized samples produced by the capture service, not original device metadata.
+- Very long recordings can exceed memory if fully loaded; stream with the reader for larger files.
+- The current format version is strict: unsupported versions are rejected.
+- Recording/replay preserves analysis input, not complete application UI state.
 

@@ -1,111 +1,92 @@
 # QA findings & remaining technical debt
 
 This document records the QA/product-hardening state of the repository. It reflects the current code
-and CI configuration; it should not be read as a claim that all static-analysis findings are fixed.
+and CI configuration; it should not be read as a claim that all static-analysis findings are fixed or
+that all interactive UI states have been manually verified.
 
 ## Current QA focus
 
-A new detailed QA plan for application and documentation hardening is maintained in
+A detailed QA plan for application and documentation hardening is maintained in
 [`docs/qa/application-documentation-qa-plan.md`](qa/application-documentation-qa-plan.md). That plan
 covers documentation inventory, screenshot regeneration, visual readability criteria, automated image
 checks, manual Swing application QA and release-quality gates.
 
-## Changes made in the current QA pass (PR 3 / PR 4 / PR 5 of issue #198)
+The current public-release focus is professional documentation quality: clear user guidance,
+version-tolerant commands, honest research limitations, regenerated screenshots and documented manual
+QA evidence.
 
-- **DocImageRendererTest extended**: all nine generated documentation images now have tests. Previous
-  tests checked only the five workbench images; the four feature images (`renderTrigger`,
-  `renderSpectrumPeakHold`, `renderRecordingFormat`, `renderAbComparison`) are now also covered.
-- **Non-blank region tests**: each image now has one or more tests that verify non-blank content in
-  specific sub-regions (top, middle, bottom thirds; left/right halves for split-panel images), not
-  only a single global bright-pixel scan.
-- **Layout guard tests for `drawClippedString`**: five tests cover the short-text pass-through, long-
-  text truncation with `…`, narrow-maxWidth constraint, empty string and large-maxWidth cases.
-- **ARCHITECTURE.md updated**: the boundary-enforcement section now explicitly names
-  `ArchitectureBoundaryTest` (source-level import/POM checks, nine test methods) and
-  `ArchitectureFitnessTest` (ArchUnit bytecode checks for Workflow/Execution bounded contexts and
-  cyclic-dependency detection) with their responsibilities.
-- **Documentation reviewed**: README.md, ARCHITECTURE.md, ROADMAP.md, docs/development.md,
-  docs/quality.md, docs/features/*.md, docs/plugins/acoustic-localization.md and
-  docs/plugins/acoustic-localization/**/*.md were reviewed against the current code. No stale
-  snapshot-version commands or unsupported capability claims were found; all referenced screenshot
-  files exist in `docs/images/`.
-- **Manual QA evidence file created**: `docs/qa/manual-application-qa-2026-07-03.md` records the
-  agent-environment QA pass results, confirms code-inspectable items, and flags interactive Swing
-  application checks as requiring a human tester.
+## Changes made in the current documentation-overhaul pass
 
-## Changes made in the previous QA pass
+- **README.md rewritten**: clearer project positioning, stable-vs-experimental status, quickstart,
+  workflow overview, documentation map, quality expectations and explicit limitations.
+- **ARCHITECTURE.md rewritten**: concise module responsibilities, runtime flow, boundary rules,
+  plugin architecture, workflow/execution separation and known architecture debt.
+- **ROADMAP.md rewritten**: now focuses on release-quality documentation, product hardening,
+  architecture, UX, recording/export and open acoustic-localization research issues.
+- **Development and quality docs rewritten**: validation commands, screenshot generation, CI gates,
+  documentation standards and release QA expectations are now described as practical workflows.
+- **Feature docs polished**: waveform trigger, spectrum overlays, recording/replay and A/B comparison
+  now use consistent user-facing language and limitation sections.
+- **Acoustic-localization docs rewritten**: stronger separation between implemented research tools,
+  experimental areas and unsupported production claims.
+- **Documentation command hygiene improved**: stale hard-coded app JAR versions were replaced with
+  version-tolerant commands where appropriate.
 
-- **README.md**: shortened and restructured the opening, moved project status near the top, grouped
-  features, clarified stable vs. experimental areas and states that this is a Java audio/DSP
-  laboratory, not a production mosquito-tracking platform.
-- **Screenshot workflow**: `DocImageRenderer` now writes a reproducible 1600x1000 dashboard image to
-  `docs/images/screenshot.png` and feature images under `docs/images/features/`.
-- **UI ergonomics**: default app window increased to 1440x1000; top settings/measurement rows use a
-  vertical layout instead of a fixed two-row grid; diagnosis rows use flexible `BorderLayout` rows and
-  a larger preferred size.
-- **Tests**: added a headless smoke test for the documentation dashboard screenshot dimensions and
-  visible content.
-- **Architecture docs**: synchronized the module graph with the seven Maven modules, documented
-  `audio-plugin-api`, runtime plugin discovery and the current `org.hammer.audio` split package.
-- **Plugin docs**: kept `docs/plugins/acoustic-localization.md` as the concise entry page and moved
-  detailed pipeline/setup content to `docs/plugins/acoustic-localization/README.md` and child pages.
-- **Quality gates**: added a low JaCoCo `BUNDLE` line-coverage check (`0.05`) and a CI baseline check
-  that fails when Checkstyle/PMD/SpotBugs report counts exceed `quality-baseline.properties`.
-- **CI**: CodeQL now uses an explicit Maven package build instead of Autobuild; artifact uploads are
-  preserved.
-- **Roadmap**: replaced mostly completed history with open next steps.
+## Earlier QA improvements still relevant
+
+- `DocImageRendererTest` was extended so generated documentation images have automated dimension and
+  non-blank region checks.
+- Layout guard tests cover `drawClippedString` behavior for short, long, narrow and empty text.
+- The architecture docs identify both source-level boundary checks and ArchUnit fitness tests.
+- A manual QA evidence template exists under `docs/qa/`; interactive Swing QA still requires a human
+  tester running the packaged application.
 
 ## Baseline commands and results
 
-Baseline before changes:
+Baseline command used for normal validation:
 
 ```bash
-JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64 ./mvnw -B clean verify
+./mvnw clean verify
 ```
 
-Result: exit code 0.
-
-Static-analysis report counts after this pass are stored in `quality-baseline.properties`. Existing
-findings remain technical debt; CI blocks increases above that baseline rather than claiming a clean
-static-analysis state.
+Static-analysis report counts are stored in `quality-baseline.properties`. Existing findings remain
+technical debt; CI blocks increases above that baseline rather than claiming a clean static-analysis
+state.
 
 ## Confirmed alignment between docs and code
 
 - The reactor has seven modules: `audio-core`, `audio-geometry`, `audio-acquisition`, `audio-dsp`,
   `audio-plugin-api`, `audio-experimental-acoustic` and `audio-app`.
-- `audio-plugin-api` provides the plugin contracts; the Swing app compiles against those contracts
-  and loads concrete plugins through `PluginManager` / Java `ServiceLoader`.
-- `audio-experimental-acoustic` depends on stable modules plus `audio-plugin-api`; it is optional
-  research/plugin code.
-- The README screenshot is generated by a checked-in Java utility rather than a manually cropped UI
-  capture.
+- `audio-plugin-api` provides plugin contracts; the Swing app loads concrete plugins through
+  `PluginManager` / Java `ServiceLoader`.
+- `audio-experimental-acoustic` remains optional research/plugin code.
+- README and feature screenshots are generated by a checked-in Java utility rather than manually
+  cropped UI captures.
 - Codecov upload is not a hard gate because the workflow uses `fail_ci_if_error=false`.
-- All nine `DocImageRenderer` output images now have automated dimension and non-blank region checks
-  in `DocImageRendererTest`.
 
 ## Remaining technical debt
 
 ### Documentation and screenshots
 
-- Documentation screenshots are generated from manual drawing code with fixed coordinates. All images
-  need visual QA for overlapping labels, clipped axis/tick labels and unreadable legends. Automated
-  tests confirm non-blank content but cannot verify semantic label readability.
-- The application documentation requires a completed manual QA matrix covering main dashboard,
-  recording/replay, evidence export, plugin discovery and workbench flows with a live human tester
-  running the packaged Swing application.
+- Generated screenshots still require human visual QA for overlapping labels, clipped axis/tick labels
+  and unreadable legends. Automated tests can confirm dimensions and non-blank regions, but they
+  cannot prove semantic readability.
+- New workbench screenshots should be added once the UI states are stable enough for public-facing
+  documentation.
+- Documentation link checking should be automated with an offline repository-local checker.
+
+### Manual application QA
+
+- A human tester still needs to run the packaged Swing application and complete the manual QA matrix.
+- The most important flows are dashboard startup, demo/live input, recording/replay, evidence export,
+  plugin discovery, acoustic workbench simulation, imported recording workbench and error handling.
+- HiDPI and resize checks remain manual.
 
 ### Static analysis and coverage
 
 - Checkstyle, PMD and SpotBugs still have existing findings. They are report-only in local Maven
   execution and baseline-gated in CI.
-- The JaCoCo gate is intentionally low at 5% bundle line coverage. It should be raised only with
-  behavior-focused tests.
-
-### UI
-
-- The screenshot generator validates documentation output, not every live Swing layout state.
-  Additional panel-level tests should be added as controls are introduced.
-- HiDPI scale-factor testing remains manual.
+- The JaCoCo gate is intentionally low. It should be raised only with behavior-focused tests.
 
 ### Architecture
 
@@ -123,13 +104,13 @@ static-analysis state.
 
 ## Prioritized follow-up recommendations
 
-1. Execute and record a full manual application QA pass with a human tester running the packaged
-   application; update `docs/qa/manual-application-qa-2026-07-03.md` or create a new dated file.
-2. Regenerate all documentation screenshots from the current codebase and review them visually for
-   overlapping labels, clipped axes and unreadable legends.
-3. Add a documentation link checker that runs offline against repository files.
-4. Add a focused `SampleClock` drift/jitter test or issue reference.
-5. Resolve the `org.hammer.audio` split package before adding JPMS descriptors.
-6. Raise JaCoCo thresholds after adding tests for capture, replay/export and UI panel edge cases.
-7. Reduce `quality-baseline.properties` module by module as findings are fixed.
+1. Run `./mvnw clean verify` on the documentation-overhaul branch and fix any remaining Spotless or
+   static-analysis findings.
+2. Regenerate all documentation screenshots from the current codebase and review them visually.
+3. Complete a dated manual application QA evidence file with a human tester.
+4. Add an offline documentation link checker.
+5. Add focused `SampleClock` drift/jitter tests or keep #136 as the tracked implementation path.
+6. Resolve the `org.hammer.audio` split package before adding JPMS descriptors.
+7. Raise JaCoCo thresholds only after adding tests for capture, replay/export and UI edge cases.
+8. Reduce `quality-baseline.properties` module by module as findings are fixed.
 
