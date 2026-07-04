@@ -4,7 +4,7 @@ If you use **Audio Analyzer**, please cite the archived software release and the
 
 ## Preferred citation
 
-Carsten Hammer. **Audio Analyzer**. Version 0.0.3-SNAPSHOT. 2026. Software. GitHub repository: https://github.com/carstenartur/audio-analyzer
+Carsten Hammer. **Audio Analyzer**. Version 0.0.3. 2026. Software. GitHub repository: https://github.com/carstenartur/audio-analyzer
 
 When a Zenodo DOI is minted for a release, prefer the Zenodo citation shown on the release page and keep the GitHub repository URL as the code source.
 
@@ -15,7 +15,8 @@ When a Zenodo DOI is minted for a release, prefer the Zenodo citation shown on t
   author       = {Hammer, Carsten},
   orcid        = {https://orcid.org/0009-0005-1047-6381},
   title        = {Audio Analyzer},
-  version      = {0.0.3-SNAPSHOT},
+  version      = {0.0.3},
+  date         = {2026-07-04},
   publisher    = {GitHub and Zenodo},
   url          = {https://github.com/carstenartur/audio-analyzer},
   license      = {MIT}
