@@ -5,9 +5,7 @@
 [![Coverage](https://img.shields.io/endpoint?url=https://carstenartur.github.io/audio-analyzer/coverage/badge.json)](https://carstenartur.github.io/audio-analyzer/coverage/)
 [![CodeQL](https://github.com/carstenartur/audio-analyzer/actions/workflows/codeql.yml/badge.svg?branch=master)](https://github.com/carstenartur/audio-analyzer/actions/workflows/codeql.yml)
 [![License](https://img.shields.io/github/license/carstenartur/audio-analyzer)](LICENSE)
-
 [![DOI](https://zenodo.org/badge/7397122.svg)](https://doi.org/10.5281/zenodo.21186367)
-
 [![SBOM](https://img.shields.io/badge/SBOM-CycloneDX-informational?logo=owasp)](https://github.com/carstenartur/audio-analyzer/dependency-graph/sbom)
 
 **Audio Analyzer** is a Java 21 / Swing workbench for reproducible audio analysis, DSP experiments
