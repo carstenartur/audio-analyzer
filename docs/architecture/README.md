@@ -12,13 +12,13 @@ This directory contains architecture documents with different levels of authorit
 
 ## Authority levels
 
-| Document | Authority | Purpose |
-|---|---|---|
-| `ARCHITECTURE.md` | High | Stable module overview and architectural goals. |
-| `bounded-contexts.md` | High | Enforced context and dependency boundaries. |
-| `adr-006-versioned-collaborative-workflow-store.md` | Decision | Accepted direction with spike gates. |
-| `collaborative-workflow-platform.md` | Planning | Explains the end-to-end workflow editor platform. |
-| `jgit-storage-hibernate-spike.md` | Spike | Defines the next technical verification step. |
+|                      Document                       | Authority |                      Purpose                      |
+|-----------------------------------------------------|-----------|---------------------------------------------------|
+| `ARCHITECTURE.md`                                   | High      | Stable module overview and architectural goals.   |
+| `bounded-contexts.md`                               | High      | Enforced context and dependency boundaries.       |
+| `adr-006-versioned-collaborative-workflow-store.md` | Decision  | Accepted direction with spike gates.              |
+| `collaborative-workflow-platform.md`                | Planning  | Explains the end-to-end workflow editor platform. |
+| `jgit-storage-hibernate-spike.md`                   | Spike     | Defines the next technical verification step.     |
 
 If planning documents conflict with ADR-006 or the bounded-context rules, ADR-006 and the bounded-context rules win.
 
@@ -40,3 +40,4 @@ If planning documents conflict with ADR-006 or the bounded-context rules, ADR-00
 - Keep layout, presence and viewport state separate from the semantic workflow graph.
 - Link new workflow-drawing documents from this README.
 - When an ADR changes the direction, update `collaborative-workflow-platform.md` in the same PR.
+

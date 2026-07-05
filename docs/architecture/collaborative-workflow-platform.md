@@ -72,14 +72,14 @@ Browser graph editor / desktop WebView
 
 ## Source of truth
 
-| Concern | Source of truth | Notes |
-|---|---|---|
-| Workflow graph | `audio-core` workflow model | Immutable, framework-independent, validated server-side. |
-| Workflow edit | `WorkflowOperation` / `WorkflowOperationLog` | Used for replay, audit and undo. |
-| Durable version | JGit commit produced from deterministic DSL | Git stores checkpoints, not every UI gesture. |
-| Live event | Operation event from transactional outbox | Broker/WebSocket transports committed facts only. |
-| Presence | Collaboration session state | Cursors, selection and viewport are not workflow state. |
-| Rendering | Web editor state | UI state is derived and disposable. |
+|     Concern     |               Source of truth                |                          Notes                           |
+|-----------------|----------------------------------------------|----------------------------------------------------------|
+| Workflow graph  | `audio-core` workflow model                  | Immutable, framework-independent, validated server-side. |
+| Workflow edit   | `WorkflowOperation` / `WorkflowOperationLog` | Used for replay, audit and undo.                         |
+| Durable version | JGit commit produced from deterministic DSL  | Git stores checkpoints, not every UI gesture.            |
+| Live event      | Operation event from transactional outbox    | Broker/WebSocket transports committed facts only.        |
+| Presence        | Collaboration session state                  | Cursors, selection and viewport are not workflow state.  |
+| Rendering       | Web editor state                             | UI state is derived and disposable.                      |
 
 ## Collaboration modes
 
@@ -296,3 +296,4 @@ End-to-end tests should eventually open two browser sessions, edit the same work
 - [`bounded-contexts.md`](bounded-contexts.md) — module and package boundaries.
 - [`adr-006-versioned-collaborative-workflow-store.md`](adr-006-versioned-collaborative-workflow-store.md) — accepted decision with spike gates.
 - [`jgit-storage-hibernate-spike.md`](jgit-storage-hibernate-spike.md) — first technical verification step.
+
