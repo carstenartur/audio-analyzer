@@ -1,182 +1,107 @@
-Collaborative Workflow Platform Architecture
+# Collaborative Workflow Platform Architecture
 
-1. Zielbild
+Status: Planning document  
+Primary decision record: [`adr-006-versioned-collaborative-workflow-store.md`](adr-006-versioned-collaborative-workflow-store.md)  
+First verification step: [`jgit-storage-hibernate-spike.md`](jgit-storage-hibernate-spike.md)
 
-Audio Analyzer soll langfristig nicht nur eine Swing-basierte Analyseanwendung sein, sondern eine webbasierte, kollaborative Forschungsplattform für akustische Workflows.
+## Purpose
 
-Die bestehende Swing-GUI bleibt zunächst erhalten. Die zukünftige GUI-Entwicklung soll jedoch in einer webbasierten Oberfläche stattfinden.
+This document describes the target platform for drawing, editing, versioning and executing workflow graphs. It is the scenario-level architecture that explains how the future graphical editor should work.
 
-Zentrale Ziele:
+The normative architectural decision is ADR-006. If this document and ADR-006 disagree, ADR-006 wins.
 
-* browserbasierter Workflow-Editor
-* mehrere Nutzer gleichzeitig auf demselben Arbeitsblatt
-* Live-Sichtbarkeit fremder Änderungen
-* unbegrenztes Undo/Redo
-* typisierte Workflow-Knoten und Ports
-* reproduzierbare Ausführung
-* JGit-basierte Versionierung
-* modellbasierte Konfliktlösung
-* Wiederverwendung von Konzepten aus dem Taxonomy-Projekt
+## Relationship to existing architecture
 
-2. Zielarchitektur
+Audio Analyzer already has the stable workflow foundation in `audio-core`:
+
+- immutable design-time workflow model;
+- semantic `WorkflowOperation` edits;
+- `WorkflowOperationLog` for deterministic replay and undo;
+- execution snapshots and execution plans isolated from editing state.
+
+The collaborative editor must extend that foundation instead of introducing a second workflow model.
 
 ```text
-Browser
-React / React Flow
-Yjs Collaborative Document
-Presence / Cursors / Selection
-│
-▼
-Collaboration Gateway
-WebSocket
-Awareness
-Persistence Adapter
-│
-▼
-Workflow Service
-Validation
-Type Checking
-Execution Planning
-Snapshot Export
-│
-├──────────────► JGit Repository
-│                   Branches
-│                   Commits
-│                   Model Merge
-│                   History
-│
-▼
-Execution Engine
-Audio Analyzer Core
-Dataset Import
-Feature Extraction
-Classification
-Localization
-Benchmarking
-Reporting
+audio-core workflow model
+    -> semantic workflow operations
+    -> workflow operation log
+    -> deterministic workflow DSL
+    -> versioned workflow persistence facade
+    -> DB-backed JGit storage
+    -> collaboration/event layer
+    -> web graph editor
 ```
 
-3. Grundprinzip
+## Goals
 
-Der Workflow ist kein UI-Zustand.
+- browser-based graph editor for workflow nodes and typed ports;
+- reusable non-UI workflow domain model;
+- private and shared editing sessions;
+- personal and explicitly shared undo modes;
+- deterministic replay and audit through semantic operations;
+- durable version history through JGit-backed checkpoints;
+- searchable workflow history through future Hibernate Search projections;
+- reproducible execution from stable `ExecutionSnapshot` values;
+- no dependency from `audio-core` workflow model to Swing, JGit, persistence or web frameworks.
 
-Der Workflow ist ein versionierbares Domänenmodell.
+## Non-goals
 
-Die Weboberfläche editiert dieses Modell. Die Swing-GUI, CLI, REST-API und spätere Scheduler sollen dasselbe Modell nutzen können.
+- no immediate rewrite of the Swing application;
+- no large `workflow.json` as the canonical long-term format;
+- no direct dependency from Audio Analyzer public APIs to `org.eclipse.jgit.internal.*`;
+- no assumption that Git alone solves live collaboration;
+- no assumption that a browser CRDT document is the permanent source of truth.
 
-4. Kernmodell
+## Target architecture
 
-Workflow
+```text
+Browser graph editor / desktop WebView
+    -> workflow collaboration API
+    -> workflow application service
+    -> WorkflowOperationLog
+    -> audio-core Workflow model
+    -> WorkflowValidator
+    -> deterministic workflow DSL
+    -> VersionedWorkflowStore facade
+    -> jgit-storage-hibernate / hibernate-jgit-store
+    -> database-backed JGit objects, refs and reflog
+    -> Hibernate Search projections
+    -> transactional outbox
+    -> event broker / WebSocket clients
+```
 
-Ein Workflow beschreibt ein reproduzierbares Experiment oder eine Analysepipeline.
+## Source of truth
 
-Workflow
+|     Concern     |               Source of truth                |                          Notes                           |
+|-----------------|----------------------------------------------|----------------------------------------------------------|
+| Workflow graph  | `audio-core` workflow model                  | Immutable, framework-independent, validated server-side. |
+| Workflow edit   | `WorkflowOperation` / `WorkflowOperationLog` | Used for replay, audit and undo.                         |
+| Durable version | JGit commit produced from deterministic DSL  | Git stores checkpoints, not every UI gesture.            |
+| Live event      | Operation event from transactional outbox    | Broker/WebSocket transports committed facts only.        |
+| Presence        | Collaboration session state                  | Cursors, selection and viewport are not workflow state.  |
+| Rendering       | Web editor state                             | UI state is derived and disposable.                      |
 
-- id
-- name
-- version
-- nodes
-- edges
-- metadata
-- layout
-- executionSettings
+## Collaboration modes
 
-Node
+The user must be able to choose how a drawing is shared.
 
-Ein Node ist ein ausführbarer oder konfigurierender Baustein.
+### `PRIVATE_WORKSPACE`
 
-Beispiele:
+Only the actor sees their current changes. Undo/redo is personal. Publishing or merging into a shared workflow is explicit.
 
-* HumBugDB Import
-* Synthetic Generator
-* Bandpass Filter
-* FFT
-* Feature Extraction
-* Classifier
-* Localization
-* Benchmark
-* Report
+### `SHARED_SESSION_PERSONAL_UNDO`
 
-Node
+Participants see the same live workflow. Each actor's undo stack contains only their own undoable operations. This is the recommended default for live collaboration.
 
-- id
-- type
-- label
-- position
-- inputPorts
-- outputPorts
-- properties
-- executionState
+### `SHARED_SESSION_SHARED_UNDO`
 
-Port
+Participants share one room-level undo stack. Undo may revert another user's operation, so the UI must show exactly which operation and actor will be affected before the user confirms.
 
-Ports sind typisiert.
+## Operation model
 
-Port
+All durable workflow changes should be expressible as semantic operations:
 
-- id
-- name
-- direction
-- dataType
-- required
-- multiplicity
-
-Beispiele für Typen:
-
-Dataset
-AudioBlock
-Spectrum
-FeatureVector
-FeatureSet
-ClassificationResult
-LocalizationResult
-BenchmarkResult
-Report
-
-Edge
-
-Eine Edge verbindet zwei kompatible Ports.
-
-Edge
-
-- id
-- sourceNodeId
-- sourcePortId
-- targetNodeId
-- targetPortId
-
-5. Typsystem
-
-Das Typsystem verhindert ungültige Workflows frühzeitig.
-
-Beispiele:
-
-AudioBlock      → FFT              gültig
-FeatureVector   → Classifier       gültig
-Dataset         → Localization     ungültig
-Report          → BandpassFilter   ungültig
-
-Validation muss sowohl im Browser als auch im Backend möglich sein.
-
-Der Browser darf ungültige Verbindungen bereits visuell verhindern. Das Backend bleibt aber die autoritative Prüfinstanz.
-
-6. Kollaborationsmodell
-
-Während mehrere Nutzer gleichzeitig arbeiten, ist Yjs das primäre Kollaborationsmodell.
-
-Git ist nicht der Mechanismus für Live-Kollaboration.
-
-Live Editing:
-Browser ↔ Yjs ↔ WebSocket ↔ andere Browser
-Versionierung:
-Yjs Snapshot → Workflow Model → JGit Commit
-
-7. Operationen
-
-Alle Änderungen am Workflow sollten als semantische Operationen formulierbar sein.
-
-Beispiele:
-
+```text
 CreateNode
 DeleteNode
 MoveNode
@@ -187,502 +112,214 @@ DeleteEdge
 UpdatePortType
 CreateComment
 ResolveConflict
+UndoOperation
+RedoOperation
+```
 
-Diese Operationen sind wichtig für:
+These operations are required for:
 
-* Undo/Redo
-* Integrationstests
-* Audit-Logs
-* modellbasierte Merges
-* Konfliktanalyse
+- deterministic undo/redo;
+- integration tests;
+- audit logs;
+- semantic merge;
+- conflict analysis;
+- collaboration replay after reconnect.
 
-8. Gleichzeitige Bearbeitung
+Undo and redo are also operations. They must not silently rewrite history.
 
-Typische Szenarien:
+## Git/JGit versioning
 
-Zwei Nutzer ändern verschiedene Nodes
+Git stores stable workflow checkpoints:
 
-User A ändert FFT.windowSize
-User B ändert Classifier.threshold
+- commit;
+- branch;
+- merge;
+- cherry-pick;
+- revert;
+- history;
+- comparison;
+- restoration.
 
-Erwartung:
+Git is not the live-collaboration mechanism. Live collaboration uses semantic operations and session events. Git receives stable snapshots/checkpoints derived from the workflow model and deterministic DSL.
 
-Kein Konflikt.
+The JGit storage layer is not implemented directly in Audio Analyzer. It should be consolidated as a separate `jgit-storage-hibernate` / `hibernate-jgit-store` component and accessed through a narrow `VersionedWorkflowStore` facade.
 
-Zwei Nutzer ändern dieselbe Property
+## Storage format direction
 
-User A: FFT.windowSize 2048 → 4096
-User B: FFT.windowSize 2048 → 1024
+The canonical persisted representation should be deterministic and reviewable. JSON may be useful for APIs or debugging, but a naive large `workflow.json` should not become the long-term source format.
 
-Erwartung:
+Preferred direction:
 
-Semantischer Konflikt.
+```text
+workflow model
+    -> deterministic workflow DSL
+    -> Git blob/tree/commit
+    -> DB-backed JGit store
+```
 
-Nicht als Textkonflikt, sondern als Modellkonflikt anzeigen:
+Layout and presence must stay separate from the workflow graph:
 
-Node: FFT
-Property: windowSize
-Base: 2048
-User A: 4096
-User B: 1024
+```text
+workflow.apflow      semantic graph
+layout.aplayout      node positions, grouping, viewport defaults
+metadata.toml/json   name, tags, description, authoring metadata
+```
 
-Ein Nutzer löscht einen Node, ein anderer verbindet ihn
+## Web editor direction
 
-User A löscht Node X
-User B erstellt Edge von Node X zu Node Y
+The future graphical editor is web-first, but the Swing app remains valid during the transition.
 
-Erwartung:
+Current default:
 
-Edge wird ungültig oder als Konflikt markiert.
+- GLSP-first for a server-authoritative, model-driven diagram editor;
+- React Flow may be used for a quicker UX prototype;
+- Yjs may be evaluated as a client-side collaboration helper, especially for awareness or local undo experiments;
+- none of these client-side tools may become the canonical workflow persistence layer by accident.
 
-Ein Nutzer ändert Porttyp, ein anderer erstellt Verbindung
+This does **not** reject the older React Flow/Yjs proposal. It only changes what that proposal is allowed to own. React Flow/Yjs may still be the best implementation choice if a spike proves it can preserve the same source-of-truth boundaries with less complexity.
 
-User A ändert OutputPort von AudioBlock zu Spectrum
-User B verbindet diesen Port mit einem AudioBlock-Eingang
+### Editor stack selection criteria
 
-Erwartung:
+The final editor stack should be chosen by evidence from spikes, not by document age.
 
-Backend-Validation markiert Verbindung als ungültig.
+|              Criterion              |            GLSP-first spike            |                    React Flow/Yjs spike                     |
+|-------------------------------------|----------------------------------------|-------------------------------------------------------------|
+| Server-authoritative workflow model | Natural fit; model service is central. | Must be enforced by adapter/API discipline.                 |
+| Fast UX iteration                   | More upfront architecture.             | Strong advantage.                                           |
+| Typed ports and semantic validation | Natural fit.                           | Feasible, but custom code.                                  |
+| Multi-user awareness/presence       | Needs integration.                     | Strong advantage with Yjs-style helpers.                    |
+| Personal undo in shared sessions    | Domain operation model still required. | Yjs can help, but domain semantics must still be tested.    |
+| Deterministic replay/audit          | Domain operation model required.       | Domain operation model required.                            |
+| Avoiding browser state as truth     | Natural fit.                           | Explicit guardrail required.                                |
+| Long-term maintainability           | Good if GLSP complexity is acceptable. | Good if the adapter remains small and server-authoritative. |
 
-9. Undo/Redo
+Recommended decision rule:
 
-Undo muss nutzerbezogen funktionieren.
+```text
+If GLSP proves too heavy for the first useful editor, prefer React Flow/Yjs for the UI layer.
+If React Flow/Yjs cannot keep server-authoritative operations and deterministic replay clean, prefer GLSP.
+In both cases, audio-core Workflow + WorkflowOperationLog + VersionedWorkflowStore remain the canonical model.
+```
 
-User A undo
+The backend remains authoritative for workflow validation, operation ordering and durable checkpoints.
 
-darf nicht blind Änderungen von User B zurücknehmen.
+## Conflict examples
 
-Yjs UndoManager kann dafür als Grundlage dienen, aber die Semantik muss getestet werden.
+### Different nodes changed
 
-Wichtige Fälle:
+```text
+User A changes FFT.windowSize
+User B changes Classifier.threshold
+```
 
-* lokales Undo während andere weiterarbeiten
-* Undo eines gelöschten Nodes
-* Undo einer Verbindung zu einem inzwischen geänderten Port
-* Redo nach Remote-Änderungen
-* Undo nach Commit
-* Undo nach Reconnect
+Expected result: no semantic conflict.
 
-10. Presence
+### Same property changed differently
 
-Die Weboberfläche soll anzeigen:
+```text
+Base: FFT.windowSize = 2048
+User A: FFT.windowSize = 4096
+User B: FFT.windowSize = 1024
+```
 
-* aktive Nutzer
-* Cursorposition
-* ausgewählte Nodes
-* aktuell bearbeitete Properties
-* Viewport anderer Nutzer
-* optional: Follow-User-Modus
+Expected result: semantic property conflict, not a text conflict.
 
-Presence ist nicht Teil des versionierten Workflows.
+### Node deleted while another user connects it
 
-11. Git/JGit-Versionierung
+```text
+User A deletes Node X
+User B creates Edge from Node X to Node Y
+```
 
-JGit speichert stabile Workflow-Snapshots.
+Expected result: invalid edge or semantic conflict report.
 
-Git soll leisten:
+### Port type changed while another user connects it
 
-* Commit
-* Branch
-* Merge
-* Cherry-pick
-* Revert
-* History
-* Vergleich
-* Wiederherstellung
+```text
+User A changes output port from AudioBlock to Spectrum
+User B connects that port to an AudioBlock input
+```
 
-Git soll nicht die Live-Kollaboration lösen.
+Expected result: backend validation marks the edge invalid.
 
-12. Speicherformat
+## Execution model
 
-JSON ist als Austauschformat geeignet, aber nicht als naives großes workflow.json.
+A workflow run always uses a stable snapshot:
 
-Empfohlen:
+```text
+current editable workflow state
+    -> validation
+    -> ExecutionSnapshot
+    -> ExecutionPlan
+    -> ExecutionContext
+    -> ExecutionResult
+```
 
-- workflow/
-  - workflow.json
-- nodes/
-  - \<node-id\>.json
-- edges/
-  - \<edge-id\>.json
-- metadata.json
-- layout.json
+Users may continue editing while a run executes. The running execution remains tied to the snapshot that started it.
 
-Vorteile:
+## Event transport
 
-* weniger Textkonflikte
-* stabilere Diffs
-* bessere Reviewbarkeit
-* einfachere Teil-Merges
+The broker is transport only. It is not the source of truth.
 
-Langfristig sollte dennoch ein modellbasierter Merge verwendet werden.
+Recommended pattern:
 
-13. Modellbasierter Merge
-
-Der Merge soll nicht zeilenbasiert gedacht werden.
-
-Stattdessen:
-
-- Base Workflow
-- Branch A Workflow
-- Branch B Workflow
-- ↓ Workflow Model Diff
-- ↓ Semantic Merge
-- ↓ Merged Workflow / Conflict Report
-
-Konflikte sollen fachlich angezeigt werden:
-
-Node deleted vs Node modified
-Port type changed vs Edge created
-Property changed differently
-Node renamed differently
-
-14. Workflow-Ausführung
-
-Ein Workflow wird immer aus einem stabilen Snapshot ausgeführt.
-
-- Current Collaborative State
-- ↓ Execution Snapshot
-- ↓ Validation
-- ↓ Execution Plan
-- ↓ Execution
-- ↓ Results
-
-Während der Workflow läuft, können Nutzer weiter editieren. Die laufende Ausführung bezieht sich aber auf den Snapshot.
-
-15. Execution State
-
-Nodes können Zustände anzeigen:
-
-Idle
-Ready
-Invalid
-Queued
-Running
-Completed
-Failed
-Skipped
-Cancelled
-
-Kanten können Datenstatistiken anzeigen:
-
-1452 recordings
-44100 Hz
-17 features
-Accuracy 91.2 %
-
-16. Web-Frontend
-
-Empfohlener Stack:
-
-React
-React Flow / xyflow
-Yjs
-WebSocket Provider
-TypeScript
-
-React Flow übernimmt:
-
-* Nodes
-* Edges
-* Drag & Drop
-* Zoom
-* Pan
-* Custom Node Rendering
-* Port Handles
-
-Yjs übernimmt:
-
-* Shared Document
-* Collaboration
-* Conflict-free updates
-* Awareness
-* UndoManager
-
-17. Backend
-
-Empfohlener Stack:
-
-Spring Boot
-WebSocket
-REST API
-JGit
-Audio Analyzer Engine
-
-Kernendpunkte:
-
-GET    /api/workspaces
-POST   /api/workspaces
-GET    /api/workflows/{id}
-PUT    /api/workflows/{id}
-POST   /api/workflows/{id}/validate
-POST   /api/workflows/{id}/execute
-GET    /api/executions/{id}
-GET    /api/executions/{id}/results
-POST   /api/workflows/{id}/commit
-POST   /api/workflows/{id}/branches
-POST   /api/workflows/{id}/merge
-
-18. Integration mit Swing
-
-Die bestehende Swing-GUI bleibt zunächst erhalten.
-
-Sie sollte mittelfristig nicht weiter ausgebaut werden.
-
-Ziel:
-
-- Swing GUI → uses Workflow Service
-- Web GUI → uses Workflow Service
-- CLI → uses Workflow Service
-
-Keine neue Funktion sollte ausschließlich in Swing entstehen.
-
-19. Teststrategie
-
-Dieses Projekt benötigt ungewöhnlich starke Integrationstests.
-
-Unit Tests
-
-* Workflow validation
-* Port compatibility
-* Node property validation
-* Serialization
-* Diff
-* Merge
-* Execution planning
-
-Collaboration Tests
-
-Simulierte Nutzer:
-
-User A
-User B
-User C
-
-Szenarien:
-
-* gleichzeitiges Node-Verschieben
-* gleichzeitiges Property-Ändern
-* Delete-vs-Modify
-* Connect-vs-TypeChange
-* Undo-vs-RemoteChange
-* Offline-vs-Online-Reconnect
-* Commit während andere editieren
-
-Fuzz Tests
-
-Zufällige Operationen:
-
-create node
-move node
-delete node
-connect
-disconnect
-update property
-undo
-redo
+```text
+DB transaction:
+  append WorkflowOperation
+  update workflow/session projection
+  create optional Git checkpoint
+  insert outbox event
 commit
-merge
 
-Nach jeder Operation:
+outbox dispatcher:
+  publish event to broker/WebSocket clients
+```
 
-* Workflow bleibt syntaktisch gültig
-* ungültige Edges werden erkannt
-* keine verlorenen Nodes
-* keine Kanten auf nicht existierende Ports
-* keine doppelten IDs
-* keine nicht reproduzierbaren Ergebnisse
+ActiveMQ Artemis, another JMS/AMQP broker, or a simple WebSocket adapter can be evaluated behind a `WorkflowEventBus` abstraction.
 
-End-to-End Tests
+## Testing strategy
 
-Browser-basierte Tests mit Playwright:
+Unit tests:
 
-* zwei Browser öffnen dasselbe Workflow-Blatt
-* User A bewegt Node
-* User B sieht Bewegung
-* User B ändert Property
-* User A sieht Änderung
-* User A undo
-* User B sieht konsistenten Zustand
-* Workflow wird gespeichert
-* Backend führt gespeicherten Snapshot aus
+- workflow validation;
+- port compatibility;
+- node property validation;
+- DSL serialization;
+- semantic diff;
+- semantic merge;
+- execution planning.
 
-20. Umsetzung in Issues
+Collaboration tests with simulated users:
 
-Issue 1: Define workflow domain model and JSON schema
+- concurrent node moves;
+- concurrent property edits;
+- delete-vs-modify;
+- connect-vs-type-change;
+- undo-vs-remote-change;
+- offline/online reconnect;
+- commit while others edit.
 
-Deliverables:
+Fuzz tests should apply random operations and assert that the workflow remains structurally valid or produces explicit validation errors.
 
-* Workflow
-* Node
-* Port
-* Edge
-* Property
-* Artifact
-* JSON schema
-* validation tests
+End-to-end tests should eventually open two browser sessions, edit the same workflow, verify propagation, run undo and execute a saved snapshot.
 
-Issue 2: Add workflow validation and typed port compatibility
+## Implementation order
 
-Deliverables:
+1. Finish the JGit/Hibernate storage spike.
+2. Define the `VersionedWorkflowStore` facade.
+3. Implement the minimal `Input -> Gain -> Output` workflow roundtrip.
+4. Add deterministic DSL serialization and reload.
+5. Add semantic diff for the vertical slice.
+6. Build the GLSP-first editor spike and, if feasible, a constrained React Flow/Yjs editor spike against the same backend API.
+7. Choose the editor stack using the criteria above.
+8. Add collaboration sessions and event transport.
+9. Add personal/shared undo behavior.
+10. Add Hibernate Search projections for workflow history.
 
-* WorkflowValidator
-* TypeRegistry
-* PortCompatibilityService
-* invalid edge reporting
+## Related documents
 
-Issue 3: Add workflow execution snapshot model
+- [`README.md`](README.md) — map of architecture documents.
+- [`bounded-contexts.md`](bounded-contexts.md) — module and package boundaries.
+- [`adr-006-versioned-collaborative-workflow-store.md`](adr-006-versioned-collaborative-workflow-store.md) — accepted decision with spike gates.
+- [`jgit-storage-hibernate-spike.md`](jgit-storage-hibernate-spike.md) — first technical verification step.
 
-Deliverables:
-
-* ExecutionSnapshot
-* ExecutionPlan
-* ExecutionResult
-* immutable execution input
-
-Issue 4: Add REST API for workflow CRUD and validation
-
-Deliverables:
-
-* workflow endpoints
-* validation endpoint
-* JSON import/export
-
-Issue 5: Add React/React Flow prototype
-
-Deliverables:
-
-* web module
-* workflow canvas
-* custom nodes
-* ports
-* edges
-* property panel
-
-Issue 6: Add Yjs collaboration layer
-
-Deliverables:
-
-* shared workflow document
-* WebSocket sync
-* multi-user editing
-* presence
-* basic undo/redo
-
-Issue 7: Add collaborative editing integration tests
-
-Deliverables:
-
-* multi-client tests
-* concurrent edit tests
-* undo/redo tests
-* reconnect tests
-
-Issue 8: Add JGit workflow persistence
-
-Deliverables:
-
-* commit workflow snapshot
-* branch workflows
-* load history
-* compare snapshots
-
-Issue 9: Add model-based diff and merge
-
-Deliverables:
-
-* WorkflowDiff
-* WorkflowMerge
-* conflict model
-* semantic conflict reports
-
-Issue 10: Add workflow execution from web UI
-
-Deliverables:
-
-* execute button
-* execution status
-* node state updates
-* result artifacts
-
-Issue 11: Add benchmark/result annotations to graph
-
-Deliverables:
-
-* node result badges
-* edge statistics
-* benchmark overlays
-* error display
-
-Issue 12: Migrate existing acoustic workflows to graph nodes
-
-Deliverables:
-
-* DatasetImportNode
-* SyntheticGeneratorNode
-* FeatureExtractionNode
-* ClassifierNode
-* LocalizationNode
-* BenchmarkNode
-* ReportNode
-
-21. Recommended implementation order
-
-Do not start with React.
-
-Start with the model.
-
-Recommended order:
-
-1. Workflow domain model
-2. Validation and type system
-3. Execution snapshot
-4. REST API
-5. React Flow prototype
-6. Yjs collaboration
-7. Integration tests
-8. JGit persistence
-9. Model merge
-10. Execution from web
-11. Result overlays
-12. Acoustic node library
-
-22\. Architectural decision
-
-The browser UI is the future primary GUI.
-
-The Swing UI remains supported temporarily but should not receive major new workflow-editing features.
-
-The long-term product is a collaborative, browser-based workflow platform with a Java execution backend.
-
-23. Open questions
-
-* Should the collaboration server store Yjs updates permanently or only snapshots?
-* Should Git commits be user-triggered or automatic?
-* Should every workflow edit become an operation log entry?
-* Should workflow execution require a committed snapshot?
-* Should comments be versioned or only collaborative UI state?
-* Should layout be versioned together with semantics?
-* Should unresolved merge conflicts be represented as first-class workflow objects?
-* Can Taxonomy's model-merge logic be extracted into a shared library?
-
-24. First milestone
-
-A realistic first milestone is:
-
-Collaborative Workflow Prototype
-
-Scope:
-
-* browser canvas
-* typed nodes
-* typed edges
-* two users editing simultaneously
-* live presence
-* undo/redo
-* save/load workflow
-* backend validation
-
-No audio execution yet.
-
-This milestone proves the risky part first: collaborative editing of a typed workflow graph.
