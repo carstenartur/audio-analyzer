@@ -72,14 +72,14 @@ Browser graph editor / desktop WebView
 
 ## Source of truth
 
-| Concern | Source of truth | Notes |
-|---|---|---|
-| Workflow graph | `audio-core` workflow model | Immutable, framework-independent, validated server-side. |
-| Workflow edit | `WorkflowOperation` / `WorkflowOperationLog` | Used for replay, audit and undo. |
-| Durable version | JGit commit produced from deterministic DSL | Git stores checkpoints, not every UI gesture. |
-| Live event | Operation event from transactional outbox | Broker/WebSocket transports committed facts only. |
-| Presence | Collaboration session state | Cursors, selection and viewport are not workflow state. |
-| Rendering | Web editor state | UI state is derived and disposable. |
+|     Concern     |               Source of truth                |                          Notes                           |
+|-----------------|----------------------------------------------|----------------------------------------------------------|
+| Workflow graph  | `audio-core` workflow model                  | Immutable, framework-independent, validated server-side. |
+| Workflow edit   | `WorkflowOperation` / `WorkflowOperationLog` | Used for replay, audit and undo.                         |
+| Durable version | JGit commit produced from deterministic DSL  | Git stores checkpoints, not every UI gesture.            |
+| Live event      | Operation event from transactional outbox    | Broker/WebSocket transports committed facts only.        |
+| Presence        | Collaboration session state                  | Cursors, selection and viewport are not workflow state.  |
+| Rendering       | Web editor state                             | UI state is derived and disposable.                      |
 
 ## Collaboration modes
 
@@ -182,16 +182,16 @@ This does **not** reject the older React Flow/Yjs proposal. It only changes what
 
 The final editor stack should be chosen by evidence from spikes, not by document age.
 
-| Criterion | GLSP-first spike | React Flow/Yjs spike |
-|---|---|---|
-| Server-authoritative workflow model | Natural fit; model service is central. | Must be enforced by adapter/API discipline. |
-| Fast UX iteration | More upfront architecture. | Strong advantage. |
-| Typed ports and semantic validation | Natural fit. | Feasible, but custom code. |
-| Multi-user awareness/presence | Needs integration. | Strong advantage with Yjs-style helpers. |
-| Personal undo in shared sessions | Domain operation model still required. | Yjs can help, but domain semantics must still be tested. |
-| Deterministic replay/audit | Domain operation model required. | Domain operation model required. |
-| Avoiding browser state as truth | Natural fit. | Explicit guardrail required. |
-| Long-term maintainability | Good if GLSP complexity is acceptable. | Good if the adapter remains small and server-authoritative. |
+|              Criterion              |            GLSP-first spike            |                    React Flow/Yjs spike                     |
+|-------------------------------------|----------------------------------------|-------------------------------------------------------------|
+| Server-authoritative workflow model | Natural fit; model service is central. | Must be enforced by adapter/API discipline.                 |
+| Fast UX iteration                   | More upfront architecture.             | Strong advantage.                                           |
+| Typed ports and semantic validation | Natural fit.                           | Feasible, but custom code.                                  |
+| Multi-user awareness/presence       | Needs integration.                     | Strong advantage with Yjs-style helpers.                    |
+| Personal undo in shared sessions    | Domain operation model still required. | Yjs can help, but domain semantics must still be tested.    |
+| Deterministic replay/audit          | Domain operation model required.       | Domain operation model required.                            |
+| Avoiding browser state as truth     | Natural fit.                           | Explicit guardrail required.                                |
+| Long-term maintainability           | Good if GLSP complexity is acceptable. | Good if the adapter remains small and server-authoritative. |
 
 Recommended decision rule:
 
@@ -322,3 +322,4 @@ End-to-end tests should eventually open two browser sessions, edit the same work
 - [`bounded-contexts.md`](bounded-contexts.md) — module and package boundaries.
 - [`adr-006-versioned-collaborative-workflow-store.md`](adr-006-versioned-collaborative-workflow-store.md) — accepted decision with spike gates.
 - [`jgit-storage-hibernate-spike.md`](jgit-storage-hibernate-spike.md) — first technical verification step.
+
