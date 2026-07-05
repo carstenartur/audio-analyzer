@@ -72,14 +72,14 @@ Browser graph editor / desktop WebView
 
 ## Source of truth
 
-|     Concern     |               Source of truth                |                          Notes                           |
-|-----------------|----------------------------------------------|----------------------------------------------------------|
-| Workflow graph  | `audio-core` workflow model                  | Immutable, framework-independent, validated server-side. |
-| Workflow edit   | `WorkflowOperation` / `WorkflowOperationLog` | Used for replay, audit and undo.                         |
-| Durable version | JGit commit produced from deterministic DSL  | Git stores checkpoints, not every UI gesture.            |
-| Live event      | Operation event from transactional outbox    | Broker/WebSocket transports committed facts only.        |
-| Presence        | Collaboration session state                  | Cursors, selection and viewport are not workflow state.  |
-| Rendering       | Web editor state                             | UI state is derived and disposable.                      |
+| Concern | Source of truth | Notes |
+|---|---|---|
+| Workflow graph | `audio-core` workflow model | Immutable, framework-independent, validated server-side. |
+| Workflow edit | `WorkflowOperation` / `WorkflowOperationLog` | Used for replay, audit and undo. |
+| Durable version | JGit commit produced from deterministic DSL | Git stores checkpoints, not every UI gesture. |
+| Live event | Operation event from transactional outbox | Broker/WebSocket transports committed facts only. |
+| Presence | Collaboration session state | Cursors, selection and viewport are not workflow state. |
+| Rendering | Web editor state | UI state is derived and disposable. |
 
 ## Collaboration modes
 
@@ -169,12 +169,37 @@ metadata.toml/json   name, tags, description, authoring metadata
 
 The future graphical editor is web-first, but the Swing app remains valid during the transition.
 
-Preferred architecture spike:
+Current default:
 
 - GLSP-first for a server-authoritative, model-driven diagram editor;
 - React Flow may be used for a quicker UX prototype;
 - Yjs may be evaluated as a client-side collaboration helper, especially for awareness or local undo experiments;
 - none of these client-side tools may become the canonical workflow persistence layer by accident.
+
+This does **not** reject the older React Flow/Yjs proposal. It only changes what that proposal is allowed to own. React Flow/Yjs may still be the best implementation choice if a spike proves it can preserve the same source-of-truth boundaries with less complexity.
+
+### Editor stack selection criteria
+
+The final editor stack should be chosen by evidence from spikes, not by document age.
+
+| Criterion | GLSP-first spike | React Flow/Yjs spike |
+|---|---|---|
+| Server-authoritative workflow model | Natural fit; model service is central. | Must be enforced by adapter/API discipline. |
+| Fast UX iteration | More upfront architecture. | Strong advantage. |
+| Typed ports and semantic validation | Natural fit. | Feasible, but custom code. |
+| Multi-user awareness/presence | Needs integration. | Strong advantage with Yjs-style helpers. |
+| Personal undo in shared sessions | Domain operation model still required. | Yjs can help, but domain semantics must still be tested. |
+| Deterministic replay/audit | Domain operation model required. | Domain operation model required. |
+| Avoiding browser state as truth | Natural fit. | Explicit guardrail required. |
+| Long-term maintainability | Good if GLSP complexity is acceptable. | Good if the adapter remains small and server-authoritative. |
+
+Recommended decision rule:
+
+```text
+If GLSP proves too heavy for the first useful editor, prefer React Flow/Yjs for the UI layer.
+If React Flow/Yjs cannot keep server-authoritative operations and deterministic replay clean, prefer GLSP.
+In both cases, audio-core Workflow + WorkflowOperationLog + VersionedWorkflowStore remain the canonical model.
+```
 
 The backend remains authoritative for workflow validation, operation ordering and durable checkpoints.
 
@@ -285,10 +310,11 @@ End-to-end tests should eventually open two browser sessions, edit the same work
 3. Implement the minimal `Input -> Gain -> Output` workflow roundtrip.
 4. Add deterministic DSL serialization and reload.
 5. Add semantic diff for the vertical slice.
-6. Build a GLSP-first graph editor spike.
-7. Add collaboration sessions and event transport.
-8. Add personal/shared undo behavior.
-9. Add Hibernate Search projections for workflow history.
+6. Build the GLSP-first editor spike and, if feasible, a constrained React Flow/Yjs editor spike against the same backend API.
+7. Choose the editor stack using the criteria above.
+8. Add collaboration sessions and event transport.
+9. Add personal/shared undo behavior.
+10. Add Hibernate Search projections for workflow history.
 
 ## Related documents
 
@@ -296,4 +322,3 @@ End-to-end tests should eventually open two browser sessions, edit the same work
 - [`bounded-contexts.md`](bounded-contexts.md) — module and package boundaries.
 - [`adr-006-versioned-collaborative-workflow-store.md`](adr-006-versioned-collaborative-workflow-store.md) — accepted decision with spike gates.
 - [`jgit-storage-hibernate-spike.md`](jgit-storage-hibernate-spike.md) — first technical verification step.
-
