@@ -61,6 +61,7 @@ import org.junit.jupiter.api.Test;
 class RegularJGitStoragePrototypeTest {
 
   private static final String MAIN_REF = "refs/heads/main";
+  private static final int DEFAULT_BLOCK_SIZE = 4096;
   private static final PersonIdent COMMITTER =
       new PersonIdent(
           "JGit Spike",
@@ -553,7 +554,7 @@ class RegularJGitStoragePrototypeTest {
 
   private static final class PrototypeObjectDatabase extends DfsObjDatabase {
     private final RepositoryTables tables;
-    private int blockSize;
+    private int blockSize = DEFAULT_BLOCK_SIZE;
 
     private PrototypeObjectDatabase(DfsRepository repository, RepositoryTables tables) {
       super(repository, new DfsReaderOptions());
