@@ -106,4 +106,4 @@ This ADR is accepted only with the following gates:
 
 ## Follow-up
 
-The next implementation item is the JGit/Hibernate storage spike, documented in `docs/architecture/jgit-storage-hibernate-spike.md`.
+The JGit/Hibernate storage spike is now documented as a completed proof in `docs/architecture/jgit-storage-hibernate-spike.md`. The next implementation item after extraction is the `Input -> Gain -> Output` workflow-store vertical slice, which should be tracked as a dedicated follow-up issue.
