@@ -332,6 +332,10 @@ public final class ExperimentNodeCatalog {
   // Helpers
   // -------------------------------------------------------------------------
 
+  /**
+   * Creates a required input port. All catalog input ports are required by design: catalog nodes
+   * define standard experiment components whose inputs must be connected before execution.
+   */
   private static Port input(
       String id, String name, String dataType, PortMultiplicity multiplicity) {
     return new Port(id, name, PortDirection.INPUT, dataType, true, multiplicity);
