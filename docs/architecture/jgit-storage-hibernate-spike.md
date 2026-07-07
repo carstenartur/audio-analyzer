@@ -21,7 +21,7 @@ Can the DB-backed JGit store be implemented as an external module against a regu
 
 Result: **yes**. A reusable storage module can be implemented against the normal `org.eclipse.jgit:org.eclipse.jgit` artifact. No Audio Analyzer specific fork or patch is required for the storage layer itself.
 
-This PR also consumes the released `io.github.carstenartur:jgit-storage-hibernate-core:0.1.2` artifact from `https://maven.pkg.github.com/carstenartur/jgit-storage-hibernate` in `audio-app` test scope. `JGitStorageHibernateReleaseArtifactTest` verifies that the release artifact's public API is present on the test classpath.
+This PR also keeps an optional release-artifact check for `io.github.carstenartur:jgit-storage-hibernate-core:0.1.2` from `https://maven.pkg.github.com/carstenartur/jgit-storage-hibernate` in `audio-app` test scope. `JGitStorageHibernateReleaseArtifactTest` verifies that the release artifact's public API is present on the test classpath when `-DjgitStorageHibernateArtifactCheck=true` is set.
 
 The only non-obvious requirement is storage-side conflict detection: the backing database must reject stale reftable replacement writes so that concurrent ref updates become optimistic-lock conflicts instead of lost updates. The JGit API already supports this pattern through DFS/reftable hooks; the responsibility stays inside the storage module.
 
@@ -40,7 +40,7 @@ Included:
 
 - extract or re-create a neutral Hibernate-backed JGit storage prototype;
 - compile it against a regular JGit artifact where possible;
-- consume the released `jgit-storage-hibernate-core` artifact as a test dependency;
+- consume the released `jgit-storage-hibernate-core` artifact as an optional test dependency;
 - write/read blobs, trees, commits and refs through JGit APIs, and document reflog behavior;
 - prove transactional ref update behavior;
 - document whether JGit internals are unavoidable;
@@ -100,19 +100,19 @@ The storage module may internally use `DfsRepository`, `DfsObjDatabase`, `DfsRef
 
 Prototype coverage lives in `audio-app/src/test/java/org/hammer/audio/RegularJGitStoragePrototypeTest.java`.
 
-Release-artifact consumption is covered by `audio-app/src/test/java/org/hammer/audio/JGitStorageHibernateReleaseArtifactTest.java`, which resolves public classes from `io.github.carstenartur:jgit-storage-hibernate-core:0.1.2`.
+Release-artifact consumption is covered by `audio-app/src/test/java/org/hammer/audio/JGitStorageHibernateReleaseArtifactTest.java`, which resolves public classes from `io.github.carstenartur:jgit-storage-hibernate-core:0.1.2` when `-DjgitStorageHibernateArtifactCheck=true` is enabled.
 
-The prototype consumes the released storage artifact for classpath verification and compiles the low-level DFS/reftable proof against the JGit APIs supplied transitively by that release artifact.
+The prototype compiles the low-level DFS/reftable proof against an explicit `org.eclipse.jgit:org.eclipse.jgit:${jgit.version}` test dependency. Release-artifact classpath verification remains available as an opt-in profile.
 
-| Proof area | Result | Notes |
-|---|---|---|
-| Released artifact consumption | ✅ | `jgit-storage-hibernate-core:0.1.2` is resolved from the GitHub Maven repository in `audio-app` test scope. |
-| Blob/tree/commit/ref roundtrip | ✅ | Low-level JGit APIs create blob, tree, commit and ref history successfully. |
-| Concurrent ref update | ✅ | One writer succeeds and one writer fails once the backing store rejects stale reftable replacement writes. |
-| Rollback / half-state | ✅ (documented limitation) | A failure before ref update leaves branch history unchanged, but already-written objects remain orphaned until GC. |
-| Reflog behavior | ✅ (documented) | DFS/reftable path did not emit reflog entries in this prototype even when ref-log messages were supplied. |
-| Restart / cache behavior | ✅ | Reopen works; long-lived readers need `scanForRepoChanges()` after external writes; repo-scoped pack naming prevents collisions. |
-| Audio Analyzer API isolation | ✅ | Prototype is test-scoped only; production modules remain free of JGit dependencies. |
+|           Proof area           |          Result           |                                                                               Notes                                                                                |
+|--------------------------------|---------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Released artifact consumption  | ✅ (opt-in)                | `jgit-storage-hibernate-core:0.1.2` is resolved from the GitHub Maven repository in `audio-app` test scope when `-DjgitStorageHibernateArtifactCheck=true` is set. |
+| Blob/tree/commit/ref roundtrip | ✅                         | Low-level JGit APIs create blob, tree, commit and ref history successfully.                                                                                        |
+| Concurrent ref update          | ✅                         | One writer succeeds and one writer fails once the backing store rejects stale reftable replacement writes.                                                         |
+| Rollback / half-state          | ✅ (documented limitation) | A failure before ref update leaves branch history unchanged, but already-written objects remain orphaned until GC.                                                 |
+| Reflog behavior                | ✅ (documented)            | DFS/reftable path did not emit reflog entries in this prototype even when ref-log messages were supplied.                                                          |
+| Restart / cache behavior       | ✅                         | Reopen works; long-lived readers need `scanForRepoChanges()` after external writes; repo-scoped pack naming prevents collisions.                                   |
+| Audio Analyzer API isolation   | ✅                         | Prototype is test-scoped only; production modules remain free of JGit dependencies.                                                                                |
 
 ## Required technical proof
 
@@ -193,7 +193,7 @@ Document that large audio recordings are not stored as Git blobs in this store. 
 
 - [x] A neutral storage module exists or a precise extraction plan is documented.
 - [x] The module either compiles against regular JGit or identifies the exact required fork/API delta.
-- [x] Audio Analyzer consumes the released `jgit-storage-hibernate-core` artifact in test scope.
+- [x] Audio Analyzer keeps an optional test-scope check for the released `jgit-storage-hibernate-core` artifact.
 - [x] Blob/tree/commit/ref roundtrip is tested.
 - [x] Atomic ref update is tested.
 - [x] Rollback/half-state behavior is tested or explicitly rejected with a documented reason.

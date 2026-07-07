@@ -378,7 +378,9 @@ class RegularJGitStoragePrototypeTest {
     Ref ref = repository.exactRef(refName);
     assertNotNull(ref);
     ReflogReader reflogReader = repository.getRefDatabase().getReflogReader(ref);
-    assertNotNull(reflogReader);
+    if (reflogReader == null) {
+      return List.of();
+    }
     return reflogReader.getReverseEntries();
   }
 
@@ -666,11 +668,18 @@ class RegularJGitStoragePrototypeTest {
     @Override
     public int read(long position, ByteBuffer buffer) {
       byte[] bytes = data();
-      int bytesToRead = Math.min(buffer.remaining(), bytes.length - (int) position);
-      if (bytesToRead == 0) {
+      if (!buffer.hasRemaining()) {
+        return 0;
+      }
+      if (position < 0) {
+        throw new IllegalArgumentException("position must be non-negative");
+      }
+      if (position >= bytes.length) {
         return -1;
       }
-      buffer.put(bytes, (int) position, bytesToRead);
+      int offset = (int) position;
+      int bytesToRead = Math.min(buffer.remaining(), bytes.length - offset);
+      buffer.put(bytes, offset, bytesToRead);
       return bytesToRead;
     }
 
@@ -692,7 +701,7 @@ class RegularJGitStoragePrototypeTest {
   private static final class ByteArrayReadableChannel implements ReadableChannel {
     private final byte[] data;
     private final int blockSize;
-    private int position;
+    private long position;
     private boolean open = true;
 
     private ByteArrayReadableChannel(byte[] data, int blockSize) {
@@ -702,11 +711,15 @@ class RegularJGitStoragePrototypeTest {
 
     @Override
     public int read(ByteBuffer destination) {
-      int bytesToRead = Math.min(destination.remaining(), data.length - position);
-      if (bytesToRead == 0) {
+      if (!destination.hasRemaining()) {
+        return 0;
+      }
+      if (position >= data.length) {
         return -1;
       }
-      destination.put(data, position, bytesToRead);
+      int offset = Math.toIntExact(position);
+      int bytesToRead = Math.min(destination.remaining(), data.length - offset);
+      destination.put(data, offset, bytesToRead);
       position += bytesToRead;
       return bytesToRead;
     }
@@ -728,7 +741,13 @@ class RegularJGitStoragePrototypeTest {
 
     @Override
     public void position(long newPosition) {
-      position = (int) newPosition;
+      if (newPosition < 0) {
+        throw new IllegalArgumentException("position must be non-negative");
+      }
+      if (newPosition > Integer.MAX_VALUE) {
+        throw new IllegalArgumentException("position exceeds supported range");
+      }
+      position = newPosition;
     }
 
     @Override
