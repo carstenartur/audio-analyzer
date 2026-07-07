@@ -7,18 +7,27 @@ This directory contains architecture documents with different levels of authorit
 1. [`../../ARCHITECTURE.md`](../../ARCHITECTURE.md) — repository-wide module architecture and core boundary rules.
 2. [`bounded-contexts.md`](bounded-contexts.md) — explicit bounded contexts, package boundaries and dependency directions.
 3. [`adr-006-versioned-collaborative-workflow-store.md`](adr-006-versioned-collaborative-workflow-store.md) — accepted decision for the versioned collaborative workflow store.
-4. [`collaborative-workflow-platform.md`](collaborative-workflow-platform.md) — scenario-level target architecture for drawing, collaboration, undo and execution.
-5. [`jgit-storage-hibernate-spike.md`](jgit-storage-hibernate-spike.md) — completed storage spike proving the DB-backed JGit store can be consolidated without an Audio Analyzer specific JGit fork.
+4. [`adr-007-editor-stack.md`](adr-007-editor-stack.md) — accepted editor stack decision (React Flow / Yjs, with GLSP as fallback).
+5. [`collaborative-workflow-platform.md`](collaborative-workflow-platform.md) — scenario-level target architecture for drawing, collaboration, undo and execution.
+6. [`jgit-storage-hibernate-spike.md`](jgit-storage-hibernate-spike.md) — completed storage spike proving the DB-backed JGit store can be consolidated without an Audio Analyzer specific JGit fork.
+
+## Experiment Modeling Workbench documents
+
+7. [`experiment-workflow-model-mapping.md`](experiment-workflow-model-mapping.md) — spike mapping of existing workflow classes to experiment configurations (issue #214).
+8. [`experiment-node-catalog.md`](experiment-node-catalog.md) — first experiment node catalog with typed ports, valid and invalid connection examples (issue #215).
 
 ## Authority levels
 
-|                      Document                       | Authority |                        Purpose                         |
-|-----------------------------------------------------|-----------|--------------------------------------------------------|
-| `ARCHITECTURE.md`                                   | High      | Stable module overview and architectural goals.        |
-| `bounded-contexts.md`                               | High      | Enforced context and dependency boundaries.            |
-| `adr-006-versioned-collaborative-workflow-store.md` | Decision  | Accepted direction with spike gates.                   |
-| `collaborative-workflow-platform.md`                | Planning  | Explains the end-to-end workflow editor platform.      |
-| `jgit-storage-hibernate-spike.md`                   | Spike     | Records the completed JGit/Hibernate storage decision. |
+|                      Document                       | Authority |                         Purpose                         |
+|-----------------------------------------------------|-----------|---------------------------------------------------------|
+| `ARCHITECTURE.md`                                   | High      | Stable module overview and architectural goals.         |
+| `bounded-contexts.md`                               | High      | Enforced context and dependency boundaries.             |
+| `adr-006-versioned-collaborative-workflow-store.md` | Decision  | Accepted direction with spike gates.                    |
+| `adr-007-editor-stack.md`                           | Decision  | React Flow/Yjs selected as editor stack; GLSP fallback. |
+| `collaborative-workflow-platform.md`                | Planning  | Explains the end-to-end workflow editor platform.       |
+| `jgit-storage-hibernate-spike.md`                   | Spike     | Records the completed JGit/Hibernate storage decision.  |
+| `experiment-workflow-model-mapping.md`              | Spike     | Maps existing workflow classes to experiment configs.   |
+| `experiment-node-catalog.md`                        | Catalog   | First experiment node catalog with typed ports.         |
 
 If planning documents conflict with ADR-006 or the bounded-context rules, ADR-006 and the bounded-context rules win.
 
