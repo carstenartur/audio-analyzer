@@ -701,7 +701,7 @@ class RegularJGitStoragePrototypeTest {
   private static final class ByteArrayReadableChannel implements ReadableChannel {
     private final byte[] data;
     private final int blockSize;
-    private long position;
+    private int position;
     private boolean open = true;
 
     private ByteArrayReadableChannel(byte[] data, int blockSize) {
@@ -717,9 +717,8 @@ class RegularJGitStoragePrototypeTest {
       if (position >= data.length) {
         return -1;
       }
-      int offset = Math.toIntExact(position);
-      int bytesToRead = Math.min(destination.remaining(), data.length - offset);
-      destination.put(data, offset, bytesToRead);
+      int bytesToRead = Math.min(destination.remaining(), data.length - position);
+      destination.put(data, position, bytesToRead);
       position += bytesToRead;
       return bytesToRead;
     }
@@ -747,7 +746,7 @@ class RegularJGitStoragePrototypeTest {
       if (newPosition > Integer.MAX_VALUE) {
         throw new IllegalArgumentException("position exceeds supported range");
       }
-      position = newPosition;
+      position = (int) newPosition;
     }
 
     @Override
