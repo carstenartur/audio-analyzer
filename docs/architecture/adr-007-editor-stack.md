@@ -1,7 +1,7 @@
 # ADR-007: Editor Stack Selection for Experiment Modeling Workbench
 
 **Issue**: [#221](https://github.com/carstenartur/audio-analyzer/issues/221)  
-**Status**: Accepted  
+**Status**: Proposed — pending spike evidence  
 **Date**: 2026-07-07  
 **Related spikes**: [#219 GLSP](https://github.com/carstenartur/audio-analyzer/issues/219), [#220 React Flow/Yjs](https://github.com/carstenartur/audio-analyzer/issues/220)
 
@@ -9,11 +9,10 @@
 
 ## Context
 
-The Experiment Modeling Workbench (issue #206) needs a graph editor. Two candidates were
-evaluated through spike analysis:
+The Experiment Modeling Workbench (issue #206) needs a graph editor. Two candidates must be evaluated with comparable spikes:
 
 1. **GLSP** (Graphical Language Server Protocol) — Eclipse/EclipseSource model-driven editor
-2. **React Flow + Yjs** — lightweight React graph renderer with CRDT collaboration helpers
+2. **React Flow + Yjs** — lightweight React graph renderer with optional CRDT collaboration helpers
 
 The canonical workflow state must always remain in:
 
@@ -23,22 +22,23 @@ audio-core Workflow
   -> VersionedWorkflowStore
 ```
 
-The editor is an *adapter layer* only. It must translate user gestures into semantic
-`WorkflowOperation` values; it must not become the source of truth.
+The editor is an adapter layer only. It must translate user gestures into semantic `WorkflowOperation` values; it must not become the source of truth.
+
+This ADR is intentionally **not accepted yet**. It records the selection criteria, current working hypothesis and guardrails. It becomes accepted only after #219 and #220 have produced comparable evidence.
 
 ---
 
 ## Evaluation criteria
 
-|              Criterion              | Weight |
-|-------------------------------------|--------|
-| Server-authoritative workflow model | High   |
-| Typed ports and semantic validation | High   |
-| Personal undo feasibility           | High   |
-| Deterministic replay/audit          | High   |
-| Adapter complexity / cognitive load | High   |
-| Future collaboration readiness      | Medium |
-| Maintainability                     | Medium |
+| Criterion | Weight |
+|---|---|
+| Server-authoritative workflow model | High |
+| Typed ports and semantic validation | High |
+| Personal undo feasibility | High |
+| Deterministic replay/audit | High |
+| Adapter complexity / cognitive load | High |
+| Future collaboration readiness | Medium |
+| Maintainability | Medium |
 
 ---
 
@@ -73,15 +73,15 @@ User gesture (GLSP client)
 
 - Purpose-built model-driven editor with typed diagrams
 - Rich port and connector model natively
-- Server-authoritative by design (the GModel server holds canonical state)
+- Server-authoritative by design when the GLSP server is wired to the domain model
 - Eclipse ecosystem, mature tooling
 
 ### Weaknesses
 
-- High setup complexity (Theia or VS Code extension host required)
-- Steep learning curve for developers unfamiliar with the EMF/GLSP ecosystem
-- Two-model overhead: GModel + audio-core Workflow require explicit synchronisation
-- Large framework footprint for what is currently a research workbench
+- High setup complexity (Theia or VS Code extension host likely required)
+- Steep learning curve for developers unfamiliar with the GLSP ecosystem
+- Two-model overhead: GModel + audio-core Workflow require explicit synchronization
+- Large framework footprint for the first research-workbench MVP
 
 ---
 
@@ -89,16 +89,17 @@ User gesture (GLSP client)
 
 ### What React Flow owns
 
-- Node and edge rendering in the browser (React)
+- Node and edge rendering in the browser
 - Layout drag-and-drop (client-side only)
 - Viewport and zoom state
 
 ### What Yjs may own (optional, scoped)
 
 - Awareness state (user cursors, presence)
-- Optimistic client-side undo helpers (scoped to layout, not to semantic state)
+- Optimistic client-side layout helpers
+- Local collaboration helpers that are later reconciled through semantic operations
 
-### What React Flow/Yjs must NOT own
+### What React Flow/Yjs must not own
 
 - Canonical workflow state — always held server-side in `audio-core Workflow`
 - Semantic validation — stays in `WorkflowValidator`
@@ -120,65 +121,65 @@ User gesture (React Flow UI)
 ### Strengths
 
 - Low barrier to entry (standard React + npm)
-- Flexible rendering: typed ports renderable as custom node handles
-- Yjs awareness is optional and additive — collaboration can be wired in later
-- Fewer layers between developer and browser
+- Flexible rendering: typed ports can be rendered as custom node handles
+- Yjs awareness is optional and additive; collaboration can be wired in later
+- Fewer framework layers between developer and browser
 
 ### Weaknesses
 
 - No built-in model-driven constraint enforcement
-- Requires explicit discipline to keep server authoritative (optimistic updates risk state drift)
-- Yjs document state must never be used as durable canonical store (explicit architectural guard)
+- Requires explicit discipline to keep the server authoritative
+- Optimistic updates risk state drift if adapters are careless
+- Yjs document state must never be used as durable canonical store
 
 ---
 
-## Decision
+## Proposed starting hypothesis
 
-**React Flow + Yjs is the recommended starting point** for the following reasons:
+React Flow + Yjs is the current recommended starting hypothesis because it appears likely to keep the first MVP's cognitive load lower than GLSP:
 
-1. **Lower cognitive load per layer.** A React developer needs to understand one layer (HTTP/WS
-   adapter calling `WorkflowOperation` API) rather than also understanding GModel, JSON-RPC
-   handlers, and Theia/VS Code extension infrastructure.
+1. A React developer can work against one narrow HTTP/WebSocket adapter that sends `WorkflowOperation` requests.
+2. The first workbench is a research/productivity workbench, not an enterprise-scale diagramming platform.
+3. The boundary between React Flow state and `audio-core Workflow` is simple to test if all mutations go through application services.
+4. Yjs awareness can be introduced for cursors/presence without making a Yjs document the canonical workflow.
 
-2. **Faster iteration for a research workbench.** The workbench is for reproducible experiment
-   configurations, not for large-scale industrial diagram authoring. React Flow's simplicity
-   accelerates the first working prototype.
+This is not a final decision. The hypothesis must be rejected if the React Flow/Yjs spike cannot keep server-authoritative operations, deterministic replay and validation clean.
 
-3. **Layer boundary is enforceable.** The boundary between React Flow state (UI layout) and
-   `audio-core Workflow` (semantic state) is the HTTP/WS API. Architecture tests in
-   `ArchitectureFitnessTest` already prevent server-side code from depending on UI/React packages.
-
-4. **Collaboration can be added incrementally.** Yjs awareness can be wired in for cursor/presence
-   without ever storing Yjs document state as canonical workflow state.
-
-GLSP remains a valid future choice if the workbench grows to enterprise scale and the team needs
-a model-driven EMF-grade editor. The decision should be revisited if React Flow proves unable to
-enforce server-authoritative semantics with acceptable complexity.
+GLSP remains a valid candidate if the GLSP spike shows that its model-driven structure keeps the adapter cleaner or safer despite higher setup cost.
 
 ---
 
-## Boundaries enforced by this decision
+## Boundaries that any final decision must enforce
 
-|          Layer           |                        Owns                        |                Must not own                 |
-|--------------------------|----------------------------------------------------|---------------------------------------------|
-| React Flow (UI)          | Node/edge rendering, layout, viewport state        | Canonical workflow, validation, history     |
-| Yjs (optional)           | Awareness (cursors, presence), optimistic layout   | Durable state, semantic conflict resolution |
-| WebSocket/HTTP adapter   | `WorkflowOperation` translation, outbox publishing | GModel sync, layout persistence             |
-| Application service      | Validate, apply, checkpoint workflow operations    | UI rendering, JGit internals                |
-| `VersionedWorkflowStore` | Durable Git checkpoints, history                   | Editor state, collaboration sessions        |
-| `audio-core Workflow`    | Semantic graph, operations, execution snapshots    | UI, persistence, JGit, React, Yjs           |
+| Layer | Owns | Must not own |
+|---|---|---|
+| Graph editor UI | Node/edge rendering, layout, viewport state | Canonical workflow, validation, history |
+| Yjs or equivalent helper | Awareness/presence, optional optimistic helpers | Durable state, semantic conflict resolution |
+| HTTP/WebSocket adapter | `WorkflowOperation` translation | Persistence internals, DSL format details |
+| Application service | Validate, apply, checkpoint workflow operations | UI rendering, storage internals |
+| `VersionedWorkflowStore` | Durable checkpoints and history | Editor state, collaboration sessions |
+| `audio-core Workflow` | Semantic graph, operations, execution snapshots | UI, persistence, JGit, React, Yjs |
+
+---
+
+## Acceptance path
+
+This ADR may be changed to **Accepted** only when:
+
+- #219 records the GLSP spike result;
+- #220 records the React Flow/Yjs spike result;
+- both spikes use the same backend/application API;
+- the accepted decision explains why the chosen path keeps cognitive load lower;
+- the accepted decision lists fallback criteria and migration path.
 
 ---
 
 ## Migration / fallback
 
-If React Flow proves too difficult to keep server-authoritative (e.g. optimistic-update drift
-becomes a recurring bug class), the migration path is:
+If React Flow proves too difficult to keep server-authoritative, the fallback path is:
 
-1. Extract all semantic operation translation into a clean `WorkflowEditorService` that accepts
-   only `WorkflowOperation` inputs and returns `Workflow` projections.
+1. Extract all semantic operation translation into a clean `WorkflowEditorService` that accepts only `WorkflowOperation` inputs and returns `Workflow` projections.
 2. Replace React Flow with GLSP by pointing GLSP action handlers at `WorkflowEditorService`.
-3. The `audio-core` model, DSL serializer and `VersionedWorkflowStore` remain unchanged.
+3. Keep `audio-core` model, DSL serializer and `VersionedWorkflowStore` unchanged.
 
-Because the canonical state is already isolated behind `VersionedWorkflowStore` and
-`WorkflowOperationLog`, the editor is replaceable without touching the domain layer.
+If GLSP proves too heavy for the first useful editor, keep React Flow as the UI layer and limit Yjs to awareness/layout helpers until semantic collaboration is implemented through `WorkflowOperation` events.
