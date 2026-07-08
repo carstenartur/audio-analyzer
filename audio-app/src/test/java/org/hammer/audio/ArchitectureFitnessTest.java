@@ -150,4 +150,88 @@ class ArchitectureFitnessTest {
   void noCyclicDependenciesBetweenBoundedContextSlices() {
     slices().matching("org.hammer.audio.(*)..").should().beFreeOfCycles().check(ROOT_CLASSES);
   }
+
+  // -------------------------------------------------------------------------
+  // Experiment Modeling Workbench guardrails (issue #222)
+  // -------------------------------------------------------------------------
+
+  private static final String DSL_PKG = "org.hammer.audio.workflow.dsl..";
+  private static final String STORE_PKG = "org.hammer.audio.workflow.store..";
+  private static final String CATALOG_PKG = "org.hammer.audio.workflow.catalog..";
+  private static final String PERSISTENCE_PKG = "org.hammer.audio.recording..";
+  private static final JavaClasses DSL_CLASSES = importProduction("org.hammer.audio.workflow.dsl");
+  private static final JavaClasses STORE_CLASSES =
+      importProduction("org.hammer.audio.workflow.store");
+  private static final JavaClasses CATALOG_CLASSES =
+      importProduction("org.hammer.audio.workflow.catalog");
+
+  /**
+   * Modeling guardrail: the DSL package (workflow.dsl) must not depend on Swing, AWT or JGit.
+   *
+   * <p>The DSL serializer/parser translates workflow domain objects to/from canonical text. It must
+   * remain framework-free so it can be called from any layer above the domain.
+   */
+  @Test
+  void dslPackageDoesNotDependOnSwingOrJGit() {
+    noClasses()
+        .that()
+        .resideInAPackage(DSL_PKG)
+        .should()
+        .dependOnClassesThat()
+        .resideInAnyPackage(JAVAX_SWING, JAVA_AWT, JGIT_PKG)
+        .check(DSL_CLASSES);
+  }
+
+  /**
+   * Modeling guardrail: the DSL package must not depend on the Persistence context.
+   *
+   * <p>The DSL serializer converts domain objects to text. It must not need recording or storage
+   * packages; those belong in the persistence facade or higher layers.
+   */
+  @Test
+  void dslPackageDoesNotDependOnPersistence() {
+    noClasses()
+        .that()
+        .resideInAPackage(DSL_PKG)
+        .should()
+        .dependOnClassesThat()
+        .resideInAPackage(PERSISTENCE_PKG)
+        .check(DSL_CLASSES);
+  }
+
+  /**
+   * Modeling guardrail: the workflow store facade (workflow.store) must not depend on Swing, AWT or
+   * JGit.
+   *
+   * <p>JGit and Hibernate internals must stay behind implementations of the facade, never appear in
+   * the facade interface or value objects.
+   */
+  @Test
+  void storeFacadeDoesNotDependOnSwingOrJGit() {
+    noClasses()
+        .that()
+        .resideInAPackage(STORE_PKG)
+        .should()
+        .dependOnClassesThat()
+        .resideInAnyPackage(JAVAX_SWING, JAVA_AWT, JGIT_PKG)
+        .check(STORE_CLASSES);
+  }
+
+  /**
+   * Modeling guardrail: the node catalog (workflow.catalog) must not depend on Swing, AWT, JGit or
+   * the Persistence context.
+   *
+   * <p>The catalog provides domain-level prototypes. It belongs in the workflow domain layer and
+   * must not pull in rendering, storage or runtime dependencies.
+   */
+  @Test
+  void catalogDoesNotDependOnSwingJGitOrPersistence() {
+    noClasses()
+        .that()
+        .resideInAPackage(CATALOG_PKG)
+        .should()
+        .dependOnClassesThat()
+        .resideInAnyPackage(JAVAX_SWING, JAVA_AWT, JGIT_PKG, PERSISTENCE_PKG)
+        .check(CATALOG_CLASSES);
+  }
 }
