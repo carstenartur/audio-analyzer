@@ -151,7 +151,7 @@ GLSP remains a valid candidate if the GLSP spike shows that its model-driven str
 
 ## Boundaries that any final decision must enforce
 
-|          Layer           |                       Owns                      |                 Must not own                |
+|          Layer           |                      Owns                       |                Must not own                 |
 |--------------------------|-------------------------------------------------|---------------------------------------------|
 | Graph editor UI          | Node/edge rendering, layout, viewport state     | Canonical workflow, validation, history     |
 | Yjs or equivalent helper | Awareness/presence, optional optimistic helpers | Durable state, semantic conflict resolution |
@@ -166,8 +166,8 @@ GLSP remains a valid candidate if the GLSP spike shows that its model-driven str
 
 This ADR may be changed to **Accepted** only when:
 
-- #219 records the GLSP spike result;
-- #220 records the React Flow/Yjs spike result;
+- issue #219 records the GLSP spike result;
+- issue #220 records the React Flow/Yjs spike result;
 - both spikes use the same backend/application API;
 - the accepted decision explains why the chosen path keeps cognitive load lower;
 - the accepted decision lists fallback criteria and migration path.
