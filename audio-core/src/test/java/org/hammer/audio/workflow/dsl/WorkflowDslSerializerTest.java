@@ -114,10 +114,44 @@ class WorkflowDslSerializerTest {
     assertEquals(original.metadata(), restored.metadata());
   }
 
-  /** Literal backslash sequences must remain literal after a serialize/parse roundtrip. */
+  /** Literal backslash-n sequences must remain literal after a serialize/parse roundtrip. */
   @Test
   void metadataValueWithLiteralBackslashNRoundTrips() {
     Workflow original = buildWorkflowWithMetadata(Map.of("path", "C:\\new\\notes"));
+
+    String text = SERIALIZER.serialize(original);
+    Workflow restored = PARSER.parse(text);
+
+    assertEquals(original.metadata(), restored.metadata());
+  }
+
+  /** Real newline characters must survive a serialize/parse roundtrip. */
+  @Test
+  void metadataValueWithRealNewlineRoundTrips() {
+    Workflow original = buildWorkflowWithMetadata(Map.of("multiline", "line one\nline two"));
+
+    String text = SERIALIZER.serialize(original);
+    Workflow restored = PARSER.parse(text);
+
+    assertEquals(original.metadata(), restored.metadata());
+  }
+
+  /** Quotes and backslashes must survive together without corrupting escape order. */
+  @Test
+  void metadataValueWithQuotesAndBackslashesRoundTrips() {
+    Workflow original =
+        buildWorkflowWithMetadata(Map.of("quotedPath", "quote \"value\" at C:\\temp\\file"));
+
+    String text = SERIALIZER.serialize(original);
+    Workflow restored = PARSER.parse(text);
+
+    assertEquals(original.metadata(), restored.metadata());
+  }
+
+  /** Metadata keys are escaped too, so special key names must roundtrip. */
+  @Test
+  void metadataKeyWithSpecialCharactersRoundTrips() {
+    Workflow original = buildWorkflowWithMetadata(Map.of("path:key\\name", "value"));
 
     String text = SERIALIZER.serialize(original);
     Workflow restored = PARSER.parse(text);
@@ -150,7 +184,7 @@ class WorkflowDslSerializerTest {
     Node sink =
         new Node(
             "node.sink",
-            "report",
+            "audio-sink",
             "Sink",
             List.of(
                 new Port(
@@ -164,7 +198,7 @@ class WorkflowDslSerializerTest {
     Node source =
         new Node(
             "node.source",
-            "recording-input",
+            "audio-source",
             "Source",
             List.of(),
             List.of(
@@ -187,7 +221,7 @@ class WorkflowDslSerializerTest {
     Node sink =
         new Node(
             "node.sink",
-            "report",
+            "audio-sink",
             "Sink",
             List.of(
                 new Port(
@@ -202,7 +236,7 @@ class WorkflowDslSerializerTest {
     Node source =
         new Node(
             "node.source",
-            "recording-input",
+            "audio-source",
             "Source",
             List.of(),
             List.of(
@@ -227,7 +261,7 @@ class WorkflowDslSerializerTest {
     Node alpha =
         new Node(
             "node.alpha",
-            "recording-input",
+            "audio-source",
             "Source",
             List.of(),
             List.of(
@@ -241,7 +275,7 @@ class WorkflowDslSerializerTest {
     Node beta =
         new Node(
             "node.beta",
-            "report",
+            "audio-sink",
             "Sink",
             List.of(
                 new Port(
@@ -264,7 +298,7 @@ class WorkflowDslSerializerTest {
     Node source =
         new Node(
             "node.source",
-            "recording-input",
+            "audio-source",
             "Source",
             List.of(),
             List.of(
@@ -278,7 +312,7 @@ class WorkflowDslSerializerTest {
     Node sinkA =
         new Node(
             "node.sinkA",
-            "report",
+            "audio-sink",
             "SinkA",
             List.of(
                 new Port(
@@ -292,7 +326,7 @@ class WorkflowDslSerializerTest {
     Node sinkB =
         new Node(
             "node.sinkB",
-            "report",
+            "audio-sink",
             "SinkB",
             List.of(
                 new Port(
