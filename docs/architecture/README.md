@@ -8,7 +8,7 @@ This directory contains architecture documents with different levels of authorit
 2. [`bounded-contexts.md`](bounded-contexts.md) — explicit bounded contexts, package boundaries and dependency directions.
 3. [`adr-006-versioned-collaborative-workflow-store.md`](adr-006-versioned-collaborative-workflow-store.md) — accepted decision for the versioned collaborative workflow store.
 4. [`collaborative-workflow-platform.md`](collaborative-workflow-platform.md) — scenario-level target architecture for drawing, collaboration, undo and execution.
-5. [`adr-007-editor-stack.md`](adr-007-editor-stack.md) — proposed editor stack hypothesis pending GLSP and React Flow/Yjs spike evidence.
+5. [`adr-007-editor-stack.md`](adr-007-editor-stack.md) — accepted decision: React Flow + Yjs as the editor stack, with GLSP evaluated and documented as the fallback path.
 6. [`jgit-storage-hibernate-spike.md`](jgit-storage-hibernate-spike.md) — completed storage spike proving the DB-backed JGit store can be consolidated without an Audio Analyzer specific JGit fork.
 
 ## Experiment Modeling Workbench documents

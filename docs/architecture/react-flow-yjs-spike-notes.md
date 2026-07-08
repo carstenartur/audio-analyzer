@@ -138,8 +138,8 @@ The same `onConnect` handler fires the HTTP request. The server returns HTTP 422
 { "error": "Type mismatch: Dataset cannot connect to AudioBlock port" }
 ```
 
-The browser shows the error message. React Flow's optimistic edge is not added to the permanent
-edge list; the state rolls back.
+The browser shows the error message. No edge is committed to React Flow state;
+the UI remains on the last accepted server projection.
 
 **Finding**: invalid edges are rejected by `WorkflowValidator` at the server; the React Flow state
 never permanently accepts the invalid edge.
