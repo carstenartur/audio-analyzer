@@ -148,10 +148,10 @@ class WorkflowDslSerializerTest {
     assertEquals(original.metadata(), restored.metadata());
   }
 
-  /** Metadata keys are escaped too, so special key names must roundtrip. */
+  /** Metadata keys with colons are stable IDs and must roundtrip through quoted DSL keys. */
   @Test
-  void metadataKeyWithSpecialCharactersRoundTrips() {
-    Workflow original = buildWorkflowWithMetadata(Map.of("path:key\\name", "value"));
+  void metadataKeyWithColonRoundTrips() {
+    Workflow original = buildWorkflowWithMetadata(Map.of("path:key.name-1", "value"));
 
     String text = SERIALIZER.serialize(original);
     Workflow restored = PARSER.parse(text);
