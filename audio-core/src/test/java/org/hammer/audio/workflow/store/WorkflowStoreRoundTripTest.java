@@ -185,8 +185,8 @@ class WorkflowStoreRoundTripTest {
     Node input =
         new Node(
             "node.input",
-            "recording-input",
-            "Recording Input",
+            "audio-source",
+            "Audio Source",
             List.of(),
             List.of(
                 new Port(
@@ -199,8 +199,8 @@ class WorkflowStoreRoundTripTest {
     Node output =
         new Node(
             "node.output",
-            "report",
-            "Report",
+            "audio-sink",
+            "Audio Sink",
             List.of(
                 new Port(
                     "audio-in",
@@ -246,8 +246,8 @@ class WorkflowStoreRoundTripTest {
     Node input =
         new Node(
             "node.input",
-            "recording-input",
-            "Recording Input",
+            "audio-source",
+            "Audio Source",
             List.of(),
             List.of(
                 new Port(

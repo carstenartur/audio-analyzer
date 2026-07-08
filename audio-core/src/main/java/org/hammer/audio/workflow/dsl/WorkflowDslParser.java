@@ -17,8 +17,8 @@ import org.hammer.audio.workflow.Workflow;
  * Deterministic text parser for {@link Workflow} objects serialized by {@link
  * WorkflowDslSerializer}.
  *
- * <p>Rebuilds the full workflow domain model from the canonical DSL text. Parser state is not
- * thread-safe; create a new instance per parse invocation.
+ * <p>Rebuilds the full workflow domain model from the canonical DSL text. Instances are stateless
+ * and may be safely reused across parse invocations.
  *
  * <p>Owned by the DSL layer. May be used by the persistence facade and application services, but
  * must not depend on UI, JGit or execution internals.
@@ -332,10 +332,31 @@ public final class WorkflowDslParser {
         return null;
       }
       if (raw.startsWith("\"") && raw.endsWith("\"") && raw.length() >= 2) {
-        String inner = raw.substring(1, raw.length() - 1);
-        return inner.replace("\\n", "\n").replace("\\\"", "\"").replace("\\\\", "\\");
+        return unescapeQuotedValue(raw.substring(1, raw.length() - 1));
       }
       return raw;
+    }
+
+    private static String unescapeQuotedValue(String raw) {
+      StringBuilder value = new StringBuilder(raw.length());
+      int index = 0;
+      while (index < raw.length()) {
+        char current = raw.charAt(index);
+        if (current != '\\' || index + 1 >= raw.length()) {
+          value.append(current);
+          index++;
+          continue;
+        }
+        char escaped = raw.charAt(index + 1);
+        switch (escaped) {
+          case 'n' -> value.append('\n');
+          case '"' -> value.append('"');
+          case '\\' -> value.append('\\');
+          default -> value.append(raw, index, index + 2);
+        }
+        index += 2;
+      }
+      return value.toString();
     }
   }
 }

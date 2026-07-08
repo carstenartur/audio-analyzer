@@ -60,7 +60,7 @@ public interface VersionedWorkflowStore {
   RefUpdateResult updateRef(String refName, CommitId expectedOldCommit, CommitId newCommit);
 
   /**
-   * Returns a chronological list of recent commits on the given ref.
+   * Returns a reverse-chronological list of recent commits on the given ref.
    *
    * @param refName ref or branch name
    * @param limit maximum number of entries to return

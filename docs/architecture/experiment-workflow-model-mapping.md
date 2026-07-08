@@ -55,6 +55,24 @@ The following first-experiment requirements are already met by the existing mode
 
 ---
 
+## Canonical representation choice
+
+The persisted model representation should remain the dedicated `workflow.dsl` format rather than
+generic YAML.
+
+Reasons:
+
+- the serializer must produce byte-stable output for Git checkpoints and reproducible diffs;
+- `audio-core` only needs a narrow, explicit grammar instead of YAML aliases, tags, comments and
+  implicit scalar coercions;
+- the parser stays a small inverse of the serializer, which keeps the trusted persistence surface
+  predictable.
+
+If external interoperability or hand-authored exchange files become a requirement later, YAML can
+still be added as an import/export adapter without changing the canonical stored model.
+
+---
+
 ## Rejected additions
 
 |         Rejected concept         |                                                          Reason                                                           |

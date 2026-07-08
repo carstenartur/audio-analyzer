@@ -114,6 +114,17 @@ class WorkflowDslSerializerTest {
     assertEquals(original.metadata(), restored.metadata());
   }
 
+  /** Literal backslash sequences must remain literal after a serialize/parse roundtrip. */
+  @Test
+  void metadataValueWithLiteralBackslashNRoundTrips() {
+    Workflow original = buildWorkflowWithMetadata(Map.of("path", "C:\\new\\notes"));
+
+    String text = SERIALIZER.serialize(original);
+    Workflow restored = PARSER.parse(text);
+
+    assertEquals(original.metadata(), restored.metadata());
+  }
+
   /** Two semantically different workflows must produce different DSL text. */
   @Test
   void differentWorkflowsProduceDifferentText() {

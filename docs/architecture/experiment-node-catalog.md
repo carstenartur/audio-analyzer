@@ -127,22 +127,21 @@ Port data types use the constants from `DataTypes`:
 
 ## Valid connection examples
 
-| #  |           Source            |   Source port   |              Target              |         Target port          |     Matching type      |
-|----|-----------------------------|-----------------|----------------------------------|------------------------------|------------------------|
-| 1  | `SyntheticSignalGenerator`  | `signal-out`    | `Gain`                           | `audio-in`                   | `AudioBlock`           |
-| 2  | `Gain`                      | `audio-out`     | `BandpassFilter`                 | `audio-in`                   | `AudioBlock`           |
-| 3  | `BandpassFilter`            | `audio-out`     | `FFT`                            | `audio-in`                   | `AudioBlock`           |
-| 4  | `FFT`                       | `spectrum-out`  | `WingbeatFeatureExtraction`      | `spectrum-in`                | `Spectrum`             |
-| 5  | `WingbeatFeatureExtraction` | `features-out`  | `Classifier`                     | `features-in`                | `FeatureSet`           |
-| 6  | `Classifier`                | `result-out`    | `Benchmark`                      | `result-in`                  | `ClassificationResult` |
-| 7  | `Benchmark`                 | `benchmark-out` | `Report`                         | `benchmark-in`               | `BenchmarkResult`      |
-| 8  | `RecordingInput`            | `audio-out`     | `RecordingInput` → *via Dataset* | *N/A (input node, see note)* | —                      |
-| 9  | `SyntheticSignalGenerator`  | `signal-out`    | `Localization`                   | `audio-in`                   | `AudioBlock`           |
-| 10 | `Classifier`                | `result-out`    | `EvidenceExport`                 | `result-in`                  | `ClassificationResult` |
+| # |           Source            |   Source port   |           Target            |  Target port   |     Matching type      |
+|---|-----------------------------|-----------------|-----------------------------|----------------|------------------------|
+| 1 | `SyntheticSignalGenerator`  | `signal-out`    | `Gain`                      | `audio-in`     | `AudioBlock`           |
+| 2 | `Gain`                      | `audio-out`     | `BandpassFilter`            | `audio-in`     | `AudioBlock`           |
+| 3 | `BandpassFilter`            | `audio-out`     | `FFT`                       | `audio-in`     | `AudioBlock`           |
+| 4 | `FFT`                       | `spectrum-out`  | `WingbeatFeatureExtraction` | `spectrum-in`  | `Spectrum`             |
+| 5 | `WingbeatFeatureExtraction` | `features-out`  | `Classifier`                | `features-in`  | `FeatureSet`           |
+| 6 | `Classifier`                | `result-out`    | `Benchmark`                 | `result-in`    | `ClassificationResult` |
+| 7 | `Benchmark`                 | `benchmark-out` | `Report`                    | `benchmark-in` | `BenchmarkResult`      |
+| 8 | `SyntheticSignalGenerator`  | `signal-out`    | `Localization`              | `audio-in`     | `AudioBlock`           |
+| 9 | `Classifier`                | `result-out`    | `EvidenceExport`            | `result-in`    | `ClassificationResult` |
 
-> **Note on RecordingInput**: its output type is `Dataset`, not `AudioBlock`. A `Dataset` cannot
-> connect directly to a `Gain` node (which expects `AudioBlock`). A future adapter node would be
-> needed to unpack individual `AudioBlock` frames from a `Dataset`.
+> **Note on dataset sources**: `RecordingInput` and `HumBugDbImport` emit `Dataset`, not
+> `AudioBlock`. The current first-slice catalog intentionally has no `Dataset` → `AudioBlock`
+> adapter node yet, so dataset sources do not have a valid downstream connection in this catalog.
 
 ---
 
@@ -160,17 +159,17 @@ Port data types use the constants from `DataTypes`:
 
 ---
 
-## Minimum workflow example: Input → Gain → Output
+## Minimal valid report workflow example
 
 ```text
 SyntheticSignalGenerator (signal-out: AudioBlock)
-    -> Gain              (audio-in / audio-out: AudioBlock)
-        -> Report        (benchmark-in: BenchmarkResult)
+    -> FFT                       (audio-in / spectrum-out: AudioBlock → Spectrum)
+        -> WingbeatFeatureExtraction (spectrum-in / features-out: Spectrum → FeatureSet)
+            -> Classifier            (features-in / result-out: FeatureSet → ClassificationResult)
+                -> Benchmark         (result-in / benchmark-out: ClassificationResult → BenchmarkResult)
+                    -> Report        (benchmark-in: BenchmarkResult)
 ```
 
-> The full path to `Report` requires a `Benchmark` node between `Classifier` and `Report`.
-> The short-cut `Gain → Report` is type-invalid (AudioBlock ≠ BenchmarkResult).
-> See `WorkflowStoreRoundTripTest` for a valid three-node test that uses `AudioBlock` ports
-> uniformly between Input, Gain, and Output (report node redefined to accept AudioBlock for test
-> purposes).
+> A shorter valid terminal chain is `Classifier -> EvidenceExport`. `Report` always requires a
+> `BenchmarkResult`, so a `Benchmark` node must precede it.
 
