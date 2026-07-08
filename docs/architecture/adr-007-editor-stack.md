@@ -1,9 +1,10 @@
 # ADR-007: Editor Stack Selection for Experiment Modeling Workbench
 
 **Issue**: [#221](https://github.com/carstenartur/audio-analyzer/issues/221)  
-**Status**: Proposed — pending spike evidence  
+**Status**: Accepted — React Flow + Yjs  
 **Date**: 2026-07-07  
-**Related spikes**: [#219 GLSP](https://github.com/carstenartur/audio-analyzer/issues/219), [#220 React Flow/Yjs](https://github.com/carstenartur/audio-analyzer/issues/220)
+**Accepted**: 2026-07-08  
+**Related spikes**: [#219 GLSP spike notes](glsp-spike-notes.md), [#220 React Flow/Yjs spike notes](react-flow-yjs-spike-notes.md)
 
 ---
 
@@ -24,7 +25,8 @@ audio-core Workflow
 
 The editor is an adapter layer only. It must translate user gestures into semantic `WorkflowOperation` values; it must not become the source of truth.
 
-This ADR is intentionally **not accepted yet**. It records the selection criteria, current working hypothesis and guardrails. It becomes accepted only after #219 and #220 have produced comparable evidence.
+This ADR is **accepted**. The decision is based on the comparable spike evidence from
+[#219 GLSP spike notes](glsp-spike-notes.md) and [#220 React Flow/Yjs spike notes](react-flow-yjs-spike-notes.md).
 
 ---
 
@@ -134,18 +136,47 @@ User gesture (React Flow UI)
 
 ---
 
-## Proposed starting hypothesis
+## Decision: React Flow + Yjs
 
-React Flow + Yjs is the current recommended starting hypothesis because it appears likely to keep the first MVP's cognitive load lower than GLSP:
+**Accepted** based on spike evidence from
+[glsp-spike-notes.md](glsp-spike-notes.md) and
+[react-flow-yjs-spike-notes.md](react-flow-yjs-spike-notes.md).
 
-1. A React developer can work against one narrow HTTP/WebSocket adapter that sends `WorkflowOperation` requests.
-2. The first workbench is a research/productivity workbench, not an enterprise-scale diagramming platform.
-3. The boundary between React Flow state and `audio-core Workflow` is simple to test if all mutations go through application services.
-4. Yjs awareness can be introduced for cursors/presence without making a Yjs document the canonical workflow.
+### Why React Flow + Yjs keeps cognitive load lower
 
-This is not a final decision. The hypothesis must be rejected if the React Flow/Yjs spike cannot keep server-authoritative operations, deterministic replay and validation clean.
+1. **Single model** — React Flow state is always a derived view of the server projection. There is
+   no second canonical model (GModel) that must be kept in sync with `audio-core Workflow`.
+2. **Narrow adapter surface** — a developer needs to understand one HTTP/WebSocket adapter and one
+   `WorkflowEditorService` class. No extension host, no JSON-RPC protocol, no GModel lifecycle.
+3. **Research-scale workbench** — the first workbench is a productivity tool for researchers, not
+   an enterprise IDE. React Flow's npm-based setup fits the scope.
+4. **Testable without a browser** — the `WorkflowEditorService` can be tested with plain Java unit
+   tests asserting on `WorkflowProjection` responses.
+5. **Yjs is optional and additive** — awareness/presence can be introduced later without changing
+   the server-authoritative design.
 
-GLSP remains a valid candidate if the GLSP spike shows that its model-driven structure keeps the adapter cleaner or safer despite higher setup cost.
+### Why GLSP was not chosen
+
+GLSP is architecturally sound and correctly encourages server-authoritative operation flows.
+However, for this workbench:
+
+- Setup requires a GLSP server process plus a Theia/VS Code extension host before any graph is
+  visible.
+- Every mutation must be reflected in both GModel and `audio-core Workflow`; a GModel projection
+  bug diverges silently.
+- A developer unfamiliar with GLSP needs to learn the JSON-RPC protocol, `GModelState`,
+  `OperationHandler` lifecycle and the Sprotty/React client model before writing a test.
+- The setup and learning cost is disproportionate to the research-workbench scope.
+
+GLSP remains a valid fallback path (see Migration / fallback below).
+
+### What this decision does not change
+
+- `audio-core Workflow` remains the semantic domain model.
+- `WorkflowOperationLog` remains the replay/undo mechanism.
+- `VersionedWorkflowStore` remains the persistence facade.
+- `WorkflowValidator` remains the type-compatibility authority.
+- Layer boundaries enforced by `ArchitectureFitnessTest` remain unchanged.
 
 ---
 
@@ -162,15 +193,16 @@ GLSP remains a valid candidate if the GLSP spike shows that its model-driven str
 
 ---
 
-## Acceptance path
+## Acceptance record
 
-This ADR may be changed to **Accepted** only when:
+This ADR was accepted on 2026-07-08 when:
 
-- issue #219 records the GLSP spike result;
-- issue #220 records the React Flow/Yjs spike result;
-- both spikes use the same backend/application API;
-- the accepted decision explains why the chosen path keeps cognitive load lower;
-- the accepted decision lists fallback criteria and migration path.
+- [glsp-spike-notes.md](glsp-spike-notes.md) recorded the GLSP spike result (#219);
+- [react-flow-yjs-spike-notes.md](react-flow-yjs-spike-notes.md) recorded the React Flow/Yjs
+  spike result (#220);
+- both spikes used the same backend `WorkflowEditorService` API;
+- the decision above explains why React Flow + Yjs keeps cognitive load lower than GLSP for this
+  workbench scope.
 
 ---
 
