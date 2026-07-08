@@ -30,15 +30,15 @@ This ADR is intentionally **not accepted yet**. It records the selection criteri
 
 ## Evaluation criteria
 
-| Criterion | Weight |
-|---|---|
-| Server-authoritative workflow model | High |
-| Typed ports and semantic validation | High |
-| Personal undo feasibility | High |
-| Deterministic replay/audit | High |
-| Adapter complexity / cognitive load | High |
-| Future collaboration readiness | Medium |
-| Maintainability | Medium |
+|              Criterion              | Weight |
+|-------------------------------------|--------|
+| Server-authoritative workflow model | High   |
+| Typed ports and semantic validation | High   |
+| Personal undo feasibility           | High   |
+| Deterministic replay/audit          | High   |
+| Adapter complexity / cognitive load | High   |
+| Future collaboration readiness      | Medium |
+| Maintainability                     | Medium |
 
 ---
 
@@ -151,14 +151,14 @@ GLSP remains a valid candidate if the GLSP spike shows that its model-driven str
 
 ## Boundaries that any final decision must enforce
 
-| Layer | Owns | Must not own |
-|---|---|---|
-| Graph editor UI | Node/edge rendering, layout, viewport state | Canonical workflow, validation, history |
+|          Layer           |                       Owns                      |                 Must not own                |
+|--------------------------|-------------------------------------------------|---------------------------------------------|
+| Graph editor UI          | Node/edge rendering, layout, viewport state     | Canonical workflow, validation, history     |
 | Yjs or equivalent helper | Awareness/presence, optional optimistic helpers | Durable state, semantic conflict resolution |
-| HTTP/WebSocket adapter | `WorkflowOperation` translation | Persistence internals, DSL format details |
-| Application service | Validate, apply, checkpoint workflow operations | UI rendering, storage internals |
-| `VersionedWorkflowStore` | Durable checkpoints and history | Editor state, collaboration sessions |
-| `audio-core Workflow` | Semantic graph, operations, execution snapshots | UI, persistence, JGit, React, Yjs |
+| HTTP/WebSocket adapter   | `WorkflowOperation` translation                 | Persistence internals, DSL format details   |
+| Application service      | Validate, apply, checkpoint workflow operations | UI rendering, storage internals             |
+| `VersionedWorkflowStore` | Durable checkpoints and history                 | Editor state, collaboration sessions        |
+| `audio-core Workflow`    | Semantic graph, operations, execution snapshots | UI, persistence, JGit, React, Yjs           |
 
 ---
 
