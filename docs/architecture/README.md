@@ -18,16 +18,16 @@ This directory contains architecture documents with different levels of authorit
 
 ## Authority levels
 
-| Document | Authority | Purpose |
-|---|---|---|
-| `ARCHITECTURE.md` | High | Stable module overview and architectural goals. |
-| `bounded-contexts.md` | High | Enforced context and dependency boundaries. |
-| `adr-006-versioned-collaborative-workflow-store.md` | Decision | Accepted direction with spike gates. |
-| `collaborative-workflow-platform.md` | Planning | Explains the end-to-end workflow editor platform. |
-| `adr-007-editor-stack.md` | Proposed ADR | Records editor-stack criteria and current React Flow/Yjs starting hypothesis; not accepted until #219 and #220 are complete. |
-| `jgit-storage-hibernate-spike.md` | Spike | Records the completed JGit/Hibernate storage decision. |
-| `experiment-workflow-model-mapping.md` | Spike | Maps existing workflow classes to experiment configs. |
-| `experiment-node-catalog.md` | Catalog | First experiment node catalog with typed ports. |
+|                       Document                      |  Authority   |                                                           Purpose                                                            |
+|-----------------------------------------------------|--------------|------------------------------------------------------------------------------------------------------------------------------|
+| `ARCHITECTURE.md`                                   | High         | Stable module overview and architectural goals.                                                                              |
+| `bounded-contexts.md`                               | High         | Enforced context and dependency boundaries.                                                                                  |
+| `adr-006-versioned-collaborative-workflow-store.md` | Decision     | Accepted direction with spike gates.                                                                                         |
+| `collaborative-workflow-platform.md`                | Planning     | Explains the end-to-end workflow editor platform.                                                                            |
+| `adr-007-editor-stack.md`                           | Proposed ADR | Records editor-stack criteria and current React Flow/Yjs starting hypothesis; not accepted until #219 and #220 are complete. |
+| `jgit-storage-hibernate-spike.md`                   | Spike        | Records the completed JGit/Hibernate storage decision.                                                                       |
+| `experiment-workflow-model-mapping.md`              | Spike        | Maps existing workflow classes to experiment configs.                                                                        |
+| `experiment-node-catalog.md`                        | Catalog      | First experiment node catalog with typed ports.                                                                              |
 
 If planning documents conflict with ADR-006 or the bounded-context rules, ADR-006 and the bounded-context rules win.
 
