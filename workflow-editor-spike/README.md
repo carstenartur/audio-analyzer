@@ -34,6 +34,16 @@ The Vite dev server starts at `http://localhost:5173` and proxies all
 To start the Java HTTP adapter, construct `WorkflowEditorHttpAdapter` with a
 store-backed `WorkflowEditorService` and call `start(8080)` in audio-app.
 
+## Verification
+
+```bash
+# From workflow-editor-spike/:
+npm run verify
+```
+
+`verify` runs the TypeScript/Vite build. The Java application-service boundary
+is covered by Maven tests in `audio-core`.
+
 ## HTTP API consumed by the workbench
 
 | Endpoint | Purpose |
