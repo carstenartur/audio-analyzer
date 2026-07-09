@@ -18,11 +18,11 @@ import org.hammer.audio.workflow.WorkflowOperation;
 import org.hammer.audio.workflow.WorkflowOperationLog;
 import org.hammer.audio.workflow.WorkflowValidator;
 import org.hammer.audio.workflow.catalog.ExperimentNodeCatalog;
-import org.hammer.audio.workflow.execution.ExecutionSnapshot;
 import org.hammer.audio.workflow.store.CommitId;
 import org.hammer.audio.workflow.store.CommitMetadata;
 import org.hammer.audio.workflow.store.InMemoryVersionedWorkflowStore;
 import org.hammer.audio.workflow.store.VersionedWorkflowStore;
+import org.hammer.audio.workflow.store.WorkflowSnapshot;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -289,7 +289,8 @@ class WorkflowEditorServiceTest {
     WorkflowEditorService persistentService =
         new WorkflowEditorService(log, new WorkflowValidator(), store);
     CommitMetadata metadata =
-        new CommitMetadata("editor-user", "Checkpoint graph", Instant.parse("2026-01-02T08:00:00Z"));
+        new CommitMetadata(
+            "editor-user", "Checkpoint graph", Instant.parse("2026-01-02T08:00:00Z"));
 
     CommitId commitId = persistentService.checkpoint("main", metadata);
     WorkflowProjection loaded = persistentService.loadGraph(commitId);
@@ -313,11 +314,10 @@ class WorkflowEditorServiceTest {
             "2.0");
     service.applyOperation(updateOp);
 
-    ExecutionSnapshot snapshot =
-        service.executeSnapshot("snapshot.workflow.spike.1", Instant.parse("2026-01-03T10:00:00Z"));
+    WorkflowSnapshot snapshot = service.executeSnapshot();
 
-    assertEquals("snapshot.workflow.spike.1", snapshot.snapshotId());
     assertEquals("workflow.spike", snapshot.workflowId());
-    assertEquals(3, snapshot.nodes().size());
+    assertTrue(snapshot.dslText().contains("workflow"));
+    assertTrue(snapshot.dslText().contains("node.gain"));
   }
 }

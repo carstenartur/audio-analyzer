@@ -8,7 +8,6 @@ import org.hammer.audio.workflow.WorkflowOperationLog;
 import org.hammer.audio.workflow.WorkflowValidator;
 import org.hammer.audio.workflow.dsl.WorkflowDslParser;
 import org.hammer.audio.workflow.dsl.WorkflowDslSerializer;
-import org.hammer.audio.workflow.execution.ExecutionSnapshot;
 import org.hammer.audio.workflow.store.CommitId;
 import org.hammer.audio.workflow.store.CommitInfo;
 import org.hammer.audio.workflow.store.CommitMetadata;
@@ -190,14 +189,13 @@ public final class WorkflowEditorService {
   }
 
   /**
-   * Produces an immutable execution snapshot from the current graph state.
+   * Produces a deterministic DSL snapshot of the current graph state for execution workflows.
    *
-   * @param snapshotId stable identifier for the execution snapshot
-   * @param createdAt snapshot creation time
-   * @return immutable execution snapshot
+   * @return immutable workflow snapshot
    */
-  public ExecutionSnapshot executeSnapshot(String snapshotId, java.time.Instant createdAt) {
-    return ExecutionSnapshot.of(snapshotId, operationLog.currentWorkflow(), createdAt);
+  public WorkflowSnapshot executeSnapshot() {
+    Workflow workflow = operationLog.currentWorkflow();
+    return new WorkflowSnapshot(workflow.id(), serializer.serialize(workflow));
   }
 
   private VersionedWorkflowStore requireStore() {
