@@ -129,7 +129,7 @@ public final class WorkflowEditorService {
    *
    * @param branch branch to load
    * @return projection of the loaded workflow
-   * @throws IllegalArgumentException if branch is blank or snapshot and DSL workflow ids diverge
+   * @throws IllegalArgumentException if branch is blank or snapshot and DSL workflow IDs diverge
    */
   public WorkflowProjection loadGraph(String branch) {
     Objects.requireNonNull(branch, "branch");
@@ -148,7 +148,7 @@ public final class WorkflowEditorService {
    *
    * @param commitId commit identifier to load
    * @return projection of the loaded workflow
-   * @throws IllegalArgumentException if snapshot and DSL workflow ids diverge
+   * @throws IllegalArgumentException if snapshot and DSL workflow IDs diverge
    */
   public WorkflowProjection loadGraph(CommitId commitId) {
     Objects.requireNonNull(commitId, "commitId");
