@@ -7,7 +7,7 @@ import java.util.Objects;
 /** Operation log that applies semantic workflow operations, supports replay and undo. */
 public final class WorkflowOperationLog {
 
-  private final Workflow initialWorkflow;
+  private Workflow initialWorkflow;
   private Workflow current;
   private final List<WorkflowOperation> operationHistory;
 
@@ -53,5 +53,16 @@ public final class WorkflowOperationLog {
                         "Operation has no inverse: " + last.getClass().getSimpleName()));
     current = inverse.apply(current);
     return current;
+  }
+
+  /**
+   * Replaces the log state with a new workflow baseline and clears operation history.
+   *
+   * @param workflow new current and replay baseline workflow
+   */
+  public void reset(Workflow workflow) {
+    this.initialWorkflow = Objects.requireNonNull(workflow, "workflow");
+    this.current = workflow;
+    this.operationHistory.clear();
   }
 }

@@ -40,7 +40,7 @@ import org.hammer.audio.workflow.store.WorkflowSnapshot;
  */
 public final class WorkflowEditorService {
 
-  private WorkflowOperationLog operationLog;
+  private final WorkflowOperationLog operationLog;
   private final WorkflowValidator validator;
   private final VersionedWorkflowStore workflowStore;
   private final WorkflowDslSerializer serializer;
@@ -120,7 +120,7 @@ public final class WorkflowEditorService {
     if (!violations.isEmpty()) {
       throw new WorkflowOperationRejectedException(violations);
     }
-    this.operationLog = new WorkflowOperationLog(workflow);
+    this.operationLog.reset(workflow);
     return WorkflowProjection.fromWorkflow(workflow);
   }
 
