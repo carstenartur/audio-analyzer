@@ -1,30 +1,34 @@
 # Workflow Editor Spike — React Flow + WorkflowOperation
 
-This directory contains the client-side skeleton for the ADR-007 spike
+This directory contains the client-side spike for the ADR-007 decision
 (React Flow + Yjs direction). The Java server side is implemented in
-`audio-core/src/main/java/org/hammer/audio/workflow/editor/`.
+`audio-core/src/main/java/org/hammer/audio/workflow/editor/` and the HTTP
+adapter in `audio-app/src/main/java/org/hammer/audio/workflow/editor/http/`.
 
 ## Files
 
-|             File              |                                                      Purpose                                                      |
-|-------------------------------|-------------------------------------------------------------------------------------------------------------------|
-| `WorkflowEditorComponent.tsx` | Minimal React Flow component rendering typed-port nodes and demonstrating the server-authoritative update pattern |
+|             File              |                                                 Purpose                                                  |
+|-------------------------------|----------------------------------------------------------------------------------------------------------|
+| `WorkflowEditorComponent.tsx` | React Flow component rendering typed-port nodes and implementing the server-authoritative update pattern |
+| `src/main.tsx`                | Vite/React entry point that mounts `WorkflowEditorComponent`                                             |
+| `index.html`                  | HTML shell for the Vite dev server                                                                       |
+| `package.json`                | npm package with React, React Flow and Vite dependencies                                                 |
+| `vite.config.ts`              | Vite configuration with `/workflow` proxy to the Java HTTP adapter on port 8080                          |
+| `tsconfig.json`               | TypeScript compiler configuration                                                                        |
 
 ## Running locally
 
 ```bash
-# From this directory
-npm create vite@latest . -- --template react-ts
-npm install reactflow
-# Copy WorkflowEditorComponent.tsx into src/
-# Replace src/App.tsx with: import WorkflowEditorComponent from './WorkflowEditorComponent'; export default WorkflowEditorComponent;
+# From the workflow-editor-spike/ directory:
+npm install
 npm run dev
 ```
 
-The component fetches the initial `WorkflowProjection` from the backend at startup.
-All node/edge mutations go through `POST /workflow/operations` and the state is
-updated from the server response only — React Flow's local state is never the
-source of truth.
+The Vite dev server starts at `http://localhost:5173` and proxies all
+`/workflow` requests to the Java HTTP adapter at `http://localhost:8080`.
+
+To start the Java HTTP adapter, run `WorkflowEditorHttpAdapter.start(8080)` in
+audio-app (see the class Javadoc for a self-contained main method example).
 
 ## Key architecture points proved by this spike
 
@@ -32,11 +36,16 @@ source of truth.
   `WorkflowProjection`; no parallel model to synchronise.
 - **Typed ports**: each node renders typed `Handle` components coloured by
   `dataType`; the backend `WorkflowValidator` enforces compatibility.
-- **Rejection path**: a 422 response discards the optimistic edge and restores
-  the last accepted projection; no "state roll-back" is needed because no edge
-  was committed to state in the first place.
+- **Rejection path**: a 422 response leaves the UI on the last accepted
+  projection — no state was committed before the server confirmed acceptance.
+  No rollback mechanism is needed or present.
+- **Server-authoritative edge deletion**: `onEdgesChange` intercepts React
+  Flow's "remove" change type and fires `DisconnectPorts` to the server instead
+  of removing the edge locally. The edge stays in the UI until the server
+  confirms.
 - **Yjs boundary**: Yjs (if added) may own cursor/awareness/layout only; it
-  must not own canonical workflow edges or nodes.
+  must not own canonical workflow edges, nodes, operation ordering, or durable
+  history.
 
 ## Java unit tests
 
@@ -45,7 +54,10 @@ The server-side `WorkflowEditorService` is tested without a browser in
 
 - valid edge: `SyntheticSignalGenerator(AudioBlock) → Gain(AudioBlock)` accepted ✓
 - invalid edge: `RecordingInput(Dataset) → Gain(AudioBlock)` rejected with
-  `WorkflowOperationRejectedException` (type mismatch) ✓
-- parameter update: `UpdateProperty` on Gain node accepted and projected ✓
+  `WorkflowOperationRejectedException` (type mismatch); log unchanged ✓
+- parameter update: `UpdateProperty` on Gain node accepted; property value
+  `"1.5"` visible in the returned projection ✓
+- edge removal: `DisconnectPorts` removes the edge; returned projection has 0
+  edges; operation recorded only after validation passes ✓
 - projection shape: node count, handle descriptors, empty edge list ✓
 

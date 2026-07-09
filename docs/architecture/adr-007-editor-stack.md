@@ -203,11 +203,23 @@ This ADR was accepted on 2026-07-08 and the server-side slice was implemented on
 - `WorkflowEditorService` (`audio-core/src/main/java/org/hammer/audio/workflow/editor/`) is
   implemented and validates operations before applying them to `WorkflowOperationLog`;
 - `WorkflowProjection` provides the React Flow–ready read model with typed-port handle
-  descriptors (`NodeProjection`, `HandleProjection`, `EdgeProjection`);
+  descriptors (`NodeProjection`, `HandleProjection`, `EdgeProjection`) and a `properties` map
+  that surfaces node metadata values (e.g. `UpdateProperty` results) in the projection;
 - `WorkflowEditorServiceTest` proves the vertical slice with plain Java unit tests (no browser):
-  valid edge accepted, `Dataset → AudioBlock` mismatch rejected, parameter update applied;
+  - valid edge (`SyntheticSignalGenerator(AudioBlock) → Gain(AudioBlock)`) accepted and projected;
+  - `Dataset → AudioBlock` type-mismatch rejected with `WorkflowOperationRejectedException`; log unchanged;
+  - `UpdateProperty` on Gain node accepted; property value `"1.5"` asserted in the returned projection;
+  - `DisconnectPorts` removes an existing edge; returned projection has zero edges; operation
+    recorded only after validation passes;
+- `WorkflowEditorHttpAdapter` (`audio-app/src/main/java/org/hammer/audio/workflow/editor/http/`)
+  exposes `GET /workflow/projection` and `POST /workflow/operations` using the JDK built-in
+  `HttpServer`; rejected operations return HTTP 422 with a violations list;
 - `workflow-editor-spike/WorkflowEditorComponent.tsx` shows the matching React Flow component
-  that consumes the projection and posts operations to the service;
+  that consumes the projection and posts operations to the service; edge deletions are
+  intercepted before local commit and sent as `DisconnectPorts` to the server;
+- `workflow-editor-spike/package.json`, `vite.config.ts`, `tsconfig.json`, `index.html` and
+  `src/main.tsx` make the spike buildable with `npm install && npm run dev` from
+  `workflow-editor-spike/` without any manual file copying;
 - the decision above explains why React Flow + Yjs keeps cognitive load lower than GLSP for this
   workbench scope.
 

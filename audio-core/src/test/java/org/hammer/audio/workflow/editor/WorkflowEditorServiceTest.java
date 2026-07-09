@@ -187,6 +187,47 @@ class WorkflowEditorServiceTest {
             .orElseThrow(() -> new AssertionError("Gain node missing from projection"));
     assertEquals(GAIN_ID, gainProjection.id());
     assertEquals("gain", gainProjection.type());
+    assertEquals(
+        "1.5",
+        gainProjection.properties().get("gain"),
+        "gain property value must be visible in the projection after UpdateProperty");
+  }
+
+  // -------------------------------------------------------------------------
+  // Edge removal: DisconnectPorts path through WorkflowEditorService
+  // -------------------------------------------------------------------------
+
+  @Test
+  void disconnectPorts_existingEdge_removedAndNotInProjection() {
+    Edge edge = new Edge("edge.input-to-gain", INPUT_ID, SIGNAL_OUT, GAIN_ID, AUDIO_IN);
+    WorkflowOperation connectOp =
+        new WorkflowOperation.ConnectPorts("op.connect", OP_TIME, AUTHOR, edge);
+    service.applyOperation(connectOp);
+
+    WorkflowOperation disconnectOp =
+        new WorkflowOperation.DisconnectPorts("op.disconnect", OP_TIME, AUTHOR, edge.id(), edge);
+    WorkflowProjection projection = service.applyOperation(disconnectOp);
+
+    assertEquals(
+        0, projection.edges().size(), "projection must not contain the edge after DisconnectPorts");
+  }
+
+  @Test
+  void disconnectPorts_recordedInLogOnlyAfterValidation() {
+    Edge edge = new Edge("edge.input-to-gain", INPUT_ID, SIGNAL_OUT, GAIN_ID, AUDIO_IN);
+    WorkflowOperation connectOp =
+        new WorkflowOperation.ConnectPorts("op.connect", OP_TIME, AUTHOR, edge);
+    service.applyOperation(connectOp);
+    assertEquals(1, log.operations().size(), "connect operation should be recorded");
+
+    WorkflowOperation disconnectOp =
+        new WorkflowOperation.DisconnectPorts("op.disconnect", OP_TIME, AUTHOR, edge.id(), edge);
+    service.applyOperation(disconnectOp);
+
+    assertEquals(
+        2,
+        log.operations().size(),
+        "disconnect operation should be recorded in the log only after validation passes");
   }
 
   // -------------------------------------------------------------------------

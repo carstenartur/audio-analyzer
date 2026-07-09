@@ -1,6 +1,7 @@
 package org.hammer.audio.workflow.editor;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import org.hammer.audio.workflow.Workflow;
 
@@ -52,7 +53,8 @@ public record WorkflowProjection(
                             .toList(),
                         node.outputPorts().stream()
                             .map(p -> new HandleProjection(p.id(), p.name(), p.dataType().id()))
-                            .toList()))
+                            .toList(),
+                        Map.copyOf(node.metadata().entries())))
             .toList();
     List<EdgeProjection> edgeProjections =
         workflow.edges().stream()
@@ -69,7 +71,7 @@ public record WorkflowProjection(
   }
 
   /**
-   * Projection of a single workflow node with typed-port handle lists.
+   * Projection of a single workflow node with typed-port handle lists and property values.
    *
    * @param id stable node identifier (maps to React Flow {@code node.id})
    * @param type node type string (maps to React Flow {@code node.type})
@@ -77,13 +79,16 @@ public record WorkflowProjection(
    * @param inputHandles typed input port descriptors (source of React Flow target {@code Handle}s)
    * @param outputHandles typed output port descriptors (source of React Flow source {@code
    *     Handle}s)
+   * @param properties metadata properties set on the node (e.g. parameter values updated via {@code
+   *     UpdateProperty})
    */
   public record NodeProjection(
       String id,
       String type,
       String label,
       List<HandleProjection> inputHandles,
-      List<HandleProjection> outputHandles) {
+      List<HandleProjection> outputHandles,
+      Map<String, String> properties) {
 
     public NodeProjection {
       Objects.requireNonNull(id, "id");
@@ -91,6 +96,7 @@ public record WorkflowProjection(
       Objects.requireNonNull(label, "label");
       inputHandles = List.copyOf(Objects.requireNonNull(inputHandles, "inputHandles"));
       outputHandles = List.copyOf(Objects.requireNonNull(outputHandles, "outputHandles"));
+      properties = Map.copyOf(Objects.requireNonNull(properties, "properties"));
     }
   }
 

@@ -21,19 +21,19 @@ This directory contains architecture documents with different levels of authorit
 
 ## Authority levels
 
-|                      Document                       |  Authority   |                                              Purpose                                               |
-|-----------------------------------------------------|--------------|----------------------------------------------------------------------------------------------------|
-| `ARCHITECTURE.md`                                   | High         | Stable module overview and architectural goals.                                                    |
-| `bounded-contexts.md`                               | High         | Enforced context and dependency boundaries.                                                        |
-| `adr-006-versioned-collaborative-workflow-store.md` | Decision     | Accepted direction with spike gates.                                                               |
-| `collaborative-workflow-platform.md`                | Planning     | Explains the end-to-end workflow editor platform.                                                  |
-| `adr-007-editor-stack.md`                           | Accepted ADR | React Flow + Yjs accepted as the editor stack; GLSP evaluated and documented as fallback.          |
-| `jgit-storage-hibernate-spike.md`                   | Spike        | Records the completed JGit/Hibernate storage decision.                                             |
-| `experiment-workflow-model-mapping.md`              | Spike        | Maps existing workflow classes to experiment configs.                                              |
-| `experiment-node-catalog.md`                        | Catalog      | First experiment node catalog with typed ports.                                                    |
-| `glsp-spike-notes.md`                               | Spike        | GLSP spike result: rendering, edge operations, parameter edits, integration cost.                  |
-| `react-flow-yjs-spike-notes.md`                     | Spike        | React Flow/Yjs spike result: rendering, edge operations, parameter edits, Yjs boundary evaluation. |
-| `workflow-editor-spike/`                            | Executable Spike | `WorkflowEditorService` + `WorkflowProjection` in audio-core; React Flow component sketch.    |
+|                      Document                       |    Authority     |                                              Purpose                                               |
+|-----------------------------------------------------|------------------|----------------------------------------------------------------------------------------------------|
+| `ARCHITECTURE.md`                                   | High             | Stable module overview and architectural goals.                                                    |
+| `bounded-contexts.md`                               | High             | Enforced context and dependency boundaries.                                                        |
+| `adr-006-versioned-collaborative-workflow-store.md` | Decision         | Accepted direction with spike gates.                                                               |
+| `collaborative-workflow-platform.md`                | Planning         | Explains the end-to-end workflow editor platform.                                                  |
+| `adr-007-editor-stack.md`                           | Accepted ADR     | React Flow + Yjs accepted as the editor stack; GLSP evaluated and documented as fallback.          |
+| `jgit-storage-hibernate-spike.md`                   | Spike            | Records the completed JGit/Hibernate storage decision.                                             |
+| `experiment-workflow-model-mapping.md`              | Spike            | Maps existing workflow classes to experiment configs.                                              |
+| `experiment-node-catalog.md`                        | Catalog          | First experiment node catalog with typed ports.                                                    |
+| `glsp-spike-notes.md`                               | Spike            | GLSP spike result: rendering, edge operations, parameter edits, integration cost.                  |
+| `react-flow-yjs-spike-notes.md`                     | Spike            | React Flow/Yjs spike result: rendering, edge operations, parameter edits, Yjs boundary evaluation. |
+| `workflow-editor-spike/`                            | Executable Spike | `WorkflowEditorService` + `WorkflowProjection` in audio-core; React Flow component sketch.         |
 
 If planning documents conflict with ADR-006 or the bounded-context rules, ADR-006 and the bounded-context rules win.
 

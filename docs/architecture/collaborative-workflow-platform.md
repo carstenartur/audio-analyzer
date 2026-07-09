@@ -172,9 +172,15 @@ The future graphical editor is web-first, but the Swing app remains valid during
 Accepted direction (ADR-007):
 
 - React Flow + Yjs is the accepted editor stack for the first workbench MVP (see [`adr-007-editor-stack.md`](adr-007-editor-stack.md));
-- Yjs may own awareness, presence and optimistic layout; it must not own canonical workflow state, durable history, or `WorkflowOperation` ordering;
+- Yjs may own awareness, presence and viewport/layout helpers; it must not own canonical workflow
+  state, durable history, `WorkflowOperation` ordering, or semantic conflict resolution;
+- React Flow state is always derived from the server `WorkflowProjection`; no optimistic semantic
+  commits; rejected operations leave the UI on the last accepted projection;
+- `WorkflowEditorHttpAdapter` in `audio-app` is the HTTP bridge between the React Flow client and
+  the `WorkflowEditorService` in `audio-core`;
 - none of these client-side tools may become the canonical workflow persistence layer by accident;
-- GLSP remains documented as the evaluated fallback path if server-authoritativeness proves harder to maintain in React.
+- GLSP remains documented as the evaluated fallback path if server-authoritativeness proves harder
+  to maintain in React.
 
 ### Editor stack selection criteria
 

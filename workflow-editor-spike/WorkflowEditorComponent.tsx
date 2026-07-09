@@ -33,11 +33,11 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import ReactFlow, {
-  addEdge,
   Background,
   Connection,
   Controls,
   Edge,
+  EdgeChange,
   Handle,
   Node,
   NodeProps,
@@ -184,7 +184,7 @@ async function postOperation(operation: unknown): Promise<WorkflowProjection> {
 
 export default function WorkflowEditorComponent() {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const [edges, setEdges, onEdgesChangeDefault] = useEdgesState([]);
   const [workflowName, setWorkflowName] = useState('');
   const [error, setError] = useState<string | null>(null);
 
@@ -227,6 +227,39 @@ export default function WorkflowEditorComponent() {
     [applyProjection],
   );
 
+  // Edge change interceptor: intercept "remove" changes and fire DisconnectPorts instead
+  // of allowing React Flow to remove the edge from local state immediately.
+  // The edge stays in the UI until the server confirms removal (server-authoritative).
+  const onEdgesChange = useCallback(
+    (changes: EdgeChange[]) => {
+      const nonRemoveChanges = changes.filter((c) => c.type !== 'remove');
+      onEdgesChangeDefault(nonRemoveChanges);
+
+      const removeChanges = changes.filter((c) => c.type === 'remove');
+      for (const change of removeChanges) {
+        const edge = edges.find((e) => e.id === change.id);
+        if (!edge) continue;
+        const operation = {
+          type: 'DisconnectPorts',
+          operationId: `op.disconnect.${Date.now()}`,
+          author: 'web-editor',
+          edgeId: edge.id,
+          disconnectedEdge: {
+            id: edge.id,
+            sourceNodeId: edge.source,
+            sourcePortId: edge.sourceHandle ?? '',
+            targetNodeId: edge.target,
+            targetPortId: edge.targetHandle ?? '',
+          },
+        };
+        postOperation(operation)
+          .then(applyProjection)
+          .catch((err: Error) => setError(err.message));
+      }
+    },
+    [onEdgesChangeDefault, edges, applyProjection],
+  );
+
   // Parameter update: fire UpdateProperty, update from server response
   const onParameterChange = useCallback(
     (nodeId: string, key: string, value: string) => {
@@ -245,6 +278,7 @@ export default function WorkflowEditorComponent() {
     },
     [applyProjection],
   );
+  void onParameterChange; // exposed for host components; not used in this minimal spike
 
   return (
     <div style={{ width: '100vw', height: '100vh' }}>
