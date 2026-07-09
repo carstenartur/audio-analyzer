@@ -15,5 +15,5 @@
     "noUnusedLocals": false,
     "noUnusedParameters": false
   },
-  "include": ["src", "WorkflowEditorComponent.tsx", "vite.config.ts"]
+  "include": ["src", "WorkflowEditorComponent.tsx"]
 }

@@ -278,7 +278,7 @@ export default function WorkflowEditorComponent() {
     },
     [applyProjection],
   );
-  void onParameterChange; // exposed for host components; not used in this minimal spike
+  void onParameterChange; // exported for child node components; not wired in this minimal spike render
 
   return (
     <div style={{ width: '100vw', height: '100vh' }}>
