@@ -195,12 +195,19 @@ GLSP remains a valid fallback path (see Migration / fallback below).
 
 ## Acceptance record
 
-This ADR was accepted on 2026-07-08 when:
+This ADR was accepted on 2026-07-08 and the server-side slice was implemented on 2026-07-09:
 
 - [glsp-spike-notes.md](glsp-spike-notes.md) recorded the GLSP spike result (#219);
 - [react-flow-yjs-spike-notes.md](react-flow-yjs-spike-notes.md) recorded the React Flow/Yjs
   spike result (#220);
-- both spikes used the same backend `WorkflowEditorService` API;
+- `WorkflowEditorService` (`audio-core/src/main/java/org/hammer/audio/workflow/editor/`) is
+  implemented and validates operations before applying them to `WorkflowOperationLog`;
+- `WorkflowProjection` provides the React Flow–ready read model with typed-port handle
+  descriptors (`NodeProjection`, `HandleProjection`, `EdgeProjection`);
+- `WorkflowEditorServiceTest` proves the vertical slice with plain Java unit tests (no browser):
+  valid edge accepted, `Dataset → AudioBlock` mismatch rejected, parameter update applied;
+- `workflow-editor-spike/WorkflowEditorComponent.tsx` shows the matching React Flow component
+  that consumes the projection and posts operations to the service;
 - the decision above explains why React Flow + Yjs keeps cognitive load lower than GLSP for this
   workbench scope.
 

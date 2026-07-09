@@ -17,6 +17,7 @@ This directory contains architecture documents with different levels of authorit
 8. [`experiment-node-catalog.md`](experiment-node-catalog.md) — first experiment node catalog with typed ports, valid and invalid connection examples (issue #215).
 9. [`glsp-spike-notes.md`](glsp-spike-notes.md) — GLSP spike result: rendering, edge operations, parameter edits, integration cost (issue #219).
 10. [`react-flow-yjs-spike-notes.md`](react-flow-yjs-spike-notes.md) — React Flow/Yjs spike result: rendering, edge operations, parameter edits, Yjs boundary evaluation (issue #220).
+11. [`../../workflow-editor-spike/README.md`](../../workflow-editor-spike/README.md) — executable ADR-007 spike: `WorkflowEditorService` Java tests + React Flow TypeScript component skeleton.
 
 ## Authority levels
 
@@ -32,6 +33,7 @@ This directory contains architecture documents with different levels of authorit
 | `experiment-node-catalog.md`                        | Catalog      | First experiment node catalog with typed ports.                                                    |
 | `glsp-spike-notes.md`                               | Spike        | GLSP spike result: rendering, edge operations, parameter edits, integration cost.                  |
 | `react-flow-yjs-spike-notes.md`                     | Spike        | React Flow/Yjs spike result: rendering, edge operations, parameter edits, Yjs boundary evaluation. |
+| `workflow-editor-spike/`                            | Executable Spike | `WorkflowEditorService` + `WorkflowProjection` in audio-core; React Flow component sketch.    |
 
 If planning documents conflict with ADR-006 or the bounded-context rules, ADR-006 and the bounded-context rules win.
 
