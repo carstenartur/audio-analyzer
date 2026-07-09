@@ -11,14 +11,14 @@ posted as `WorkflowOperation` requests.
 
 ## Files
 
-| File | Purpose |
-|------|---------|
+|             File              |                                                      Purpose                                                       |
+|-------------------------------|--------------------------------------------------------------------------------------------------------------------|
 | `WorkflowEditorComponent.tsx` | React Flow workbench with node palette, typed-port canvas, parameter panel, validation, save/reload and history UI |
-| `src/main.tsx` | Vite/React entry point that mounts `WorkflowEditorComponent` |
-| `index.html` | HTML shell for the Vite dev server |
-| `package.json` | npm package with React, React Flow and Vite dependencies |
-| `vite.config.ts` | Vite configuration with `/workflow` proxy to the Java HTTP adapter on port 8080 |
-| `tsconfig.json` | TypeScript compiler configuration |
+| `src/main.tsx`                | Vite/React entry point that mounts `WorkflowEditorComponent`                                                       |
+| `index.html`                  | HTML shell for the Vite dev server                                                                                 |
+| `package.json`                | npm package with React, React Flow and Vite dependencies                                                           |
+| `vite.config.ts`              | Vite configuration with `/workflow` proxy to the Java HTTP adapter on port 8080                                    |
+| `tsconfig.json`               | TypeScript compiler configuration                                                                                  |
 
 ## Running locally
 
@@ -46,16 +46,16 @@ is covered by Maven tests in `audio-core`.
 
 ## HTTP API consumed by the workbench
 
-| Endpoint | Purpose |
-|----------|---------|
-| `GET /workflow/projection` | Load current server-authoritative graph projection |
-| `GET /workflow/catalog` | Load node palette entries from the experiment catalog |
-| `GET /workflow/validation` | Validate the current graph and show validation feedback |
-| `POST /workflow/operations` | Apply `CreateNode`, `ConnectPorts`, `DisconnectPorts` and `UpdateProperty` operations |
-| `POST /workflow/checkpoints` | Save/checkpoint the current graph through `VersionedWorkflowStore` |
-| `GET /workflow/history?branch=main&limit=20` | Show checkpoint history |
-| `POST /workflow/load` | Reload a branch head or a specific commit |
-| `GET /workflow/snapshot` | Preview the deterministic DSL snapshot used for execution handoff |
+|                   Endpoint                   |                                        Purpose                                        |
+|----------------------------------------------|---------------------------------------------------------------------------------------|
+| `GET /workflow/projection`                   | Load current server-authoritative graph projection                                    |
+| `GET /workflow/catalog`                      | Load node palette entries from the experiment catalog                                 |
+| `GET /workflow/validation`                   | Validate the current graph and show validation feedback                               |
+| `POST /workflow/operations`                  | Apply `CreateNode`, `ConnectPorts`, `DisconnectPorts` and `UpdateProperty` operations |
+| `POST /workflow/checkpoints`                 | Save/checkpoint the current graph through `VersionedWorkflowStore`                    |
+| `GET /workflow/history?branch=main&limit=20` | Show checkpoint history                                                               |
+| `POST /workflow/load`                        | Reload a branch head or a specific commit                                             |
+| `GET /workflow/snapshot`                     | Preview the deterministic DSL snapshot used for execution handoff                     |
 
 ## Issue #210 MVP coverage
 
@@ -89,3 +89,4 @@ The server-side `WorkflowEditorService` is tested without a browser in
 - checkpoint/load/history roundtrip through `InMemoryVersionedWorkflowStore`;
 - snapshot export for execution handoff;
 - input validation guards for blank branch/ref and invalid history limit.
+

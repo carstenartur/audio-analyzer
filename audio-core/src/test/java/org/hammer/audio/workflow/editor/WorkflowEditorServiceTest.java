@@ -26,9 +26,7 @@ import org.hammer.audio.workflow.store.WorkflowSnapshot;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-/**
- * Executable tests for {@link WorkflowEditorService} (ADR-007 / issue #210 workbench boundary).
- */
+/** Executable tests for {@link WorkflowEditorService} (ADR-007 / issue #210 workbench boundary). */
 class WorkflowEditorServiceTest {
 
   private static final Instant OP_TIME = Instant.parse("2026-01-01T12:00:00Z");
@@ -75,7 +73,8 @@ class WorkflowEditorServiceTest {
         new Workflow(
             "workflow.spike2",
             "Invalid Edge Spike",
-            List.of(recordingInput, ExperimentNodeCatalog.gain(GAIN_ID), audioOutputNode(OUTPUT_ID)),
+            List.of(
+                recordingInput, ExperimentNodeCatalog.gain(GAIN_ID), audioOutputNode(OUTPUT_ID)),
             List.of());
     WorkflowOperationLog rejectionLog = new WorkflowOperationLog(withRecording);
     WorkflowEditorService rejectionService =
@@ -113,7 +112,8 @@ class WorkflowEditorServiceTest {
 
     WorkflowProjection projection =
         service.applyOperation(
-            new WorkflowOperation.DisconnectPorts("op.disconnect", OP_TIME, AUTHOR, edge.id(), edge));
+            new WorkflowOperation.DisconnectPorts(
+                "op.disconnect", OP_TIME, AUTHOR, edge.id(), edge));
 
     assertEquals(0, projection.edges().size(), "projection must not contain disconnected edge");
   }
@@ -134,7 +134,8 @@ class WorkflowEditorServiceTest {
 
   @Test
   void currentProjection_gainNodeHasTypedHandles() {
-    WorkflowProjection.NodeProjection gainProjection = findNode(service.currentProjection(), GAIN_ID);
+    WorkflowProjection.NodeProjection gainProjection =
+        findNode(service.currentProjection(), GAIN_ID);
 
     assertEquals(1, gainProjection.inputHandles().size(), "gain has one input handle");
     assertEquals(1, gainProjection.outputHandles().size(), "gain has one output handle");
@@ -229,7 +230,8 @@ class WorkflowEditorServiceTest {
     assertThrows(IllegalArgumentException.class, () -> persistentService.loadGraph(""));
     assertThrows(IllegalArgumentException.class, () -> persistentService.loadGraph("   "));
     assertThrows(IllegalArgumentException.class, () -> persistentService.checkpoint("", metadata));
-    assertThrows(IllegalArgumentException.class, () -> persistentService.checkpoint("   ", metadata));
+    assertThrows(
+        IllegalArgumentException.class, () -> persistentService.checkpoint("   ", metadata));
     assertThrows(IllegalArgumentException.class, () -> persistentService.history("", 5));
     assertThrows(IllegalArgumentException.class, () -> persistentService.history("   ", 5));
     assertThrows(IllegalArgumentException.class, () -> persistentService.history("main", -1));

@@ -41,6 +41,10 @@ public final class WorkflowEditorHttpAdapter {
   private static final String APPLICATION_JSON = "application/json; charset=utf-8";
   private static final String DEFAULT_BRANCH = "main";
   private static final int DEFAULT_HISTORY_LIMIT = 20;
+  private static final String HTTP_GET = "GET";
+  private static final String HTTP_POST = "POST";
+  private static final String MSG_METHOD_NOT_ALLOWED = "Method Not Allowed";
+  private static final String JSON_FIELD_TIMESTAMP = "timestamp";
 
   private final WorkflowEditorService editorService;
   private final ObjectMapper mapper;
@@ -87,24 +91,24 @@ public final class WorkflowEditorHttpAdapter {
   }
 
   private void handleProjection(HttpExchange exchange) throws IOException {
-    if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
-      sendError(exchange, HTTP_METHOD_NOT_ALLOWED, "Method Not Allowed");
+    if (!HTTP_GET.equalsIgnoreCase(exchange.getRequestMethod())) {
+      sendError(exchange, HTTP_METHOD_NOT_ALLOWED, MSG_METHOD_NOT_ALLOWED);
       return;
     }
     sendJson(exchange, HTTP_OK, mapper.writeValueAsBytes(editorService.currentProjection()));
   }
 
   private void handleCatalog(HttpExchange exchange) throws IOException {
-    if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
-      sendError(exchange, HTTP_METHOD_NOT_ALLOWED, "Method Not Allowed");
+    if (!HTTP_GET.equalsIgnoreCase(exchange.getRequestMethod())) {
+      sendError(exchange, HTTP_METHOD_NOT_ALLOWED, MSG_METHOD_NOT_ALLOWED);
       return;
     }
     sendJson(exchange, HTTP_OK, mapper.writeValueAsBytes(catalogEntries()));
   }
 
   private void handleValidation(HttpExchange exchange) throws IOException {
-    if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
-      sendError(exchange, HTTP_METHOD_NOT_ALLOWED, "Method Not Allowed");
+    if (!HTTP_GET.equalsIgnoreCase(exchange.getRequestMethod())) {
+      sendError(exchange, HTTP_METHOD_NOT_ALLOWED, MSG_METHOD_NOT_ALLOWED);
       return;
     }
     ViolationsResponse response = new ViolationsResponse(editorService.validate());
@@ -112,8 +116,8 @@ public final class WorkflowEditorHttpAdapter {
   }
 
   private void handleOperations(HttpExchange exchange) throws IOException {
-    if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
-      sendError(exchange, HTTP_METHOD_NOT_ALLOWED, "Method Not Allowed");
+    if (!HTTP_POST.equalsIgnoreCase(exchange.getRequestMethod())) {
+      sendError(exchange, HTTP_METHOD_NOT_ALLOWED, MSG_METHOD_NOT_ALLOWED);
       return;
     }
     JsonNode json = readJson(exchange);
@@ -135,8 +139,8 @@ public final class WorkflowEditorHttpAdapter {
   }
 
   private void handleCheckpoints(HttpExchange exchange) throws IOException {
-    if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
-      sendError(exchange, HTTP_METHOD_NOT_ALLOWED, "Method Not Allowed");
+    if (!HTTP_POST.equalsIgnoreCase(exchange.getRequestMethod())) {
+      sendError(exchange, HTTP_METHOD_NOT_ALLOWED, MSG_METHOD_NOT_ALLOWED);
       return;
     }
     JsonNode json = readJson(exchange);
@@ -147,11 +151,14 @@ public final class WorkflowEditorHttpAdapter {
     String author = textOrDefault(json, "author", "web-editor");
     String message = textOrDefault(json, "message", "Workbench checkpoint");
     Instant timestamp =
-        json.has("timestamp") ? Instant.parse(json.get("timestamp").asText()) : Instant.now();
+        json.has(JSON_FIELD_TIMESTAMP)
+            ? Instant.parse(json.get(JSON_FIELD_TIMESTAMP).asText())
+            : Instant.now();
     try {
       CommitMetadata metadata = new CommitMetadata(author, message, timestamp);
       CommitId commitId = editorService.checkpoint(branch, metadata);
-      sendJson(exchange, HTTP_OK, mapper.writeValueAsBytes(new CheckpointResponse(commitId.value())));
+      sendJson(
+          exchange, HTTP_OK, mapper.writeValueAsBytes(new CheckpointResponse(commitId.value())));
     } catch (WorkflowOperationRejectedException ex) {
       sendJson(
           exchange,
@@ -163,8 +170,8 @@ public final class WorkflowEditorHttpAdapter {
   }
 
   private void handleHistory(HttpExchange exchange) throws IOException {
-    if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
-      sendError(exchange, HTTP_METHOD_NOT_ALLOWED, "Method Not Allowed");
+    if (!HTTP_GET.equalsIgnoreCase(exchange.getRequestMethod())) {
+      sendError(exchange, HTTP_METHOD_NOT_ALLOWED, MSG_METHOD_NOT_ALLOWED);
       return;
     }
     try {
@@ -180,8 +187,8 @@ public final class WorkflowEditorHttpAdapter {
   }
 
   private void handleLoad(HttpExchange exchange) throws IOException {
-    if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
-      sendError(exchange, HTTP_METHOD_NOT_ALLOWED, "Method Not Allowed");
+    if (!HTTP_POST.equalsIgnoreCase(exchange.getRequestMethod())) {
+      sendError(exchange, HTTP_METHOD_NOT_ALLOWED, MSG_METHOD_NOT_ALLOWED);
       return;
     }
     JsonNode json = readJson(exchange);
@@ -207,8 +214,8 @@ public final class WorkflowEditorHttpAdapter {
   }
 
   private void handleSnapshot(HttpExchange exchange) throws IOException {
-    if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
-      sendError(exchange, HTTP_METHOD_NOT_ALLOWED, "Method Not Allowed");
+    if (!HTTP_GET.equalsIgnoreCase(exchange.getRequestMethod())) {
+      sendError(exchange, HTTP_METHOD_NOT_ALLOWED, MSG_METHOD_NOT_ALLOWED);
       return;
     }
     WorkflowSnapshot snapshot = editorService.executeSnapshot();
@@ -230,7 +237,9 @@ public final class WorkflowEditorHttpAdapter {
     String operationId = requiredText(json, "operationId");
     String author = json.has("author") ? json.get("author").asText() : "web-editor";
     Instant timestamp =
-        json.has("timestamp") ? Instant.parse(json.get("timestamp").asText()) : Instant.now();
+        json.has(JSON_FIELD_TIMESTAMP)
+            ? Instant.parse(json.get(JSON_FIELD_TIMESTAMP).asText())
+            : Instant.now();
     return switch (type) {
       case "CreateNode" -> {
         String nodeId = requiredText(json, "nodeId");
@@ -311,22 +320,27 @@ public final class WorkflowEditorHttpAdapter {
 
   private static List<CatalogEntry> catalogEntries() {
     return List.of(
-        CatalogEntry.from("recording-input", ExperimentNodeCatalog.recordingInput("catalog.recording")),
+        CatalogEntry.from(
+            "recording-input", ExperimentNodeCatalog.recordingInput("catalog.recording")),
         CatalogEntry.from(
             "synthetic-signal-generator",
             ExperimentNodeCatalog.syntheticSignalGenerator("catalog.synthetic")),
-        CatalogEntry.from("humbug-db-import", ExperimentNodeCatalog.humBugDbImport("catalog.humbug")),
+        CatalogEntry.from(
+            "humbug-db-import", ExperimentNodeCatalog.humBugDbImport("catalog.humbug")),
         CatalogEntry.from("gain", ExperimentNodeCatalog.gain("catalog.gain")),
-        CatalogEntry.from("bandpass-filter", ExperimentNodeCatalog.bandpassFilter("catalog.bandpass")),
+        CatalogEntry.from(
+            "bandpass-filter", ExperimentNodeCatalog.bandpassFilter("catalog.bandpass")),
         CatalogEntry.from("fft", ExperimentNodeCatalog.fft("catalog.fft")),
         CatalogEntry.from(
             "wingbeat-feature-extraction",
             ExperimentNodeCatalog.wingbeatFeatureExtraction("catalog.features")),
         CatalogEntry.from("classifier", ExperimentNodeCatalog.classifier("catalog.classifier")),
-        CatalogEntry.from("localization", ExperimentNodeCatalog.localization("catalog.localization")),
+        CatalogEntry.from(
+            "localization", ExperimentNodeCatalog.localization("catalog.localization")),
         CatalogEntry.from("benchmark", ExperimentNodeCatalog.benchmark("catalog.benchmark")),
         CatalogEntry.from("report", ExperimentNodeCatalog.report("catalog.report")),
-        CatalogEntry.from("evidence-export", ExperimentNodeCatalog.evidenceExport("catalog.evidence")));
+        CatalogEntry.from(
+            "evidence-export", ExperimentNodeCatalog.evidenceExport("catalog.evidence")));
   }
 
   private static JsonNode requireObject(JsonNode node, String field) {
@@ -396,7 +410,11 @@ public final class WorkflowEditorHttpAdapter {
     }
   }
 
-  /** JSON response body for rejected operations or current validation status. */
+  /**
+   * JSON response body for rejected operations or current validation status.
+   *
+   * @param violations list of structural violation messages
+   */
   public record ViolationsResponse(List<String> violations) {
 
     public ViolationsResponse {
@@ -404,10 +422,22 @@ public final class WorkflowEditorHttpAdapter {
     }
   }
 
-  /** JSON response body for a created checkpoint. */
+  /**
+   * JSON response body for a created checkpoint.
+   *
+   * @param commitId stable identifier of the created commit
+   */
   public record CheckpointResponse(String commitId) {}
 
-  /** JSON response entry for checkpoint history. */
+  /**
+   * JSON response entry for checkpoint history.
+   *
+   * @param commitId stable identifier of the commit
+   * @param workflowId domain identifier of the workflow
+   * @param author author of the commit
+   * @param message human-readable commit message
+   * @param timestamp instant at which the commit was created
+   */
   public record HistoryEntry(
       String commitId, String workflowId, String author, String message, Instant timestamp) {
 
@@ -421,12 +451,24 @@ public final class WorkflowEditorHttpAdapter {
     }
   }
 
-  /** JSON response entry for node palette items. */
+  /**
+   * JSON response entry for node palette items.
+   *
+   * @param type node type identifier
+   * @param label human-readable node label
+   * @param inputHandles typed input port handles
+   * @param outputHandles typed output port handles
+   */
   public record CatalogEntry(
       String type,
       String label,
       List<WorkflowProjection.HandleProjection> inputHandles,
       List<WorkflowProjection.HandleProjection> outputHandles) {
+
+    public CatalogEntry {
+      inputHandles = List.copyOf(Objects.requireNonNull(inputHandles, "inputHandles"));
+      outputHandles = List.copyOf(Objects.requireNonNull(outputHandles, "outputHandles"));
+    }
 
     static CatalogEntry from(String type, Node node) {
       Workflow catalogWorkflow = new Workflow("catalog", "Catalog", List.of(node), List.of());

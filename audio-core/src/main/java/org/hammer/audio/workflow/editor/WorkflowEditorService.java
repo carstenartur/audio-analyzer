@@ -67,9 +67,9 @@ public final class WorkflowEditorService {
   /**
    * Applies a workflow operation if it produces a valid workflow, or rejects it otherwise.
    *
-   * <p>The operation is first applied to a candidate copy of the current workflow (no side effects).
-   * If the candidate passes validation the operation is recorded in the log and the updated
-   * projection is returned. If validation fails the log is left unchanged and {@link
+   * <p>The operation is first applied to a candidate copy of the current workflow (no side
+   * effects). If the candidate passes validation the operation is recorded in the log and the
+   * updated projection is returned. If validation fails the log is left unchanged and {@link
    * WorkflowOperationRejectedException} is thrown.
    *
    * @param operation operation to apply
@@ -229,7 +229,11 @@ public final class WorkflowEditorService {
   private static void assertSnapshotIdMatchesDsl(String snapshotId, String dslId) {
     if (!snapshotId.equals(dslId)) {
       throw new IllegalArgumentException(
-          "snapshot workflowId '" + snapshotId + "' does not match DSL workflow id '" + dslId + "'");
+          "snapshot workflowId '"
+              + snapshotId
+              + "' does not match DSL workflow id '"
+              + dslId
+              + "'");
     }
   }
 }
