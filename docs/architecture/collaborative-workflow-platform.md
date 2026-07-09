@@ -169,14 +169,18 @@ metadata.toml/json   name, tags, description, authoring metadata
 
 The future graphical editor is web-first, but the Swing app remains valid during the transition.
 
-Current default:
+Accepted direction (ADR-007):
 
-- GLSP-first for a server-authoritative, model-driven diagram editor;
-- React Flow may be used for a quicker UX prototype;
-- Yjs may be evaluated as a client-side collaboration helper, especially for awareness or local undo experiments;
-- none of these client-side tools may become the canonical workflow persistence layer by accident.
-
-This does **not** reject the older React Flow/Yjs proposal. It only changes what that proposal is allowed to own. React Flow/Yjs may still be the best implementation choice if a spike proves it can preserve the same source-of-truth boundaries with less complexity.
+- React Flow + Yjs is the accepted editor stack for the first workbench MVP (see [`adr-007-editor-stack.md`](adr-007-editor-stack.md));
+- Yjs may own awareness, presence and viewport/layout helpers; it must not own canonical workflow
+  state, durable history, `WorkflowOperation` ordering, or semantic conflict resolution;
+- React Flow state is always derived from the server `WorkflowProjection`; no optimistic semantic
+  commits; rejected operations leave the UI on the last accepted projection;
+- `WorkflowEditorHttpAdapter` in `audio-app` is the HTTP bridge between the React Flow client and
+  the `WorkflowEditorService` in `audio-core`;
+- none of these client-side tools may become the canonical workflow persistence layer by accident;
+- GLSP remains documented as the evaluated fallback path if server-authoritativeness proves harder
+  to maintain in React.
 
 ### Editor stack selection criteria
 
