@@ -129,12 +129,18 @@ public final class WorkflowEditorService {
    *
    * @param branch branch to load
    * @return projection of the loaded workflow
+   * @throws IllegalArgumentException if branch is blank or snapshot and DSL workflow ids diverge
    */
   public WorkflowProjection loadGraph(String branch) {
     Objects.requireNonNull(branch, "branch");
+    if (branch.isBlank()) {
+      throw new IllegalArgumentException("branch must not be blank");
+    }
     VersionedWorkflowStore store = requireStore();
     WorkflowSnapshot snapshot = store.loadHead(branch);
-    return loadGraph(parser.parse(snapshot.dslText()));
+    Workflow workflow = parser.parse(snapshot.dslText());
+    assertSnapshotIdMatchesDsl(snapshot.workflowId(), workflow.id());
+    return loadGraph(workflow);
   }
 
   /**
@@ -142,12 +148,15 @@ public final class WorkflowEditorService {
    *
    * @param commitId commit identifier to load
    * @return projection of the loaded workflow
+   * @throws IllegalArgumentException if snapshot and DSL workflow ids diverge
    */
   public WorkflowProjection loadGraph(CommitId commitId) {
     Objects.requireNonNull(commitId, "commitId");
     VersionedWorkflowStore store = requireStore();
     WorkflowSnapshot snapshot = store.loadAtCommit(commitId);
-    return loadGraph(parser.parse(snapshot.dslText()));
+    Workflow workflow = parser.parse(snapshot.dslText());
+    assertSnapshotIdMatchesDsl(snapshot.workflowId(), workflow.id());
+    return loadGraph(workflow);
   }
 
   /**
@@ -162,15 +171,27 @@ public final class WorkflowEditorService {
   /**
    * Persists a checkpoint of the current graph state in the configured store.
    *
+   * <p>The current workflow is validated before persisting; if it is structurally invalid the
+   * checkpoint is rejected and no commit is created.
+   *
    * @param branch branch to commit to
    * @param metadata commit metadata (author/message/timestamp)
    * @return commit id of the created checkpoint
+   * @throws IllegalArgumentException if branch is blank
+   * @throws WorkflowOperationRejectedException if the current workflow is structurally invalid
    */
   public CommitId checkpoint(String branch, CommitMetadata metadata) {
     Objects.requireNonNull(branch, "branch");
+    if (branch.isBlank()) {
+      throw new IllegalArgumentException("branch must not be blank");
+    }
     Objects.requireNonNull(metadata, "metadata");
-    VersionedWorkflowStore store = requireStore();
     Workflow workflow = operationLog.currentWorkflow();
+    List<String> violations = validator.validate(workflow);
+    if (!violations.isEmpty()) {
+      throw new WorkflowOperationRejectedException(violations);
+    }
+    VersionedWorkflowStore store = requireStore();
     WorkflowSnapshot snapshot = new WorkflowSnapshot(workflow.id(), serializer.serialize(workflow));
     return store.commit(branch, snapshot, metadata);
   }
@@ -179,11 +200,18 @@ public final class WorkflowEditorService {
    * Lists recent checkpoint commits for a branch/reference.
    *
    * @param refName branch or ref
-   * @param limit max entries to return
+   * @param limit max entries to return; must be &ge; 0
    * @return reverse-chronological commit summaries
+   * @throws IllegalArgumentException if refName is blank or limit is negative
    */
   public List<CommitInfo> history(String refName, int limit) {
     Objects.requireNonNull(refName, "refName");
+    if (refName.isBlank()) {
+      throw new IllegalArgumentException("refName must not be blank");
+    }
+    if (limit < 0) {
+      throw new IllegalArgumentException("limit must be >= 0");
+    }
     VersionedWorkflowStore store = requireStore();
     return store.history(refName, limit);
   }
@@ -203,5 +231,16 @@ public final class WorkflowEditorService {
       throw new IllegalStateException("workflowStore is not configured");
     }
     return workflowStore;
+  }
+
+  private static void assertSnapshotIdMatchesDsl(String snapshotId, String dslId) {
+    if (!snapshotId.equals(dslId)) {
+      throw new IllegalArgumentException(
+          "snapshot workflowId '"
+              + snapshotId
+              + "' does not match DSL workflow id '"
+              + dslId
+              + "'");
+    }
   }
 }

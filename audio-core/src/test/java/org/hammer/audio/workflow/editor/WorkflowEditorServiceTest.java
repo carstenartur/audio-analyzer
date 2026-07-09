@@ -320,4 +320,50 @@ class WorkflowEditorServiceTest {
     assertTrue(snapshot.dslText().contains("workflow"));
     assertTrue(snapshot.dslText().contains("node.gain"));
   }
+
+  // -------------------------------------------------------------------------
+  // Input validation guards
+  // -------------------------------------------------------------------------
+
+  @Test
+  void loadGraph_blankBranch_throwsIllegalArgument() {
+    VersionedWorkflowStore store = new InMemoryVersionedWorkflowStore();
+    WorkflowEditorService persistentService =
+        new WorkflowEditorService(log, new WorkflowValidator(), store);
+
+    assertThrows(IllegalArgumentException.class, () -> persistentService.loadGraph(""));
+    assertThrows(IllegalArgumentException.class, () -> persistentService.loadGraph("   "));
+  }
+
+  @Test
+  void checkpoint_blankBranch_throwsIllegalArgument() {
+    VersionedWorkflowStore store = new InMemoryVersionedWorkflowStore();
+    WorkflowEditorService persistentService =
+        new WorkflowEditorService(log, new WorkflowValidator(), store);
+    CommitMetadata metadata =
+        new CommitMetadata("user", "msg", Instant.parse("2026-01-01T00:00:00Z"));
+
+    assertThrows(IllegalArgumentException.class, () -> persistentService.checkpoint("", metadata));
+    assertThrows(
+        IllegalArgumentException.class, () -> persistentService.checkpoint("   ", metadata));
+  }
+
+  @Test
+  void history_blankRefName_throwsIllegalArgument() {
+    VersionedWorkflowStore store = new InMemoryVersionedWorkflowStore();
+    WorkflowEditorService persistentService =
+        new WorkflowEditorService(log, new WorkflowValidator(), store);
+
+    assertThrows(IllegalArgumentException.class, () -> persistentService.history("", 5));
+    assertThrows(IllegalArgumentException.class, () -> persistentService.history("   ", 5));
+  }
+
+  @Test
+  void history_negativeLimit_throwsIllegalArgument() {
+    VersionedWorkflowStore store = new InMemoryVersionedWorkflowStore();
+    WorkflowEditorService persistentService =
+        new WorkflowEditorService(log, new WorkflowValidator(), store);
+
+    assertThrows(IllegalArgumentException.class, () -> persistentService.history("main", -1));
+  }
 }
