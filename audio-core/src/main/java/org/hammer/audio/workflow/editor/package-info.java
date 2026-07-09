@@ -1,25 +1,22 @@
 /**
- * Application service layer for the web workflow editor spike (ADR-007).
+ * Application-service layer for the web workflow editor MVP (ADR-007 / issue #210).
  *
  * <p>This package provides the server-side API surface that the React Flow editor adapter calls:
  *
  * <ul>
  *   <li>{@link org.hammer.audio.workflow.editor.WorkflowEditorService} — accepts {@code
  *       WorkflowOperation} values, validates with {@code WorkflowValidator}, applies to {@code
- *       WorkflowOperationLog}, and returns a {@code WorkflowProjection}.
+ *       WorkflowOperationLog}, loads/saves checkpoints through the persistence facade and returns
+ *       {@code WorkflowProjection} read models.
  *   <li>{@link org.hammer.audio.workflow.editor.WorkflowProjection} — React Flow–ready read model
- *       derived from a {@code Workflow}. Contains typed-port handle descriptors so the UI can
- *       render typed {@code Handle} components without parsing domain objects directly.
+ *       derived from a {@code Workflow}. Contains typed-port handle descriptors and node property
+ *       values so the UI can render a graph without parsing domain objects directly.
  *   <li>{@link org.hammer.audio.workflow.editor.WorkflowOperationRejectedException} — thrown when a
- *       {@code WorkflowOperation} produces a structurally invalid workflow (type mismatch, broken
- *       port reference, etc.).
+ *       {@code WorkflowOperation} or loaded graph produces a structurally invalid workflow.
  * </ul>
  *
- * <p><b>Dependency rules</b>: this package must not depend on Swing, JGit, React, Yjs, or any web
- * framework. It is a pure Java application service boundary. The web layer (TypeScript/React Flow)
- * lives outside the Maven build.
- *
- * <p>See {@code workflow-editor-spike/} at the repository root for the matching TypeScript React
- * Flow component that consumes the {@code WorkflowProjection} JSON produced by this service.
+ * <p><b>Dependency rules</b>: this package must not depend on Swing, JGit, React, Yjs, Selenium,
+ * Playwright, Testcontainers or any web framework. It is a pure Java application-service boundary.
+ * The web layer lives in {@code workflow-editor-spike/}; HTTP wiring lives in {@code audio-app}.
  */
 package org.hammer.audio.workflow.editor;
