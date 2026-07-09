@@ -19,6 +19,7 @@ import java.util.Map;
 import java.util.Objects;
 import org.hammer.audio.workflow.Edge;
 import org.hammer.audio.workflow.Node;
+import org.hammer.audio.workflow.Workflow;
 import org.hammer.audio.workflow.WorkflowOperation;
 import org.hammer.audio.workflow.catalog.ExperimentNodeCatalog;
 import org.hammer.audio.workflow.editor.WorkflowEditorService;
@@ -29,29 +30,7 @@ import org.hammer.audio.workflow.store.CommitInfo;
 import org.hammer.audio.workflow.store.CommitMetadata;
 import org.hammer.audio.workflow.store.WorkflowSnapshot;
 
-/**
- * Minimal HTTP adapter for the workflow editor MVP (ADR-007 / issue #210).
- *
- * <p>Exposes the application-service surface required by the single-user workbench MVP:
- *
- * <ul>
- *   <li>{@code GET /workflow/projection} — returns the current {@link WorkflowProjection}.
- *   <li>{@code GET /workflow/catalog} — returns the first experiment node palette entries.
- *   <li>{@code GET /workflow/validation} — validates the current graph.
- *   <li>{@code POST /workflow/operations} — applies a semantic {@link WorkflowOperation}.
- *   <li>{@code POST /workflow/checkpoints} — saves a checkpoint through {@link
- *       WorkflowEditorService#checkpoint(String, CommitMetadata)}.
- *   <li>{@code GET /workflow/history} — lists recent checkpoint commits.
- *   <li>{@code POST /workflow/load} — reloads a branch head or a specific commit.
- *   <li>{@code GET /workflow/snapshot} — exports the current deterministic DSL snapshot.
- * </ul>
- *
- * <p>This adapter uses the JDK built-in {@code com.sun.net.httpserver.HttpServer}. No external web
- * framework dependency is required. It is intended for local MVP/spike development only and must
- * not be deployed as a production server.
- *
- * <p><b>Dependency rules</b>: this class must not import Swing, JGit, React, or Yjs types.
- */
+/** Minimal HTTP adapter for the workflow editor MVP (ADR-007 / issue #210). */
 public final class WorkflowEditorHttpAdapter {
 
   private static final int HTTP_OK = 200;
@@ -128,7 +107,8 @@ public final class WorkflowEditorHttpAdapter {
       sendError(exchange, HTTP_METHOD_NOT_ALLOWED, "Method Not Allowed");
       return;
     }
-    sendJson(exchange, HTTP_OK, mapper.writeValueAsBytes(new ViolationsResponse(editorService.validate())));
+    ViolationsResponse response = new ViolationsResponse(editorService.validate());
+    sendJson(exchange, HTTP_OK, mapper.writeValueAsBytes(response));
   }
 
   private void handleOperations(HttpExchange exchange) throws IOException {
@@ -140,18 +120,17 @@ public final class WorkflowEditorHttpAdapter {
     if (json == null) {
       return;
     }
-    WorkflowOperation operation;
     try {
-      operation = parseOperation(json);
-    } catch (IllegalArgumentException ex) {
-      sendError(exchange, HTTP_BAD_REQUEST, "Unrecognised operation: " + ex.getMessage());
-      return;
-    }
-    try {
+      WorkflowOperation operation = parseOperation(json);
       WorkflowProjection projection = editorService.applyOperation(operation);
       sendJson(exchange, HTTP_OK, mapper.writeValueAsBytes(projection));
     } catch (WorkflowOperationRejectedException ex) {
-      sendJson(exchange, HTTP_UNPROCESSABLE, mapper.writeValueAsBytes(new ViolationsResponse(ex.violations())));
+      sendJson(
+          exchange,
+          HTTP_UNPROCESSABLE,
+          mapper.writeValueAsBytes(new ViolationsResponse(ex.violations())));
+    } catch (IllegalArgumentException | IllegalStateException ex) {
+      sendError(exchange, HTTP_BAD_REQUEST, ex.getMessage());
     }
   }
 
@@ -170,10 +149,14 @@ public final class WorkflowEditorHttpAdapter {
     Instant timestamp =
         json.has("timestamp") ? Instant.parse(json.get("timestamp").asText()) : Instant.now();
     try {
-      CommitId commitId = editorService.checkpoint(branch, new CommitMetadata(author, message, timestamp));
+      CommitMetadata metadata = new CommitMetadata(author, message, timestamp);
+      CommitId commitId = editorService.checkpoint(branch, metadata);
       sendJson(exchange, HTTP_OK, mapper.writeValueAsBytes(new CheckpointResponse(commitId.value())));
     } catch (WorkflowOperationRejectedException ex) {
-      sendJson(exchange, HTTP_UNPROCESSABLE, mapper.writeValueAsBytes(new ViolationsResponse(ex.violations())));
+      sendJson(
+          exchange,
+          HTTP_UNPROCESSABLE,
+          mapper.writeValueAsBytes(new ViolationsResponse(ex.violations())));
     } catch (IllegalArgumentException | IllegalStateException ex) {
       sendError(exchange, HTTP_BAD_REQUEST, ex.getMessage());
     }
@@ -184,11 +167,12 @@ public final class WorkflowEditorHttpAdapter {
       sendError(exchange, HTTP_METHOD_NOT_ALLOWED, "Method Not Allowed");
       return;
     }
-    Map<String, String> query = parseQuery(exchange.getRequestURI());
-    String branch = query.getOrDefault("branch", DEFAULT_BRANCH);
-    int limit = parseLimit(query.get("limit"));
     try {
-      List<HistoryEntry> entries = editorService.history(branch, limit).stream().map(HistoryEntry::from).toList();
+      Map<String, String> query = parseQuery(exchange.getRequestURI());
+      String branch = query.getOrDefault("branch", DEFAULT_BRANCH);
+      int limit = parseLimit(query.get("limit"));
+      List<HistoryEntry> entries =
+          editorService.history(branch, limit).stream().map(HistoryEntry::from).toList();
       sendJson(exchange, HTTP_OK, mapper.writeValueAsBytes(entries));
     } catch (IllegalArgumentException | IllegalStateException ex) {
       sendError(exchange, HTTP_BAD_REQUEST, ex.getMessage());
@@ -213,7 +197,10 @@ public final class WorkflowEditorHttpAdapter {
       }
       sendJson(exchange, HTTP_OK, mapper.writeValueAsBytes(projection));
     } catch (WorkflowOperationRejectedException ex) {
-      sendJson(exchange, HTTP_UNPROCESSABLE, mapper.writeValueAsBytes(new ViolationsResponse(ex.violations())));
+      sendJson(
+          exchange,
+          HTTP_UNPROCESSABLE,
+          mapper.writeValueAsBytes(new ViolationsResponse(ex.violations())));
     } catch (IllegalArgumentException | IllegalStateException ex) {
       sendError(exchange, HTTP_BAD_REQUEST, ex.getMessage());
     }
@@ -248,14 +235,11 @@ public final class WorkflowEditorHttpAdapter {
       case "CreateNode" -> {
         String nodeId = requiredText(json, "nodeId");
         String catalogType = requiredText(json, "catalogType");
-        yield new WorkflowOperation.CreateNode(
-            operationId, timestamp, author, createCatalogNode(catalogType, nodeId));
+        Node node = createCatalogNode(catalogType, nodeId);
+        yield new WorkflowOperation.CreateNode(operationId, timestamp, author, node);
       }
       case "ConnectPorts" -> {
-        JsonNode edgeJson = json.get("edge");
-        if (edgeJson == null) {
-          throw new IllegalArgumentException("ConnectPorts requires 'edge' field");
-        }
+        JsonNode edgeJson = requireObject(json, "edge");
         Edge edge =
             new Edge(
                 requiredText(edgeJson, "id"),
@@ -267,10 +251,7 @@ public final class WorkflowEditorHttpAdapter {
       }
       case "DisconnectPorts" -> {
         String edgeId = requiredText(json, "edgeId");
-        JsonNode edgeJson = json.get("disconnectedEdge");
-        if (edgeJson == null) {
-          throw new IllegalArgumentException("DisconnectPorts requires 'disconnectedEdge' field");
-        }
+        JsonNode edgeJson = requireObject(json, "disconnectedEdge");
         Edge disconnectedEdge =
             new Edge(
                 requiredText(edgeJson, "id"),
@@ -288,12 +269,7 @@ public final class WorkflowEditorHttpAdapter {
         String newValue = json.has("newValue") ? json.get("newValue").asText() : null;
         String previousValue =
             json.has("previousValue") ? json.get("previousValue").asText() : null;
-        WorkflowOperation.PropertyTarget propertyTarget =
-            Arrays.stream(WorkflowOperation.PropertyTarget.values())
-                .filter(t -> t.name().equals(target))
-                .findFirst()
-                .orElseThrow(
-                    () -> new IllegalArgumentException("Unknown PropertyTarget: " + target));
+        WorkflowOperation.PropertyTarget propertyTarget = parsePropertyTarget(target);
         yield new WorkflowOperation.UpdateProperty(
             operationId,
             timestamp,
@@ -306,6 +282,13 @@ public final class WorkflowEditorHttpAdapter {
       }
       default -> throw new IllegalArgumentException("Unknown operation type: " + type);
     };
+  }
+
+  private static WorkflowOperation.PropertyTarget parsePropertyTarget(String target) {
+    return Arrays.stream(WorkflowOperation.PropertyTarget.values())
+        .filter(t -> t.name().equals(target))
+        .findFirst()
+        .orElseThrow(() -> new IllegalArgumentException("Unknown PropertyTarget: " + target));
   }
 
   private static Node createCatalogNode(String catalogType, String nodeId) {
@@ -344,6 +327,14 @@ public final class WorkflowEditorHttpAdapter {
         CatalogEntry.from("benchmark", ExperimentNodeCatalog.benchmark("catalog.benchmark")),
         CatalogEntry.from("report", ExperimentNodeCatalog.report("catalog.report")),
         CatalogEntry.from("evidence-export", ExperimentNodeCatalog.evidenceExport("catalog.evidence")));
+  }
+
+  private static JsonNode requireObject(JsonNode node, String field) {
+    JsonNode value = node.get(field);
+    if (value == null || !value.isObject()) {
+      throw new IllegalArgumentException("Missing required object field: " + field);
+    }
+    return value;
   }
 
   private static String requiredText(JsonNode node, String field) {
@@ -438,9 +429,9 @@ public final class WorkflowEditorHttpAdapter {
       List<WorkflowProjection.HandleProjection> outputHandles) {
 
     static CatalogEntry from(String type, Node node) {
-      WorkflowProjection projection =
-          WorkflowProjection.fromWorkflow(new org.hammer.audio.workflow.Workflow("catalog", "Catalog", List.of(node), List.of()));
-      WorkflowProjection.NodeProjection nodeProjection = projection.nodes().get(0);
+      Workflow catalogWorkflow = new Workflow("catalog", "Catalog", List.of(node), List.of());
+      WorkflowProjection.NodeProjection nodeProjection =
+          WorkflowProjection.fromWorkflow(catalogWorkflow).nodes().get(0);
       return new CatalogEntry(
           type, node.label(), nodeProjection.inputHandles(), nodeProjection.outputHandles());
     }
