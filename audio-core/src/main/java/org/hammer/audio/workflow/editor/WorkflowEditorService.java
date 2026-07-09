@@ -15,28 +15,18 @@ import org.hammer.audio.workflow.store.VersionedWorkflowStore;
 import org.hammer.audio.workflow.store.WorkflowSnapshot;
 
 /**
- * Application service for the React Flow workflow editor spike (ADR-007).
+ * Application-service boundary for the single-user React Flow workbench MVP (issue #210).
  *
- * <p>This service is the single entry point for every user gesture arriving from the browser. It
- * implements the server-authoritative design described in {@code adr-007-editor-stack.md}:
- *
- * <ol>
- *   <li>Apply the {@link WorkflowOperation} to a candidate workflow (pure, no side effects).
- *   <li>Validate the candidate with {@link WorkflowValidator}.
- *   <li>If validation passes: record the operation in {@link WorkflowOperationLog} and return the
- *       updated {@link WorkflowProjection}.
- *   <li>If validation fails: throw {@link WorkflowOperationRejectedException}; the log is
- *       unchanged.
- * </ol>
- *
- * <p>The React Flow client must update its node/edge state only from the returned {@code
- * WorkflowProjection}. It must never treat its own in-memory state as the canonical workflow.
+ * <p>This service is the single server-authoritative entry point for graph editing, validation,
+ * save/reload/history and execution handoff. Browser adapters call this service through a thin HTTP
+ * layer; they must not access DSL, JGit, storage internals or mutable UI state as canonical
+ * workflow state.
  *
  * <p><b>Thread safety</b>: not thread-safe. Concurrent access must be serialised by the caller
  * (e.g. via a request-scoped lock or a single-threaded actor).
  *
- * <p><b>Dependency rules</b>: this class must not depend on Swing, JGit, React, Yjs, or any web
- * framework. It is a pure Java application service.
+ * <p><b>Dependency rules</b>: this class must not depend on Swing, JGit, React, Yjs, Selenium,
+ * Playwright, Testcontainers or any web framework. It is a pure Java application service.
  */
 public final class WorkflowEditorService {
 
@@ -77,9 +67,9 @@ public final class WorkflowEditorService {
   /**
    * Applies a workflow operation if it produces a valid workflow, or rejects it otherwise.
    *
-   * <p>The operation is first applied to a candidate copy of the current workflow (no side
-   * effects). If the candidate passes validation the operation is recorded in the log and the
-   * updated projection is returned. If validation fails the log is left unchanged and {@link
+   * <p>The operation is first applied to a candidate copy of the current workflow (no side effects).
+   * If the candidate passes validation the operation is recorded in the log and the updated
+   * projection is returned. If validation fails the log is left unchanged and {@link
    * WorkflowOperationRejectedException} is thrown.
    *
    * @param operation operation to apply
@@ -217,7 +207,10 @@ public final class WorkflowEditorService {
   }
 
   /**
-   * Produces a deterministic DSL snapshot of the current graph state for execution workflows.
+   * Produces a deterministic DSL snapshot of the current graph state for execution handoff.
+   *
+   * <p>This is not yet a full execution plan. It is the stable workflow snapshot consumed by the
+   * future execution-integration layer from issue #211.
    *
    * @return immutable workflow snapshot
    */
@@ -236,11 +229,7 @@ public final class WorkflowEditorService {
   private static void assertSnapshotIdMatchesDsl(String snapshotId, String dslId) {
     if (!snapshotId.equals(dslId)) {
       throw new IllegalArgumentException(
-          "snapshot workflowId '"
-              + snapshotId
-              + "' does not match DSL workflow id '"
-              + dslId
-              + "'");
+          "snapshot workflowId '" + snapshotId + "' does not match DSL workflow id '" + dslId + "'");
     }
   }
 }
