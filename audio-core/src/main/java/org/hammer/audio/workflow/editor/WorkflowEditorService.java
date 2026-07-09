@@ -6,6 +6,14 @@ import org.hammer.audio.workflow.Workflow;
 import org.hammer.audio.workflow.WorkflowOperation;
 import org.hammer.audio.workflow.WorkflowOperationLog;
 import org.hammer.audio.workflow.WorkflowValidator;
+import org.hammer.audio.workflow.dsl.WorkflowDslParser;
+import org.hammer.audio.workflow.dsl.WorkflowDslSerializer;
+import org.hammer.audio.workflow.execution.ExecutionSnapshot;
+import org.hammer.audio.workflow.store.CommitId;
+import org.hammer.audio.workflow.store.CommitInfo;
+import org.hammer.audio.workflow.store.CommitMetadata;
+import org.hammer.audio.workflow.store.VersionedWorkflowStore;
+import org.hammer.audio.workflow.store.WorkflowSnapshot;
 
 /**
  * Application service for the React Flow workflow editor spike (ADR-007).
@@ -33,8 +41,11 @@ import org.hammer.audio.workflow.WorkflowValidator;
  */
 public final class WorkflowEditorService {
 
-  private final WorkflowOperationLog operationLog;
+  private WorkflowOperationLog operationLog;
   private final WorkflowValidator validator;
+  private final VersionedWorkflowStore workflowStore;
+  private final WorkflowDslSerializer serializer;
+  private final WorkflowDslParser parser;
 
   /**
    * Creates a service backed by the given operation log and validator.
@@ -43,8 +54,25 @@ public final class WorkflowEditorService {
    * @param validator structural workflow validator
    */
   public WorkflowEditorService(WorkflowOperationLog operationLog, WorkflowValidator validator) {
+    this(operationLog, validator, null);
+  }
+
+  /**
+   * Creates a service backed by the given operation log, validator and checkpoint store.
+   *
+   * @param operationLog operation log holding the current workflow state
+   * @param validator structural workflow validator
+   * @param workflowStore workflow checkpoint store; may be {@code null} for non-persistent usage
+   */
+  public WorkflowEditorService(
+      WorkflowOperationLog operationLog,
+      WorkflowValidator validator,
+      VersionedWorkflowStore workflowStore) {
     this.operationLog = Objects.requireNonNull(operationLog, "operationLog");
     this.validator = Objects.requireNonNull(validator, "validator");
+    this.workflowStore = workflowStore;
+    this.serializer = new WorkflowDslSerializer();
+    this.parser = new WorkflowDslParser();
   }
 
   /**
@@ -78,5 +106,104 @@ public final class WorkflowEditorService {
    */
   public WorkflowProjection currentProjection() {
     return WorkflowProjection.fromWorkflow(operationLog.currentWorkflow());
+  }
+
+  /**
+   * Loads the given workflow into the editor as canonical state.
+   *
+   * @param workflow workflow to load
+   * @return projection of the loaded workflow
+   * @throws WorkflowOperationRejectedException if the workflow is structurally invalid
+   */
+  public WorkflowProjection loadGraph(Workflow workflow) {
+    Objects.requireNonNull(workflow, "workflow");
+    List<String> violations = validator.validate(workflow);
+    if (!violations.isEmpty()) {
+      throw new WorkflowOperationRejectedException(violations);
+    }
+    this.operationLog = new WorkflowOperationLog(workflow);
+    return WorkflowProjection.fromWorkflow(workflow);
+  }
+
+  /**
+   * Loads the graph from the current HEAD of a branch in the configured store.
+   *
+   * @param branch branch to load
+   * @return projection of the loaded workflow
+   */
+  public WorkflowProjection loadGraph(String branch) {
+    Objects.requireNonNull(branch, "branch");
+    VersionedWorkflowStore store = requireStore();
+    WorkflowSnapshot snapshot = store.loadHead(branch);
+    return loadGraph(parser.parse(snapshot.dslText()));
+  }
+
+  /**
+   * Loads the graph at a specific commit in the configured store.
+   *
+   * @param commitId commit identifier to load
+   * @return projection of the loaded workflow
+   */
+  public WorkflowProjection loadGraph(CommitId commitId) {
+    Objects.requireNonNull(commitId, "commitId");
+    VersionedWorkflowStore store = requireStore();
+    WorkflowSnapshot snapshot = store.loadAtCommit(commitId);
+    return loadGraph(parser.parse(snapshot.dslText()));
+  }
+
+  /**
+   * Validates the current graph state.
+   *
+   * @return list of structural validation violations; empty when valid
+   */
+  public List<String> validate() {
+    return validator.validate(operationLog.currentWorkflow());
+  }
+
+  /**
+   * Persists a checkpoint of the current graph state in the configured store.
+   *
+   * @param branch branch to commit to
+   * @param metadata commit metadata (author/message/timestamp)
+   * @return commit id of the created checkpoint
+   */
+  public CommitId checkpoint(String branch, CommitMetadata metadata) {
+    Objects.requireNonNull(branch, "branch");
+    Objects.requireNonNull(metadata, "metadata");
+    VersionedWorkflowStore store = requireStore();
+    Workflow workflow = operationLog.currentWorkflow();
+    WorkflowSnapshot snapshot = new WorkflowSnapshot(workflow.id(), serializer.serialize(workflow));
+    return store.commit(branch, snapshot, metadata);
+  }
+
+  /**
+   * Lists recent checkpoint commits for a branch/reference.
+   *
+   * @param refName branch or ref
+   * @param limit max entries to return
+   * @return reverse-chronological commit summaries
+   */
+  public List<CommitInfo> history(String refName, int limit) {
+    Objects.requireNonNull(refName, "refName");
+    VersionedWorkflowStore store = requireStore();
+    return store.history(refName, limit);
+  }
+
+  /**
+   * Produces an immutable execution snapshot from the current graph state.
+   *
+   * @param snapshotId stable identifier for the execution snapshot
+   * @param createdAt snapshot creation time
+   * @return immutable execution snapshot
+   */
+  public ExecutionSnapshot executeSnapshot(String snapshotId, java.time.Instant createdAt) {
+    return ExecutionSnapshot.of(snapshotId, operationLog.currentWorkflow(), createdAt);
+  }
+
+  private VersionedWorkflowStore requireStore() {
+    if (workflowStore == null) {
+      throw new IllegalStateException("workflowStore is not configured");
+    }
+    return workflowStore;
   }
 }

@@ -18,6 +18,11 @@ import org.hammer.audio.workflow.WorkflowOperation;
 import org.hammer.audio.workflow.WorkflowOperationLog;
 import org.hammer.audio.workflow.WorkflowValidator;
 import org.hammer.audio.workflow.catalog.ExperimentNodeCatalog;
+import org.hammer.audio.workflow.execution.ExecutionSnapshot;
+import org.hammer.audio.workflow.store.CommitId;
+import org.hammer.audio.workflow.store.CommitMetadata;
+import org.hammer.audio.workflow.store.InMemoryVersionedWorkflowStore;
+import org.hammer.audio.workflow.store.VersionedWorkflowStore;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -276,5 +281,43 @@ class WorkflowEditorServiceTest {
         DataTypes.AUDIO_BLOCK.id(),
         gainProjection.outputHandles().get(0).dataType(),
         "gain output handle must be AudioBlock");
+  }
+
+  @Test
+  void checkpointLoadAndHistory_roundTripThroughStore() {
+    VersionedWorkflowStore store = new InMemoryVersionedWorkflowStore();
+    WorkflowEditorService persistentService =
+        new WorkflowEditorService(log, new WorkflowValidator(), store);
+    CommitMetadata metadata =
+        new CommitMetadata("editor-user", "Checkpoint graph", Instant.parse("2026-01-02T08:00:00Z"));
+
+    CommitId commitId = persistentService.checkpoint("main", metadata);
+    WorkflowProjection loaded = persistentService.loadGraph(commitId);
+
+    assertEquals("workflow.spike", loaded.workflowId());
+    assertEquals(1, persistentService.history("main", 10).size());
+    assertEquals(commitId, persistentService.history("main", 10).get(0).commitId());
+  }
+
+  @Test
+  void executeSnapshot_usesCurrentWorkflowState() {
+    WorkflowOperation updateOp =
+        new WorkflowOperation.UpdateProperty(
+            "op.update.gain.snapshot",
+            OP_TIME,
+            AUTHOR,
+            WorkflowOperation.PropertyTarget.NODE,
+            GAIN_ID,
+            "gain",
+            null,
+            "2.0");
+    service.applyOperation(updateOp);
+
+    ExecutionSnapshot snapshot =
+        service.executeSnapshot("snapshot.workflow.spike.1", Instant.parse("2026-01-03T10:00:00Z"));
+
+    assertEquals("snapshot.workflow.spike.1", snapshot.snapshotId());
+    assertEquals("workflow.spike", snapshot.workflowId());
+    assertEquals(3, snapshot.nodes().size());
   }
 }
