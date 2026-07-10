@@ -11,6 +11,8 @@ import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
@@ -39,11 +41,13 @@ public final class WorkflowEditorHttpAdapter {
   private static final int HTTP_METHOD_NOT_ALLOWED = 405;
   private static final String CONTENT_TYPE = "Content-Type";
   private static final String APPLICATION_JSON = "application/json; charset=utf-8";
+  private static final String TEXT_PLAIN_UTF_8 = "text/plain; charset=utf-8";
   private static final String DEFAULT_BRANCH = "main";
   private static final int DEFAULT_HISTORY_LIMIT = 20;
   private static final String HTTP_GET = "GET";
   private static final String HTTP_POST = "POST";
   private static final String MSG_METHOD_NOT_ALLOWED = "Method Not Allowed";
+  private static final String JSON_FIELD_COMMIT_ID = "commitId";
   private static final String JSON_FIELD_TIMESTAMP = "timestamp";
 
   private final WorkflowEditorService editorService;
@@ -67,16 +71,27 @@ public final class WorkflowEditorHttpAdapter {
    * @throws IOException if the server cannot bind to the port
    */
   public void start(int port) throws IOException {
-    server = HttpServer.create(new InetSocketAddress(port), 0);
-    server.createContext("/workflow/projection", this::handleProjection);
-    server.createContext("/workflow/catalog", this::handleCatalog);
-    server.createContext("/workflow/validation", this::handleValidation);
-    server.createContext("/workflow/operations", this::handleOperations);
-    server.createContext("/workflow/checkpoints", this::handleCheckpoints);
-    server.createContext("/workflow/history", this::handleHistory);
-    server.createContext("/workflow/load", this::handleLoad);
-    server.createContext("/workflow/snapshot", this::handleSnapshot);
-    server.start();
+    HttpServer httpServer = HttpServer.create(new InetSocketAddress(port), 0);
+    registerContexts(httpServer);
+    httpServer.start();
+  }
+
+  /**
+   * Starts the HTTP server on the given port and registers a static-file context.
+   *
+   * <p>Static files are served from the given {@code staticDir}. Workflow API paths take precedence
+   * over the root path via JDK HttpServer longest-prefix routing.
+   *
+   * @param port TCP port to bind
+   * @param staticDir directory from which static files are served at {@code /}
+   * @throws IOException if the server cannot bind to the port
+   */
+  public void start(int port, Path staticDir) throws IOException {
+    Objects.requireNonNull(staticDir, "staticDir");
+    HttpServer httpServer = HttpServer.create(new InetSocketAddress(port), 0);
+    httpServer.createContext("/", new StaticFileHandler(staticDir));
+    registerContexts(httpServer);
+    httpServer.start();
   }
 
   /**
@@ -197,8 +212,8 @@ public final class WorkflowEditorHttpAdapter {
     }
     try {
       WorkflowProjection projection;
-      if (json.has("commitId") && !json.get("commitId").asText().isBlank()) {
-        projection = editorService.loadGraph(new CommitId(json.get("commitId").asText()));
+      if (json.has(JSON_FIELD_COMMIT_ID) && !json.get(JSON_FIELD_COMMIT_ID).asText().isBlank()) {
+        projection = editorService.loadGraph(new CommitId(json.get(JSON_FIELD_COMMIT_ID).asText()));
       } else {
         projection = editorService.loadGraph(textOrDefault(json, "branch", DEFAULT_BRANCH));
       }
@@ -403,7 +418,7 @@ public final class WorkflowEditorHttpAdapter {
 
   private void sendError(HttpExchange exchange, int status, String message) throws IOException {
     byte[] body = message.getBytes(StandardCharsets.UTF_8);
-    exchange.getResponseHeaders().set(CONTENT_TYPE, "text/plain; charset=utf-8");
+    exchange.getResponseHeaders().set(CONTENT_TYPE, TEXT_PLAIN_UTF_8);
     exchange.sendResponseHeaders(status, body.length);
     try (OutputStream out = exchange.getResponseBody()) {
       out.write(body);
@@ -427,7 +442,12 @@ public final class WorkflowEditorHttpAdapter {
    *
    * @param commitId stable identifier of the created commit
    */
-  public record CheckpointResponse(String commitId) {}
+  public record CheckpointResponse(String commitId) {
+    public CheckpointResponse {
+      Objects.requireNonNull(
+          commitId, () -> "CheckpointResponse parameter commitId must not be null");
+    }
+  }
 
   /**
    * JSON response entry for checkpoint history.
@@ -476,6 +496,91 @@ public final class WorkflowEditorHttpAdapter {
           WorkflowProjection.fromWorkflow(catalogWorkflow).nodes().get(0);
       return new CatalogEntry(
           type, node.label(), nodeProjection.inputHandles(), nodeProjection.outputHandles());
+    }
+  }
+
+  /**
+   * Registers all workflow API contexts onto the given HTTP server.
+   *
+   * <p>After this call the server has contexts for {@code /workflow/projection}, {@code
+   * /workflow/catalog}, {@code /workflow/validation}, {@code /workflow/operations}, {@code
+   * /workflow/checkpoints}, {@code /workflow/history}, {@code /workflow/load} and {@code
+   * /workflow/snapshot}.
+   *
+   * @param httpServer the HTTP server to attach contexts to
+   */
+  void registerContexts(HttpServer httpServer) {
+    server = httpServer;
+    httpServer.createContext("/workflow/projection", this::handleProjection);
+    httpServer.createContext("/workflow/catalog", this::handleCatalog);
+    httpServer.createContext("/workflow/validation", this::handleValidation);
+    httpServer.createContext("/workflow/operations", this::handleOperations);
+    httpServer.createContext("/workflow/checkpoints", this::handleCheckpoints);
+    httpServer.createContext("/workflow/history", this::handleHistory);
+    httpServer.createContext("/workflow/load", this::handleLoad);
+    httpServer.createContext("/workflow/snapshot", this::handleSnapshot);
+  }
+
+  /** Serves static files from a filesystem directory. */
+  private static final class StaticFileHandler implements com.sun.net.httpserver.HttpHandler {
+
+    private final Path root;
+
+    StaticFileHandler(Path root) {
+      this.root = root.normalize();
+    }
+
+    @Override
+    public void handle(HttpExchange exchange) throws IOException {
+      if (!HTTP_GET.equalsIgnoreCase(exchange.getRequestMethod())) {
+        exchange.getResponseHeaders().set("Allow", HTTP_GET);
+        sendStatic(
+            exchange,
+            HTTP_METHOD_NOT_ALLOWED,
+            TEXT_PLAIN_UTF_8,
+            MSG_METHOD_NOT_ALLOWED.getBytes(StandardCharsets.UTF_8));
+        return;
+      }
+      String uriPath = exchange.getRequestURI().getPath();
+      if (uriPath == null || "/".equals(uriPath) || uriPath.isEmpty()) {
+        uriPath = "/index.html";
+      }
+      String relative = uriPath.startsWith("/") ? uriPath.substring(1) : uriPath;
+      Path target = root.resolve(relative).normalize();
+      if (!target.startsWith(root)) {
+        sendStatic(exchange, 403, TEXT_PLAIN_UTF_8, "Forbidden".getBytes(StandardCharsets.UTF_8));
+        return;
+      }
+      if (!Files.exists(target) || Files.isDirectory(target)) {
+        sendStatic(exchange, 404, TEXT_PLAIN_UTF_8, "Not Found".getBytes(StandardCharsets.UTF_8));
+        return;
+      }
+      byte[] content = Files.readAllBytes(target);
+      sendStatic(exchange, HTTP_OK, guessContentType(target), content);
+    }
+
+    private static void sendStatic(
+        HttpExchange exchange, int status, String contentType, byte[] body) throws IOException {
+      exchange.getResponseHeaders().set(CONTENT_TYPE, contentType);
+      exchange.sendResponseHeaders(status, body.length);
+      try (OutputStream out = exchange.getResponseBody()) {
+        out.write(body);
+      }
+    }
+
+    private static String guessContentType(Path path) {
+      Path fileName = path.getFileName();
+      if (fileName == null) {
+        return "application/octet-stream";
+      }
+      String name = fileName.toString().toLowerCase(java.util.Locale.ROOT);
+      if (name.endsWith(".html")) return "text/html; charset=utf-8";
+      if (name.endsWith(".js")) return "application/javascript; charset=utf-8";
+      if (name.endsWith(".css")) return "text/css; charset=utf-8";
+      if (name.endsWith(".json")) return "application/json; charset=utf-8";
+      if (name.endsWith(".png")) return "image/png";
+      if (name.endsWith(".svg")) return "image/svg+xml";
+      return "application/octet-stream";
     }
   }
 }

@@ -336,4 +336,29 @@
       </plugin>
     </plugins>
   </build>
+
+  <!--
+    Profile: screenshot-tests
+    
+    Activates the workbench screenshot documentation pipeline.  This profile is intentionally
+    not active by default to keep the standard build free of Docker dependencies.
+    
+    Verify mode (compare generated screenshots against committed baselines):
+      mvn -Pscreenshot-tests verify
+    
+    Update mode (regenerate committed documentation screenshots after intentional UI changes):
+      mvn -Pscreenshot-tests verify -DupdateScreenshots=true
+    
+    Prerequisites: Docker must be available.  The audio-app JAR must already be built
+    (mvn package -pl audio-app -am).  When running with -Pscreenshot-tests the full build
+    automatically packages audio-app first.
+  -->
+  <profiles>
+    <profile>
+      <id>screenshot-tests</id>
+      <modules>
+        <module>workbench-screenshot-tests</module>
+      </modules>
+    </profile>
+  </profiles>
 </project>

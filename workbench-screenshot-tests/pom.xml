@@ -1,0 +1,169 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>audioin</groupId>
+    <artifactId>audioin-parent</artifactId>
+    <version>0.0.4-SNAPSHOT</version>
+  </parent>
+  <artifactId>workbench-screenshot-tests</artifactId>
+  <name>Workbench Screenshot Tests</name>
+  <description>Testcontainers + Playwright integration-test pipeline for workbench UI documentation screenshots.</description>
+
+  <properties>
+    <testcontainers.version>1.20.4</testcontainers.version>
+    <playwright.version>1.49.0</playwright.version>
+    <slf4j.version>2.0.16</slf4j.version>
+    <!--
+      Skip static-analysis tools for this test-only module: it has no production sources and
+      all quality is validated at the integration-test level.
+    -->
+    <checkstyle.skip>true</checkstyle.skip>
+    <pmd.skip>true</pmd.skip>
+    <spotbugs.skip>true</spotbugs.skip>
+    <!--
+      Skip JaCoCo for this module: there are no main sources and the coverage check would fail
+      with 0% coverage.  The integration tests themselves do not run inside JaCoCo instrumentation.
+    -->
+    <jacoco.skip>true</jacoco.skip>
+    <!--
+      Paths to the pre-built audio-app JAR and its runtime library directory.
+      These are resolved by the Failsafe plugin and injected as system properties so that
+      WorkbenchContainer can locate the artifacts without a compile-time dependency.
+    -->
+    <workbench.jar.path>${project.parent.basedir}/audio-app/target/audio-app-${project.version}.jar</workbench.jar.path>
+    <workbench.lib.dir>${project.parent.basedir}/audio-app/target/lib</workbench.lib.dir>
+    <workbench.static.dir>${project.parent.basedir}/audio-app/src/main/resources/workbench-ui</workbench.static.dir>
+    <!--
+      Documentation screenshot output path.  In verify mode screenshots are written to a temp
+      directory and compared against this path.  In update mode they are written here directly.
+    -->
+    <docs.screenshots.dir>${project.parent.basedir}/docs/assets/screenshots/workbench</docs.screenshots.dir>
+    <!--
+      Set -DupdateScreenshots=true to regenerate committed documentation screenshots.
+    -->
+    <updateScreenshots>false</updateScreenshots>
+    <!--
+      Pixel-difference tolerance expressed as a percentage of total pixels (0–100).
+      A value of 2 means up to 2 % of pixels may differ before the comparison fails.
+    -->
+    <screenshot.tolerance.pct>2</screenshot.tolerance.pct>
+  </properties>
+
+  <dependencies>
+    <!-- Build-order dependency: ensures audio-app is packaged before IT tests run -->
+    <dependency>
+      <groupId>audioin</groupId>
+      <artifactId>audio-app</artifactId>
+      <version>${project.version}</version>
+      <scope>test</scope>
+      <!-- We reference the JAR via a system property; we do not use the classes directly -->
+      <optional>true</optional>
+    </dependency>
+
+    <!-- Testcontainers core + Docker client -->
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>testcontainers</artifactId>
+      <version>${testcontainers.version}</version>
+      <scope>test</scope>
+    </dependency>
+
+    <!-- Playwright Java for browser automation -->
+    <dependency>
+      <groupId>com.microsoft.playwright</groupId>
+      <artifactId>playwright</artifactId>
+      <version>${playwright.version}</version>
+      <scope>test</scope>
+    </dependency>
+
+    <!-- JUnit 5 -->
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter-api</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter-engine</artifactId>
+      <scope>test</scope>
+    </dependency>
+
+    <!-- SLF4J simple binding for Testcontainers log output -->
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-simple</artifactId>
+      <version>${slf4j.version}</version>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <!--
+        Maven Failsafe plugin runs *IT.java classes during integration-test / verify phases.
+        This ensures the audio-app JAR is already built (package phase) before the tests run.
+      -->
+      <plugin>
+        <artifactId>maven-failsafe-plugin</artifactId>
+        <version>3.5.3</version>
+        <configuration>
+          <systemPropertyVariables>
+            <workbench.jar.path>${workbench.jar.path}</workbench.jar.path>
+            <workbench.lib.dir>${workbench.lib.dir}</workbench.lib.dir>
+            <workbench.static.dir>${workbench.static.dir}</workbench.static.dir>
+            <docs.screenshots.dir>${docs.screenshots.dir}</docs.screenshots.dir>
+            <updateScreenshots>${updateScreenshots}</updateScreenshots>
+            <screenshot.tolerance.pct>${screenshot.tolerance.pct}</screenshot.tolerance.pct>
+          </systemPropertyVariables>
+          <!--
+            Do not fail the build for missing tests: the module may be activated on machines
+            without Docker and all IT tests will be skipped gracefully.
+          -->
+          <failIfNoSpecifiedTests>false</failIfNoSpecifiedTests>
+        </configuration>
+        <executions>
+          <execution>
+            <goals>
+              <goal>integration-test</goal>
+              <goal>verify</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+
+      <!--
+        Skip the default Surefire run: this module has no unit tests.
+      -->
+      <plugin>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <skipTests>true</skipTests>
+        </configuration>
+      </plugin>
+
+      <!--
+        Override the JaCoCo executions inherited from the parent to do nothing.
+        The module has no main sources so the coverage check would fail at 0%.
+      -->
+      <plugin>
+        <groupId>org.jacoco</groupId>
+        <artifactId>jacoco-maven-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>prepare-agent</id>
+            <phase>none</phase>
+          </execution>
+          <execution>
+            <id>report</id>
+            <phase>none</phase>
+          </execution>
+          <execution>
+            <id>check</id>
+            <phase>none</phase>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+</project>
