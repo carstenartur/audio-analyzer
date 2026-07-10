@@ -19,7 +19,7 @@ Maven (-Pscreenshot-tests)
 
 ## Operating Modes
 
-### Verify Mode (default — used by CI and normal local checks)
+### Verify Mode (default — used by local checks and by CI only when explicitly enabled)
 
 ```bash
 mvn -Pscreenshot-tests verify
@@ -30,7 +30,7 @@ mvn -Pscreenshot-tests verify
 - Compares generated screenshots against committed baselines in `docs/assets/screenshots/workbench/`.
 - Fails the build if screenshots differ beyond the configured tolerance (default 2%) or if a
   required baseline screenshot is missing.
-- On failure, generated screenshots and diffs are written to
+- On failure, generated screenshots are written to
   `workbench-screenshot-tests/target/screenshot-failures/` for local inspection.
 
 ### Update Mode (used intentionally when UI changes should update documentation)
@@ -113,9 +113,10 @@ Screenshot captured: `docs/assets/screenshots/workbench/initial-load.png`
 
 ## CI Integration
 
-The CI workflow (`maven.yml`) runs the screenshot tests in verify mode when the `screenshot-tests`
-profile is active. On failure, generated screenshots are uploaded as CI artifacts named
-`workbench-screenshot-failures`.
+The default CI workflow (`maven.yml`) runs `mvn -B clean verify --file pom.xml` and does **not**
+activate `-Pscreenshot-tests`. If screenshot tests are run in CI with the profile enabled,
+generated screenshots are uploaded as CI artifacts named `workbench-screenshot-failures` on
+failure.
 
 To run screenshot tests in CI explicitly:
 

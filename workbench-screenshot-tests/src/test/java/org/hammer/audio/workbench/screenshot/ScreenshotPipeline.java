@@ -60,7 +60,23 @@ public final class ScreenshotPipeline {
    * @return tolerance in the range 0–100
    */
   public static int tolerancePct() {
-    return Integer.parseInt(System.getProperty(PROP_TOLERANCE, "2"));
+    String configured = System.getProperty(PROP_TOLERANCE, "2");
+    final int tolerance;
+    try {
+      tolerance = Integer.parseInt(configured);
+    } catch (NumberFormatException ex) {
+      throw new IllegalStateException(
+          "System property '"
+              + PROP_TOLERANCE
+              + "' must be an integer in range 0–100: "
+              + configured,
+          ex);
+    }
+    if (tolerance < 0 || tolerance > 100) {
+      throw new IllegalStateException(
+          "System property '" + PROP_TOLERANCE + "' must be in range 0–100: " + tolerance);
+    }
+    return tolerance;
   }
 
   /**

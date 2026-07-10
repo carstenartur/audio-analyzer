@@ -287,7 +287,7 @@
             .map(function (h) {
               return (
                 '<div class="wf-port" data-port-id="' +
-                h.id +
+                escHtml(h.id) +
                 '" data-port-direction="input">' +
                 '<div class="port-handle" style="background:' +
                 portColor(h.dataType) +
@@ -306,7 +306,7 @@
             .map(function (h) {
               return (
                 '<div class="wf-port" data-port-id="' +
-                h.id +
+                escHtml(h.id) +
                 '" data-port-direction="output">' +
                 escHtml(h.name) +
                 '<div class="port-handle" style="background:' +
@@ -327,12 +327,12 @@
             '</div>' +
             '<div class="wf-node-ports">' +
             '<div data-testid="input-ports-' +
-            node.id +
+            escHtml(node.id) +
             '">' +
             inputsHtml +
             '</div>' +
             '<div data-testid="output-ports-' +
-            node.id +
+            escHtml(node.id) +
             '">' +
             outputsHtml +
             '</div>' +

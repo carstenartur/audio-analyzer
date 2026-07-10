@@ -41,11 +41,13 @@ public final class WorkflowEditorHttpAdapter {
   private static final int HTTP_METHOD_NOT_ALLOWED = 405;
   private static final String CONTENT_TYPE = "Content-Type";
   private static final String APPLICATION_JSON = "application/json; charset=utf-8";
+  private static final String TEXT_PLAIN_UTF_8 = "text/plain; charset=utf-8";
   private static final String DEFAULT_BRANCH = "main";
   private static final int DEFAULT_HISTORY_LIMIT = 20;
   private static final String HTTP_GET = "GET";
   private static final String HTTP_POST = "POST";
   private static final String MSG_METHOD_NOT_ALLOWED = "Method Not Allowed";
+  private static final String JSON_FIELD_COMMIT_ID = "commitId";
   private static final String JSON_FIELD_TIMESTAMP = "timestamp";
 
   private final WorkflowEditorService editorService;
@@ -210,8 +212,8 @@ public final class WorkflowEditorHttpAdapter {
     }
     try {
       WorkflowProjection projection;
-      if (json.has("commitId") && !json.get("commitId").asText().isBlank()) {
-        projection = editorService.loadGraph(new CommitId(json.get("commitId").asText()));
+      if (json.has(JSON_FIELD_COMMIT_ID) && !json.get(JSON_FIELD_COMMIT_ID).asText().isBlank()) {
+        projection = editorService.loadGraph(new CommitId(json.get(JSON_FIELD_COMMIT_ID).asText()));
       } else {
         projection = editorService.loadGraph(textOrDefault(json, "branch", DEFAULT_BRANCH));
       }
@@ -416,7 +418,7 @@ public final class WorkflowEditorHttpAdapter {
 
   private void sendError(HttpExchange exchange, int status, String message) throws IOException {
     byte[] body = message.getBytes(StandardCharsets.UTF_8);
-    exchange.getResponseHeaders().set(CONTENT_TYPE, "text/plain; charset=utf-8");
+    exchange.getResponseHeaders().set(CONTENT_TYPE, TEXT_PLAIN_UTF_8);
     exchange.sendResponseHeaders(status, body.length);
     try (OutputStream out = exchange.getResponseBody()) {
       out.write(body);
@@ -440,7 +442,12 @@ public final class WorkflowEditorHttpAdapter {
    *
    * @param commitId stable identifier of the created commit
    */
-  public record CheckpointResponse(String commitId) {}
+  public record CheckpointResponse(String commitId) {
+    public CheckpointResponse {
+      Objects.requireNonNull(
+          commitId, () -> "CheckpointResponse parameter commitId must not be null");
+    }
+  }
 
   /**
    * JSON response entry for checkpoint history.
@@ -525,6 +532,15 @@ public final class WorkflowEditorHttpAdapter {
 
     @Override
     public void handle(HttpExchange exchange) throws IOException {
+      if (!HTTP_GET.equalsIgnoreCase(exchange.getRequestMethod())) {
+        exchange.getResponseHeaders().set("Allow", HTTP_GET);
+        sendStatic(
+            exchange,
+            HTTP_METHOD_NOT_ALLOWED,
+            TEXT_PLAIN_UTF_8,
+            MSG_METHOD_NOT_ALLOWED.getBytes(StandardCharsets.UTF_8));
+        return;
+      }
       String uriPath = exchange.getRequestURI().getPath();
       if (uriPath == null || "/".equals(uriPath) || uriPath.isEmpty()) {
         uriPath = "/index.html";
@@ -532,19 +548,11 @@ public final class WorkflowEditorHttpAdapter {
       String relative = uriPath.startsWith("/") ? uriPath.substring(1) : uriPath;
       Path target = root.resolve(relative).normalize();
       if (!target.startsWith(root)) {
-        sendStatic(
-            exchange,
-            403,
-            "text/plain; charset=utf-8",
-            "Forbidden".getBytes(StandardCharsets.UTF_8));
+        sendStatic(exchange, 403, TEXT_PLAIN_UTF_8, "Forbidden".getBytes(StandardCharsets.UTF_8));
         return;
       }
       if (!Files.exists(target) || Files.isDirectory(target)) {
-        sendStatic(
-            exchange,
-            404,
-            "text/plain; charset=utf-8",
-            "Not Found".getBytes(StandardCharsets.UTF_8));
+        sendStatic(exchange, 404, TEXT_PLAIN_UTF_8, "Not Found".getBytes(StandardCharsets.UTF_8));
         return;
       }
       byte[] content = Files.readAllBytes(target);

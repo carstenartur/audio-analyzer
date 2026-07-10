@@ -18,6 +18,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
+import org.opentest4j.TestAbortedException;
 import org.testcontainers.DockerClientFactory;
 import org.testcontainers.containers.GenericContainer;
 
@@ -70,7 +71,11 @@ class WorkbenchInitialLoadIT {
         isDockerAvailable(), "Docker is not available — skipping screenshot integration tests");
     assumeTrue(isJarAvailable(), "audio-app JAR not found — build the project first");
 
-    container = WorkbenchContainerFactory.create();
+    try {
+      container = WorkbenchContainerFactory.create();
+    } catch (IllegalStateException ex) {
+      throw new TestAbortedException(ex.getMessage(), ex);
+    }
     container.start();
 
     playwright = Playwright.create();

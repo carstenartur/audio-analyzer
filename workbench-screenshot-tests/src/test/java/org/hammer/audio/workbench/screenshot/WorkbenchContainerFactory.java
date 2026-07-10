@@ -88,7 +88,7 @@ public final class WorkbenchContainerFactory {
    * @return base URL, e.g. {@code http://localhost:32769}
    */
   public static String baseUrl(GenericContainer<?> container) {
-    return "http://localhost:" + container.getMappedPort(WORKBENCH_PORT);
+    return "http://" + container.getHost() + ":" + container.getMappedPort(WORKBENCH_PORT);
   }
 
   private static Path requirePath(String property) {
