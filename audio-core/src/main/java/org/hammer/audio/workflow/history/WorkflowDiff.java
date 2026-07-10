@@ -5,6 +5,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import java.util.TreeSet;
 import org.hammer.audio.workflow.Edge;
 import org.hammer.audio.workflow.Node;
 import org.hammer.audio.workflow.Workflow;
@@ -136,40 +138,19 @@ public record WorkflowDiff(List<WorkflowChange> changes) {
       Map<String, String> before,
       Map<String, String> after,
       List<WorkflowChange> changes) {
-    diffChangedOrRemovedProperties(targetId, before, after, changes);
-    diffNewProperties(targetId, before, after, changes);
-  }
-
-  private static void diffChangedOrRemovedProperties(
-      String targetId,
-      Map<String, String> before,
-      Map<String, String> after,
-      List<WorkflowChange> changes) {
-    for (String key : sortedKeys(before)) {
+    for (String key : sortedKeys(before, after)) {
       String beforeValue = before.get(key);
       String afterValue = after.get(key);
-      if (!beforeValue.equals(afterValue)) {
+      if (!Objects.equals(beforeValue, afterValue)) {
         changes.add(new WorkflowChange.ParameterChanged(targetId, key, beforeValue, afterValue));
       }
     }
   }
 
-  private static void diffNewProperties(
-      String targetId,
-      Map<String, String> before,
-      Map<String, String> after,
-      List<WorkflowChange> changes) {
-    for (String key : sortedKeys(after)) {
-      if (!before.containsKey(key)) {
-        changes.add(new WorkflowChange.ParameterChanged(targetId, key, null, after.get(key)));
-      }
-    }
-  }
-
-  private static List<String> sortedKeys(Map<String, String> properties) {
-    List<String> keys = new ArrayList<>(properties.keySet());
-    keys.sort(String::compareTo);
-    return keys;
+  private static List<String> sortedKeys(Map<String, String> before, Map<String, String> after) {
+    Set<String> keys = new TreeSet<>(before.keySet());
+    keys.addAll(after.keySet());
+    return new ArrayList<>(keys);
   }
 
   private static Map<String, Node> indexNodes(Workflow workflow) {

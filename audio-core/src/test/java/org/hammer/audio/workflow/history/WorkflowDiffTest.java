@@ -189,8 +189,8 @@ class WorkflowDiffTest {
 
     assertEquals(3, diff.changes().size());
     assertEquals("alpha", ((WorkflowChange.ParameterChanged) diff.changes().get(0)).propertyKey());
-    assertEquals("zeta", ((WorkflowChange.ParameterChanged) diff.changes().get(1)).propertyKey());
-    assertEquals("middle", ((WorkflowChange.ParameterChanged) diff.changes().get(2)).propertyKey());
+    assertEquals("middle", ((WorkflowChange.ParameterChanged) diff.changes().get(1)).propertyKey());
+    assertEquals("zeta", ((WorkflowChange.ParameterChanged) diff.changes().get(2)).propertyKey());
   }
 
   // helper shim to avoid importing Assertions.assertNull/assertInstanceOf in a confusing way
