@@ -8,6 +8,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.hammer.audio.workflow.Node;
 import org.hammer.audio.workflow.Workflow;
 import org.hammer.audio.workflow.WorkflowOperation;
@@ -114,7 +115,7 @@ class CollaborativeWorkflowSessionServiceTest {
   void publishFailureLeavesCommittedWorkflowChangeAndPendingOutboxEntry() {
     InMemoryWorkflowEventOutbox outbox = new InMemoryWorkflowEventOutbox();
     List<WorkflowCollaborationEvent> published = new ArrayList<>();
-    boolean[] failNextPublish = {true};
+    AtomicBoolean failNextPublish = new AtomicBoolean(true);
     CollaborativeWorkflowSessionService service =
         new CollaborativeWorkflowSessionService(
             "session-1",
@@ -122,8 +123,7 @@ class CollaborativeWorkflowSessionServiceTest {
             new WorkflowOperationLog(initialWorkflow()),
             outbox,
             event -> {
-              if (failNextPublish[0]) {
-                failNextPublish[0] = false;
+              if (failNextPublish.getAndSet(false)) {
                 throw new IllegalStateException("broker unavailable");
               }
               published.add(event);

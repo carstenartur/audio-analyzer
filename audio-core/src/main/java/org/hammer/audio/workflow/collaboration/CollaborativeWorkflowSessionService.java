@@ -7,6 +7,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import org.hammer.audio.workflow.Workflow;
 import org.hammer.audio.workflow.WorkflowOperation;
 import org.hammer.audio.workflow.WorkflowOperationLog;
@@ -25,6 +27,9 @@ import org.hammer.audio.workflow.WorkflowOperationLog;
  * </ul>
  */
 public final class CollaborativeWorkflowSessionService {
+
+  private static final Logger LOGGER =
+      Logger.getLogger(CollaborativeWorkflowSessionService.class.getName());
 
   private final String sessionId;
   private final CollaborationMode mode;
@@ -193,6 +198,15 @@ public final class CollaborativeWorkflowSessionService {
         eventBus.publish(entry.event());
         eventOutbox.markPublished(entry.entryId());
       } catch (RuntimeException ex) {
+        LOGGER.log(
+            Level.WARNING,
+            "Failed to publish collaboration event for session "
+                + sessionId
+                + ", outboxEntryId="
+                + entry.entryId()
+                + ", eventType="
+                + entry.event().type(),
+            ex);
         break;
       }
     }
