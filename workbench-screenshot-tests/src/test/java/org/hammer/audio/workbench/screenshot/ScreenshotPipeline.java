@@ -41,6 +41,8 @@ public final class ScreenshotPipeline {
   private static final String PROP_TOLERANCE = "screenshot.tolerance.pct";
   private static final String PROP_DOCS_DIR = "docs.screenshots.dir";
 
+  private static final int PIXEL_CHANNEL_TOLERANCE = 8;
+
   private ScreenshotPipeline() {}
 
   /**
@@ -203,11 +205,14 @@ public final class ScreenshotPipeline {
   }
 
   private static boolean pixelsMatch(int rgb1, int rgb2) {
-    // Allow up to 8 per-channel difference to tolerate minor rendering variations
+    // Allow up to PIXEL_CHANNEL_TOLERANCE per-channel difference to tolerate minor rendering
+    // variations
     int dr = Math.abs(((rgb1 >> 16) & 0xff) - ((rgb2 >> 16) & 0xff));
     int dg = Math.abs(((rgb1 >> 8) & 0xff) - ((rgb2 >> 8) & 0xff));
     int db = Math.abs((rgb1 & 0xff) - (rgb2 & 0xff));
-    return dr <= 8 && dg <= 8 && db <= 8;
+    return dr <= PIXEL_CHANNEL_TOLERANCE
+        && dg <= PIXEL_CHANNEL_TOLERANCE
+        && db <= PIXEL_CHANNEL_TOLERANCE;
   }
 
   /**

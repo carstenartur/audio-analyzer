@@ -88,7 +88,7 @@ public final class WorkflowHttpServerLauncher {
         new Edge("seed.edge.gain-to-out", "seed.gain", "audio-out", "seed.output", "audio-in");
     return new Workflow(
         "seed.workflow",
-        "Input \u2192 Gain \u2192 Output",
+        "Input -> Gain -> Output",
         List.of(inputNode, gainNode, outputNode),
         List.of(inputToGain, gainToOutput));
   }

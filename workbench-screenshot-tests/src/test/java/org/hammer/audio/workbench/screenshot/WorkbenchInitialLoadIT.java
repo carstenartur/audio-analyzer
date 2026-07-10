@@ -58,7 +58,7 @@ class WorkbenchInitialLoadIT {
   private static final int VIEWPORT_WIDTH = 1280;
   private static final int VIEWPORT_HEIGHT = 720;
   private static final int PAGE_LOAD_TIMEOUT_MS = 15_000;
-  private static final String STATUS_LOADED_PREFIX = "Loaded:";
+  private static final String EXPECTED_STATUS_PREFIX = "Loaded:";
 
   private GenericContainer<?> container;
   private Playwright playwright;
@@ -159,7 +159,7 @@ class WorkbenchInitialLoadIT {
       Locator statusMsg = page.locator("[data-testid='status-message']");
       String statusText = statusMsg.innerText();
       assertTrue(
-          statusText.startsWith(STATUS_LOADED_PREFIX),
+          statusText.startsWith(EXPECTED_STATUS_PREFIX),
           "Status message must indicate successful load, got: " + statusText);
 
       // Capture full-page screenshot
