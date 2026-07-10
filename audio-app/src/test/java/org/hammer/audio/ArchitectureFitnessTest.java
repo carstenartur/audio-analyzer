@@ -234,4 +234,67 @@ class ArchitectureFitnessTest {
         .resideInAnyPackage(JAVAX_SWING, JAVA_AWT, JGIT_PKG, PERSISTENCE_PKG)
         .check(CATALOG_CLASSES);
   }
+
+  // -------------------------------------------------------------------------
+  // Semantic-analysis / history-projection guardrails (issue #213)
+  // -------------------------------------------------------------------------
+
+  private static final String HISTORY_PKG = "org.hammer.audio.workflow.history..";
+  private static final JavaClasses HISTORY_CLASSES =
+      importProduction("org.hammer.audio.workflow.history");
+
+  /**
+   * History-projection guardrail: the workflow.history package must not depend on Swing, AWT or
+   * JGit.
+   *
+   * <p>The semantic-diff, conflict-report and history-search layer is pure domain analysis. It
+   * consumes workflow snapshots and value objects; it must never pull in rendering or VCS
+   * implementation dependencies.
+   */
+  @Test
+  void historyPackageDoesNotDependOnSwingOrJGit() {
+    noClasses()
+        .that()
+        .resideInAPackage(HISTORY_PKG)
+        .should()
+        .dependOnClassesThat()
+        .resideInAnyPackage(JAVAX_SWING, JAVA_AWT, JGIT_PKG)
+        .check(HISTORY_CLASSES);
+  }
+
+  /**
+   * History-projection guardrail: the workflow.history package must not depend on the Persistence
+   * context (recording).
+   *
+   * <p>Search projections are derived views of workflow domain objects and the store facade. They
+   * must not import recording or raw persistence utilities.
+   */
+  @Test
+  void historyPackageDoesNotDependOnPersistence() {
+    noClasses()
+        .that()
+        .resideInAPackage(HISTORY_PKG)
+        .should()
+        .dependOnClassesThat()
+        .resideInAPackage(PERSISTENCE_PKG)
+        .check(HISTORY_CLASSES);
+  }
+
+  /**
+   * History-projection guardrail: the workflow.history package must not depend on the execution
+   * context.
+   *
+   * <p>Semantic diffs and history projections consume stable workflow snapshots, not execution
+   * state. Importing execution types would couple history analysis to runtime behaviour.
+   */
+  @Test
+  void historyPackageDoesNotDependOnExecution() {
+    noClasses()
+        .that()
+        .resideInAPackage(HISTORY_PKG)
+        .should()
+        .dependOnClassesThat()
+        .resideInAPackage(EXECUTION_PKG)
+        .check(HISTORY_CLASSES);
+  }
 }

@@ -237,14 +237,14 @@ User B creates Edge from Node X to Node Y
 
 Expected result: invalid edge or semantic conflict report.
 
-### Port type changed while another user connects it
+### Endpoint property changed while another user connects it
 
 ```text
-User A changes output port from AudioBlock to Spectrum
-User B connects that port to an AudioBlock input
+User A changes a property on Node Y that affects compatibility
+User B connects an edge to Node Y
 ```
 
-Expected result: backend validation marks the edge invalid.
+Expected result: backend validation or semantic merge marks the edge for review.
 
 ## Execution model
 
@@ -298,7 +298,7 @@ Collaboration tests with simulated users:
 - concurrent node moves;
 - concurrent property edits;
 - delete-vs-modify;
-- connect-vs-type-change;
+- connect-vs-parameter-change;
 - undo-vs-remote-change;
 - offline/online reconnect;
 - commit while others edit.
