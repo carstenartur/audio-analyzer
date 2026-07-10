@@ -1,12 +1,16 @@
 /**
  * Execution bounded context — runtime lifecycle model derived from a frozen workflow snapshot.
  *
- * <p>This package contains the execution model only: {@link
+ * <p>This package contains the execution model and services: {@link
  * org.hammer.audio.workflow.execution.ExecutionSnapshot} (immutable freeze of a workflow at
  * execution start), {@link org.hammer.audio.workflow.execution.ExecutionPlan} (topological node
  * order), {@link org.hammer.audio.workflow.execution.ExecutionContext} (mutable per-node status
  * tracking), {@link org.hammer.audio.workflow.execution.ExecutionResult} (immutable terminal
- * outcome) and {@link org.hammer.audio.workflow.execution.ExecutionStatus} (node lifecycle states).
+ * outcome), {@link org.hammer.audio.workflow.execution.ExecutionStatus} (node lifecycle states),
+ * {@link org.hammer.audio.workflow.execution.SnapshotExecutionService} (application service that
+ * creates snapshots from stored checkpoints and drives dry-run execution) and {@link
+ * org.hammer.audio.workflow.execution.ReproducibilityBundle} (immutable evidence bundle capturing a
+ * completed run and its version-control provenance).
  *
  * <p><strong>Boundary rules</strong>:
  *
