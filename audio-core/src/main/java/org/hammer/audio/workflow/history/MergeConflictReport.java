@@ -19,7 +19,7 @@ import java.util.Set;
  *   <li><b>Delete-vs-modify</b>: one diff removes a node while the other diff modifies a property
  *       on the same node. Because the intent of each side is incompatible, neither can be
  *       auto-resolved.
- *   <li><b>Connect-vs-type-change</b>: one diff adds an edge while the other diff modifies a
+ *   <li><b>Connect-vs-parameter-change</b>: one diff adds an edge while the other diff modifies a
  *       property on one of the edge's endpoint nodes. The edge may become invalid after the
  *       property change, so human review is required.
  * </ul>
@@ -67,8 +67,8 @@ public record MergeConflictReport(List<MergeConflict> conflicts) {
         theirsRemovedNodeIds,
         oursChangedTargetIds,
         conflicts);
-    detectConnectVsTypeChange(ours.changes(), theirsChangedTargetIds, conflicts);
-    detectConnectVsTypeChange(theirs.changes(), oursChangedTargetIds, conflicts);
+    detectConnectVsParameterChange(ours.changes(), theirsChangedTargetIds, conflicts);
+    detectConnectVsParameterChange(theirs.changes(), oursChangedTargetIds, conflicts);
     return new MergeConflictReport(conflicts);
   }
 
@@ -90,7 +90,7 @@ public record MergeConflictReport(List<MergeConflict> conflicts) {
     }
   }
 
-  private static void detectConnectVsTypeChange(
+  private static void detectConnectVsParameterChange(
       List<WorkflowChange> changes,
       Set<String> otherChangedTargetIds,
       List<MergeConflict> conflicts) {
@@ -101,7 +101,7 @@ public record MergeConflictReport(List<MergeConflict> conflicts) {
                 added.edge().sourceNodeId(), added.edge().targetNodeId(), otherChangedTargetIds);
         if (conflictingNodeId != null) {
           conflicts.add(
-              new MergeConflict.ConnectVsTypeChange(added.edge().id(), conflictingNodeId));
+              new MergeConflict.ConnectVsParameterChange(added.edge().id(), conflictingNodeId));
         }
       }
     }

@@ -82,7 +82,7 @@ class MergeConflictReportTest {
   }
 
   @Test
-  void connectVsTypeChange_detectedWhenOursConnectsAndTheirsModifiesEndpoint() {
+  void connectVsParameterChange_detectedWhenOursConnectsAndTheirsModifiesEndpoint() {
     // base: A + B, no edges
     Workflow base = workflow(List.of(NODE_A, NODE_B), List.of());
     // ours: adds edge A->B
@@ -94,17 +94,17 @@ class MergeConflictReportTest {
     WorkflowDiff theirsDiff = WorkflowDiff.compute(base, theirs);
     MergeConflictReport report = MergeConflictReport.detect(oursDiff, theirsDiff);
 
-    assertTrue(report.hasConflicts(), "connect-vs-type-change should be reported as conflict");
+    assertTrue(report.hasConflicts(), "connect-vs-parameter-change should be reported as conflict");
     assertEquals(1, report.conflicts().size());
     MergeConflict conflict = report.conflicts().get(0);
-    assertInstanceOf(MergeConflict.ConnectVsTypeChange.class, conflict);
-    MergeConflict.ConnectVsTypeChange ctc = (MergeConflict.ConnectVsTypeChange) conflict;
+    assertInstanceOf(MergeConflict.ConnectVsParameterChange.class, conflict);
+    MergeConflict.ConnectVsParameterChange ctc = (MergeConflict.ConnectVsParameterChange) conflict;
     assertEquals("edge.ab", ctc.edgeId());
     assertEquals("node.b", ctc.nodeId());
   }
 
   @Test
-  void connectVsTypeChange_detectedSymmetrically() {
+  void connectVsParameterChange_detectedSymmetrically() {
     Workflow base = workflow(List.of(NODE_A, NODE_B), List.of());
     // ours: modifies parameter on B
     Workflow ours = workflow(List.of(NODE_A, NODE_B_WITH_GAIN), List.of());
@@ -115,8 +115,9 @@ class MergeConflictReportTest {
     WorkflowDiff theirsDiff = WorkflowDiff.compute(base, theirs);
     MergeConflictReport report = MergeConflictReport.detect(oursDiff, theirsDiff);
 
-    assertTrue(report.hasConflicts(), "symmetric connect-vs-type-change should also be reported");
-    assertInstanceOf(MergeConflict.ConnectVsTypeChange.class, report.conflicts().get(0));
+    assertTrue(
+        report.hasConflicts(), "symmetric connect-vs-parameter-change should also be reported");
+    assertInstanceOf(MergeConflict.ConnectVsParameterChange.class, report.conflicts().get(0));
   }
 
   @Test

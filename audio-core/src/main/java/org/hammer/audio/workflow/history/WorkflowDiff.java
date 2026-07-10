@@ -145,12 +145,11 @@ public record WorkflowDiff(List<WorkflowChange> changes) {
       Map<String, String> before,
       Map<String, String> after,
       List<WorkflowChange> changes) {
-    for (Map.Entry<String, String> entry : before.entrySet()) {
-      String afterValue = after.get(entry.getKey());
-      if (!entry.getValue().equals(afterValue)) {
-        changes.add(
-            new WorkflowChange.ParameterChanged(
-                targetId, entry.getKey(), entry.getValue(), afterValue));
+    for (String key : sortedKeys(before)) {
+      String beforeValue = before.get(key);
+      String afterValue = after.get(key);
+      if (!beforeValue.equals(afterValue)) {
+        changes.add(new WorkflowChange.ParameterChanged(targetId, key, beforeValue, afterValue));
       }
     }
   }
@@ -160,12 +159,17 @@ public record WorkflowDiff(List<WorkflowChange> changes) {
       Map<String, String> before,
       Map<String, String> after,
       List<WorkflowChange> changes) {
-    for (Map.Entry<String, String> entry : after.entrySet()) {
-      if (!before.containsKey(entry.getKey())) {
-        changes.add(
-            new WorkflowChange.ParameterChanged(targetId, entry.getKey(), null, entry.getValue()));
+    for (String key : sortedKeys(after)) {
+      if (!before.containsKey(key)) {
+        changes.add(new WorkflowChange.ParameterChanged(targetId, key, null, after.get(key)));
       }
     }
+  }
+
+  private static List<String> sortedKeys(Map<String, String> properties) {
+    List<String> keys = new ArrayList<>(properties.keySet());
+    keys.sort(String::compareTo);
+    return keys;
   }
 
   private static Map<String, Node> indexNodes(Workflow workflow) {

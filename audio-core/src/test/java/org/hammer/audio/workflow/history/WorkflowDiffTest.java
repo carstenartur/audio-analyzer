@@ -163,6 +163,36 @@ class WorkflowDiffTest {
     assertEquals(1, addedNodes, "one node should be added");
   }
 
+  @Test
+  void parameterChanges_areReportedInDeterministicKeyOrder() {
+    Node beforeNode =
+        new Node(
+            "node.b",
+            "gain",
+            "Gain",
+            List.of(),
+            List.of(),
+            new Metadata(Map.of("zeta", "1.0", "alpha", "2.0")));
+    Node afterNode =
+        new Node(
+            "node.b",
+            "gain",
+            "Gain",
+            List.of(),
+            List.of(),
+            new Metadata(Map.of("zeta", "1.5", "alpha", "2.5", "middle", "3.0")));
+
+    WorkflowDiff diff =
+        WorkflowDiff.compute(
+            workflow(List.of(NODE_A, beforeNode), List.of()),
+            workflow(List.of(NODE_A, afterNode), List.of()));
+
+    assertEquals(3, diff.changes().size());
+    assertEquals("alpha", ((WorkflowChange.ParameterChanged) diff.changes().get(0)).propertyKey());
+    assertEquals("zeta", ((WorkflowChange.ParameterChanged) diff.changes().get(1)).propertyKey());
+    assertEquals("middle", ((WorkflowChange.ParameterChanged) diff.changes().get(2)).propertyKey());
+  }
+
   // helper shim to avoid importing Assertions.assertNull/assertInstanceOf in a confusing way
   private static void assertNull(Object actual) {
     assertEquals(null, actual);

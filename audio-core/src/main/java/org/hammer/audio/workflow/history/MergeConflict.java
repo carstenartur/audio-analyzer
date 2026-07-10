@@ -15,7 +15,7 @@ import java.util.Objects;
  * @see MergeConflictReport
  */
 public sealed interface MergeConflict
-    permits MergeConflict.DeleteVsModify, MergeConflict.ConnectVsTypeChange {
+    permits MergeConflict.DeleteVsModify, MergeConflict.ConnectVsParameterChange {
 
   /**
    * One branch deleted a node while the other branch modified it (e.g. renamed or updated a
@@ -33,17 +33,17 @@ public sealed interface MergeConflict
   }
 
   /**
-   * One branch connected two ports (adding an edge) while the other branch changed the type of one
-   * of the involved nodes.
+   * One branch connected two ports (adding an edge) while the other branch changed a parameter on
+   * one of the involved nodes.
    *
-   * <p>The new edge may be invalid after the type change, so the conflict must be reviewed by a
-   * human author.
+   * <p>The new edge may be invalid after the parameter change, so the conflict must be reviewed by
+   * a human author.
    *
    * @param edgeId stable identifier of the newly added edge that may be invalid
-   * @param nodeId stable identifier of the node whose type was changed on the other branch
+   * @param nodeId stable identifier of the node whose parameter was changed on the other branch
    */
-  record ConnectVsTypeChange(String edgeId, String nodeId) implements MergeConflict {
-    public ConnectVsTypeChange {
+  record ConnectVsParameterChange(String edgeId, String nodeId) implements MergeConflict {
+    public ConnectVsParameterChange {
       Objects.requireNonNull(edgeId, "edgeId");
       Objects.requireNonNull(nodeId, "nodeId");
     }
