@@ -12,7 +12,12 @@ public interface WorkflowEventOutbox {
 
   void markPublished(String entryId);
 
-  /** Stored outbox message. */
+  /**
+   * Stored outbox message.
+   *
+   * @param entryId unique outbox entry identifier
+   * @param event committed event payload
+   */
   record OutboxEntry(String entryId, WorkflowCollaborationEvent event) {
     public OutboxEntry {
       Objects.requireNonNull(entryId, "entryId");

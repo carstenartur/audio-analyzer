@@ -2,7 +2,13 @@ package org.hammer.audio.workflow.collaboration;
 
 import java.util.Objects;
 
-/** Actor/user metadata attached to collaboration operations and events. */
+/**
+ * Actor/user metadata attached to collaboration operations and events.
+ *
+ * @param actorId stable collaboration actor identifier
+ * @param userId stable user identifier
+ * @param displayName user-facing display name
+ */
 public record OperationActor(String actorId, String userId, String displayName) {
 
   public OperationActor {

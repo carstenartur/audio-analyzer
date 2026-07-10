@@ -4,7 +4,15 @@ import java.time.Instant;
 import java.util.Objects;
 import org.hammer.audio.workflow.WorkflowOperation;
 
-/** Collaboration/application-service metadata wrapper around a semantic workflow operation. */
+/**
+ * Collaboration/application-service metadata wrapper around a semantic workflow operation.
+ *
+ * @param sessionId collaboration session identifier
+ * @param mode active collaboration mode of the session
+ * @param actor actor metadata for the operation sender
+ * @param operation semantic workflow operation
+ * @param receivedAt application-service receive timestamp
+ */
 public record WorkflowOperationEnvelope(
     String sessionId,
     CollaborationMode mode,
@@ -23,7 +31,11 @@ public record WorkflowOperationEnvelope(
     }
     if (!operation.author().equals(actor.actorId())) {
       throw new IllegalArgumentException(
-          "operation author '" + operation.author() + "' must match actorId '" + actor.actorId() + "'");
+          "operation author '"
+              + operation.author()
+              + "' must match actorId '"
+              + actor.actorId()
+              + "'");
     }
   }
 

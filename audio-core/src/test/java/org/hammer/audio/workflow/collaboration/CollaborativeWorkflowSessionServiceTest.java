@@ -106,7 +106,8 @@ class CollaborativeWorkflowSessionServiceTest {
             alice));
 
     assertEquals(1, published.size());
-    assertEquals(0, outbox.pending().size(), "published outbox entry should be marked as delivered");
+    assertEquals(
+        0, outbox.pending().size(), "published outbox entry should be marked as delivered");
   }
 
   @Test
@@ -119,7 +120,8 @@ class CollaborativeWorkflowSessionServiceTest {
         new PresenceState(
             "alice", Instant.parse("2026-01-01T12:00:00Z"), Map.of("cursor.x", "100")));
 
-    assertEquals(0, service.operations().size(), "presence updates must not touch semantic history");
+    assertEquals(
+        0, service.operations().size(), "presence updates must not touch semantic history");
     assertEquals(1, service.presenceSnapshot().size());
     assertEquals("100", service.presenceSnapshot().get("alice").attributes().get("cursor.x"));
   }

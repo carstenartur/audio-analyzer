@@ -6,7 +6,16 @@ import java.util.Objects;
 import java.util.UUID;
 import org.hammer.audio.workflow.WorkflowOperation;
 
-/** Committed collaboration event published through an event bus. */
+/**
+ * Committed collaboration event published through an event bus.
+ *
+ * @param eventId unique event identifier
+ * @param sessionId collaboration session identifier
+ * @param occurredAt event creation timestamp
+ * @param type event type
+ * @param actor actor metadata for the event source
+ * @param payload immutable event payload
+ */
 public record WorkflowCollaborationEvent(
     String eventId,
     String sessionId,
@@ -52,12 +61,7 @@ public record WorkflowCollaborationEvent(
   }
 
   public static WorkflowCollaborationEvent undoApplied(
-      String sessionId,
-      OperationActor requestedBy,
-      UndoScope scope,
-      String revertedOperationId,
-      String revertedActorId,
-      String undoOperationId) {
+      String sessionId, OperationActor requestedBy, UndoDetails undoDetails) {
     return new WorkflowCollaborationEvent(
         UUID.randomUUID().toString(),
         sessionId,
@@ -65,9 +69,27 @@ public record WorkflowCollaborationEvent(
         TYPE_UNDO_APPLIED,
         requestedBy,
         Map.of(
-            "undoScope", scope.name(),
-            "revertedOperationId", revertedOperationId,
-            "revertedActorId", revertedActorId,
-            "undoOperationId", undoOperationId));
+            "undoScope", undoDetails.scope().name(),
+            "revertedOperationId", undoDetails.revertedOperationId(),
+            "revertedActorId", undoDetails.revertedActorId(),
+            "undoOperationId", undoDetails.undoOperationId()));
+  }
+
+  /**
+   * Details for a shared/personal undo event payload.
+   *
+   * @param scope effective undo scope
+   * @param revertedOperationId operation id that was reverted
+   * @param revertedActorId actor whose operation was reverted
+   * @param undoOperationId semantic inverse operation id that was applied
+   */
+  public record UndoDetails(
+      UndoScope scope, String revertedOperationId, String revertedActorId, String undoOperationId) {
+    public UndoDetails {
+      Objects.requireNonNull(scope, "scope");
+      Objects.requireNonNull(revertedOperationId, "revertedOperationId");
+      Objects.requireNonNull(revertedActorId, "revertedActorId");
+      Objects.requireNonNull(undoOperationId, "undoOperationId");
+    }
   }
 }

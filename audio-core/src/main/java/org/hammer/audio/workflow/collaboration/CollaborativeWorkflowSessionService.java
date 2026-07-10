@@ -1,12 +1,12 @@
 package org.hammer.audio.workflow.collaboration;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import org.hammer.audio.workflow.Workflow;
 import org.hammer.audio.workflow.WorkflowOperation;
 import org.hammer.audio.workflow.WorkflowOperationLog;
@@ -31,7 +31,7 @@ public final class CollaborativeWorkflowSessionService {
   private final WorkflowOperationLog operationLog;
   private final WorkflowEventOutbox eventOutbox;
   private final WorkflowEventBus eventBus;
-  private final Map<String, PresenceState> presenceByActor = new LinkedHashMap<>();
+  private final Map<String, PresenceState> presenceByActor = new ConcurrentHashMap<>();
 
   public CollaborativeWorkflowSessionService(
       String sessionId,
@@ -58,7 +58,9 @@ public final class CollaborativeWorkflowSessionService {
     Objects.requireNonNull(envelope, "envelope");
     assertSessionAndMode(envelope.sessionId(), envelope.mode());
     operationLog.apply(envelope.operation());
-    appendAndPublish(WorkflowCollaborationEvent.operationApplied(sessionId, envelope.actor(), envelope.operation()));
+    appendAndPublish(
+        WorkflowCollaborationEvent.operationApplied(
+            sessionId, envelope.actor(), envelope.operation()));
     return operationLog.currentWorkflow();
   }
 
@@ -66,7 +68,8 @@ public final class CollaborativeWorkflowSessionService {
     Objects.requireNonNull(actor, "actor");
     if (mode.undoScope() == UndoScope.SHARED) {
       throw new IllegalStateException(
-          "Shared undo mode requires explicit target operation id to avoid implicit cross-user undo");
+          "Shared undo mode requires explicit target operation id to avoid implicit cross-user"
+              + " undo");
     }
     WorkflowOperation target = findLatestOperationByAuthor(actor.actorId());
     assertPersonalUndoSafe(actor.actorId(), target);
@@ -97,9 +100,11 @@ public final class CollaborativeWorkflowSessionService {
     return Map.copyOf(presenceByActor);
   }
 
-  private UndoResult applyUndo(OperationActor requestedBy, WorkflowOperation target, UndoScope scope) {
+  private UndoResult applyUndo(
+      OperationActor requestedBy, WorkflowOperation target, UndoScope scope) {
     WorkflowOperation inverse =
-        target.inverseOperation()
+        target
+            .inverseOperation()
             .orElseThrow(
                 () ->
                     new UnsupportedOperationException(
@@ -109,10 +114,8 @@ public final class CollaborativeWorkflowSessionService {
         WorkflowCollaborationEvent.undoApplied(
             sessionId,
             requestedBy,
-            scope,
-            target.operationId(),
-            target.author(),
-            inverse.operationId()));
+            new WorkflowCollaborationEvent.UndoDetails(
+                scope, target.operationId(), target.author(), inverse.operationId())));
     return new UndoResult(
         requestedBy.actorId(), scope, target.operationId(), target.author(), inverse.operationId());
   }
@@ -202,7 +205,11 @@ public final class CollaborativeWorkflowSessionService {
   private void assertSessionAndMode(String envelopeSessionId, CollaborationMode envelopeMode) {
     if (!sessionId.equals(envelopeSessionId)) {
       throw new IllegalArgumentException(
-          "envelope sessionId '" + envelopeSessionId + "' does not match session '" + sessionId + "'");
+          "envelope sessionId '"
+              + envelopeSessionId
+              + "' does not match session '"
+              + sessionId
+              + "'");
     }
     if (mode != envelopeMode) {
       throw new IllegalArgumentException(
@@ -210,7 +217,15 @@ public final class CollaborativeWorkflowSessionService {
     }
   }
 
-  /** Result of an undo operation. */
+  /**
+   * Result of an undo operation.
+   *
+   * @param requestedByActor actor requesting undo
+   * @param scope effective undo scope
+   * @param revertedOperationId operation id that was reverted
+   * @param revertedActorId actor whose operation was reverted
+   * @param undoOperationId semantic inverse operation id that was applied
+   */
   public record UndoResult(
       String requestedByActor,
       UndoScope scope,

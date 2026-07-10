@@ -6,13 +6,13 @@ public enum CollaborationMode {
   SHARED_SESSION_PERSONAL_UNDO(UndoScope.PERSONAL),
   SHARED_SESSION_SHARED_UNDO(UndoScope.SHARED);
 
-  private final UndoScope undoScope;
+  private final UndoScope configuredUndoScope;
 
   CollaborationMode(UndoScope undoScope) {
-    this.undoScope = undoScope;
+    this.configuredUndoScope = undoScope;
   }
 
   public UndoScope undoScope() {
-    return undoScope;
+    return configuredUndoScope;
   }
 }
