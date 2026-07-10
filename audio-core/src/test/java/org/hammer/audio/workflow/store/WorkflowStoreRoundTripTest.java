@@ -14,6 +14,7 @@ import org.hammer.audio.workflow.Port;
 import org.hammer.audio.workflow.PortDirection;
 import org.hammer.audio.workflow.PortMultiplicity;
 import org.hammer.audio.workflow.Workflow;
+import org.hammer.audio.workflow.WorkflowOperationLog;
 import org.hammer.audio.workflow.dsl.WorkflowDslParser;
 import org.hammer.audio.workflow.dsl.WorkflowDslSerializer;
 import org.hammer.audio.workflow.execution.ExecutionSnapshot;
@@ -125,6 +126,25 @@ class WorkflowStoreRoundTripTest {
   void loadHeadFromNonexistentBranchThrows() {
     VersionedWorkflowStore store = new InMemoryVersionedWorkflowStore();
     assertThrows(NoSuchElementException.class, () -> store.loadHead("nonexistent"));
+  }
+
+  /**
+   * Domain layer test: {@link WorkflowOperationLog} state initialized from a loaded workflow
+   * reflects the committed workflow with no pending operations.
+   */
+  @Test
+  void workflowOperationLogStateMatchesCommittedWorkflow() {
+    VersionedWorkflowStore store = new InMemoryVersionedWorkflowStore();
+    Workflow workflow = buildMinimalWorkflow();
+    store.commit(BRANCH, toSnapshot(workflow), METADATA);
+
+    WorkflowSnapshot loaded = store.loadHead(BRANCH);
+    Workflow restoredWorkflow = PARSER.parse(loaded.dslText());
+
+    WorkflowOperationLog log = new WorkflowOperationLog(restoredWorkflow);
+
+    assertEquals(workflow, log.currentWorkflow());
+    assertEquals(List.of(), log.operations());
   }
 
   /**
