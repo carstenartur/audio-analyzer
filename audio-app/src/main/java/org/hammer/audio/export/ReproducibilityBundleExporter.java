@@ -19,7 +19,7 @@ import org.hammer.audio.workflow.execution.ExecutionStatus;
 import org.hammer.audio.workflow.execution.ReproducibilityBundle;
 
 /**
- * Writes a {@link ReproducibilityBundle} as a versioned directory of plain-text artefacts.
+ * Writes a {@link ReproducibilityBundle} as a versioned directory of plain-text artifacts.
  *
  * <p>Given a parent directory and an immutable {@link ReproducibilityBundle} payload, creates a
  * {@code run-YYYYMMDD-HHMMSS} sub-directory containing:
@@ -34,7 +34,7 @@ import org.hammer.audio.workflow.execution.ReproducibilityBundle;
  * </ul>
  *
  * <p>All methods are pure I/O functions. No workflow DSL serialisation, no Swing/UI code and no
- * JGit internals are used here. The class is intentionally kept narrow; new artefact types can be
+ * JGit internals are used here. The class is intentionally kept narrow; new artifact types can be
  * added without changing the exporter contract.
  *
  * <p>Duplicate bundle names in the same parent directory are resolved by appending a numeric suffix
@@ -70,7 +70,7 @@ public final class ReproducibilityBundleExporter {
    * @param parentDirectory directory under which the bundle directory is created
    * @param bundle reproducibility evidence to export
    * @return the path to the created bundle directory
-   * @throws IOException if writing any artefact fails
+   * @throws IOException if writing any artifact fails
    * @throws IllegalArgumentException if bundle is null
    */
   public Path export(Path parentDirectory, ReproducibilityBundle bundle) throws IOException {
