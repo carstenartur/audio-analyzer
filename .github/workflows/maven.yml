@@ -46,6 +46,15 @@ jobs:
     - name: Build and verify with Maven (Java ${{ env.JAVA_VERSION }})
       run: mvn -B clean verify --file pom.xml
     
+    - name: Upload workbench screenshot failure artifacts
+      if: failure()
+      uses: actions/upload-artifact@v7
+      with:
+        name: workbench-screenshot-failures
+        path: workbench-screenshot-tests/target/screenshot-failures/
+        if-no-files-found: ignore
+        retention-days: 30
+    
     - name: Upload JUnit XML reports
       if: always()
       uses: actions/upload-artifact@v7

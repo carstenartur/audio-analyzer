@@ -64,7 +64,7 @@
   <suppress files=".*audio\-experimental\-acoustic/src/main/java/org/hammer/audio/experimental/acoustic/wingbeat/WingbeatLabel\.java" checks="com\.puppycrawl\.tools\.checkstyle\.checks\.whitespace\.WhitespaceAroundCheck" lines="33"/>
   <suppress files=".*audio\-experimental\-acoustic/src/main/java/org/hammer/audio/experimental/acoustic/workbench/ImportedRecordingWorkbenchPanel\.java" checks="com\.puppycrawl\.tools\.checkstyle\.checks\.whitespace\.WhitespaceAroundCheck" lines="396"/>
   <suppress files=".*audio\-experimental\-acoustic/src/main/java/org/hammer/audio/experimental/acoustic/workbench/WorkbenchParameters\.java" checks="com\.puppycrawl\.tools\.checkstyle\.checks\.whitespace\.WhitespaceAroundCheck" lines="82"/>
-  <suppress files=".*audio\-app/src/main/java/org/hammer/audio/workflow/editor/http/WorkflowEditorHttpAdapter\.java" checks="com\.puppycrawl\.tools\.checkstyle\.checks\.whitespace\.WhitespaceAroundCheck" lines="430"/>
+  <suppress files=".*audio\-app/src/main/java/org/hammer/audio/workflow/editor/http/WorkflowEditorHttpAdapter\.java" checks="com\.puppycrawl\.tools\.checkstyle\.checks\.whitespace\.WhitespaceAroundCheck" lines="443"/>
   <suppress files=".*audio\-geometry/src/main/java/org/hammer/audio/geometry/LocalizationConstraint2D\.java" checks="com\.puppycrawl\.tools\.checkstyle\.checks\.javadoc\.JavadocTypeCheck" lines="6"/>
   <suppress files=".*audio\-geometry/src/main/java/org/hammer/audio/geometry/MicrophoneArrayGeometry\.java" checks="com\.puppycrawl\.tools\.checkstyle\.checks\.javadoc\.JavadocTypeCheck" lines="116"/>
   <suppress files=".*audio\-geometry/src/main/java/org/hammer/audio/geometry/Ray2D\.java" checks="com\.puppycrawl\.tools\.checkstyle\.checks\.javadoc\.JavadocTypeCheck" lines="4"/>

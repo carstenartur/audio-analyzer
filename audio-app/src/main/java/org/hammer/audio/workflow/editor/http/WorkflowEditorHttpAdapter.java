@@ -11,6 +11,8 @@ import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
@@ -67,16 +69,27 @@ public final class WorkflowEditorHttpAdapter {
    * @throws IOException if the server cannot bind to the port
    */
   public void start(int port) throws IOException {
-    server = HttpServer.create(new InetSocketAddress(port), 0);
-    server.createContext("/workflow/projection", this::handleProjection);
-    server.createContext("/workflow/catalog", this::handleCatalog);
-    server.createContext("/workflow/validation", this::handleValidation);
-    server.createContext("/workflow/operations", this::handleOperations);
-    server.createContext("/workflow/checkpoints", this::handleCheckpoints);
-    server.createContext("/workflow/history", this::handleHistory);
-    server.createContext("/workflow/load", this::handleLoad);
-    server.createContext("/workflow/snapshot", this::handleSnapshot);
-    server.start();
+    HttpServer httpServer = HttpServer.create(new InetSocketAddress(port), 0);
+    registerContexts(httpServer);
+    httpServer.start();
+  }
+
+  /**
+   * Starts the HTTP server on the given port and registers a static-file context.
+   *
+   * <p>Static files are served from the given {@code staticDir}. Workflow API paths take precedence
+   * over the root path via JDK HttpServer longest-prefix routing.
+   *
+   * @param port TCP port to bind
+   * @param staticDir directory from which static files are served at {@code /}
+   * @throws IOException if the server cannot bind to the port
+   */
+  public void start(int port, Path staticDir) throws IOException {
+    Objects.requireNonNull(staticDir, "staticDir");
+    HttpServer httpServer = HttpServer.create(new InetSocketAddress(port), 0);
+    httpServer.createContext("/", new StaticFileHandler(staticDir));
+    registerContexts(httpServer);
+    httpServer.start();
   }
 
   /**
@@ -476,6 +489,90 @@ public final class WorkflowEditorHttpAdapter {
           WorkflowProjection.fromWorkflow(catalogWorkflow).nodes().get(0);
       return new CatalogEntry(
           type, node.label(), nodeProjection.inputHandles(), nodeProjection.outputHandles());
+    }
+  }
+
+  /**
+   * Registers all workflow API contexts onto the given HTTP server.
+   *
+   * <p>After this call the server has contexts for {@code /workflow/projection}, {@code
+   * /workflow/catalog}, {@code /workflow/validation}, {@code /workflow/operations}, {@code
+   * /workflow/checkpoints}, {@code /workflow/history}, {@code /workflow/load} and {@code
+   * /workflow/snapshot}.
+   *
+   * @param httpServer the HTTP server to attach contexts to
+   */
+  void registerContexts(HttpServer httpServer) {
+    server = httpServer;
+    httpServer.createContext("/workflow/projection", this::handleProjection);
+    httpServer.createContext("/workflow/catalog", this::handleCatalog);
+    httpServer.createContext("/workflow/validation", this::handleValidation);
+    httpServer.createContext("/workflow/operations", this::handleOperations);
+    httpServer.createContext("/workflow/checkpoints", this::handleCheckpoints);
+    httpServer.createContext("/workflow/history", this::handleHistory);
+    httpServer.createContext("/workflow/load", this::handleLoad);
+    httpServer.createContext("/workflow/snapshot", this::handleSnapshot);
+  }
+
+  /** Serves static files from a filesystem directory. */
+  private static final class StaticFileHandler implements com.sun.net.httpserver.HttpHandler {
+
+    private final Path root;
+
+    StaticFileHandler(Path root) {
+      this.root = root.normalize();
+    }
+
+    @Override
+    public void handle(HttpExchange exchange) throws IOException {
+      String uriPath = exchange.getRequestURI().getPath();
+      if (uriPath == null || "/".equals(uriPath) || uriPath.isEmpty()) {
+        uriPath = "/index.html";
+      }
+      String relative = uriPath.startsWith("/") ? uriPath.substring(1) : uriPath;
+      Path target = root.resolve(relative).normalize();
+      if (!target.startsWith(root)) {
+        sendStatic(
+            exchange,
+            403,
+            "text/plain; charset=utf-8",
+            "Forbidden".getBytes(StandardCharsets.UTF_8));
+        return;
+      }
+      if (!Files.exists(target) || Files.isDirectory(target)) {
+        sendStatic(
+            exchange,
+            404,
+            "text/plain; charset=utf-8",
+            "Not Found".getBytes(StandardCharsets.UTF_8));
+        return;
+      }
+      byte[] content = Files.readAllBytes(target);
+      sendStatic(exchange, HTTP_OK, guessContentType(target), content);
+    }
+
+    private static void sendStatic(
+        HttpExchange exchange, int status, String contentType, byte[] body) throws IOException {
+      exchange.getResponseHeaders().set(CONTENT_TYPE, contentType);
+      exchange.sendResponseHeaders(status, body.length);
+      try (OutputStream out = exchange.getResponseBody()) {
+        out.write(body);
+      }
+    }
+
+    private static String guessContentType(Path path) {
+      Path fileName = path.getFileName();
+      if (fileName == null) {
+        return "application/octet-stream";
+      }
+      String name = fileName.toString().toLowerCase(java.util.Locale.ROOT);
+      if (name.endsWith(".html")) return "text/html; charset=utf-8";
+      if (name.endsWith(".js")) return "application/javascript; charset=utf-8";
+      if (name.endsWith(".css")) return "text/css; charset=utf-8";
+      if (name.endsWith(".json")) return "application/json; charset=utf-8";
+      if (name.endsWith(".png")) return "image/png";
+      if (name.endsWith(".svg")) return "image/svg+xml";
+      return "application/octet-stream";
     }
   }
 }

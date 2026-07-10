@@ -1,0 +1,412 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Workflow Workbench</title>
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        /* Disable all animations and transitions for deterministic screenshots */
+        animation: none !important;
+        transition: none !important;
+      }
+
+      body {
+        margin: 0;
+        font-family: system-ui, sans-serif;
+        background: #11111b;
+        color: #cdd6f4;
+      }
+
+      #workbench {
+        display: grid;
+        grid-template-columns: 260px 1fr;
+        grid-template-rows: 48px 1fr;
+        height: 100vh;
+        width: 100vw;
+      }
+
+      #toolbar {
+        grid-column: 1 / -1;
+        background: #181825;
+        border-bottom: 1px solid #313244;
+        display: flex;
+        align-items: center;
+        padding: 0 16px;
+        gap: 12px;
+      }
+
+      #toolbar h1 {
+        margin: 0;
+        font-size: 15px;
+        font-weight: 600;
+        color: #cdd6f4;
+      }
+
+      #status {
+        font-size: 12px;
+        color: #a6e3a1;
+      }
+
+      #error-banner {
+        font-size: 12px;
+        color: #f38ba8;
+        display: none;
+      }
+
+      #palette {
+        background: #1e1e2e;
+        border-right: 1px solid #313244;
+        overflow-y: auto;
+        padding: 12px;
+      }
+
+      #palette h2 {
+        margin: 0 0 10px;
+        font-size: 13px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: #7f849c;
+      }
+
+      .palette-node {
+        background: #181825;
+        border: 1px solid #45475a;
+        border-radius: 6px;
+        padding: 8px 10px;
+        margin-bottom: 6px;
+        cursor: pointer;
+      }
+
+      .palette-node-label {
+        font-size: 12px;
+        font-weight: 600;
+      }
+
+      .palette-node-type {
+        font-size: 10px;
+        color: #7f849c;
+        margin-top: 2px;
+      }
+
+      .palette-node-ports {
+        font-size: 10px;
+        color: #6c7086;
+        margin-top: 2px;
+      }
+
+      #graph-area {
+        overflow: auto;
+        padding: 24px;
+        position: relative;
+      }
+
+      #graph-canvas {
+        position: relative;
+        min-width: 600px;
+        min-height: 400px;
+      }
+
+      .wf-node {
+        position: absolute;
+        background: #1e1e2e;
+        border: 1px solid #45475a;
+        border-radius: 8px;
+        padding: 10px 14px;
+        min-width: 160px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+      }
+
+      .wf-node-label {
+        font-size: 12px;
+        font-weight: 600;
+        text-align: center;
+        margin-bottom: 6px;
+      }
+
+      .wf-node-ports {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+      }
+
+      .wf-port {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 10px;
+        color: #bac2de;
+      }
+
+      .port-handle {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        border: 1px solid #45475a;
+        flex-shrink: 0;
+      }
+
+      .edge-svg {
+        position: absolute;
+        top: 0;
+        left: 0;
+        pointer-events: none;
+        overflow: visible;
+      }
+
+      .wf-edge {
+        stroke: #7f849c;
+        stroke-width: 2;
+        fill: none;
+      }
+
+      #loading {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #7f849c;
+        font-size: 14px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="workbench">
+      <header id="toolbar">
+        <h1 data-testid="workbench-title">Workflow Workbench</h1>
+        <span id="status" data-testid="status-message"></span>
+        <span id="error-banner" data-testid="error-banner"></span>
+      </header>
+
+      <aside id="palette" data-testid="node-palette">
+        <h2>Node Palette</h2>
+        <div id="catalog-list" data-testid="catalog-list"></div>
+      </aside>
+
+      <main id="graph-area" data-testid="graph-area">
+        <div id="loading">Loading workbench…</div>
+        <div id="graph-canvas" data-testid="graph-canvas" style="display:none">
+          <svg class="edge-svg" id="edge-svg" width="100%" height="100%"></svg>
+        </div>
+      </main>
+    </div>
+
+    <script>
+      // Workbench data types colour map
+      const TYPE_COLOURS = {
+        AudioBlock: '#4a90d9',
+        Dataset: '#7b68ee',
+        Spectrum: '#e67e22',
+        FeatureSet: '#27ae60',
+        ClassificationResult: '#e74c3c',
+        LocalizationResult: '#16a085',
+        BenchmarkResult: '#d35400',
+        Report: '#95a5a6',
+      };
+
+      function portColor(dataType) {
+        return TYPE_COLOURS[dataType] || '#888';
+      }
+
+      function showStatus(msg) {
+        document.getElementById('status').textContent = msg;
+      }
+
+      function showError(msg) {
+        const el = document.getElementById('error-banner');
+        el.textContent = msg;
+        el.style.display = 'inline';
+      }
+
+      async function getJson(url) {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(url + ' failed: ' + res.status);
+        return res.json();
+      }
+
+      function renderCatalog(entries) {
+        const list = document.getElementById('catalog-list');
+        list.innerHTML = '';
+        entries.forEach(function (entry) {
+          const div = document.createElement('div');
+          div.className = 'palette-node';
+          div.dataset.nodeType = entry.type;
+          div.dataset.testid = 'palette-node-' + entry.type;
+          div.innerHTML =
+            '<div class="palette-node-label">' +
+            escHtml(entry.label) +
+            '</div>' +
+            '<div class="palette-node-type">' +
+            escHtml(entry.type) +
+            '</div>' +
+            '<div class="palette-node-ports">in ' +
+            entry.inputHandles.length +
+            ' · out ' +
+            entry.outputHandles.length +
+            '</div>';
+          list.appendChild(div);
+        });
+      }
+
+      // Layout: place nodes in a horizontal row, 220px apart
+      function layoutNodes(nodes) {
+        const positions = {};
+        nodes.forEach(function (n, i) {
+          positions[n.id] = {x: 40 + i * 220, y: 100};
+        });
+        return positions;
+      }
+
+      function renderGraph(projection) {
+        const canvas = document.getElementById('graph-canvas');
+        const svg = document.getElementById('edge-svg');
+
+        // Clear existing nodes (keep SVG)
+        Array.from(canvas.children).forEach(function (el) {
+          if (el !== svg) canvas.removeChild(el);
+        });
+        svg.innerHTML = '';
+
+        const positions = layoutNodes(projection.nodes);
+        const nodeEls = {};
+
+        projection.nodes.forEach(function (node) {
+          const pos = positions[node.id];
+          const div = document.createElement('div');
+          div.className = 'wf-node';
+          div.dataset.nodeId = node.id;
+          div.dataset.testid = 'node-' + node.id;
+          div.style.left = pos.x + 'px';
+          div.style.top = pos.y + 'px';
+
+          const inputsHtml = (node.inputHandles || [])
+            .map(function (h) {
+              return (
+                '<div class="wf-port" data-port-id="' +
+                h.id +
+                '" data-port-direction="input">' +
+                '<div class="port-handle" style="background:' +
+                portColor(h.dataType) +
+                '" title="' +
+                escHtml(h.name) +
+                ' (' +
+                escHtml(h.dataType) +
+                ')"></div>' +
+                escHtml(h.name) +
+                '</div>'
+              );
+            })
+            .join('');
+
+          const outputsHtml = (node.outputHandles || [])
+            .map(function (h) {
+              return (
+                '<div class="wf-port" data-port-id="' +
+                h.id +
+                '" data-port-direction="output">' +
+                escHtml(h.name) +
+                '<div class="port-handle" style="background:' +
+                portColor(h.dataType) +
+                '" title="' +
+                escHtml(h.name) +
+                ' (' +
+                escHtml(h.dataType) +
+                ')"></div>' +
+                '</div>'
+              );
+            })
+            .join('');
+
+          div.innerHTML =
+            '<div class="wf-node-label">' +
+            escHtml(node.label) +
+            '</div>' +
+            '<div class="wf-node-ports">' +
+            '<div data-testid="input-ports-' +
+            node.id +
+            '">' +
+            inputsHtml +
+            '</div>' +
+            '<div data-testid="output-ports-' +
+            node.id +
+            '">' +
+            outputsHtml +
+            '</div>' +
+            '</div>';
+
+          canvas.appendChild(div);
+          nodeEls[node.id] = div;
+        });
+
+        // Draw edges after nodes are in the DOM
+        requestAnimationFrame(function () {
+          drawEdges(projection.edges, nodeEls, positions, canvas, svg);
+          document.getElementById('loading').style.display = 'none';
+          canvas.style.display = 'block';
+          showStatus(
+            'Loaded: ' +
+              projection.workflowName +
+              ' (' +
+              projection.nodes.length +
+              ' nodes, ' +
+              projection.edges.length +
+              ' edges)',
+          );
+        });
+      }
+
+      function drawEdges(edges, nodeEls, positions, canvas, svg) {
+        if (!edges || edges.length === 0) return;
+        const canvasRect = canvas.getBoundingClientRect();
+        edges.forEach(function (edge) {
+          const sourceEl = nodeEls[edge.source];
+          const targetEl = nodeEls[edge.target];
+          if (!sourceEl || !targetEl) return;
+          const srcRect = sourceEl.getBoundingClientRect();
+          const tgtRect = targetEl.getBoundingClientRect();
+          const x1 = srcRect.right - canvasRect.left;
+          const y1 = srcRect.top + srcRect.height / 2 - canvasRect.top;
+          const x2 = tgtRect.left - canvasRect.left;
+          const y2 = tgtRect.top + tgtRect.height / 2 - canvasRect.top;
+          const cx = (x1 + x2) / 2;
+          const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+          path.setAttribute(
+            'd',
+            'M ' + x1 + ' ' + y1 + ' C ' + cx + ' ' + y1 + ', ' + cx + ' ' + y2 + ', ' + x2 + ' ' + y2,
+          );
+          path.setAttribute('class', 'wf-edge');
+          path.setAttribute('data-edge-id', edge.id);
+          svg.appendChild(path);
+        });
+      }
+
+      function escHtml(str) {
+        return String(str)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+      }
+
+      async function init() {
+        try {
+          const [catalog, projection] = await Promise.all([
+            getJson('/workflow/catalog'),
+            getJson('/workflow/projection'),
+          ]);
+          renderCatalog(catalog);
+          renderGraph(projection);
+        } catch (err) {
+          showError('Error loading workbench: ' + err.message);
+          document.getElementById('loading').textContent = 'Failed to load workbench.';
+        }
+      }
+
+      document.addEventListener('DOMContentLoaded', init);
+    </script>
+  </body>
+</html>
