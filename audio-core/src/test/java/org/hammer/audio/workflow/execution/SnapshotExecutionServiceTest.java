@@ -232,6 +232,50 @@ class SnapshotExecutionServiceTest {
   }
 
   @Test
+  void runRejectsNullPlanId() {
+    ExecutionSnapshot emptySnapshot =
+        new ExecutionSnapshot(
+            "snap.empty", "workflow.empty", List.of(), List.of(), null, SNAP_TIME);
+
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> service.run(emptySnapshot, null, "exec.1", null, null, START_TIME, END_TIME));
+  }
+
+  @Test
+  void runRejectsBlankPlanId() {
+    ExecutionSnapshot emptySnapshot =
+        new ExecutionSnapshot(
+            "snap.empty", "workflow.empty", List.of(), List.of(), null, SNAP_TIME);
+
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> service.run(emptySnapshot, "  ", "exec.1", null, null, START_TIME, END_TIME));
+  }
+
+  @Test
+  void runRejectsNullExecutionId() {
+    ExecutionSnapshot emptySnapshot =
+        new ExecutionSnapshot(
+            "snap.empty", "workflow.empty", List.of(), List.of(), null, SNAP_TIME);
+
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> service.run(emptySnapshot, "plan.1", null, null, null, START_TIME, END_TIME));
+  }
+
+  @Test
+  void runRejectsBlankExecutionId() {
+    ExecutionSnapshot emptySnapshot =
+        new ExecutionSnapshot(
+            "snap.empty", "workflow.empty", List.of(), List.of(), null, SNAP_TIME);
+
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> service.run(emptySnapshot, "plan.1", "", null, null, START_TIME, END_TIME));
+  }
+
+  @Test
   void constructorRejectsNullStore() {
     assertThrows(NullPointerException.class, () -> new SnapshotExecutionService(null, PARSER));
   }

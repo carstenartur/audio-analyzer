@@ -69,6 +69,33 @@ class ReproducibilityBundleTest {
   }
 
   @Test
+  void rejectsCommitInfoWithNullCommitId() {
+    CommitId commitId = new CommitId("commit-abc");
+    CommitInfo commitInfo =
+        new CommitInfo(
+            commitId, new CommitMetadata("alice", "Save checkpoint", SNAP_TIME), "workflow.test");
+
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> new ReproducibilityBundle(minimalSnapshot(), completedResult(), null, commitInfo));
+  }
+
+  @Test
+  void rejectsCommitInfoWithMismatchedCommitId() {
+    CommitId commitId = new CommitId("commit-abc");
+    CommitId differentId = new CommitId("commit-xyz");
+    CommitInfo commitInfo =
+        new CommitInfo(
+            commitId, new CommitMetadata("alice", "Save checkpoint", SNAP_TIME), "workflow.test");
+
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            new ReproducibilityBundle(
+                minimalSnapshot(), completedResult(), differentId, commitInfo));
+  }
+
+  @Test
   void rejectsNullSnapshot() {
     assertThrows(
         NullPointerException.class,

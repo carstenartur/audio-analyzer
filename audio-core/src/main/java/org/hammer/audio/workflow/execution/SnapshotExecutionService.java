@@ -102,6 +102,8 @@ public final class SnapshotExecutionService {
       Instant startedAt,
       Instant completedAt) {
     Objects.requireNonNull(snapshot, "snapshot");
+    StableExecutionIds.requireStable(planId, "planId");
+    StableExecutionIds.requireStable(executionId, "executionId");
     Objects.requireNonNull(startedAt, "startedAt");
     Objects.requireNonNull(completedAt, "completedAt");
 

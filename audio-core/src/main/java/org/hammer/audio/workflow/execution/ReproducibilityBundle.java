@@ -27,6 +27,18 @@ public record ReproducibilityBundle(
   public ReproducibilityBundle {
     Objects.requireNonNull(snapshot, "snapshot");
     Objects.requireNonNull(result, "result");
+    if (commitInfo != null) {
+      if (commitId == null) {
+        throw new IllegalArgumentException("commitId must not be null when commitInfo is present");
+      }
+      if (!commitId.equals(commitInfo.commitId())) {
+        throw new IllegalArgumentException(
+            "commitId must equal commitInfo.commitId() but got commitId="
+                + commitId
+                + " and commitInfo.commitId()="
+                + commitInfo.commitId());
+      }
+    }
   }
 
   /**

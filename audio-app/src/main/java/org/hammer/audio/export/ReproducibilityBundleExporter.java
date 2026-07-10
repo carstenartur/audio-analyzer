@@ -29,8 +29,7 @@ import org.hammer.audio.workflow.execution.ReproducibilityBundle;
  *       creation timestamp, overall execution status and node count.
  *   <li>{@code execution-result.json} — per-run outcome: execution ID, plan ID, started/completed
  *       instants, overall status and per-node terminal statuses.
- *   <li>{@code workflow-nodes.csv} — one row per workflow node: ID and order index in the execution
- *       plan.
+ *   <li>{@code workflow-nodes.csv} — one row per workflow node: node ID, type and label.
  * </ul>
  *
  * <p>All methods are pure I/O functions. No workflow DSL serialisation, no Swing/UI code and no
