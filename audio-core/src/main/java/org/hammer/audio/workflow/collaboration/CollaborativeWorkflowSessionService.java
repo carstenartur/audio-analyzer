@@ -189,8 +189,12 @@ public final class CollaborativeWorkflowSessionService {
   private void appendAndPublish(WorkflowCollaborationEvent event) {
     eventOutbox.append(event);
     for (WorkflowEventOutbox.OutboxEntry entry : eventOutbox.pending()) {
-      eventBus.publish(entry.event());
-      eventOutbox.markPublished(entry.entryId());
+      try {
+        eventBus.publish(entry.event());
+        eventOutbox.markPublished(entry.entryId());
+      } catch (RuntimeException ex) {
+        break;
+      }
     }
   }
 

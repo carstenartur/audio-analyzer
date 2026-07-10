@@ -111,6 +111,39 @@ class CollaborativeWorkflowSessionServiceTest {
   }
 
   @Test
+  void publishFailureLeavesCommittedWorkflowChangeAndPendingOutboxEntry() {
+    InMemoryWorkflowEventOutbox outbox = new InMemoryWorkflowEventOutbox();
+    List<WorkflowCollaborationEvent> published = new ArrayList<>();
+    boolean[] failNextPublish = {true};
+    CollaborativeWorkflowSessionService service =
+        new CollaborativeWorkflowSessionService(
+            "session-1",
+            CollaborationMode.PRIVATE_WORKSPACE,
+            new WorkflowOperationLog(initialWorkflow()),
+            outbox,
+            event -> {
+              if (failNextPublish[0]) {
+                failNextPublish[0] = false;
+                throw new IllegalStateException("broker unavailable");
+              }
+              published.add(event);
+            });
+
+    OperationActor alice = new OperationActor("alice", "alice", "Alice");
+
+    service.applyOperation(
+        envelope(
+            CollaborationMode.PRIVATE_WORKSPACE,
+            rename("op.alice", T0, "alice", "Input", "Input A"),
+            alice));
+
+    assertEquals("Input A", findNode(service.currentWorkflow(), "node.input").label());
+    assertEquals(1, service.operations().size());
+    assertEquals(1, outbox.pending().size(), "failed publish should remain pending in outbox");
+    assertEquals(0, published.size(), "failed publish should not appear as delivered");
+  }
+
+  @Test
   void presenceStateIsNonSemanticAndDoesNotChangeWorkflowOperationHistory() {
     CollaborativeWorkflowSessionService service =
         newService(CollaborationMode.SHARED_SESSION_PERSONAL_UNDO, event -> {});
