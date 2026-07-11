@@ -345,19 +345,23 @@ The Maven module dependency graph enforces coarse-grained boundaries automatical
 `ArchitectureFitnessTest` in `audio-app` uses [ArchUnit](https://www.archunit.org) to analyse
 compiled bytecode and enforces the following rules automatically on every `mvn verify` run:
 
-|                    Test method                    |                                  Bounded-context rule                                  |
-|---------------------------------------------------|----------------------------------------------------------------------------------------|
-| `workflowContextDoesNotDependOnSwing`             | Workflow must not depend on `javax.swing` / `java.awt`                                 |
-| `workflowContextDoesNotDependOnJGit`              | Workflow must not depend on `org.eclipse.jgit`                                         |
-| `workflowContextDoesNotDependOnPersistence`       | Workflow (incl. Validation) must not depend on `org.hammer.audio.recording`            |
-| `executionContextDoesNotDependOnPersistence`      | Execution must not depend on `org.hammer.audio.recording`                              |
-| `executionContextDoesNotDependOnVisualization`    | Execution must not depend on `org.hammer.audio.ui` / Swing / AWT                       |
-| `noCyclicDependenciesBetweenBoundedContextSlices` | No cyclic dependencies between bounded-context package slices under `org.hammer.audio` |
+|                         Test method                         |                                  Bounded-context rule                                  |
+|-------------------------------------------------------------|----------------------------------------------------------------------------------------|
+| `workflowContextDoesNotDependOnSwing`                       | Workflow must not depend on `javax.swing` / `java.awt`                                 |
+| `workflowContextDoesNotDependOnJGit`                        | Workflow must not depend on `org.eclipse.jgit`                                         |
+| `workflowContextDoesNotDependOnPersistence`                 | Workflow (incl. Validation) must not depend on `org.hammer.audio.recording`            |
+| `executionContextDoesNotDependOnPersistence`                | Execution must not depend on `org.hammer.audio.recording`                              |
+| `executionContextDoesNotDependOnVisualization`              | Execution must not depend on `org.hammer.audio.ui` / Swing / AWT                       |
+| `storeFacadeDoesNotDependOnInfrastructureAdapters`          | `workflow.store` facade must not depend on concrete infrastructure adapter packages    |
+| `editorHttpAdapterDoesNotDependOnStorageInternals`          | Editor HTTP adapter must not depend on JGit or storage implementation internals        |
+| `collaborationPackageDoesNotDependOnEditorOrVisualization`  | Collaboration package must not depend on editor HTTP or visualization packages         |
+| `semanticWorkflowPackagesDoNotDependOnCollaborationPackage` | Semantic workflow packages must not depend on collaboration transport/presence         |
+| `noCyclicDependenciesBetweenBoundedContextSlices`           | No cyclic dependencies between bounded-context package slices under `org.hammer.audio` |
 
 Note: React and Yjs are JavaScript frameworks with no Java package equivalent in this project.
 The Workflow context is protected from Java UI dependencies plus JGit / Persistence dependencies by
-the rules above. The Collaboration context is future; its rules will be added when the package is
-created.
+the rules above. Collaboration boundaries are enforced by dedicated ArchUnit rules that keep
+semantic workflow packages separate from collaboration/editor concerns.
 
 ### 3. Source-level import checks (fitness tests)
 
