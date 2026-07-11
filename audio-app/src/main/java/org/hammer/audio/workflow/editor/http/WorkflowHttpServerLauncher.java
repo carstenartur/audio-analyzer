@@ -13,6 +13,7 @@ import org.hammer.audio.workflow.WorkflowOperationLog;
 import org.hammer.audio.workflow.WorkflowValidator;
 import org.hammer.audio.workflow.catalog.ExperimentNodeCatalog;
 import org.hammer.audio.workflow.editor.WorkflowEditorService;
+import org.hammer.audio.workflow.store.VersionedWorkflowStore;
 
 /**
  * Headless HTTP-server entry point for the workflow workbench.
@@ -30,6 +31,10 @@ import org.hammer.audio.workflow.editor.WorkflowEditorService;
  *       the built-in classpath workbench UI is copied to a temporary directory
  * </ul>
  *
+ * <p>This launcher operates in <b>in-memory</b> mode: checkpoints survive within a single process
+ * run but are discarded on exit. To start the workbench with durable persistence use {@link
+ * org.hammer.audio.infrastructure.workflow.PersistentWorkbenchLauncher} instead.
+ *
  * <p><b>Dependency rules</b>: this class must not depend on Swing, JGit, Testcontainers, Playwright
  * or Selenium. It is a plain application entry point that wires domain services to the HTTP
  * adapter.
@@ -37,14 +42,20 @@ import org.hammer.audio.workflow.editor.WorkflowEditorService;
 public final class WorkflowHttpServerLauncher {
 
   private static final Logger LOG = Logger.getLogger(WorkflowHttpServerLauncher.class.getName());
-  static final int DEFAULT_PORT = 8080;
+
+  /** Default TCP port for the workbench HTTP server. */
+  public static final int DEFAULT_PORT = 8080;
 
   private WorkflowHttpServerLauncher() {
     // utility class — do not instantiate
   }
 
   /**
-   * Application entry point.
+   * Application entry point — starts the workbench in <b>in-memory</b> mode (no persistence).
+   *
+   * <p>Checkpoints are kept only in memory and discarded when the process exits. To start the
+   * workbench with durable persistence use {@link
+   * org.hammer.audio.infrastructure.workflow.PersistentWorkbenchLauncher} instead.
    *
    * @param args optional arguments: {@code [port] [staticDir]}
    * @throws IOException if the HTTP server fails to start
@@ -52,15 +63,38 @@ public final class WorkflowHttpServerLauncher {
    */
   public static void main(String[] args) throws IOException, InterruptedException {
     int port = args.length > 0 ? Integer.parseInt(args[0]) : DEFAULT_PORT;
-    Path staticDir = args.length > 1 ? Path.of(args[1]) : extractBuiltInUi();
+    Path staticDir = args.length > 1 ? Path.of(args[1]) : null;
+    launch(port, staticDir, null);
+  }
+
+  /**
+   * Launches the workbench HTTP server with an optional persistent store.
+   *
+   * <p>When {@code store} is {@code null} the workbench operates in <b>in-memory</b> mode:
+   * checkpoints survive editing operations within the same process but are discarded on exit. Pass a
+   * non-{@code null} {@link VersionedWorkflowStore} implementation to enable durable checkpoint
+   * persistence.
+   *
+   * <p>This method <em>blocks</em> the calling thread until the JVM is shut down.
+   *
+   * @param port TCP port to bind
+   * @param staticDir filesystem path to serve as static web content at {@code /}; if {@code null}
+   *     the built-in classpath workbench UI is extracted to a temporary directory
+   * @param store versioned workflow checkpoint store, or {@code null} for in-memory usage
+   * @throws IOException if the HTTP server fails to start
+   * @throws InterruptedException if the calling thread is interrupted while waiting
+   */
+  public static void launch(int port, Path staticDir, VersionedWorkflowStore store)
+      throws IOException, InterruptedException {
+    Path resolvedStaticDir = staticDir != null ? staticDir : extractBuiltInUi();
 
     WorkflowOperationLog log = new WorkflowOperationLog(seedWorkflow());
     WorkflowValidator validator = new WorkflowValidator();
-    WorkflowEditorService service = new WorkflowEditorService(log, validator);
+    WorkflowEditorService service = new WorkflowEditorService(log, validator, store);
 
     WorkflowEditorHttpAdapter adapter = new WorkflowEditorHttpAdapter(service);
-    if (staticDir != null) {
-      adapter.start(port, staticDir);
+    if (resolvedStaticDir != null) {
+      adapter.start(port, resolvedStaticDir);
     } else {
       adapter.start(port);
     }
