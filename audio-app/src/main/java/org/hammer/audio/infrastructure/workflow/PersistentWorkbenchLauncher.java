@@ -33,8 +33,8 @@ import org.hammer.audio.workflow.editor.http.WorkflowHttpServerLauncher;
  * <ul>
  *   <li><b>Persistent</b> (production / development): use this launcher with a local or shared
  *       directory. The JGit bare repository is created automatically if it does not yet exist.
- *   <li><b>In-memory</b> (demo / tests): use {@link WorkflowHttpServerLauncher} directly (no
- *       {@code dataDir} required; state is discarded on exit).
+ *   <li><b>In-memory</b> (demo / tests): use {@link WorkflowHttpServerLauncher} directly (no {@code
+ *       dataDir} required; state is discarded on exit).
  * </ul>
  *
  * <p><b>Shutdown</b>: a JVM shutdown hook closes the workflow store cleanly on {@code SIGTERM} or
@@ -42,8 +42,7 @@ import org.hammer.audio.workflow.editor.http.WorkflowHttpServerLauncher;
  */
 public final class PersistentWorkbenchLauncher {
 
-  private static final Logger LOG =
-      Logger.getLogger(PersistentWorkbenchLauncher.class.getName());
+  private static final Logger LOG = Logger.getLogger(PersistentWorkbenchLauncher.class.getName());
   private static final String DATA_DIR_PROPERTY = "workbench.data.dir";
   private static final String DATA_DIR_ENV = "WORKBENCH_DATA_DIR";
 
@@ -69,6 +68,7 @@ public final class PersistentWorkbenchLauncher {
    * @throws IOException if the HTTP server or the workflow store fails to start
    * @throws InterruptedException if the main thread is interrupted while the server is running
    */
+  @SuppressWarnings("PMD.CloseResource") // store is closed by the registered shutdown hook
   public static void main(String[] args) throws IOException, InterruptedException {
     int port =
         args.length > 0 ? Integer.parseInt(args[0]) : WorkflowHttpServerLauncher.DEFAULT_PORT;

@@ -71,8 +71,8 @@ public final class WorkflowHttpServerLauncher {
    * Launches the workbench HTTP server with an optional persistent store.
    *
    * <p>When {@code store} is {@code null} the workbench operates in <b>in-memory</b> mode:
-   * checkpoints survive editing operations within the same process but are discarded on exit. Pass a
-   * non-{@code null} {@link VersionedWorkflowStore} implementation to enable durable checkpoint
+   * checkpoints survive editing operations within the same process but are discarded on exit. Pass
+   * a non-{@code null} {@link VersionedWorkflowStore} implementation to enable durable checkpoint
    * persistence.
    *
    * <p>This method <em>blocks</em> the calling thread until the JVM is shut down.
