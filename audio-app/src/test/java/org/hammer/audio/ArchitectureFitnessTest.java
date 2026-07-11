@@ -161,6 +161,7 @@ class ArchitectureFitnessTest {
   private static final String PERSISTENCE_PKG = "org.hammer.audio.recording..";
   private static final String WORKFLOW_STORE_INFRA_PKG =
       "org.hammer.audio.infrastructure.workflow.store..";
+  private static final String EDITOR_PKG = "org.hammer.audio.workflow.editor..";
   private static final String EDITOR_HTTP_ADAPTER_PKG = "org.hammer.audio.workflow.editor.http..";
   private static final String COLLABORATION_PKG = "org.hammer.audio.workflow.collaboration..";
   private static final JavaClasses DSL_CLASSES = importProduction("org.hammer.audio.workflow.dsl");
@@ -311,7 +312,7 @@ class ArchitectureFitnessTest {
         .resideInAPackage(COLLABORATION_PKG)
         .should()
         .dependOnClassesThat()
-        .resideInAnyPackage(EDITOR_HTTP_ADAPTER_PKG, UI_PKG, JAVAX_SWING, JAVA_AWT)
+        .resideInAnyPackage(EDITOR_PKG, UI_PKG, JAVAX_SWING, JAVA_AWT)
         .check(COLLABORATION_CLASSES);
   }
 
@@ -325,9 +326,7 @@ class ArchitectureFitnessTest {
   void semanticWorkflowPackagesDoNotDependOnCollaborationPackage() {
     noClasses()
         .that()
-        .resideInAPackage(WORKFLOW_PKG)
-        .and()
-        .resideOutsideOfPackage(COLLABORATION_PKG)
+        .resideInAnyPackage(DSL_PKG, STORE_PKG, CATALOG_PKG, HISTORY_PKG)
         .should()
         .dependOnClassesThat()
         .resideInAPackage(COLLABORATION_PKG)
