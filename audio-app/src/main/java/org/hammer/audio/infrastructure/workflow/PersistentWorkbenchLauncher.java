@@ -93,7 +93,7 @@ public final class PersistentWorkbenchLauncher {
           "Failed to initialize persistent workflow store at '"
               + dataDir
               + "'. "
-              + "Check that the path exists and is writable. Cause: "
+              + "Check that the path is valid and the parent directory is writable. Cause: "
               + ex.getMessage(),
           ex);
     }

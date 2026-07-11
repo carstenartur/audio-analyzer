@@ -31,8 +31,10 @@ import org.hammer.audio.workflow.store.VersionedWorkflowStore;
  *       the built-in classpath workbench UI is copied to a temporary directory
  * </ul>
  *
- * <p>This launcher operates in <b>in-memory</b> mode: checkpoints survive within a single process
- * run but are discarded on exit. To start the workbench with durable persistence use {@link
+ * <p>This launcher operates in <b>in-memory</b> mode: workflow edits are kept in memory for the
+ * lifetime of the process. Store-backed endpoints (checkpoint, history and load) are unavailable
+ * without a {@link VersionedWorkflowStore} — attempting them returns an error. To start the
+ * workbench with durable persistence use {@link
  * org.hammer.audio.infrastructure.workflow.PersistentWorkbenchLauncher} instead.
  *
  * <p><b>Dependency rules</b>: this class must not depend on Swing, JGit, Testcontainers, Playwright
@@ -53,9 +55,10 @@ public final class WorkflowHttpServerLauncher {
   /**
    * Application entry point — starts the workbench in <b>in-memory</b> mode (no persistence).
    *
-   * <p>Checkpoints are kept only in memory and discarded when the process exits. To start the
-   * workbench with durable persistence use {@link
-   * org.hammer.audio.infrastructure.workflow.PersistentWorkbenchLauncher} instead.
+   * <p>Workflow edits are kept in memory only; store-backed endpoints (checkpoint, history and
+   * load) are not supported and will return an error. To start the workbench with durable
+   * persistence use {@link org.hammer.audio.infrastructure.workflow.PersistentWorkbenchLauncher}
+   * instead.
    *
    * @param args optional arguments: {@code [port] [staticDir]}
    * @throws IOException if the HTTP server fails to start
@@ -70,10 +73,10 @@ public final class WorkflowHttpServerLauncher {
   /**
    * Launches the workbench HTTP server with an optional persistent store.
    *
-   * <p>When {@code store} is {@code null} the workbench operates in <b>in-memory</b> mode:
-   * checkpoints survive editing operations within the same process but are discarded on exit. Pass
-   * a non-{@code null} {@link VersionedWorkflowStore} implementation to enable durable checkpoint
-   * persistence.
+   * <p>When {@code store} is {@code null} the workbench operates in <b>in-memory</b> mode: workflow
+   * edits are kept in memory only. Store-backed endpoints (checkpoint, history and load) are
+   * unavailable and will return an error. Pass a non-{@code null} {@link VersionedWorkflowStore}
+   * implementation to enable those persistence endpoints.
    *
    * <p>This method <em>blocks</em> the calling thread until the JVM is shut down.
    *
