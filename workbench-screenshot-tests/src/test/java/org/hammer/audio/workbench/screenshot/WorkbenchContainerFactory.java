@@ -28,8 +28,7 @@ public final class WorkbenchContainerFactory {
   /** Port exposed by the workbench HTTP server inside the container. */
   public static final int WORKBENCH_PORT = 8080;
 
-  private static final String LAUNCHER_CLASS =
-      "org.hammer.audio.workflow.editor.http.WorkflowHttpServerLauncher";
+  private static final String LAUNCHER_CLASS = "org.hammer.audio.app.WorkbenchApplication";
 
   private WorkbenchContainerFactory() {}
 
@@ -61,10 +60,10 @@ public final class WorkbenchContainerFactory {
             + " \""
             + LAUNCHER_CLASS
             + "\","
-            + " \""
+            + " \"--server.port="
             + WORKBENCH_PORT
             + "\","
-            + " \"/app/static\"]\n";
+            + " \"--workbench.static.dir=/app/static\"]\n";
 
     ImageFromDockerfile image =
         new ImageFromDockerfile()

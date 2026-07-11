@@ -1,23 +1,9 @@
 package org.hammer.audio.workflow.editor.http;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.sun.net.httpserver.HttpExchange;
-import com.sun.net.httpserver.HttpServer;
-import java.io.IOException;
-import java.io.OutputStream;
-import java.net.InetSocketAddress;
-import java.net.URI;
-import java.net.URLDecoder;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.time.Instant;
 import java.util.Arrays;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import org.hammer.audio.workflow.Edge;
 import org.hammer.audio.workflow.Node;
@@ -31,28 +17,28 @@ import org.hammer.audio.workflow.store.CommitId;
 import org.hammer.audio.workflow.store.CommitInfo;
 import org.hammer.audio.workflow.store.CommitMetadata;
 import org.hammer.audio.workflow.store.WorkflowSnapshot;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
-/** Minimal HTTP adapter for the workflow editor MVP (ADR-007 / issue #210). */
+/** Spring MVC REST controller for the workflow editor MVP (ADR-007 / issue #210). */
+@RestController
+@RequestMapping("/workflow")
 public final class WorkflowEditorHttpAdapter {
 
-  private static final int HTTP_OK = 200;
-  private static final int HTTP_BAD_REQUEST = 400;
-  private static final int HTTP_UNPROCESSABLE = 422;
-  private static final int HTTP_METHOD_NOT_ALLOWED = 405;
-  private static final String CONTENT_TYPE = "Content-Type";
-  private static final String APPLICATION_JSON = "application/json; charset=utf-8";
-  private static final String TEXT_PLAIN_UTF_8 = "text/plain; charset=utf-8";
   private static final String DEFAULT_BRANCH = "main";
   private static final int DEFAULT_HISTORY_LIMIT = 20;
-  private static final String HTTP_GET = "GET";
-  private static final String HTTP_POST = "POST";
-  private static final String MSG_METHOD_NOT_ALLOWED = "Method Not Allowed";
+  private static final String DEFAULT_HISTORY_LIMIT_STR = "20";
   private static final String JSON_FIELD_COMMIT_ID = "commitId";
   private static final String JSON_FIELD_TIMESTAMP = "timestamp";
 
   private final WorkflowEditorService editorService;
-  private final ObjectMapper mapper;
-  private HttpServer server;
 
   /**
    * Creates an adapter backed by the given workflow editor service.
@@ -61,107 +47,47 @@ public final class WorkflowEditorHttpAdapter {
    */
   public WorkflowEditorHttpAdapter(WorkflowEditorService editorService) {
     this.editorService = Objects.requireNonNull(editorService, "editorService");
-    this.mapper = new ObjectMapper().disable(SerializationFeature.FAIL_ON_EMPTY_BEANS);
+  }
+
+  /** Returns the current workflow projection. */
+  @GetMapping("/projection")
+  public WorkflowProjection projection() {
+    return editorService.currentProjection();
+  }
+
+  /** Returns the full node palette. */
+  @GetMapping("/catalog")
+  public List<CatalogEntry> catalog() {
+    return catalogEntries();
+  }
+
+  /** Returns the current structural validation status. */
+  @GetMapping("/validation")
+  public ViolationsResponse validation() {
+    return new ViolationsResponse(editorService.validate());
   }
 
   /**
-   * Starts the HTTP server on the given port.
+   * Applies a workflow operation and returns the updated projection.
    *
-   * @param port TCP port to bind
-   * @throws IOException if the server cannot bind to the port
+   * @param json operation descriptor
+   * @return updated projection on success, or 422 with violations on rejection
    */
-  public void start(int port) throws IOException {
-    HttpServer httpServer = HttpServer.create(new InetSocketAddress(port), 0);
-    registerContexts(httpServer);
-    httpServer.start();
+  @PostMapping("/operations")
+  public ResponseEntity<?> operations(@RequestBody JsonNode json) {
+    WorkflowOperation operation = parseOperation(json);
+    WorkflowProjection projection = editorService.applyOperation(operation);
+    return ResponseEntity.ok(projection);
   }
 
   /**
-   * Starts the HTTP server on the given port and registers a static-file context.
+   * Creates a checkpoint and returns the new commit identifier.
    *
-   * <p>Static files are served from the given {@code staticDir}. Workflow API paths take precedence
-   * over the root path via JDK HttpServer longest-prefix routing.
-   *
-   * @param port TCP port to bind
-   * @param staticDir directory from which static files are served at {@code /}
-   * @throws IOException if the server cannot bind to the port
+   * @param json checkpoint metadata (branch, author, message, timestamp)
+   * @return checkpoint response on success, or 422 with violations on rejection
    */
-  public void start(int port, Path staticDir) throws IOException {
-    Objects.requireNonNull(staticDir, "staticDir");
-    HttpServer httpServer = HttpServer.create(new InetSocketAddress(port), 0);
-    httpServer.createContext("/", new StaticFileHandler(staticDir));
-    registerContexts(httpServer);
-    httpServer.start();
-  }
-
-  /**
-   * Stops the HTTP server.
-   *
-   * @param delaySeconds seconds to wait before the server stops accepting new connections
-   */
-  public void stop(int delaySeconds) {
-    if (server != null) {
-      server.stop(delaySeconds);
-    }
-  }
-
-  private void handleProjection(HttpExchange exchange) throws IOException {
-    if (!HTTP_GET.equalsIgnoreCase(exchange.getRequestMethod())) {
-      sendError(exchange, HTTP_METHOD_NOT_ALLOWED, MSG_METHOD_NOT_ALLOWED);
-      return;
-    }
-    sendJson(exchange, HTTP_OK, mapper.writeValueAsBytes(editorService.currentProjection()));
-  }
-
-  private void handleCatalog(HttpExchange exchange) throws IOException {
-    if (!HTTP_GET.equalsIgnoreCase(exchange.getRequestMethod())) {
-      sendError(exchange, HTTP_METHOD_NOT_ALLOWED, MSG_METHOD_NOT_ALLOWED);
-      return;
-    }
-    sendJson(exchange, HTTP_OK, mapper.writeValueAsBytes(catalogEntries()));
-  }
-
-  private void handleValidation(HttpExchange exchange) throws IOException {
-    if (!HTTP_GET.equalsIgnoreCase(exchange.getRequestMethod())) {
-      sendError(exchange, HTTP_METHOD_NOT_ALLOWED, MSG_METHOD_NOT_ALLOWED);
-      return;
-    }
-    ViolationsResponse response = new ViolationsResponse(editorService.validate());
-    sendJson(exchange, HTTP_OK, mapper.writeValueAsBytes(response));
-  }
-
-  private void handleOperations(HttpExchange exchange) throws IOException {
-    if (!HTTP_POST.equalsIgnoreCase(exchange.getRequestMethod())) {
-      sendError(exchange, HTTP_METHOD_NOT_ALLOWED, MSG_METHOD_NOT_ALLOWED);
-      return;
-    }
-    JsonNode json = readJson(exchange);
-    if (json == null) {
-      return;
-    }
-    try {
-      WorkflowOperation operation = parseOperation(json);
-      WorkflowProjection projection = editorService.applyOperation(operation);
-      sendJson(exchange, HTTP_OK, mapper.writeValueAsBytes(projection));
-    } catch (WorkflowOperationRejectedException ex) {
-      sendJson(
-          exchange,
-          HTTP_UNPROCESSABLE,
-          mapper.writeValueAsBytes(new ViolationsResponse(ex.violations())));
-    } catch (IllegalArgumentException | IllegalStateException ex) {
-      sendError(exchange, HTTP_BAD_REQUEST, ex.getMessage());
-    }
-  }
-
-  private void handleCheckpoints(HttpExchange exchange) throws IOException {
-    if (!HTTP_POST.equalsIgnoreCase(exchange.getRequestMethod())) {
-      sendError(exchange, HTTP_METHOD_NOT_ALLOWED, MSG_METHOD_NOT_ALLOWED);
-      return;
-    }
-    JsonNode json = readJson(exchange);
-    if (json == null) {
-      return;
-    }
+  @PostMapping("/checkpoints")
+  public ResponseEntity<?> checkpoints(@RequestBody JsonNode json) {
     String branch = textOrDefault(json, "branch", DEFAULT_BRANCH);
     String author = textOrDefault(json, "author", "web-editor");
     String message = textOrDefault(json, "message", "Workbench checkpoint");
@@ -169,83 +95,66 @@ public final class WorkflowEditorHttpAdapter {
         json.has(JSON_FIELD_TIMESTAMP)
             ? Instant.parse(json.get(JSON_FIELD_TIMESTAMP).asText())
             : Instant.now();
-    try {
-      CommitMetadata metadata = new CommitMetadata(author, message, timestamp);
-      CommitId commitId = editorService.checkpoint(branch, metadata);
-      sendJson(
-          exchange, HTTP_OK, mapper.writeValueAsBytes(new CheckpointResponse(commitId.value())));
-    } catch (WorkflowOperationRejectedException ex) {
-      sendJson(
-          exchange,
-          HTTP_UNPROCESSABLE,
-          mapper.writeValueAsBytes(new ViolationsResponse(ex.violations())));
-    } catch (IllegalArgumentException | IllegalStateException ex) {
-      sendError(exchange, HTTP_BAD_REQUEST, ex.getMessage());
-    }
+    CommitMetadata metadata = new CommitMetadata(author, message, timestamp);
+    CommitId commitId = editorService.checkpoint(branch, metadata);
+    return ResponseEntity.ok(new CheckpointResponse(commitId.value()));
   }
 
-  private void handleHistory(HttpExchange exchange) throws IOException {
-    if (!HTTP_GET.equalsIgnoreCase(exchange.getRequestMethod())) {
-      sendError(exchange, HTTP_METHOD_NOT_ALLOWED, MSG_METHOD_NOT_ALLOWED);
-      return;
-    }
-    try {
-      Map<String, String> query = parseQuery(exchange.getRequestURI());
-      String branch = query.getOrDefault("branch", DEFAULT_BRANCH);
-      int limit = parseLimit(query.get("limit"));
-      List<HistoryEntry> entries =
-          editorService.history(branch, limit).stream().map(HistoryEntry::from).toList();
-      sendJson(exchange, HTTP_OK, mapper.writeValueAsBytes(entries));
-    } catch (IllegalArgumentException | IllegalStateException ex) {
-      sendError(exchange, HTTP_BAD_REQUEST, ex.getMessage());
-    }
+  /**
+   * Returns commit history for a branch.
+   *
+   * @param branch branch name (default: {@code main})
+   * @param limit maximum number of entries (default: 20)
+   * @return list of history entries
+   */
+  @GetMapping("/history")
+  public List<HistoryEntry> history(
+      @RequestParam(defaultValue = DEFAULT_BRANCH) String branch,
+      @RequestParam(defaultValue = DEFAULT_HISTORY_LIMIT_STR) int limit) {
+    return editorService.history(branch, limit).stream().map(HistoryEntry::from).toList();
   }
 
-  private void handleLoad(HttpExchange exchange) throws IOException {
-    if (!HTTP_POST.equalsIgnoreCase(exchange.getRequestMethod())) {
-      sendError(exchange, HTTP_METHOD_NOT_ALLOWED, MSG_METHOD_NOT_ALLOWED);
-      return;
+  /**
+   * Loads a workflow snapshot by commit identifier or branch name.
+   *
+   * @param json load descriptor ({@code commitId} or {@code branch})
+   * @return updated projection on success, or 422 with violations on rejection
+   */
+  @PostMapping("/load")
+  public ResponseEntity<?> load(@RequestBody JsonNode json) {
+    WorkflowProjection projection;
+    if (json.has(JSON_FIELD_COMMIT_ID) && !json.get(JSON_FIELD_COMMIT_ID).asText().isBlank()) {
+      projection = editorService.loadGraph(new CommitId(json.get(JSON_FIELD_COMMIT_ID).asText()));
+    } else {
+      projection = editorService.loadGraph(textOrDefault(json, "branch", DEFAULT_BRANCH));
     }
-    JsonNode json = readJson(exchange);
-    if (json == null) {
-      return;
-    }
-    try {
-      WorkflowProjection projection;
-      if (json.has(JSON_FIELD_COMMIT_ID) && !json.get(JSON_FIELD_COMMIT_ID).asText().isBlank()) {
-        projection = editorService.loadGraph(new CommitId(json.get(JSON_FIELD_COMMIT_ID).asText()));
-      } else {
-        projection = editorService.loadGraph(textOrDefault(json, "branch", DEFAULT_BRANCH));
-      }
-      sendJson(exchange, HTTP_OK, mapper.writeValueAsBytes(projection));
-    } catch (WorkflowOperationRejectedException ex) {
-      sendJson(
-          exchange,
-          HTTP_UNPROCESSABLE,
-          mapper.writeValueAsBytes(new ViolationsResponse(ex.violations())));
-    } catch (IllegalArgumentException | IllegalStateException ex) {
-      sendError(exchange, HTTP_BAD_REQUEST, ex.getMessage());
-    }
+    return ResponseEntity.ok(projection);
   }
 
-  private void handleSnapshot(HttpExchange exchange) throws IOException {
-    if (!HTTP_GET.equalsIgnoreCase(exchange.getRequestMethod())) {
-      sendError(exchange, HTTP_METHOD_NOT_ALLOWED, MSG_METHOD_NOT_ALLOWED);
-      return;
-    }
-    WorkflowSnapshot snapshot = editorService.executeSnapshot();
-    sendJson(exchange, HTTP_OK, mapper.writeValueAsBytes(snapshot));
+  /** Returns the current workflow execution snapshot. */
+  @GetMapping("/snapshot")
+  public WorkflowSnapshot snapshot() {
+    return editorService.executeSnapshot();
   }
 
-  private JsonNode readJson(HttpExchange exchange) throws IOException {
-    byte[] requestBody = exchange.getRequestBody().readAllBytes();
-    try {
-      return mapper.readTree(requestBody);
-    } catch (IOException ex) {
-      sendError(exchange, HTTP_BAD_REQUEST, "Invalid JSON: " + ex.getMessage());
-      return null;
-    }
+  // -------------------------------------------------------------------------
+  // Exception mapping
+  // -------------------------------------------------------------------------
+
+  @ExceptionHandler(WorkflowOperationRejectedException.class)
+  public ResponseEntity<ViolationsResponse> handleRejected(WorkflowOperationRejectedException ex) {
+    return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
+        .body(new ViolationsResponse(ex.violations()));
   }
+
+  @ExceptionHandler({IllegalArgumentException.class, IllegalStateException.class})
+  public ResponseEntity<String> handleBadRequest(RuntimeException ex) {
+    return ResponseEntity.badRequest().body(ex.getMessage());
+  }
+
+  // -------------------------------------------------------------------------
+  // Parsing helpers
+  // -------------------------------------------------------------------------
 
   private static WorkflowOperation parseOperation(JsonNode json) {
     String type = requiredText(json, "type");
@@ -382,48 +291,9 @@ public final class WorkflowEditorHttpAdapter {
     return value.asText();
   }
 
-  private static Map<String, String> parseQuery(URI uri) {
-    Map<String, String> result = new LinkedHashMap<>();
-    String query = uri.getRawQuery();
-    if (query == null || query.isBlank()) {
-      return result;
-    }
-    for (String pair : query.split("&")) {
-      int separator = pair.indexOf('=');
-      String key = separator >= 0 ? pair.substring(0, separator) : pair;
-      String value = separator >= 0 ? pair.substring(separator + 1) : "";
-      result.put(decode(key), decode(value));
-    }
-    return result;
-  }
-
-  private static String decode(String value) {
-    return URLDecoder.decode(value, StandardCharsets.UTF_8);
-  }
-
-  private static int parseLimit(String rawLimit) {
-    if (rawLimit == null || rawLimit.isBlank()) {
-      return DEFAULT_HISTORY_LIMIT;
-    }
-    return Integer.parseInt(rawLimit);
-  }
-
-  private void sendJson(HttpExchange exchange, int status, byte[] body) throws IOException {
-    exchange.getResponseHeaders().set(CONTENT_TYPE, APPLICATION_JSON);
-    exchange.sendResponseHeaders(status, body.length);
-    try (OutputStream out = exchange.getResponseBody()) {
-      out.write(body);
-    }
-  }
-
-  private void sendError(HttpExchange exchange, int status, String message) throws IOException {
-    byte[] body = message.getBytes(StandardCharsets.UTF_8);
-    exchange.getResponseHeaders().set(CONTENT_TYPE, TEXT_PLAIN_UTF_8);
-    exchange.sendResponseHeaders(status, body.length);
-    try (OutputStream out = exchange.getResponseBody()) {
-      out.write(body);
-    }
-  }
+  // -------------------------------------------------------------------------
+  // Response value objects
+  // -------------------------------------------------------------------------
 
   /**
    * JSON response body for rejected operations or current validation status.
@@ -496,91 +366,6 @@ public final class WorkflowEditorHttpAdapter {
           WorkflowProjection.fromWorkflow(catalogWorkflow).nodes().get(0);
       return new CatalogEntry(
           type, node.label(), nodeProjection.inputHandles(), nodeProjection.outputHandles());
-    }
-  }
-
-  /**
-   * Registers all workflow API contexts onto the given HTTP server.
-   *
-   * <p>After this call the server has contexts for {@code /workflow/projection}, {@code
-   * /workflow/catalog}, {@code /workflow/validation}, {@code /workflow/operations}, {@code
-   * /workflow/checkpoints}, {@code /workflow/history}, {@code /workflow/load} and {@code
-   * /workflow/snapshot}.
-   *
-   * @param httpServer the HTTP server to attach contexts to
-   */
-  void registerContexts(HttpServer httpServer) {
-    server = httpServer;
-    httpServer.createContext("/workflow/projection", this::handleProjection);
-    httpServer.createContext("/workflow/catalog", this::handleCatalog);
-    httpServer.createContext("/workflow/validation", this::handleValidation);
-    httpServer.createContext("/workflow/operations", this::handleOperations);
-    httpServer.createContext("/workflow/checkpoints", this::handleCheckpoints);
-    httpServer.createContext("/workflow/history", this::handleHistory);
-    httpServer.createContext("/workflow/load", this::handleLoad);
-    httpServer.createContext("/workflow/snapshot", this::handleSnapshot);
-  }
-
-  /** Serves static files from a filesystem directory. */
-  private static final class StaticFileHandler implements com.sun.net.httpserver.HttpHandler {
-
-    private final Path root;
-
-    StaticFileHandler(Path root) {
-      this.root = root.normalize();
-    }
-
-    @Override
-    public void handle(HttpExchange exchange) throws IOException {
-      if (!HTTP_GET.equalsIgnoreCase(exchange.getRequestMethod())) {
-        exchange.getResponseHeaders().set("Allow", HTTP_GET);
-        sendStatic(
-            exchange,
-            HTTP_METHOD_NOT_ALLOWED,
-            TEXT_PLAIN_UTF_8,
-            MSG_METHOD_NOT_ALLOWED.getBytes(StandardCharsets.UTF_8));
-        return;
-      }
-      String uriPath = exchange.getRequestURI().getPath();
-      if (uriPath == null || "/".equals(uriPath) || uriPath.isEmpty()) {
-        uriPath = "/index.html";
-      }
-      String relative = uriPath.startsWith("/") ? uriPath.substring(1) : uriPath;
-      Path target = root.resolve(relative).normalize();
-      if (!target.startsWith(root)) {
-        sendStatic(exchange, 403, TEXT_PLAIN_UTF_8, "Forbidden".getBytes(StandardCharsets.UTF_8));
-        return;
-      }
-      if (!Files.exists(target) || Files.isDirectory(target)) {
-        sendStatic(exchange, 404, TEXT_PLAIN_UTF_8, "Not Found".getBytes(StandardCharsets.UTF_8));
-        return;
-      }
-      byte[] content = Files.readAllBytes(target);
-      sendStatic(exchange, HTTP_OK, guessContentType(target), content);
-    }
-
-    private static void sendStatic(
-        HttpExchange exchange, int status, String contentType, byte[] body) throws IOException {
-      exchange.getResponseHeaders().set(CONTENT_TYPE, contentType);
-      exchange.sendResponseHeaders(status, body.length);
-      try (OutputStream out = exchange.getResponseBody()) {
-        out.write(body);
-      }
-    }
-
-    private static String guessContentType(Path path) {
-      Path fileName = path.getFileName();
-      if (fileName == null) {
-        return "application/octet-stream";
-      }
-      String name = fileName.toString().toLowerCase(java.util.Locale.ROOT);
-      if (name.endsWith(".html")) return "text/html; charset=utf-8";
-      if (name.endsWith(".js")) return "application/javascript; charset=utf-8";
-      if (name.endsWith(".css")) return "text/css; charset=utf-8";
-      if (name.endsWith(".json")) return "application/json; charset=utf-8";
-      if (name.endsWith(".png")) return "image/png";
-      if (name.endsWith(".svg")) return "image/svg+xml";
-      return "application/octet-stream";
     }
   }
 }

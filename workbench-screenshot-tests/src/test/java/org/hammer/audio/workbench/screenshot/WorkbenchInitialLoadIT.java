@@ -48,7 +48,7 @@ import org.testcontainers.containers.GenericContainer;
  *
  * <h2>Volatile UI regions</h2>
  *
- * <p>The seed workflow served by {@code WorkflowHttpServerLauncher} contains no volatile data (no
+ * <p>The seed workflow served by {@code WorkbenchApplication} contains no volatile data (no
  * timestamps, no live telemetry). The workbench HTML page disables all CSS animations. Full-page
  * screenshots are therefore deterministic.
  */
