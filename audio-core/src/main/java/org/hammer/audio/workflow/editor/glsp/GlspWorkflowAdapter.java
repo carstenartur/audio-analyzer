@@ -136,7 +136,18 @@ public final class GlspWorkflowAdapter {
     String author();
   }
 
-  /** GLSP-style request to create a typed connection between two semantic workflow ports. */
+  /**
+   * GLSP-style request to create a typed connection between two semantic workflow ports.
+   *
+   * @param operationId stable semantic operation identifier
+   * @param timestamp operation timestamp
+   * @param author operation author
+   * @param edgeId stable edge identifier
+   * @param sourceNodeId source node identifier
+   * @param sourcePortId source output-port identifier
+   * @param targetNodeId target node identifier
+   * @param targetPortId target input-port identifier
+   */
   public record CreateEdgeAction(
       String operationId,
       Instant timestamp,
@@ -159,7 +170,14 @@ public final class GlspWorkflowAdapter {
     }
   }
 
-  /** GLSP-style request to remove an existing semantic workflow edge. */
+  /**
+   * GLSP-style request to remove an existing semantic workflow edge.
+   *
+   * @param operationId stable semantic operation identifier
+   * @param timestamp operation timestamp
+   * @param author operation author
+   * @param edgeId identifier of the edge to remove
+   */
   public record DeleteEdgeAction(
       String operationId, Instant timestamp, String author, String edgeId) implements Action {
     public DeleteEdgeAction {
@@ -170,7 +188,16 @@ public final class GlspWorkflowAdapter {
     }
   }
 
-  /** GLSP-style request to update one semantic node property. */
+  /**
+   * GLSP-style request to update one semantic node property.
+   *
+   * @param operationId stable semantic operation identifier
+   * @param timestamp operation timestamp
+   * @param author operation author
+   * @param nodeId target node identifier
+   * @param propertyKey semantic property key
+   * @param newValue replacement property value
+   */
   public record ChangePropertyAction(
       String operationId,
       Instant timestamp,
@@ -189,7 +216,14 @@ public final class GlspWorkflowAdapter {
     }
   }
 
-  /** Immutable GLSP-shaped graph projection derived from the canonical workflow model. */
+  /**
+   * Immutable GLSP-shaped graph projection derived from the canonical workflow model.
+   *
+   * @param id workflow identifier
+   * @param label workflow label
+   * @param nodes projected nodes
+   * @param edges projected edges
+   */
   public record GGraph(String id, String label, List<GNode> nodes, List<GEdge> edges) {
     public GGraph {
       Objects.requireNonNull(id, "id");
@@ -199,7 +233,16 @@ public final class GlspWorkflowAdapter {
     }
   }
 
-  /** Immutable GLSP-shaped node projection with typed input and output ports. */
+  /**
+   * Immutable GLSP-shaped node projection with typed input and output ports.
+   *
+   * @param id node identifier
+   * @param label node label
+   * @param type semantic node type
+   * @param inputPorts projected input ports
+   * @param outputPorts projected output ports
+   * @param properties projected semantic properties
+   */
   public record GNode(
       String id,
       String label,
@@ -217,7 +260,15 @@ public final class GlspWorkflowAdapter {
     }
   }
 
-  /** Immutable typed-port projection used as a GLSP connection endpoint. */
+  /**
+   * Immutable typed-port projection used as a GLSP connection endpoint.
+   *
+   * @param id adapter-level globally unique port identifier
+   * @param semanticPortId semantic workflow port identifier
+   * @param label human-readable port label
+   * @param dataType semantic workflow data-type identifier
+   * @param kind input or output direction
+   */
   public record GPort(
       String id, String semanticPortId, String label, String dataType, PortKind kind) {
     public GPort {
@@ -229,7 +280,13 @@ public final class GlspWorkflowAdapter {
     }
   }
 
-  /** Immutable GLSP-shaped edge projection between two projected port identifiers. */
+  /**
+   * Immutable GLSP-shaped edge projection between two projected port identifiers.
+   *
+   * @param id edge identifier
+   * @param sourcePortId projected source-port identifier
+   * @param targetPortId projected target-port identifier
+   */
   public record GEdge(String id, String sourcePortId, String targetPortId) {
     public GEdge {
       Objects.requireNonNull(id, "id");
