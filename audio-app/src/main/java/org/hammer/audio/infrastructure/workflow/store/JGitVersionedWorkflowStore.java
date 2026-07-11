@@ -137,17 +137,30 @@ public final class JGitVersionedWorkflowStore implements VersionedWorkflowStore,
     }
     Objects.requireNonNull(newCommit, "newCommit");
     String normalizedRef = toRefName(refName);
+    ObjectId newObjectId = parseObjectId(newCommit);
+    verifyCommitExists(newObjectId, newCommit);
     try {
       RefUpdate update = repository.updateRef(normalizedRef);
       update.setExpectedOldObjectId(
           expectedOldCommit == null ? ZERO_ID : parseObjectId(expectedOldCommit));
-      update.setNewObjectId(parseObjectId(newCommit));
+      update.setNewObjectId(newObjectId);
       update.setForceUpdate(true);
       update.setRefLogMessage("workflow ref update", false);
       RefUpdate.Result result = update.update();
       return mapRefUpdateResult(result);
     } catch (IOException ex) {
       throw new IllegalStateException("Failed to update ref: " + refName, ex);
+    }
+  }
+
+  private void verifyCommitExists(ObjectId objectId, CommitId commitId) {
+    try (RevWalk walk = new RevWalk(repository)) {
+      walk.parseCommit(objectId);
+    } catch (IOException ex) {
+      NoSuchElementException exception =
+          new NoSuchElementException("Commit not found: " + commitId.value());
+      exception.initCause(ex);
+      throw exception;
     }
   }
 

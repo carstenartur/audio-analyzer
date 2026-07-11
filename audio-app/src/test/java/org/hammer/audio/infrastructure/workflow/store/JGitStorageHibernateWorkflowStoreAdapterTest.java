@@ -151,7 +151,7 @@ class JGitStorageHibernateWorkflowStoreAdapterTest {
       Future<RefUpdateResult> left =
           pool.submit(
               () -> {
-                start.await(5, TimeUnit.SECONDS);
+                assertTrue(start.await(5, TimeUnit.SECONDS), "start latch timed out");
                 try (JGitStorageHibernateWorkflowStoreAdapter store =
                     new JGitStorageHibernateWorkflowStoreAdapter(repositoryPath)) {
                   return store.updateRef("main", base, candidateA);
@@ -160,7 +160,7 @@ class JGitStorageHibernateWorkflowStoreAdapterTest {
       Future<RefUpdateResult> right =
           pool.submit(
               () -> {
-                start.await(5, TimeUnit.SECONDS);
+                assertTrue(start.await(5, TimeUnit.SECONDS), "start latch timed out");
                 try (JGitStorageHibernateWorkflowStoreAdapter store =
                     new JGitStorageHibernateWorkflowStoreAdapter(repositoryPath)) {
                   return store.updateRef("main", base, candidateB);

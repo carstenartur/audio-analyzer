@@ -12,10 +12,10 @@ import org.hammer.audio.workflow.store.VersionedWorkflowStore;
 import org.hammer.audio.workflow.store.WorkflowSnapshot;
 
 /**
- * Production {@link VersionedWorkflowStore} adapter for the jgit-storage-hibernate boundary.
+ * Production {@link VersionedWorkflowStore} adapter backed by {@link JGitVersionedWorkflowStore}.
  *
- * <p>The external jgit-storage-hibernate module is consumed through this infrastructure adapter
- * boundary. The adapter keeps all storage details out of workflow-facing packages.
+ * <p>This adapter exposes the JGit-backed store through the {@link VersionedWorkflowStore}
+ * interface, keeping all storage details out of workflow-facing packages.
  */
 public final class JGitStorageHibernateWorkflowStoreAdapter
     implements VersionedWorkflowStore, Closeable {
