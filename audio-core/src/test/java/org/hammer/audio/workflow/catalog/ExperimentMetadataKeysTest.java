@@ -14,6 +14,14 @@ import org.junit.jupiter.api.Test;
 /** Tests for {@link ExperimentMetadataKeys}. */
 class ExperimentMetadataKeysTest {
 
+  /** Guard: the class must declare at least one public constant, or every other test is vacuous. */
+  @Test
+  void constantListIsNotEmpty() throws IllegalAccessException {
+    org.junit.jupiter.api.Assertions.assertFalse(
+        collectStringConstants().isEmpty(),
+        "ExperimentMetadataKeys must declare at least one public static final String constant");
+  }
+
   /**
    * Every constant in {@link ExperimentMetadataKeys} must satisfy the {@code StableIds} contract so
    * it can be used as a key in a {@link Metadata} entry without throwing.

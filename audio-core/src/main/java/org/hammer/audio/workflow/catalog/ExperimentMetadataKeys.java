@@ -3,12 +3,13 @@ package org.hammer.audio.workflow.catalog;
 /**
  * Standard metadata key constants for experiment nodes.
  *
- * <p>These keys are used in {@code Metadata} entries on {@code Node} objects to carry
- * experiment-specific configuration that does not belong in the structural workflow model. They are
- * the answer to the spike question: "What minimal metadata is missing for experiment setup,
- * datasets, calibration and outputs?" (issue #214).
+ * <p>These keys are used in {@code Metadata} entries on workflow graph elements ({@code Node},
+ * {@code Workflow}, {@code Port}, {@code Edge}) to carry experiment-specific configuration that
+ * does not belong in the structural workflow model. They are the answer to the spike question:
+ * "What minimal metadata is missing for experiment setup, datasets, calibration and outputs?"
+ * (issue #214).
  *
- * <p>All keys are stable identifiers (alphanumeric + {@code . : -}) so they satisfy the {@code
+ * <p>All keys are stable identifiers matching {@code [A-Za-z0-9._:-]*} so they satisfy the {@code
  * StableIds} contract enforced by {@code Metadata}.
  *
  * <p><b>Design rule</b>: add a new constant here rather than inventing an ad-hoc string in
