@@ -38,8 +38,7 @@ class GlspWorkflowAdapterTest {
                 "audio-in"));
 
     assertEquals(1, updated.edges().size());
-    assertEquals(
-        "node.generator::signal-out", updated.edges().get(0).sourcePortId());
+    assertEquals("node.generator::signal-out", updated.edges().get(0).sourcePortId());
     assertEquals("node.gain::audio-in", updated.edges().get(0).targetPortId());
   }
 
@@ -112,8 +111,7 @@ class GlspWorkflowAdapterTest {
 
   private static GlspWorkflowAdapter adapter(Workflow workflow) {
     WorkflowEditorService service =
-        new WorkflowEditorService(
-            new WorkflowOperationLog(workflow), new WorkflowValidator());
+        new WorkflowEditorService(new WorkflowOperationLog(workflow), new WorkflowValidator());
     return new GlspWorkflowAdapter(service);
   }
 }

@@ -147,8 +147,7 @@ public final class GlspWorkflowAdapter {
       implements Action {}
 
   public record DeleteEdgeAction(
-      String operationId, Instant timestamp, String author, String edgeId)
-      implements Action {}
+      String operationId, Instant timestamp, String author, String edgeId) implements Action {}
 
   public record ChangePropertyAction(
       String operationId,
