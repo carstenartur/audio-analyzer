@@ -106,7 +106,9 @@ public final class JGitVersionedWorkflowStore implements VersionedWorkflowStore,
       RevCommit commit = walk.parseCommit(objectId);
       return readSnapshot(commit);
     } catch (IOException ex) {
-      throw new NoSuchElementException("Commit not found: " + commitId);
+      NoSuchElementException exception = new NoSuchElementException("Commit not found: " + commitId);
+      exception.initCause(ex);
+      throw exception;
     }
   }
 
@@ -241,7 +243,10 @@ public final class JGitVersionedWorkflowStore implements VersionedWorkflowStore,
     try {
       return ObjectId.fromString(commitId.value());
     } catch (IllegalArgumentException ex) {
-      throw new NoSuchElementException("Invalid commit id: " + commitId.value());
+      NoSuchElementException exception =
+          new NoSuchElementException("Invalid commit id: " + commitId.value());
+      exception.initCause(ex);
+      throw exception;
     }
   }
 
