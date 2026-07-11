@@ -106,7 +106,8 @@ public final class JGitVersionedWorkflowStore implements VersionedWorkflowStore,
       RevCommit commit = walk.parseCommit(objectId);
       return readSnapshot(commit);
     } catch (IOException ex) {
-      NoSuchElementException exception = new NoSuchElementException("Commit not found: " + commitId);
+      NoSuchElementException exception =
+          new NoSuchElementException("Commit not found: " + commitId);
       exception.initCause(ex);
       throw exception;
     }

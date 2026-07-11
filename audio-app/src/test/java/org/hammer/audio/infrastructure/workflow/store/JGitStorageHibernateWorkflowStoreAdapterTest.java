@@ -112,9 +112,11 @@ class JGitStorageHibernateWorkflowStoreAdapterTest {
               .commit("seed", snapshot("workflow.alpha", "dsl-feature"), metadata("seed", 4));
       assertEquals(
           RefUpdateResult.SUCCESS, handle.store().updateRef("feature/new", null, featureHead));
-      assertEquals(snapshot("workflow.alpha", "dsl-feature"), handle.store().loadHead("feature/new"));
       assertEquals(
-          RefUpdateResult.SUCCESS, handle.store().updateRef("feature/new", featureHead, featureHead));
+          snapshot("workflow.alpha", "dsl-feature"), handle.store().loadHead("feature/new"));
+      assertEquals(
+          RefUpdateResult.SUCCESS,
+          handle.store().updateRef("feature/new", featureHead, featureHead));
     }
   }
 
@@ -130,15 +132,18 @@ class JGitStorageHibernateWorkflowStoreAdapterTest {
 
   @Test
   void concurrentRefUpdateDetectsConflict() throws Exception {
-    Path repositoryPath = Files.createTempDirectory("audio-analyzer-jgit-storage-hibernate-conflict-");
+    Path repositoryPath =
+        Files.createTempDirectory("audio-analyzer-jgit-storage-hibernate-conflict-");
     CommitId base;
     CommitId candidateA;
     CommitId candidateB;
     try (JGitStorageHibernateWorkflowStoreAdapter seedStore =
         new JGitStorageHibernateWorkflowStoreAdapter(repositoryPath)) {
       base = seedStore.commit("main", snapshot("workflow.alpha", "dsl-base"), metadata("base", 1));
-      candidateA = seedStore.commit("candidateA", snapshot("workflow.alpha", "dsl-A"), metadata("A", 2));
-      candidateB = seedStore.commit("candidateB", snapshot("workflow.alpha", "dsl-B"), metadata("B", 3));
+      candidateA =
+          seedStore.commit("candidateA", snapshot("workflow.alpha", "dsl-A"), metadata("A", 2));
+      candidateB =
+          seedStore.commit("candidateB", snapshot("workflow.alpha", "dsl-B"), metadata("B", 3));
     }
 
     CountDownLatch start = new CountDownLatch(1);
@@ -164,7 +169,8 @@ class JGitStorageHibernateWorkflowStoreAdapterTest {
 
       start.countDown();
       List<RefUpdateResult> results = List.of(get(left), get(right));
-      long successCount = results.stream().filter(result -> result == RefUpdateResult.SUCCESS).count();
+      long successCount =
+          results.stream().filter(result -> result == RefUpdateResult.SUCCESS).count();
       long staleCount = results.stream().filter(result -> result == RefUpdateResult.STALE).count();
       assertEquals(1, successCount);
       assertEquals(1, staleCount);
