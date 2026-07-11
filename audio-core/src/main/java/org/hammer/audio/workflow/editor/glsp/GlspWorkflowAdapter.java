@@ -228,6 +228,8 @@ public final class GlspWorkflowAdapter {
     public GGraph {
       Objects.requireNonNull(id, "id");
       Objects.requireNonNull(label, "label");
+      Objects.requireNonNull(nodes, "nodes");
+      Objects.requireNonNull(edges, "edges");
       nodes = List.copyOf(nodes);
       edges = List.copyOf(edges);
     }
@@ -254,6 +256,9 @@ public final class GlspWorkflowAdapter {
       Objects.requireNonNull(id, "id");
       Objects.requireNonNull(label, "label");
       Objects.requireNonNull(type, "type");
+      Objects.requireNonNull(inputPorts, "inputPorts");
+      Objects.requireNonNull(outputPorts, "outputPorts");
+      Objects.requireNonNull(properties, "properties");
       inputPorts = List.copyOf(inputPorts);
       outputPorts = List.copyOf(outputPorts);
       properties = Map.copyOf(properties);
