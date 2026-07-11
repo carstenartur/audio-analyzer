@@ -46,12 +46,38 @@ The following first-experiment requirements are already met by the existing mode
 
 ## Minimal additions identified
 
-|                 Addition                 |                                                    Reason                                                    |       Layer        |
-|------------------------------------------|--------------------------------------------------------------------------------------------------------------|--------------------|
-| `workflow.catalog.ExperimentNodeCatalog` | Factory methods for typed node prototypes (issue #215). Avoids inventing ad-hoc string constants everywhere. | Workflow domain    |
-| `workflow.dsl.WorkflowDslSerializer`     | Deterministic text representation for Git checkpoints, semantic diffs and human review (issue #217).         | DSL layer          |
-| `workflow.dsl.WorkflowDslParser`         | Inverse of the serializer. Required for loading persisted workflows back into the domain model.              | DSL layer          |
-| `workflow.store.VersionedWorkflowStore`  | Facade that hides JGit and Hibernate internals from all Audio Analyzer workflow services (issue #218).       | Persistence facade |
+|                 Addition                  |                                                           Reason                                                           |       Layer        |
+|-------------------------------------------|----------------------------------------------------------------------------------------------------------------------------|--------------------|
+| `workflow.catalog.ExperimentNodeCatalog`  | Factory methods for typed node prototypes (issue #215). Avoids inventing ad-hoc string constants everywhere.               | Workflow domain    |
+| `workflow.catalog.ExperimentMetadataKeys` | Standard metadata key constants for experiment setup, dataset provenance, calibration and outputs (issue #214, see below). | Workflow domain    |
+| `workflow.dsl.WorkflowDslSerializer`      | Deterministic text representation for Git checkpoints, semantic diffs and human review (issue #217).                       | DSL layer          |
+| `workflow.dsl.WorkflowDslParser`          | Inverse of the serializer. Required for loading persisted workflows back into the domain model.                            | DSL layer          |
+| `workflow.store.VersionedWorkflowStore`   | Facade that hides JGit and Hibernate internals from all Audio Analyzer workflow services (issue #218).                     | Persistence facade |
+
+### Metadata keys for experiment configuration
+
+`Metadata` (the existing extensible key-value bag on `Workflow`, `Node`, `Port` and `Edge`) is
+sufficient for all experiment-specific configuration. However, without explicit key constants,
+every caller would invent its own strings, making metadata entries unsearchable and error-prone.
+
+`ExperimentMetadataKeys` defines the following standard keys:
+
+|         Constant          |        Key string         |                   Usage                    |
+|---------------------------|---------------------------|--------------------------------------------|
+| `EXPERIMENT_DESCRIPTION`  | `experiment.description`  | Human-readable experiment label            |
+| `EXPERIMENT_VERSION`      | `experiment.version`      | Version tag for run comparison             |
+| `DATASET_SOURCE`          | `dataset.source`          | Dataset identifier (e.g. `humbugdb-2024`)  |
+| `DATASET_SAMPLE_RATE_HZ`  | `dataset.sample-rate-hz`  | Audio sample rate in Hz                    |
+| `DATASET_SAMPLE_COUNT`    | `dataset.sample-count`    | Number of samples in the dataset           |
+| `CALIBRATION_PRESET`      | `calibration.preset`      | Named calibration preset for generator/DSP |
+| `CALIBRATION_FREQ_MIN_HZ` | `calibration.freq-min-hz` | Lower bound of frequency range of interest |
+| `CALIBRATION_FREQ_MAX_HZ` | `calibration.freq-max-hz` | Upper bound of frequency range of interest |
+| `OUTPUT_FORMAT`           | `output.format`           | Export format (`json`, `csv`, …)           |
+| `OUTPUT_PATH`             | `output.path`             | Target path for export sink nodes          |
+
+These keys answer spike question 3: *"What minimal metadata is missing for experiment setup,
+datasets, calibration and outputs?"* — the answer is that no new domain types are needed; all
+configuration travels through `Metadata` using these standardized keys.
 
 ---
 
