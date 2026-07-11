@@ -19,8 +19,10 @@ import org.hammer.audio.workflow.WorkflowOperationLog;
 import org.hammer.audio.workflow.WorkflowValidator;
 import org.hammer.audio.workflow.catalog.ExperimentNodeCatalog;
 import org.hammer.audio.workflow.store.CommitId;
+import org.hammer.audio.workflow.store.CommitInfo;
 import org.hammer.audio.workflow.store.CommitMetadata;
 import org.hammer.audio.workflow.store.InMemoryVersionedWorkflowStore;
+import org.hammer.audio.workflow.store.RefUpdateResult;
 import org.hammer.audio.workflow.store.VersionedWorkflowStore;
 import org.hammer.audio.workflow.store.WorkflowSnapshot;
 import org.junit.jupiter.api.BeforeEach;
@@ -235,6 +237,58 @@ class WorkflowEditorServiceTest {
     assertThrows(IllegalArgumentException.class, () -> persistentService.history("", 5));
     assertThrows(IllegalArgumentException.class, () -> persistentService.history("   ", 5));
     assertThrows(IllegalArgumentException.class, () -> persistentService.history("main", -1));
+  }
+
+  @Test
+  void checkpoint_worksWithMockedStoreFacadeOnly() {
+    class CapturingStore implements VersionedWorkflowStore {
+      private String capturedBranch;
+      private WorkflowSnapshot capturedSnapshot;
+      private CommitMetadata capturedMetadata;
+
+      @Override
+      public CommitId commit(String branch, WorkflowSnapshot snapshot, CommitMetadata metadata) {
+        this.capturedBranch = branch;
+        this.capturedSnapshot = snapshot;
+        this.capturedMetadata = metadata;
+        return new CommitId("commit.mocked");
+      }
+
+      @Override
+      public WorkflowSnapshot loadAtCommit(CommitId commitId) {
+        throw new UnsupportedOperationException();
+      }
+
+      @Override
+      public WorkflowSnapshot loadHead(String branch) {
+        throw new UnsupportedOperationException();
+      }
+
+      @Override
+      public RefUpdateResult updateRef(
+          String refName, CommitId expectedOldCommit, CommitId newCommit) {
+        throw new UnsupportedOperationException();
+      }
+
+      @Override
+      public List<CommitInfo> history(String refName, int limit) {
+        throw new UnsupportedOperationException();
+      }
+    }
+
+    CapturingStore store = new CapturingStore();
+    WorkflowEditorService persistentService =
+        new WorkflowEditorService(log, new WorkflowValidator(), store);
+    CommitMetadata metadata =
+        new CommitMetadata("user", "checkpoint", Instant.parse("2026-01-04T00:00:00Z"));
+
+    CommitId commitId = persistentService.checkpoint("main", metadata);
+
+    assertEquals(new CommitId("commit.mocked"), commitId);
+    assertEquals("main", store.capturedBranch);
+    assertEquals("workflow.spike", store.capturedSnapshot.workflowId());
+    assertTrue(store.capturedSnapshot.dslText().contains("workflow.spike"));
+    assertEquals(metadata, store.capturedMetadata);
   }
 
   private static Workflow initialWorkflow() {
