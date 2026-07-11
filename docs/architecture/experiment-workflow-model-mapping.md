@@ -53,6 +53,7 @@ The following first-experiment requirements are already met by the existing mode
 | `workflow.dsl.WorkflowDslSerializer`      | Deterministic text representation for Git checkpoints, semantic diffs and human review (issue #217).                       | DSL layer          |
 | `workflow.dsl.WorkflowDslParser`          | Inverse of the serializer. Required for loading persisted workflows back into the domain model.                            | DSL layer          |
 | `workflow.store.VersionedWorkflowStore`   | Facade that hides JGit and Hibernate internals from all Audio Analyzer workflow services (issue #218).                     | Persistence facade |
+| `infrastructure.workflow.store.JGitVersionedWorkflowStore` | Infrastructure-owned adapter that implements the facade while keeping JGit internals out of workflow/editor APIs. | Infrastructure adapter |
 
 ### Metadata keys for experiment configuration
 

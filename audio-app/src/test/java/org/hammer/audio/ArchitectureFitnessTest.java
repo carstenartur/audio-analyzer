@@ -159,6 +159,8 @@ class ArchitectureFitnessTest {
   private static final String STORE_PKG = "org.hammer.audio.workflow.store..";
   private static final String CATALOG_PKG = "org.hammer.audio.workflow.catalog..";
   private static final String PERSISTENCE_PKG = "org.hammer.audio.recording..";
+  private static final String WORKFLOW_STORE_INFRA_PKG =
+      "org.hammer.audio.infrastructure.workflow.store..";
   private static final JavaClasses DSL_CLASSES = importProduction("org.hammer.audio.workflow.dsl");
   private static final JavaClasses STORE_CLASSES =
       importProduction("org.hammer.audio.workflow.store");
@@ -215,6 +217,25 @@ class ArchitectureFitnessTest {
         .dependOnClassesThat()
         .resideInAnyPackage(JAVAX_SWING, JAVA_AWT, JGIT_PKG)
         .check(STORE_CLASSES);
+  }
+
+  /**
+   * Adapter-boundary guardrail: only the workflow-store infrastructure adapter may depend on JGit.
+   *
+   * <p>This keeps JGit out of workflow/editor/application-facing packages while still allowing a
+   * dedicated persistence adapter implementation.
+   */
+  @Test
+  void onlyWorkflowStoreInfrastructureMayDependOnJGit() {
+    noClasses()
+        .that()
+        .resideInAPackage("org.hammer.audio..")
+        .and()
+        .doNotResideInAPackage(WORKFLOW_STORE_INFRA_PKG)
+        .should()
+        .dependOnClassesThat()
+        .resideInAPackage(JGIT_PKG)
+        .check(ROOT_CLASSES);
   }
 
   /**
