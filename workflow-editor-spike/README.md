@@ -1,7 +1,7 @@
 # Workflow Editor MVP — React Flow + WorkflowOperation
 
 This directory contains the client-side Modeling Workbench MVP for the ADR-007
-React Flow + Yjs direction. The Java server side is implemented in
+React Flow + narrowly scoped Yjs direction. The Java server side is implemented in
 `audio-core/src/main/java/org/hammer/audio/workflow/editor/` and the HTTP
 adapter in `audio-app/src/main/java/org/hammer/audio/workflow/editor/http/`.
 
@@ -14,9 +14,10 @@ posted as `WorkflowOperation` requests.
 |             File              |                                                      Purpose                                                       |
 |-------------------------------|--------------------------------------------------------------------------------------------------------------------|
 | `WorkflowEditorComponent.tsx` | React Flow workbench with node palette, typed-port canvas, parameter panel, validation, save/reload and history UI |
+| `src/yjsWorkbenchState.ts`    | Executable Yjs spike for cursor awareness and scoped undo/redo of viewport/panel UI state only                     |
 | `src/main.tsx`                | Vite/React entry point that mounts `WorkflowEditorComponent`                                                       |
 | `index.html`                  | HTML shell for the Vite dev server                                                                                 |
-| `package.json`                | npm package with React, React Flow and Vite dependencies                                                           |
+| `package.json`                | npm package with React, React Flow, Yjs, awareness and Vite dependencies                                           |
 | `vite.config.ts`              | Vite configuration with `/workflow` proxy to the Java HTTP adapter on port 8080                                    |
 | `tsconfig.json`               | TypeScript compiler configuration                                                                                  |
 
@@ -57,17 +58,24 @@ is covered by Maven tests in `audio-core`.
 | `POST /workflow/load`                        | Reload a branch head or a specific commit                                             |
 | `GET /workflow/snapshot`                     | Preview the deterministic DSL snapshot used for execution handoff                     |
 
-## Issue #210 MVP coverage
+## Issue #220 coverage
 
-- **Create graph visually**: the canvas renders the current `WorkflowProjection`.
-- **Add nodes from palette**: palette buttons post `WorkflowOperation.CreateNode`.
-- **Connect compatible ports**: React Flow connections post `ConnectPorts` and update only from the server response.
-- **Reject invalid connections**: 422 responses are shown as visible validation feedback; local state is not committed first.
-- **Parameter panel**: selected node properties are edited with `UpdateProperty` and shown in the returned projection.
-- **Save/checkpoint**: the save panel calls `/workflow/checkpoints`.
-- **Reload**: branch and commit reload go through `/workflow/load`.
-- **History view**: `/workflow/history` is rendered as a minimal commit list with reload buttons.
-- **Canonical state rule**: React Flow state is rebuilt from `WorkflowProjection`; UI code does not access DSL, JGit or persistence internals.
+- **Minimal graph**: the canvas renders the current `WorkflowProjection`.
+- **Typed ports**: React Flow handles are generated from typed port descriptors.
+- **Valid and invalid edges**: every connection is posted to the backend and accepted or rejected by `WorkflowEditorService` before the UI projection changes.
+- **Parameter edits**: the panel posts `UpdateProperty` operations.
+- **Server authority**: React Flow is rebuilt from the returned projection; browser state is never durable truth.
+- **Yjs awareness**: `YjsWorkbenchState` carries local/remote user and cursor state through `Awareness`.
+- **Scoped undo**: Yjs `UndoManager` tracks viewport and selected-panel changes only.
+- **Canonical-state exclusion**: workflow, nodes, edges, operations, DSL and checkpoints are explicitly forbidden from Yjs ownership.
+
+## GLSP comparison evidence
+
+The competing protocol-level GLSP spike is executable in
+`audio-core/src/main/java/org/hammer/audio/workflow/editor/glsp/GlspWorkflowAdapter.java`.
+Its tests demonstrate typed GModel-shaped projections, valid/invalid edge handling,
+parameter edits and edge removal while preserving the same server-authoritative
+`WorkflowEditorService` boundary.
 
 ## Screenshot documentation
 
@@ -79,14 +87,6 @@ history.
 ## Java unit tests
 
 The server-side `WorkflowEditorService` is tested without a browser in
-`audio-core/src/test/java/org/hammer/audio/workflow/editor/WorkflowEditorServiceTest.java`:
-
-- valid edge: `SyntheticSignalGenerator(AudioBlock) -> Gain(AudioBlock)` accepted;
-- invalid edge: `RecordingInput(Dataset) -> Gain(AudioBlock)` rejected with
-  `WorkflowOperationRejectedException`; log unchanged;
-- parameter update: `UpdateProperty` on Gain node accepted and visible in the returned projection;
-- edge removal: `DisconnectPorts` removes the edge; operation recorded only after validation passes;
-- checkpoint/load/history roundtrip through `InMemoryVersionedWorkflowStore`;
-- snapshot export for execution handoff;
-- input validation guards for blank branch/ref and invalid history limit.
-
+`audio-core/src/test/java/org/hammer/audio/workflow/editor/WorkflowEditorServiceTest.java`.
+The GLSP comparison adapter is tested in
+`audio-core/src/test/java/org/hammer/audio/workflow/editor/glsp/GlspWorkflowAdapterTest.java`.

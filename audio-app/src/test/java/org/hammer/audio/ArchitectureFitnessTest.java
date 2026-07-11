@@ -161,11 +161,18 @@ class ArchitectureFitnessTest {
   private static final String PERSISTENCE_PKG = "org.hammer.audio.recording..";
   private static final String WORKFLOW_STORE_INFRA_PKG =
       "org.hammer.audio.infrastructure.workflow.store..";
+  private static final String EDITOR_PKG = "org.hammer.audio.workflow.editor..";
+  private static final String EDITOR_HTTP_ADAPTER_PKG = "org.hammer.audio.workflow.editor.http..";
+  private static final String COLLABORATION_PKG = "org.hammer.audio.workflow.collaboration..";
   private static final JavaClasses DSL_CLASSES = importProduction("org.hammer.audio.workflow.dsl");
   private static final JavaClasses STORE_CLASSES =
       importProduction("org.hammer.audio.workflow.store");
   private static final JavaClasses CATALOG_CLASSES =
       importProduction("org.hammer.audio.workflow.catalog");
+  private static final JavaClasses EDITOR_HTTP_CLASSES =
+      importProduction("org.hammer.audio.workflow.editor.http");
+  private static final JavaClasses COLLABORATION_CLASSES =
+      importProduction("org.hammer.audio.workflow.collaboration");
 
   /**
    * Modeling guardrail: the DSL package (workflow.dsl) must not depend on Swing, AWT or JGit.
@@ -220,6 +227,24 @@ class ArchitectureFitnessTest {
   }
 
   /**
+   * Modeling guardrail: the workflow store facade must not depend on infrastructure adapter
+   * packages.
+   *
+   * <p>Application and editor layers consume {@code workflow.store} as a stable contract. Concrete
+   * JGit/Hibernate adapters must remain implementation details.
+   */
+  @Test
+  void storeFacadeDoesNotDependOnInfrastructureAdapters() {
+    noClasses()
+        .that()
+        .resideInAPackage(STORE_PKG)
+        .should()
+        .dependOnClassesThat()
+        .resideInAPackage(WORKFLOW_STORE_INFRA_PKG)
+        .check(STORE_CLASSES);
+  }
+
+  /**
    * Adapter-boundary guardrail: only the workflow-store infrastructure adapter may depend on JGit.
    *
    * <p>This keeps JGit out of workflow/editor/application-facing packages while still allowing a
@@ -254,6 +279,58 @@ class ArchitectureFitnessTest {
         .dependOnClassesThat()
         .resideInAnyPackage(JAVAX_SWING, JAVA_AWT, JGIT_PKG, PERSISTENCE_PKG)
         .check(CATALOG_CLASSES);
+  }
+
+  /**
+   * Modeling guardrail: the editor HTTP adapter must not depend on storage internals.
+   *
+   * <p>The editor adapter may call application-service and store-facade APIs, but never concrete
+   * infrastructure/JGit classes.
+   */
+  @Test
+  void editorHttpAdapterDoesNotDependOnStorageInternals() {
+    noClasses()
+        .that()
+        .resideInAPackage(EDITOR_HTTP_ADAPTER_PKG)
+        .should()
+        .dependOnClassesThat()
+        .resideInAnyPackage(WORKFLOW_STORE_INFRA_PKG, JGIT_PKG)
+        .check(EDITOR_HTTP_CLASSES);
+  }
+
+  /**
+   * Modeling guardrail: collaboration transport/services must not depend on editor rendering
+   * packages.
+   *
+   * <p>Collaboration emits semantic operation events and presence data. Rendering belongs to editor
+   * adapters and visualization packages.
+   */
+  @Test
+  void collaborationPackageDoesNotDependOnEditorOrVisualization() {
+    noClasses()
+        .that()
+        .resideInAPackage(COLLABORATION_PKG)
+        .should()
+        .dependOnClassesThat()
+        .resideInAnyPackage(EDITOR_PKG, UI_PKG, JAVAX_SWING, JAVA_AWT)
+        .check(COLLABORATION_CLASSES);
+  }
+
+  /**
+   * Modeling guardrail: semantic workflow packages must not depend on collaboration transport
+   * packages.
+   *
+   * <p>Presence/collaboration state remains separate from the semantic workflow model.
+   */
+  @Test
+  void semanticWorkflowPackagesDoNotDependOnCollaborationPackage() {
+    noClasses()
+        .that()
+        .resideInAnyPackage(DSL_PKG, STORE_PKG, CATALOG_PKG, HISTORY_PKG)
+        .should()
+        .dependOnClassesThat()
+        .resideInAPackage(COLLABORATION_PKG)
+        .check(WORKFLOW_CLASSES);
   }
 
   // -------------------------------------------------------------------------
