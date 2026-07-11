@@ -35,9 +35,7 @@ public final class InMemoryVersionedWorkflowStore implements VersionedWorkflowSt
     commits.put(id, snapshot);
     CommitRecord record = new CommitRecord(commitId, metadata, snapshot.workflowId());
     commitIndex.put(id, record);
-    refHistory
-        .computeIfAbsent(branch, k -> new ArrayList<>())
-        .add(record);
+    refHistory.computeIfAbsent(branch, k -> new ArrayList<>()).add(record);
     return commitId;
   }
 

@@ -81,12 +81,15 @@ class JGitVersionedWorkflowStoreTest {
           store.commit(
               "feature-source",
               toSnapshot(buildMinimalWorkflow()),
-              new CommitMetadata("author", "feature source", Instant.parse("2026-01-03T00:00:00Z")));
-      assertEquals(RefUpdateResult.SUCCESS, store.updateRef("refs/heads/feature/new", null, featureHead));
+              new CommitMetadata(
+                  "author", "feature source", Instant.parse("2026-01-03T00:00:00Z")));
+      assertEquals(
+          RefUpdateResult.SUCCESS, store.updateRef("refs/heads/feature/new", null, featureHead));
       assertEquals(buildMinimalWorkflow(), PARSER.parse(store.loadHead("feature/new").dslText()));
 
       assertEquals(
-          RefUpdateResult.SUCCESS, store.updateRef("refs/heads/feature/new", featureHead, featureHead));
+          RefUpdateResult.SUCCESS,
+          store.updateRef("refs/heads/feature/new", featureHead, featureHead));
       assertTrue(store.history("feature/new", 10).size() >= 1);
     }
   }

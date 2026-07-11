@@ -38,24 +38,31 @@ abstract class VersionedWorkflowStoreContractTest {
   @Test
   void historyIsReverseChronologicalAndLimited() {
     VersionedWorkflowStore store = createStore();
-    CommitId first = store.commit("main", snapshot("workflow.alpha", "dsl-1"), metadata("first", 1));
-    CommitId second = store.commit("main", snapshot("workflow.alpha", "dsl-2"), metadata("second", 2));
-    CommitId third = store.commit("main", snapshot("workflow.alpha", "dsl-3"), metadata("third", 3));
+    CommitId first =
+        store.commit("main", snapshot("workflow.alpha", "dsl-1"), metadata("first", 1));
+    CommitId second =
+        store.commit("main", snapshot("workflow.alpha", "dsl-2"), metadata("second", 2));
+    CommitId third =
+        store.commit("main", snapshot("workflow.alpha", "dsl-3"), metadata("third", 3));
 
     List<CommitInfo> history = store.history("main", 2);
 
     assertEquals(2, history.size());
     assertEquals(third, history.get(0).commitId());
     assertEquals(second, history.get(1).commitId());
-    assertEquals(List.of(third, second, first), store.history("main", 10).stream().map(CommitInfo::commitId).toList());
+    assertEquals(
+        List.of(third, second, first),
+        store.history("main", 10).stream().map(CommitInfo::commitId).toList());
   }
 
   @Test
   void updateRefSucceedsWhenExpectedHeadMatches() {
     VersionedWorkflowStore store = createStore();
-    CommitId base = store.commit("main", snapshot("workflow.alpha", "dsl-base"), metadata("base", 1));
+    CommitId base =
+        store.commit("main", snapshot("workflow.alpha", "dsl-base"), metadata("base", 1));
     CommitId candidate =
-        store.commit("candidate", snapshot("workflow.alpha", "dsl-candidate"), metadata("candidate", 2));
+        store.commit(
+            "candidate", snapshot("workflow.alpha", "dsl-candidate"), metadata("candidate", 2));
 
     RefUpdateResult result = store.updateRef("main", base, candidate);
 
@@ -66,9 +73,11 @@ abstract class VersionedWorkflowStoreContractTest {
   @Test
   void updateRefReturnsStaleWhenExpectedHeadDiffers() {
     VersionedWorkflowStore store = createStore();
-    CommitId base = store.commit("main", snapshot("workflow.alpha", "dsl-base"), metadata("base", 1));
+    CommitId base =
+        store.commit("main", snapshot("workflow.alpha", "dsl-base"), metadata("base", 1));
     CommitId candidate =
-        store.commit("candidate", snapshot("workflow.alpha", "dsl-candidate"), metadata("candidate", 2));
+        store.commit(
+            "candidate", snapshot("workflow.alpha", "dsl-candidate"), metadata("candidate", 2));
     store.commit("main", snapshot("workflow.alpha", "dsl-main-new"), metadata("main-new", 3));
 
     RefUpdateResult result = store.updateRef("main", base, candidate);
@@ -115,6 +124,7 @@ abstract class VersionedWorkflowStoreContractTest {
   }
 
   private static CommitMetadata metadata(String message, long secondOffset) {
-    return new CommitMetadata("tester", message, Instant.parse("2026-01-01T00:00:00Z").plusSeconds(secondOffset));
+    return new CommitMetadata(
+        "tester", message, Instant.parse("2026-01-01T00:00:00Z").plusSeconds(secondOffset));
   }
 }

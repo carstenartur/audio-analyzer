@@ -62,7 +62,8 @@ public final class JGitVersionedWorkflowStore implements VersionedWorkflowStore,
       ObjectId blobDsl =
           inserter.insert(Constants.OBJ_BLOB, snapshot.dslText().getBytes(StandardCharsets.UTF_8));
       ObjectId blobWorkflowId =
-          inserter.insert(Constants.OBJ_BLOB, snapshot.workflowId().getBytes(StandardCharsets.UTF_8));
+          inserter.insert(
+              Constants.OBJ_BLOB, snapshot.workflowId().getBytes(StandardCharsets.UTF_8));
 
       org.eclipse.jgit.lib.TreeFormatter formatter = new org.eclipse.jgit.lib.TreeFormatter();
       formatter.append(WORKFLOW_DSL_PATH, FileMode.REGULAR_FILE, blobDsl);
@@ -135,8 +136,10 @@ public final class JGitVersionedWorkflowStore implements VersionedWorkflowStore,
     String normalizedRef = toRefName(refName);
     try {
       RefUpdate update = repository.updateRef(normalizedRef);
-      update.setExpectedOldObjectId(expectedOldCommit == null ? ZERO_ID : parseObjectId(expectedOldCommit));
+      update.setExpectedOldObjectId(
+          expectedOldCommit == null ? ZERO_ID : parseObjectId(expectedOldCommit));
       update.setNewObjectId(parseObjectId(newCommit));
+      update.setForceUpdate(true);
       update.setRefLogMessage("workflow ref update", false);
       RefUpdate.Result result = update.update();
       return mapRefUpdateResult(result);
@@ -216,7 +219,8 @@ public final class JGitVersionedWorkflowStore implements VersionedWorkflowStore,
       emailLocalPart = "workflow-author";
     }
     Instant instant = metadata.timestamp();
-    return new PersonIdent(sanitizedAuthor, emailLocalPart + "@audio-analyzer.invalid", instant, ZoneOffset.UTC);
+    return new PersonIdent(
+        sanitizedAuthor, emailLocalPart + "@audio-analyzer.invalid", instant, ZoneOffset.UTC);
   }
 
   private static boolean isSuccessfulRefUpdate(RefUpdate.Result result) {
@@ -254,7 +258,8 @@ public final class JGitVersionedWorkflowStore implements VersionedWorkflowStore,
   private String readFile(RevCommit commit, String filePath) throws IOException {
     try (TreeWalk walk = TreeWalk.forPath(repository, filePath, commit.getTree())) {
       if (walk == null) {
-        throw new NoSuchElementException("File '" + filePath + "' not found in commit " + commit.getId().name());
+        throw new NoSuchElementException(
+            "File '" + filePath + "' not found in commit " + commit.getId().name());
       }
       return RawParseUtils.decode(repository.open(walk.getObjectId(0)).getBytes());
     }

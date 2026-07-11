@@ -231,7 +231,7 @@ class ArchitectureFitnessTest {
         .that()
         .resideInAPackage("org.hammer.audio..")
         .and()
-        .doNotResideInAPackage(WORKFLOW_STORE_INFRA_PKG)
+        .resideOutsideOfPackage(WORKFLOW_STORE_INFRA_PKG)
         .should()
         .dependOnClassesThat()
         .resideInAPackage(JGIT_PKG)
