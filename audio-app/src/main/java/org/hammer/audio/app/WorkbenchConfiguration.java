@@ -9,6 +9,7 @@ import org.hammer.audio.workflow.Workflow;
 import org.hammer.audio.workflow.WorkflowOperationLog;
 import org.hammer.audio.workflow.WorkflowValidator;
 import org.hammer.audio.workflow.catalog.ExperimentNodeCatalog;
+import org.hammer.audio.workflow.collaboration.WorkflowSessionRegistry;
 import org.hammer.audio.workflow.editor.WorkflowEditorService;
 import org.hammer.audio.workflow.store.VersionedWorkflowStore;
 import org.springframework.beans.factory.annotation.Value;
@@ -21,7 +22,7 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 /**
  * Spring configuration for the workflow workbench.
  *
- * <p>Provides the {@link WorkflowEditorService} bean, and optionally a {@link
+ * <p>Provides workflow editing and collaboration application services, and optionally a {@link
  * VersionedWorkflowStore} when {@code workbench.data.dir} is set. Also registers a filesystem
  * resource handler when {@code workbench.static.dir} is configured; otherwise the built-in
  * classpath UI at {@code /workbench-ui/} is served.
@@ -32,14 +33,7 @@ public class WorkbenchConfiguration implements WebMvcConfigurer {
   @Value("${workbench.static.dir:}")
   private String staticDir;
 
-  /**
-   * Opens a JGit-backed persistent workflow store when {@code workbench.data.dir} is configured.
-   *
-   * <p>The JGit bare repository is created automatically if it does not yet exist.
-   *
-   * @param dataDirPath filesystem path for the JGit bare repository
-   * @return persistent workflow store
-   */
+  /** Opens a JGit-backed persistent workflow store when configured. */
   @Bean
   @ConditionalOnProperty("workbench.data.dir")
   public VersionedWorkflowStore versionedWorkflowStore(
@@ -47,33 +41,22 @@ public class WorkbenchConfiguration implements WebMvcConfigurer {
     return new JGitStorageHibernateWorkflowStoreAdapter(Path.of(dataDirPath));
   }
 
-  /**
-   * Creates the {@link WorkflowEditorService} bean, injecting the optional store if present.
-   *
-   * <p>When no {@link VersionedWorkflowStore} bean is present the service operates in in-memory
-   * mode: workflow edits are kept in memory only and store-backed endpoints return an error.
-   *
-   * @param store optional persistent store (absent when {@code workbench.data.dir} is not set)
-   * @return configured editor service
-   */
+  /** Creates the single-user workflow editor service and injects the optional store. */
   @Bean
   public WorkflowEditorService workflowEditorService(
-      // SpEL safe-navigation: resolves to the VersionedWorkflowStore bean when present,
-      // or null when the bean is absent (i.e. workbench.data.dir is not configured).
       @Value("#{@versionedWorkflowStore?}") VersionedWorkflowStore store) {
     WorkflowOperationLog log = new WorkflowOperationLog(seedWorkflow());
     WorkflowValidator validator = new WorkflowValidator();
     return new WorkflowEditorService(log, validator, store);
   }
 
-  /**
-   * Registers a filesystem resource handler when {@code workbench.static.dir} is configured.
-   *
-   * <p>When the property is absent, Spring Boot's auto-configured handler serves the built-in
-   * classpath UI from {@code classpath:/workbench-ui/}.
-   *
-   * @param registry Spring MVC resource handler registry
-   */
+  /** Creates the transport-neutral collaboration-session application service. */
+  @Bean
+  public WorkflowSessionRegistry workflowSessionRegistry() {
+    return new WorkflowSessionRegistry();
+  }
+
+  /** Registers a filesystem resource handler when configured. */
   @Override
   public void addResourceHandlers(ResourceHandlerRegistry registry) {
     if (staticDir != null && !staticDir.isBlank()) {
@@ -82,15 +65,7 @@ public class WorkbenchConfiguration implements WebMvcConfigurer {
     }
   }
 
-  /**
-   * Returns the deterministic seed workflow for the workbench.
-   *
-   * <p>The seed workflow contains three nodes arranged as a simple signal chain: {@code Synthetic
-   * Signal Generator → Gain → Localization}. The graph has no volatile data and produces
-   * deterministic screenshots.
-   *
-   * @return seed workflow
-   */
+  /** Returns the deterministic seed workflow for the workbench. */
   static Workflow seedWorkflow() {
     Node inputNode = ExperimentNodeCatalog.syntheticSignalGenerator("seed.input");
     Node gainNode = ExperimentNodeCatalog.gain("seed.gain");

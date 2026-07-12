@@ -4,10 +4,10 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 /**
- * Spring Boot entry point for the workflow workbench.
+ * Spring Boot 4.1 entry point for the workflow workbench.
  *
- * <p>Starts an embedded Tomcat server with the workflow editor REST API and optional static-file
- * serving. Configuration is driven by {@code application.properties} and command-line overrides:
+ * <p>Starts the embedded servlet container with the workflow editor and collaboration-session REST
+ * APIs. Configuration is driven by {@code application.properties} and command-line overrides:
  *
  * <ul>
  *   <li>{@code server.port} — TCP port (default: 8080)
@@ -16,16 +16,16 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  *       the built-in classpath UI ({@code /workbench-ui/})
  * </ul>
  *
- * <p>Example — in-memory mode (demo / tests):
+ * <p>Example — in-memory mode:
  *
  * <pre>{@code
- * java -cp app.jar:lib/* org.hammer.audio.app.WorkbenchApplication
+ * java -jar audio-app-0.0.4-SNAPSHOT-workbench.jar
  * }</pre>
  *
- * <p>Example — persistent mode (production):
+ * <p>Example — persistent mode:
  *
  * <pre>{@code
- * java -cp app.jar:lib/* org.hammer.audio.app.WorkbenchApplication \
+ * java -jar audio-app-0.0.4-SNAPSHOT-workbench.jar \
  *     --workbench.data.dir=/data/workbench.git
  * }</pre>
  */
@@ -33,11 +33,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
     scanBasePackages = {"org.hammer.audio.app", "org.hammer.audio.workflow.editor.http"})
 public class WorkbenchApplication {
 
-  /**
-   * Application entry point.
-   *
-   * @param args Spring Boot command-line arguments
-   */
+  /** Starts the Spring Boot workbench application. */
   public static void main(String[] args) {
     SpringApplication.run(WorkbenchApplication.class, args);
   }
