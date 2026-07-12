@@ -1,232 +1,88 @@
 package org.hammer.audio.workflow.editor.http;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.sun.net.httpserver.HttpExchange;
-import com.sun.net.httpserver.HttpServer;
-import java.io.IOException;
-import java.io.OutputStream;
-import java.net.InetSocketAddress;
+import jakarta.validation.Valid;
+import java.net.URI;
 import java.util.List;
 import java.util.Objects;
-import org.hammer.audio.workflow.Workflow;
-import org.hammer.audio.workflow.collaboration.CollaborationMode;
-import org.hammer.audio.workflow.collaboration.OperationActor;
 import org.hammer.audio.workflow.collaboration.WorkflowSessionRegistry;
 import org.hammer.audio.workflow.editor.WorkflowProjection;
+import org.hammer.audio.workflow.editor.http.WorkflowSessionApiModels.ActorIdRequest;
+import org.hammer.audio.workflow.editor.http.WorkflowSessionApiModels.CreateSessionRequest;
+import org.hammer.audio.workflow.editor.http.WorkflowSessionApiModels.JoinSessionRequest;
+import org.hammer.audio.workflow.editor.http.WorkflowSessionApiModels.SessionResponse;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
-/** HTTP adapter for collaboration-session lifecycle from issue #241. */
+/** Spring MVC REST controller for collaboration-session lifecycle from issue #241. */
+@RestController
+@RequestMapping("/workflow/sessions")
 public final class WorkflowSessionHttpAdapter {
 
-  private static final String BASE_PATH = "/workflow/sessions";
-  private static final String APPLICATION_JSON = "application/json; charset=utf-8";
-  private static final int HTTP_OK = 200;
-  private static final int HTTP_CREATED = 201;
-  private static final int HTTP_BAD_REQUEST = 400;
-  private static final int HTTP_NOT_FOUND = 404;
-  private static final int HTTP_CONFLICT = 409;
-  private static final int HTTP_METHOD_NOT_ALLOWED = 405;
-
   private final WorkflowSessionRegistry registry;
-  private final ObjectMapper mapper = new ObjectMapper();
-  private HttpServer server;
 
-  /**
-   * Creates the lifecycle HTTP adapter.
-   *
-   * @param registry transport-neutral session registry
-   */
+  /** Creates the lifecycle REST controller. */
   public WorkflowSessionHttpAdapter(WorkflowSessionRegistry registry) {
     this.registry = Objects.requireNonNull(registry, "registry");
   }
 
-  /**
-   * Starts a standalone lifecycle API server. Port {@code 0} requests an ephemeral port.
-   *
-   * @param port requested TCP port
-   * @throws IOException if the server cannot bind
-   */
-  public void start(int port) throws IOException {
-    HttpServer httpServer = HttpServer.create(new InetSocketAddress(port), 0);
-    registerContexts(httpServer);
-    httpServer.start();
+  /** Creates a session and joins its owner. */
+  @PostMapping
+  public ResponseEntity<SessionResponse> create(
+      @Valid @RequestBody CreateSessionRequest request) {
+    SessionResponse response =
+        SessionResponse.from(
+            registry.create(
+                request.sessionId(),
+                request.mode(),
+                request.actor().toDomain(),
+                request.initialWorkflow()));
+    return ResponseEntity.created(URI.create("/workflow/sessions/" + response.sessionId()))
+        .body(response);
   }
 
-  /**
-   * Registers the session API on an existing HTTP server.
-   *
-   * @param httpServer target server
-   */
-  public void registerContexts(HttpServer httpServer) {
-    server = Objects.requireNonNull(httpServer, "httpServer");
-    httpServer.createContext(BASE_PATH, this::handleSessions);
+  /** Lists all current sessions in stable identifier order. */
+  @GetMapping
+  public List<SessionResponse> sessions() {
+    return registry.sessions().stream().map(SessionResponse::from).toList();
   }
 
-  /**
-   * Returns the bound port after {@link #start(int)}.
-   *
-   * @return bound TCP port
-   */
-  public int port() {
-    if (server == null) {
-      throw new IllegalStateException("Session HTTP adapter is not started");
-    }
-    return server.getAddress().getPort();
+  /** Joins an existing session. */
+  @PostMapping("/{sessionId}/join")
+  public SessionResponse join(
+      @PathVariable String sessionId, @Valid @RequestBody JoinSessionRequest request) {
+    return SessionResponse.from(registry.join(sessionId, request.toDomain()));
   }
 
-  /**
-   * Stops the standalone or shared HTTP server.
-   *
-   * @param delaySeconds graceful-stop delay
-   */
-  public void stop(int delaySeconds) {
-    if (server != null) {
-      server.stop(delaySeconds);
-    }
+  /** Leaves a session while retaining it for reconnect. */
+  @PostMapping("/{sessionId}/leave")
+  public SessionResponse leave(
+      @PathVariable String sessionId, @Valid @RequestBody ActorIdRequest request) {
+    return SessionResponse.from(registry.leave(sessionId, request.actorId()));
   }
 
-  private void handleSessions(HttpExchange exchange) throws IOException {
-    try {
-      List<String> segments = pathSegments(exchange.getRequestURI().getPath());
-      if (segments.size() == 2) {
-        handleCollection(exchange);
-        return;
-      }
-      if (segments.size() < 3) {
-        sendError(exchange, HTTP_NOT_FOUND, "Unknown session endpoint");
-        return;
-      }
-      String sessionId = segments.get(2);
-      if (segments.size() == 3) {
-        handleSession(exchange, sessionId);
-        return;
-      }
-      if (segments.size() == 4 && "join".equals(segments.get(3))) {
-        requireMethod(exchange, "POST");
-        sendJson(exchange, HTTP_OK, registry.join(sessionId, readActor(exchange)));
-        return;
-      }
-      if (segments.size() == 4 && "leave".equals(segments.get(3))) {
-        requireMethod(exchange, "POST");
-        JsonNode body = readJson(exchange);
-        sendJson(exchange, HTTP_OK, registry.leave(sessionId, requiredText(body, "actorId")));
-        return;
-      }
-      if (segments.size() == 4 && "projection".equals(segments.get(3))) {
-        requireMethod(exchange, "GET");
-        sendJson(exchange, HTTP_OK, WorkflowProjection.fromWorkflow(registry.workflow(sessionId)));
-        return;
-      }
-      sendError(exchange, HTTP_NOT_FOUND, "Unknown session endpoint");
-    } catch (MethodNotAllowedException ex) {
-      sendError(exchange, HTTP_METHOD_NOT_ALLOWED, ex.getMessage());
-    } catch (IllegalArgumentException ex) {
-      int status =
-          ex.getMessage() != null && ex.getMessage().startsWith("Unknown session:")
-              ? HTTP_NOT_FOUND
-              : HTTP_BAD_REQUEST;
-      sendError(exchange, status, ex.getMessage());
-    } catch (IllegalStateException ex) {
-      sendError(exchange, HTTP_CONFLICT, ex.getMessage());
-    }
+  /** Returns immutable session metadata. */
+  @GetMapping("/{sessionId}")
+  public SessionResponse inspect(@PathVariable String sessionId) {
+    return SessionResponse.from(registry.inspect(sessionId));
   }
 
-  private void handleCollection(HttpExchange exchange) throws IOException {
-    if ("GET".equalsIgnoreCase(exchange.getRequestMethod())) {
-      sendJson(exchange, HTTP_OK, registry.sessions());
-      return;
-    }
-    requireMethod(exchange, "POST");
-    JsonNode body = readJson(exchange);
-    String sessionId = requiredText(body, "sessionId");
-    CollaborationMode mode = CollaborationMode.valueOf(requiredText(body, "mode"));
-    OperationActor owner = actorFrom(body.path("actor"));
-    String workflowId = textOrDefault(body, "workflowId", "workflow." + sessionId);
-    String workflowName = textOrDefault(body, "workflowName", "Workflow " + sessionId);
-    Workflow workflow = new Workflow(workflowId, workflowName, List.of(), List.of());
-    sendJson(exchange, HTTP_CREATED, registry.create(sessionId, mode, owner, workflow));
+  /** Returns the current server-authoritative workflow projection. */
+  @GetMapping("/{sessionId}/projection")
+  public WorkflowProjection projection(@PathVariable String sessionId) {
+    return WorkflowProjection.fromWorkflow(registry.workflow(sessionId));
   }
 
-  private void handleSession(HttpExchange exchange, String sessionId) throws IOException {
-    if ("GET".equalsIgnoreCase(exchange.getRequestMethod())) {
-      sendJson(exchange, HTTP_OK, registry.inspect(sessionId));
-      return;
-    }
-    requireMethod(exchange, "DELETE");
-    JsonNode body = readJson(exchange);
-    registry.close(sessionId, requiredText(body, "actorId"));
-    sendJson(exchange, HTTP_OK, new ClosedSessionResponse(sessionId));
-  }
-
-  private OperationActor readActor(HttpExchange exchange) throws IOException {
-    return actorFrom(readJson(exchange));
-  }
-
-  private static OperationActor actorFrom(JsonNode node) {
-    return new OperationActor(
-        requiredText(node, "actorId"),
-        requiredText(node, "userId"),
-        requiredText(node, "displayName"));
-  }
-
-  private JsonNode readJson(HttpExchange exchange) throws IOException {
-    byte[] bytes = exchange.getRequestBody().readAllBytes();
-    if (bytes.length == 0) {
-      throw new IllegalArgumentException("JSON request body is required");
-    }
-    try {
-      return mapper.readTree(bytes);
-    } catch (IOException ex) {
-      throw new IllegalArgumentException("Invalid JSON: " + ex.getMessage(), ex);
-    }
-  }
-
-  private static String requiredText(JsonNode node, String field) {
-    if (node == null
-        || node.isMissingNode()
-        || !node.has(field)
-        || node.get(field).asText().isBlank()) {
-      throw new IllegalArgumentException("Missing or blank field: " + field);
-    }
-    return node.get(field).asText();
-  }
-
-  private static String textOrDefault(JsonNode node, String field, String fallback) {
-    return node.has(field) && !node.get(field).asText().isBlank()
-        ? node.get(field).asText()
-        : fallback;
-  }
-
-  private static List<String> pathSegments(String path) {
-    return java.util.Arrays.stream(path.split("/")).filter(segment -> !segment.isBlank()).toList();
-  }
-
-  private static void requireMethod(HttpExchange exchange, String expected) {
-    if (!expected.equalsIgnoreCase(exchange.getRequestMethod())) {
-      throw new MethodNotAllowedException("Expected HTTP " + expected);
-    }
-  }
-
-  private void sendJson(HttpExchange exchange, int status, Object value) throws IOException {
-    byte[] body = mapper.writeValueAsBytes(value);
-    exchange.getResponseHeaders().set("Content-Type", APPLICATION_JSON);
-    exchange.sendResponseHeaders(status, body.length);
-    try (OutputStream output = exchange.getResponseBody()) {
-      output.write(body);
-    }
-  }
-
-  private void sendError(HttpExchange exchange, int status, String message) throws IOException {
-    sendJson(exchange, status, new ErrorResponse(message == null ? "Request failed" : message));
-  }
-
-  private record ErrorResponse(String error) {}
-
-  private record ClosedSessionResponse(String sessionId) {}
-
-  private static final class MethodNotAllowedException extends RuntimeException {
-    MethodNotAllowedException(String message) {
-      super(message);
-    }
+  /** Explicitly closes a session. Only the owner may close it. */
+  @DeleteMapping("/{sessionId}")
+  public ResponseEntity<Void> close(
+      @PathVariable String sessionId, @Valid @RequestBody ActorIdRequest request) {
+    registry.close(sessionId, request.actorId());
+    return ResponseEntity.noContent().build();
   }
 }
