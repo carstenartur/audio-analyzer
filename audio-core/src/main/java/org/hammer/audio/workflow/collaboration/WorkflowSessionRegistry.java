@@ -275,6 +275,7 @@ public final class WorkflowSessionRegistry {
     }
 
     private SessionSnapshot snapshotUnchecked() {
+      requireOpen();
       List<OperationActor> actors = new ArrayList<>(participants.values());
       actors.sort(Comparator.comparing(OperationActor::actorId));
       return new SessionSnapshot(
