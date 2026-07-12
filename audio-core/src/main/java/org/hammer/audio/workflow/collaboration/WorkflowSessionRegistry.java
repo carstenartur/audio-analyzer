@@ -25,10 +25,7 @@ public final class WorkflowSessionRegistry {
 
   /** Creates a new session and joins its owner. */
   public SessionSnapshot create(
-      String sessionId,
-      CollaborationMode mode,
-      OperationActor owner,
-      Workflow initialWorkflow) {
+      String sessionId, CollaborationMode mode, OperationActor owner, Workflow initialWorkflow) {
     String requiredSessionId = requireNotBlank(sessionId, "sessionId");
     Objects.requireNonNull(mode, "mode");
     Objects.requireNonNull(owner, "owner");
@@ -63,10 +60,7 @@ public final class WorkflowSessionRegistry {
 
   /** Applies an actor-authored semantic operation to an existing joined session. */
   public Workflow applyOperation(
-      String sessionId,
-      CollaborationMode mode,
-      OperationActor actor,
-      WorkflowOperation operation) {
+      String sessionId, CollaborationMode mode, OperationActor actor, WorkflowOperation operation) {
     Objects.requireNonNull(mode, "mode");
     Objects.requireNonNull(actor, "actor");
     Objects.requireNonNull(operation, "operation");
@@ -127,10 +121,7 @@ public final class WorkflowSessionRegistry {
     private final Map<String, OperationActor> participants = new LinkedHashMap<>();
 
     SessionEntry(
-        String sessionId,
-        CollaborationMode mode,
-        OperationActor owner,
-        Workflow initialWorkflow) {
+        String sessionId, CollaborationMode mode, OperationActor owner, Workflow initialWorkflow) {
       this.sessionId = sessionId;
       this.mode = mode;
       this.owner = owner;
@@ -138,11 +129,7 @@ public final class WorkflowSessionRegistry {
       this.operationLog = new WorkflowOperationLog(initialWorkflow);
       this.sessionService =
           new CollaborativeWorkflowSessionService(
-              sessionId,
-              mode,
-              operationLog,
-              new InMemoryWorkflowEventOutbox(),
-              ignored -> {});
+              sessionId, mode, operationLog, new InMemoryWorkflowEventOutbox(), ignored -> {});
       participants.put(owner.actorId(), owner);
     }
 

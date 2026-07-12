@@ -23,10 +23,7 @@ class WorkflowSessionRegistryTest {
   void sharedSessionSupportsTwoActorsAndCanonicalWorkflow() {
     WorkflowSessionRegistry registry = new WorkflowSessionRegistry();
     registry.create(
-        "session.shared",
-        CollaborationMode.SHARED_SESSION_PERSONAL_UNDO,
-        OWNER,
-        emptyWorkflow());
+        "session.shared", CollaborationMode.SHARED_SESSION_PERSONAL_UNDO, OWNER, emptyWorkflow());
 
     WorkflowSessionRegistry.SessionSnapshot joined = registry.join("session.shared", GUEST);
 
@@ -37,8 +34,7 @@ class WorkflowSessionRegistryTest {
   @Test
   void privateWorkspaceRejectsDifferentActorButAllowsOwnerReconnect() {
     WorkflowSessionRegistry registry = new WorkflowSessionRegistry();
-    registry.create(
-        "session.private", CollaborationMode.PRIVATE_WORKSPACE, OWNER, emptyWorkflow());
+    registry.create("session.private", CollaborationMode.PRIVATE_WORKSPACE, OWNER, emptyWorkflow());
     registry.leave("session.private", OWNER.actorId());
 
     assertThrows(IllegalStateException.class, () -> registry.join("session.private", GUEST));
@@ -50,10 +46,7 @@ class WorkflowSessionRegistryTest {
   void duplicateJoinIsIdempotentButMetadataMismatchIsRejected() {
     WorkflowSessionRegistry registry = new WorkflowSessionRegistry();
     registry.create(
-        "session.shared",
-        CollaborationMode.SHARED_SESSION_PERSONAL_UNDO,
-        OWNER,
-        emptyWorkflow());
+        "session.shared", CollaborationMode.SHARED_SESSION_PERSONAL_UNDO, OWNER, emptyWorkflow());
     registry.join("session.shared", GUEST);
 
     assertEquals(2, registry.join("session.shared", GUEST).participants().size());
@@ -67,10 +60,7 @@ class WorkflowSessionRegistryTest {
   void operationRequiresJoinedActorMatchingSessionModeAndAuthor() {
     WorkflowSessionRegistry registry = new WorkflowSessionRegistry();
     registry.create(
-        "session.shared",
-        CollaborationMode.SHARED_SESSION_PERSONAL_UNDO,
-        OWNER,
-        emptyWorkflow());
+        "session.shared", CollaborationMode.SHARED_SESSION_PERSONAL_UNDO, OWNER, emptyWorkflow());
     Node node = new Node("node.input", "input", "Input", List.of(), List.of(), Metadata.empty());
     WorkflowOperation operation =
         new WorkflowOperation.CreateNode(
@@ -98,10 +88,7 @@ class WorkflowSessionRegistryTest {
         1,
         registry
             .applyOperation(
-                "session.shared",
-                CollaborationMode.SHARED_SESSION_PERSONAL_UNDO,
-                OWNER,
-                operation)
+                "session.shared", CollaborationMode.SHARED_SESSION_PERSONAL_UNDO, OWNER, operation)
             .nodes()
             .size());
   }
@@ -110,10 +97,7 @@ class WorkflowSessionRegistryTest {
   void emptySessionSurvivesUntilOwnerClosesIt() {
     WorkflowSessionRegistry registry = new WorkflowSessionRegistry();
     registry.create(
-        "session.shared",
-        CollaborationMode.SHARED_SESSION_PERSONAL_UNDO,
-        OWNER,
-        emptyWorkflow());
+        "session.shared", CollaborationMode.SHARED_SESSION_PERSONAL_UNDO, OWNER, emptyWorkflow());
     registry.leave("session.shared", OWNER.actorId());
 
     assertTrue(registry.inspect("session.shared").participants().isEmpty());

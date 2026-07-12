@@ -114,10 +114,7 @@ public final class WorkflowSessionHttpAdapter {
       }
       if (segments.size() == 4 && "projection".equals(segments.get(3))) {
         requireMethod(exchange, "GET");
-        sendJson(
-            exchange,
-            HTTP_OK,
-            WorkflowProjection.fromWorkflow(registry.workflow(sessionId)));
+        sendJson(exchange, HTTP_OK, WorkflowProjection.fromWorkflow(registry.workflow(sessionId)));
         return;
       }
       sendError(exchange, HTTP_NOT_FOUND, "Unknown session endpoint");
@@ -201,9 +198,7 @@ public final class WorkflowSessionHttpAdapter {
   }
 
   private static List<String> pathSegments(String path) {
-    return java.util.Arrays.stream(path.split("/"))
-        .filter(segment -> !segment.isBlank())
-        .toList();
+    return java.util.Arrays.stream(path.split("/")).filter(segment -> !segment.isBlank()).toList();
   }
 
   private static void requireMethod(HttpExchange exchange, String expected) {

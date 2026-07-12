@@ -57,7 +57,8 @@ class WorkflowSessionHttpAdapterTest {
               "workflowId":"workflow.shared",
               "workflowName":"Shared workflow"
             }
-            """.formatted(OWNER_JSON));
+            """
+                .formatted(OWNER_JSON));
     assertEquals(201, created.statusCode());
 
     HttpResponse<String> joined =
@@ -89,7 +90,9 @@ class WorkflowSessionHttpAdapterTest {
             baseUri.resolve("/workflow/sessions/session.shared"),
             "{\"actorId\":\"actor.owner\"}");
     assertEquals(200, closed.statusCode());
-    assertEquals(404, request("GET", baseUri.resolve("/workflow/sessions/session.shared"), null).statusCode());
+    assertEquals(
+        404,
+        request("GET", baseUri.resolve("/workflow/sessions/session.shared"), null).statusCode());
   }
 
   @Test
@@ -101,14 +104,16 @@ class WorkflowSessionHttpAdapterTest {
           "mode":"PRIVATE_WORKSPACE",
           "actor":%s
         }
-        """.formatted(OWNER_JSON);
+        """
+            .formatted(OWNER_JSON);
     assertEquals(201, request("POST", baseUri, createPrivate).statusCode());
     assertEquals(409, request("POST", baseUri, createPrivate).statusCode());
 
     HttpResponse<String> privateJoin =
         request("POST", baseUri.resolve("/workflow/sessions/session.private/join"), GUEST_JSON);
     assertEquals(409, privateJoin.statusCode());
-    assertTrue(mapper.readTree(privateJoin.body()).path("error").asText().contains("Private workspace"));
+    assertTrue(
+        mapper.readTree(privateJoin.body()).path("error").asText().contains("Private workspace"));
 
     HttpResponse<String> unknown =
         request("GET", baseUri.resolve("/workflow/sessions/missing"), null);
@@ -149,12 +154,14 @@ class WorkflowSessionHttpAdapterTest {
               "mode":"SHARED_SESSION_PERSONAL_UNDO",
               "actor":%s
             }
-            """.formatted(OWNER_JSON));
+            """
+                .formatted(OWNER_JSON));
     assertEquals(201, response.statusCode());
   }
 
   private HttpResponse<String> request(String method, URI uri, String body) throws Exception {
-    HttpRequest.Builder builder = HttpRequest.newBuilder(uri).header("Content-Type", "application/json");
+    HttpRequest.Builder builder =
+        HttpRequest.newBuilder(uri).header("Content-Type", "application/json");
     if (body == null) {
       builder.method(method, HttpRequest.BodyPublishers.noBody());
     } else {
