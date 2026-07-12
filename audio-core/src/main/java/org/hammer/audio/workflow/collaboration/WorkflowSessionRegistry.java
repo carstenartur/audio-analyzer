@@ -93,6 +93,7 @@ public final class WorkflowSessionRegistry {
           requiredSessionId,
           "Session changed while closing: " + requiredSessionId);
     }
+    entry.close();
   }
 
   /** Returns all current sessions in stable identifier order. */
@@ -133,6 +134,7 @@ public final class WorkflowSessionRegistry {
     private final WorkflowOperationLog operationLog;
     private final CollaborativeWorkflowSessionService sessionService;
     private final Map<String, OperationActor> participants = new LinkedHashMap<>();
+    private volatile boolean closed;
 
     SessionEntry(
         String sessionId, CollaborationMode mode, OperationActor owner, Workflow initialWorkflow) {
@@ -143,11 +145,20 @@ public final class WorkflowSessionRegistry {
       this.operationLog = new WorkflowOperationLog(initialWorkflow);
       this.sessionService =
           new CollaborativeWorkflowSessionService(
-              sessionId, mode, operationLog, new InMemoryWorkflowEventOutbox(), ignored -> {});
+              sessionId,
+              mode,
+              operationLog,
+              new InMemoryWorkflowEventOutbox(),
+              ignored -> ignoreEvent());
       participants.put(owner.actorId(), owner);
     }
 
+    private static void ignoreEvent() {
+      // no-op
+    }
+
     synchronized SessionSnapshot join(OperationActor actor) {
+      requireOpen();
       if (mode == CollaborationMode.PRIVATE_WORKSPACE && !owner.actorId().equals(actor.actorId())) {
         throw error(
             Code.PRIVATE_WORKSPACE_ACCESS_DENIED,
@@ -166,6 +177,7 @@ public final class WorkflowSessionRegistry {
     }
 
     synchronized SessionSnapshot leave(String actorId) {
+      requireOpen();
       if (!participants.containsKey(actorId)) {
         throw error(Code.ACTOR_NOT_JOINED, sessionId, "Actor is not joined: " + actorId);
       }
@@ -176,6 +188,7 @@ public final class WorkflowSessionRegistry {
 
     synchronized Workflow apply(
         CollaborationMode requestedMode, OperationActor actor, WorkflowOperation operation) {
+      requireOpen();
       if (mode != requestedMode) {
         throw error(
             Code.SESSION_MODE_MISMATCH,
@@ -196,10 +209,12 @@ public final class WorkflowSessionRegistry {
     }
 
     synchronized Workflow workflow() {
+      requireOpen();
       return operationLog.currentWorkflow();
     }
 
     synchronized SessionSnapshot snapshot() {
+      requireOpen();
       List<OperationActor> actors = new ArrayList<>(participants.values());
       actors.sort(Comparator.comparing(OperationActor::actorId));
       return new SessionSnapshot(
@@ -213,6 +228,7 @@ public final class WorkflowSessionRegistry {
     }
 
     synchronized void assertOwner(String actorId) {
+      requireOpen();
       if (!owner.actorId().equals(actorId)) {
         throw error(
             Code.SESSION_CLOSE_FORBIDDEN,
@@ -220,9 +236,29 @@ public final class WorkflowSessionRegistry {
             "Only the session owner may close it: " + owner.actorId());
       }
     }
+
+    void close() {
+      closed = true;
+    }
+
+    private void requireOpen() {
+      if (closed) {
+        throw error(Code.SESSION_NOT_FOUND, sessionId, "Unknown session: " + sessionId);
+      }
+    }
   }
 
-  /** Immutable transport-neutral session metadata. */
+  /**
+   * Immutable transport-neutral session metadata.
+   *
+   * @param sessionId stable unique session identifier
+   * @param mode immutable collaboration mode
+   * @param owner owner actor metadata
+   * @param createdAt session creation timestamp
+   * @param participants currently joined participants
+   * @param operationCount number of applied operations
+   * @param workflowId identifier of the canonical workflow
+   */
   public record SessionSnapshot(
       String sessionId,
       CollaborationMode mode,

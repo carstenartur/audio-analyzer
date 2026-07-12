@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.util.UriComponentsBuilder;
 
 /** Spring MVC REST controller for collaboration-session lifecycle from issue #241. */
 @RestController
@@ -41,8 +42,12 @@ public final class WorkflowSessionHttpAdapter {
                 request.mode(),
                 request.actor().toDomain(),
                 request.initialWorkflow()));
-    return ResponseEntity.created(URI.create("/workflow/sessions/" + response.sessionId()))
-        .body(response);
+    URI location =
+        UriComponentsBuilder.fromPath("/workflow/sessions/{sessionId}")
+            .buildAndExpand(response.sessionId())
+            .encode()
+            .toUri();
+    return ResponseEntity.created(location).body(response);
   }
 
   /** Lists all current sessions in stable identifier order. */
@@ -54,33 +59,33 @@ public final class WorkflowSessionHttpAdapter {
   /** Joins an existing session. */
   @PostMapping("/{sessionId}/join")
   public SessionResponse join(
-      @PathVariable String sessionId, @Valid @RequestBody JoinSessionRequest request) {
+      @PathVariable("sessionId") String sessionId, @Valid @RequestBody JoinSessionRequest request) {
     return SessionResponse.from(registry.join(sessionId, request.toDomain()));
   }
 
   /** Leaves a session while retaining it for reconnect. */
   @PostMapping("/{sessionId}/leave")
   public SessionResponse leave(
-      @PathVariable String sessionId, @Valid @RequestBody ActorIdRequest request) {
+      @PathVariable("sessionId") String sessionId, @Valid @RequestBody ActorIdRequest request) {
     return SessionResponse.from(registry.leave(sessionId, request.actorId()));
   }
 
   /** Returns immutable session metadata. */
   @GetMapping("/{sessionId}")
-  public SessionResponse inspect(@PathVariable String sessionId) {
+  public SessionResponse inspect(@PathVariable("sessionId") String sessionId) {
     return SessionResponse.from(registry.inspect(sessionId));
   }
 
   /** Returns the current server-authoritative workflow projection. */
   @GetMapping("/{sessionId}/projection")
-  public WorkflowProjection projection(@PathVariable String sessionId) {
+  public WorkflowProjection projection(@PathVariable("sessionId") String sessionId) {
     return WorkflowProjection.fromWorkflow(registry.workflow(sessionId));
   }
 
   /** Explicitly closes a session. Only the owner may close it. */
   @DeleteMapping("/{sessionId}")
   public ResponseEntity<Void> close(
-      @PathVariable String sessionId, @Valid @RequestBody ActorIdRequest request) {
+      @PathVariable("sessionId") String sessionId, @Valid @RequestBody ActorIdRequest request) {
     registry.close(sessionId, request.actorId());
     return ResponseEntity.noContent().build();
   }
