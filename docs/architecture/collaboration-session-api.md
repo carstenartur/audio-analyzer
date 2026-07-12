@@ -77,12 +77,12 @@ For `DELETE`, the actor must be the session owner.
 
 ## Error mapping
 
-| Condition | HTTP status |
-|---|---:|
-| Invalid or incomplete request | 400 |
-| Unknown session | 404 |
-| Duplicate session, private-session join, invalid lifecycle transition | 409 |
-| Wrong HTTP method | 405 |
+|                               Condition                               | HTTP status |
+|-----------------------------------------------------------------------|------------:|
+| Invalid or incomplete request                                         |         400 |
+| Unknown session                                                       |         404 |
+| Duplicate session, private-session join, invalid lifecycle transition |         409 |
+| Wrong HTTP method                                                     |         405 |
 
 ## Running standalone
 
