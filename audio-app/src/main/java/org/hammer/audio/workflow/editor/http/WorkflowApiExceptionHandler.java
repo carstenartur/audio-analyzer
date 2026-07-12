@@ -43,7 +43,11 @@ public final class WorkflowApiExceptionHandler {
             request);
     List<FieldViolation> violations =
         exception.getBindingResult().getFieldErrors().stream()
-            .map(error -> new FieldViolation(error.getField(), error.getDefaultMessage()))
+            .map(
+                error ->
+                    new FieldViolation(
+                        error.getField(),
+                        java.util.Objects.toString(error.getDefaultMessage(), "")))
             .toList();
     problem.setProperty("violations", violations);
     return problem;
@@ -106,6 +110,16 @@ public final class WorkflowApiExceptionHandler {
     return result.toString();
   }
 
-  /** Field-level validation detail included in invalid-request problem responses. */
-  public record FieldViolation(String field, String message) {}
+  /**
+   * Field-level validation detail included in invalid-request problem responses.
+   *
+   * @param field invalid field name
+   * @param message validation message
+   */
+  public record FieldViolation(String field, String message) {
+    public FieldViolation {
+      field = java.util.Objects.requireNonNull(field, "field");
+      message = java.util.Objects.requireNonNull(message, "message");
+    }
+  }
 }

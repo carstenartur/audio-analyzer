@@ -13,9 +13,13 @@ import org.hammer.audio.workflow.collaboration.WorkflowSessionRegistry.SessionSn
 /** Request and response models for the workflow-session REST API. */
 public final class WorkflowSessionApiModels {
 
-  private WorkflowSessionApiModels() {}
-
-  /** Actor identity supplied by the transport/authentication boundary. */
+  /**
+   * Actor identity supplied by the transport/authentication boundary.
+   *
+   * @param actorId stable actor identifier
+   * @param userId stable user identifier
+   * @param displayName actor display name
+   */
   public record ActorRequest(
       @NotBlank String actorId, @NotBlank String userId, @NotBlank String displayName) {
 
@@ -24,7 +28,15 @@ public final class WorkflowSessionApiModels {
     }
   }
 
-  /** Request for creating and initially joining a session. */
+  /**
+   * Request for creating and initially joining a session.
+   *
+   * @param sessionId stable unique session identifier
+   * @param mode requested collaboration mode
+   * @param actor owner actor metadata
+   * @param workflowId optional initial workflow id
+   * @param workflowName optional initial workflow name
+   */
   public record CreateSessionRequest(
       @NotBlank String sessionId,
       @NotNull CollaborationMode mode,
@@ -41,7 +53,13 @@ public final class WorkflowSessionApiModels {
     }
   }
 
-  /** Request for joining an existing session. */
+  /**
+   * Request for joining an existing session.
+   *
+   * @param actorId stable actor identifier
+   * @param userId stable user identifier
+   * @param displayName actor display name
+   */
   public record JoinSessionRequest(
       @NotBlank String actorId, @NotBlank String userId, @NotBlank String displayName) {
 
@@ -50,10 +68,24 @@ public final class WorkflowSessionApiModels {
     }
   }
 
-  /** Request for leaving or closing a session. */
-  public record ActorIdRequest(@NotBlank String actorId) {}
+  /**
+   * Request for leaving or closing a session.
+   *
+   * @param actorId stable actor identifier
+   */
+  public record ActorIdRequest(@NotBlank String actorId) {
+    public ActorIdRequest {
+      actorId = java.util.Objects.requireNonNull(actorId, "actorId");
+    }
+  }
 
-  /** Stable actor representation returned by the API. */
+  /**
+   * Stable actor representation returned by the API.
+   *
+   * @param actorId stable actor identifier
+   * @param userId stable user identifier
+   * @param displayName actor display name
+   */
   public record ActorResponse(String actorId, String userId, String displayName) {
 
     static ActorResponse from(OperationActor actor) {
@@ -61,7 +93,17 @@ public final class WorkflowSessionApiModels {
     }
   }
 
-  /** Transport response for collaboration-session metadata. */
+  /**
+   * Transport response for collaboration-session metadata.
+   *
+   * @param sessionId stable session identifier
+   * @param mode immutable collaboration mode
+   * @param owner owner actor metadata
+   * @param createdAt session creation timestamp
+   * @param participants currently joined participants
+   * @param operationCount number of applied operations
+   * @param workflowId canonical workflow identifier
+   */
   public record SessionResponse(
       String sessionId,
       CollaborationMode mode,
@@ -70,6 +112,9 @@ public final class WorkflowSessionApiModels {
       List<ActorResponse> participants,
       int operationCount,
       String workflowId) {
+    public SessionResponse {
+      participants = List.copyOf(java.util.Objects.requireNonNull(participants, "participants"));
+    }
 
     static SessionResponse from(SessionSnapshot snapshot) {
       return new SessionResponse(

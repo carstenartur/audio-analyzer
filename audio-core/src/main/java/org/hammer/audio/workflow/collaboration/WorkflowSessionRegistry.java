@@ -3,11 +3,11 @@ package org.hammer.audio.workflow.collaboration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantLock;
 import org.hammer.audio.workflow.Workflow;
 import org.hammer.audio.workflow.WorkflowOperation;
 import org.hammer.audio.workflow.WorkflowOperationLog;
@@ -22,17 +22,19 @@ import org.hammer.audio.workflow.collaboration.WorkflowSessionException.Code;
  */
 public final class WorkflowSessionRegistry {
 
-  private final Map<String, SessionEntry> sessions = new ConcurrentHashMap<>();
+  private static final String SESSION_ID_FIELD = "sessionId";
+
+  private final Map<String, SessionEntry> sessionEntries = new ConcurrentHashMap<>();
 
   /** Creates a new session and joins its owner. */
   public SessionSnapshot create(
       String sessionId, CollaborationMode mode, OperationActor owner, Workflow initialWorkflow) {
-    String requiredSessionId = requireNotBlank(sessionId, "sessionId");
+    String requiredSessionId = requireNotBlank(sessionId, SESSION_ID_FIELD);
     Objects.requireNonNull(mode, "mode");
     Objects.requireNonNull(owner, "owner");
     Objects.requireNonNull(initialWorkflow, "initialWorkflow");
     SessionEntry created = new SessionEntry(requiredSessionId, mode, owner, initialWorkflow);
-    SessionEntry previous = sessions.putIfAbsent(requiredSessionId, created);
+    SessionEntry previous = sessionEntries.putIfAbsent(requiredSessionId, created);
     if (previous != null) {
       throw error(
           Code.SESSION_ALREADY_EXISTS,
@@ -83,11 +85,11 @@ public final class WorkflowSessionRegistry {
 
   /** Explicitly closes a session. Only its owner may close it. */
   public void close(String sessionId, String requestedByActorId) {
-    String requiredSessionId = requireNotBlank(sessionId, "sessionId");
+    String requiredSessionId = requireNotBlank(sessionId, SESSION_ID_FIELD);
     String actorId = requireNotBlank(requestedByActorId, "requestedByActorId");
     SessionEntry entry = requireSession(requiredSessionId);
     entry.assertOwner(actorId);
-    if (!sessions.remove(requiredSessionId, entry)) {
+    if (!sessionEntries.remove(requiredSessionId, entry)) {
       throw error(
           Code.SESSION_NOT_FOUND,
           requiredSessionId,
@@ -98,15 +100,15 @@ public final class WorkflowSessionRegistry {
 
   /** Returns all current sessions in stable identifier order. */
   public List<SessionSnapshot> sessions() {
-    return sessions.values().stream()
+    return sessionEntries.values().stream()
         .map(SessionEntry::snapshot)
         .sorted(Comparator.comparing(SessionSnapshot::sessionId))
         .toList();
   }
 
   private SessionEntry requireSession(String sessionId) {
-    String requiredSessionId = requireNotBlank(sessionId, "sessionId");
-    SessionEntry entry = sessions.get(requiredSessionId);
+    String requiredSessionId = requireNotBlank(sessionId, SESSION_ID_FIELD);
+    SessionEntry entry = sessionEntries.get(requiredSessionId);
     if (entry == null) {
       throw error(
           Code.SESSION_NOT_FOUND, requiredSessionId, "Unknown session: " + requiredSessionId);
@@ -133,7 +135,8 @@ public final class WorkflowSessionRegistry {
     private final Instant createdAt;
     private final WorkflowOperationLog operationLog;
     private final CollaborativeWorkflowSessionService sessionService;
-    private final Map<String, OperationActor> participants = new LinkedHashMap<>();
+    private final Map<String, OperationActor> participants = new ConcurrentHashMap<>();
+    private final ReentrantLock lock = new ReentrantLock();
     private volatile boolean closed;
 
     SessionEntry(
@@ -157,83 +160,107 @@ public final class WorkflowSessionRegistry {
       // no-op
     }
 
-    synchronized SessionSnapshot join(OperationActor actor) {
-      requireOpen();
-      if (mode == CollaborationMode.PRIVATE_WORKSPACE && !owner.actorId().equals(actor.actorId())) {
-        throw error(
-            Code.PRIVATE_WORKSPACE_ACCESS_DENIED,
-            sessionId,
-            "Private workspace can only be joined by its owner: " + owner.actorId());
+    SessionSnapshot join(OperationActor actor) {
+      lock.lock();
+      try {
+        requireOpen();
+        if (mode == CollaborationMode.PRIVATE_WORKSPACE
+            && !owner.actorId().equals(actor.actorId())) {
+          throw error(
+              Code.PRIVATE_WORKSPACE_ACCESS_DENIED,
+              sessionId,
+              "Private workspace can only be joined by its owner: " + owner.actorId());
+        }
+        OperationActor existing = participants.get(actor.actorId());
+        if (existing != null && !existing.equals(actor)) {
+          throw error(
+              Code.ACTOR_METADATA_MISMATCH,
+              sessionId,
+              "Actor metadata mismatch for already joined actor: " + actor.actorId());
+        }
+        participants.putIfAbsent(actor.actorId(), actor);
+        return snapshotUnchecked();
+      } finally {
+        lock.unlock();
       }
-      OperationActor existing = participants.get(actor.actorId());
-      if (existing != null && !existing.equals(actor)) {
-        throw error(
-            Code.ACTOR_METADATA_MISMATCH,
-            sessionId,
-            "Actor metadata mismatch for already joined actor: " + actor.actorId());
-      }
-      participants.putIfAbsent(actor.actorId(), actor);
-      return snapshot();
     }
 
-    synchronized SessionSnapshot leave(String actorId) {
-      requireOpen();
-      if (!participants.containsKey(actorId)) {
-        throw error(Code.ACTOR_NOT_JOINED, sessionId, "Actor is not joined: " + actorId);
+    SessionSnapshot leave(String actorId) {
+      lock.lock();
+      try {
+        requireOpen();
+        if (!participants.containsKey(actorId)) {
+          throw error(Code.ACTOR_NOT_JOINED, sessionId, "Actor is not joined: " + actorId);
+        }
+        participants.remove(actorId);
+        sessionService.clearPresence(actorId);
+        return snapshotUnchecked();
+      } finally {
+        lock.unlock();
       }
-      participants.remove(actorId);
-      sessionService.clearPresence(actorId);
-      return snapshot();
     }
 
-    synchronized Workflow apply(
+    Workflow apply(
         CollaborationMode requestedMode, OperationActor actor, WorkflowOperation operation) {
-      requireOpen();
-      if (mode != requestedMode) {
-        throw error(
-            Code.SESSION_MODE_MISMATCH,
-            sessionId,
-            "Requested mode '" + requestedMode + "' does not match session mode '" + mode + "'");
+      lock.lock();
+      try {
+        requireOpen();
+        if (mode != requestedMode) {
+          throw error(
+              Code.SESSION_MODE_MISMATCH,
+              sessionId,
+              "Requested mode '" + requestedMode + "' does not match session mode '" + mode + "'");
+        }
+        OperationActor joinedActor = participants.get(actor.actorId());
+        if (joinedActor == null) {
+          throw error(Code.ACTOR_NOT_JOINED, sessionId, "Actor is not joined: " + actor.actorId());
+        }
+        if (!joinedActor.equals(actor)) {
+          throw error(
+              Code.ACTOR_METADATA_MISMATCH,
+              sessionId,
+              "Actor metadata mismatch: " + actor.actorId());
+        }
+        WorkflowOperationEnvelope envelope =
+            new WorkflowOperationEnvelope(sessionId, mode, actor, operation, Instant.now());
+        return sessionService.applyOperation(envelope);
+      } finally {
+        lock.unlock();
       }
-      OperationActor joinedActor = participants.get(actor.actorId());
-      if (joinedActor == null) {
-        throw error(Code.ACTOR_NOT_JOINED, sessionId, "Actor is not joined: " + actor.actorId());
-      }
-      if (!joinedActor.equals(actor)) {
-        throw error(
-            Code.ACTOR_METADATA_MISMATCH, sessionId, "Actor metadata mismatch: " + actor.actorId());
-      }
-      WorkflowOperationEnvelope envelope =
-          new WorkflowOperationEnvelope(sessionId, mode, actor, operation, Instant.now());
-      return sessionService.applyOperation(envelope);
     }
 
-    synchronized Workflow workflow() {
-      requireOpen();
-      return operationLog.currentWorkflow();
+    Workflow workflow() {
+      lock.lock();
+      try {
+        requireOpen();
+        return operationLog.currentWorkflow();
+      } finally {
+        lock.unlock();
+      }
     }
 
-    synchronized SessionSnapshot snapshot() {
-      requireOpen();
-      List<OperationActor> actors = new ArrayList<>(participants.values());
-      actors.sort(Comparator.comparing(OperationActor::actorId));
-      return new SessionSnapshot(
-          sessionId,
-          mode,
-          owner,
-          createdAt,
-          actors,
-          operationLog.operations().size(),
-          operationLog.currentWorkflow().id());
+    SessionSnapshot snapshot() {
+      lock.lock();
+      try {
+        requireOpen();
+        return snapshotUnchecked();
+      } finally {
+        lock.unlock();
+      }
     }
 
-    synchronized void assertOwner(String actorId) {
-      requireOpen();
-      if (!owner.actorId().equals(actorId)) {
-        throw error(
-            Code.SESSION_CLOSE_FORBIDDEN,
-            sessionId,
-            "Only the session owner may close it: " + owner.actorId());
+    void assertOwner(String actorId) {
+      lock.lock();
+      try {
+        requireOpen();
+        if (!owner.actorId().equals(actorId)) {
+          throw error(
+              Code.SESSION_CLOSE_FORBIDDEN,
+              sessionId,
+              "Only the session owner may close it: " + owner.actorId());
+        }
+      } finally {
+        lock.unlock();
       }
     }
 
@@ -245,6 +272,19 @@ public final class WorkflowSessionRegistry {
       if (closed) {
         throw error(Code.SESSION_NOT_FOUND, sessionId, "Unknown session: " + sessionId);
       }
+    }
+
+    private SessionSnapshot snapshotUnchecked() {
+      List<OperationActor> actors = new ArrayList<>(participants.values());
+      actors.sort(Comparator.comparing(OperationActor::actorId));
+      return new SessionSnapshot(
+          sessionId,
+          mode,
+          owner,
+          createdAt,
+          actors,
+          operationLog.operations().size(),
+          operationLog.currentWorkflow().id());
     }
   }
 

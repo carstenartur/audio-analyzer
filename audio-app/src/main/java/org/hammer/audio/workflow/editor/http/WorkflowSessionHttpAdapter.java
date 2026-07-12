@@ -25,6 +25,8 @@ import org.springframework.web.util.UriComponentsBuilder;
 @RequestMapping("/workflow/sessions")
 public final class WorkflowSessionHttpAdapter {
 
+  private static final String SESSION_ID = "sessionId";
+
   private final WorkflowSessionRegistry registry;
 
   /** Creates the lifecycle REST controller. */
@@ -43,7 +45,7 @@ public final class WorkflowSessionHttpAdapter {
                 request.actor().toDomain(),
                 request.initialWorkflow()));
     URI location =
-        UriComponentsBuilder.fromPath("/workflow/sessions/{sessionId}")
+        UriComponentsBuilder.fromPath("/workflow/sessions/{" + SESSION_ID + "}")
             .buildAndExpand(response.sessionId())
             .encode()
             .toUri();
@@ -59,33 +61,33 @@ public final class WorkflowSessionHttpAdapter {
   /** Joins an existing session. */
   @PostMapping("/{sessionId}/join")
   public SessionResponse join(
-      @PathVariable("sessionId") String sessionId, @Valid @RequestBody JoinSessionRequest request) {
+      @PathVariable(SESSION_ID) String sessionId, @Valid @RequestBody JoinSessionRequest request) {
     return SessionResponse.from(registry.join(sessionId, request.toDomain()));
   }
 
   /** Leaves a session while retaining it for reconnect. */
   @PostMapping("/{sessionId}/leave")
   public SessionResponse leave(
-      @PathVariable("sessionId") String sessionId, @Valid @RequestBody ActorIdRequest request) {
+      @PathVariable(SESSION_ID) String sessionId, @Valid @RequestBody ActorIdRequest request) {
     return SessionResponse.from(registry.leave(sessionId, request.actorId()));
   }
 
   /** Returns immutable session metadata. */
   @GetMapping("/{sessionId}")
-  public SessionResponse inspect(@PathVariable("sessionId") String sessionId) {
+  public SessionResponse inspect(@PathVariable(SESSION_ID) String sessionId) {
     return SessionResponse.from(registry.inspect(sessionId));
   }
 
   /** Returns the current server-authoritative workflow projection. */
   @GetMapping("/{sessionId}/projection")
-  public WorkflowProjection projection(@PathVariable("sessionId") String sessionId) {
+  public WorkflowProjection projection(@PathVariable(SESSION_ID) String sessionId) {
     return WorkflowProjection.fromWorkflow(registry.workflow(sessionId));
   }
 
   /** Explicitly closes a session. Only the owner may close it. */
   @DeleteMapping("/{sessionId}")
   public ResponseEntity<Void> close(
-      @PathVariable("sessionId") String sessionId, @Valid @RequestBody ActorIdRequest request) {
+      @PathVariable(SESSION_ID) String sessionId, @Valid @RequestBody ActorIdRequest request) {
     registry.close(sessionId, request.actorId());
     return ResponseEntity.noContent().build();
   }

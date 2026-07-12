@@ -17,23 +17,23 @@ public final class WorkflowSessionException extends RuntimeException {
     INVALID_OPERATION_AUTHOR
   }
 
-  private final Code code;
-  private final String sessionId;
+  private final Code errorCode;
+  private final String relatedSessionId;
 
   /** Creates a typed session exception. */
   public WorkflowSessionException(Code code, String sessionId, String message) {
     super(Objects.requireNonNull(message, "message"));
-    this.code = Objects.requireNonNull(code, "code");
-    this.sessionId = sessionId;
+    this.errorCode = Objects.requireNonNull(code, "code");
+    this.relatedSessionId = sessionId;
   }
 
   /** Returns the stable transport-independent error code. */
   public Code code() {
-    return code;
+    return errorCode;
   }
 
   /** Returns the related session id, or {@code null} when none is available. */
   public String sessionId() {
-    return sessionId;
+    return relatedSessionId;
   }
 }
