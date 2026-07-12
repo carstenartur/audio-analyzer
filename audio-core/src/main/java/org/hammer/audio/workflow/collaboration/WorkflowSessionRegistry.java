@@ -11,6 +11,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.hammer.audio.workflow.Workflow;
 import org.hammer.audio.workflow.WorkflowOperation;
 import org.hammer.audio.workflow.WorkflowOperationLog;
+import org.hammer.audio.workflow.collaboration.WorkflowSessionException.Code;
 
 /**
  * Thread-safe application service for collaboration-session lifecycle and actor membership.
@@ -33,7 +34,10 @@ public final class WorkflowSessionRegistry {
     SessionEntry created = new SessionEntry(requiredSessionId, mode, owner, initialWorkflow);
     SessionEntry previous = sessions.putIfAbsent(requiredSessionId, created);
     if (previous != null) {
-      throw new IllegalStateException("Session already exists: " + requiredSessionId);
+      throw error(
+          Code.SESSION_ALREADY_EXISTS,
+          requiredSessionId,
+          "Session already exists: " + requiredSessionId);
     }
     return created.snapshot();
   }
@@ -65,8 +69,10 @@ public final class WorkflowSessionRegistry {
     Objects.requireNonNull(actor, "actor");
     Objects.requireNonNull(operation, "operation");
     if (!operation.author().equals(actor.actorId())) {
-      throw new IllegalArgumentException(
-          "operation author '"
+      throw error(
+          Code.INVALID_OPERATION_AUTHOR,
+          sessionId,
+          "Operation author '"
               + operation.author()
               + "' does not match actor '"
               + actor.actorId()
@@ -82,7 +88,10 @@ public final class WorkflowSessionRegistry {
     SessionEntry entry = requireSession(requiredSessionId);
     entry.assertOwner(actorId);
     if (!sessions.remove(requiredSessionId, entry)) {
-      throw new IllegalStateException("Session changed while closing: " + requiredSessionId);
+      throw error(
+          Code.SESSION_NOT_FOUND,
+          requiredSessionId,
+          "Session changed while closing: " + requiredSessionId);
     }
   }
 
@@ -98,9 +107,14 @@ public final class WorkflowSessionRegistry {
     String requiredSessionId = requireNotBlank(sessionId, "sessionId");
     SessionEntry entry = sessions.get(requiredSessionId);
     if (entry == null) {
-      throw new IllegalArgumentException("Unknown session: " + requiredSessionId);
+      throw error(
+          Code.SESSION_NOT_FOUND, requiredSessionId, "Unknown session: " + requiredSessionId);
     }
     return entry;
+  }
+
+  private static WorkflowSessionException error(Code code, String sessionId, String message) {
+    return new WorkflowSessionException(code, sessionId, message);
   }
 
   private static String requireNotBlank(String value, String field) {
@@ -135,12 +149,16 @@ public final class WorkflowSessionRegistry {
 
     synchronized SessionSnapshot join(OperationActor actor) {
       if (mode == CollaborationMode.PRIVATE_WORKSPACE && !owner.actorId().equals(actor.actorId())) {
-        throw new IllegalStateException(
+        throw error(
+            Code.PRIVATE_WORKSPACE_ACCESS_DENIED,
+            sessionId,
             "Private workspace can only be joined by its owner: " + owner.actorId());
       }
       OperationActor existing = participants.get(actor.actorId());
       if (existing != null && !existing.equals(actor)) {
-        throw new IllegalArgumentException(
+        throw error(
+            Code.ACTOR_METADATA_MISMATCH,
+            sessionId,
             "Actor metadata mismatch for already joined actor: " + actor.actorId());
       }
       participants.putIfAbsent(actor.actorId(), actor);
@@ -149,7 +167,8 @@ public final class WorkflowSessionRegistry {
 
     synchronized SessionSnapshot leave(String actorId) {
       if (!participants.containsKey(actorId)) {
-        throw new IllegalStateException("Actor is not joined: " + actorId);
+        throw error(
+            Code.ACTOR_NOT_JOINED, sessionId, "Actor is not joined: " + actorId);
       }
       participants.remove(actorId);
       sessionService.clearPresence(actorId);
@@ -159,15 +178,21 @@ public final class WorkflowSessionRegistry {
     synchronized Workflow apply(
         CollaborationMode requestedMode, OperationActor actor, WorkflowOperation operation) {
       if (mode != requestedMode) {
-        throw new IllegalArgumentException(
+        throw error(
+            Code.SESSION_MODE_MISMATCH,
+            sessionId,
             "Requested mode '" + requestedMode + "' does not match session mode '" + mode + "'");
       }
       OperationActor joinedActor = participants.get(actor.actorId());
       if (joinedActor == null) {
-        throw new IllegalStateException("Actor is not joined: " + actor.actorId());
+        throw error(
+            Code.ACTOR_NOT_JOINED, sessionId, "Actor is not joined: " + actor.actorId());
       }
       if (!joinedActor.equals(actor)) {
-        throw new IllegalArgumentException("Actor metadata mismatch: " + actor.actorId());
+        throw error(
+            Code.ACTOR_METADATA_MISMATCH,
+            sessionId,
+            "Actor metadata mismatch: " + actor.actorId());
       }
       WorkflowOperationEnvelope envelope =
           new WorkflowOperationEnvelope(sessionId, mode, actor, operation, Instant.now());
@@ -193,7 +218,10 @@ public final class WorkflowSessionRegistry {
 
     synchronized void assertOwner(String actorId) {
       if (!owner.actorId().equals(actorId)) {
-        throw new IllegalStateException("Only the session owner may close it: " + owner.actorId());
+        throw error(
+            Code.SESSION_CLOSE_FORBIDDEN,
+            sessionId,
+            "Only the session owner may close it: " + owner.actorId());
       }
     }
   }
