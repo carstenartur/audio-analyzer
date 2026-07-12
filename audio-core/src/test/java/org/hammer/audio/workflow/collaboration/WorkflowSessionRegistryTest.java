@@ -109,12 +109,12 @@ class WorkflowSessionRegistryTest {
         () -> registry.close("session.shared", GUEST.actorId()));
     registry.close("session.shared", OWNER.actorId());
     assertCode(
-        WorkflowSessionException.Code.SESSION_NOT_FOUND,
-        () -> registry.inspect("session.shared"));
+        WorkflowSessionException.Code.SESSION_NOT_FOUND, () -> registry.inspect("session.shared"));
   }
 
   private static void assertCode(
-      WorkflowSessionException.Code expected, org.junit.jupiter.api.function.Executable executable) {
+      WorkflowSessionException.Code expected,
+      org.junit.jupiter.api.function.Executable executable) {
     WorkflowSessionException exception = assertThrows(WorkflowSessionException.class, executable);
     assertEquals(expected, exception.code());
   }
