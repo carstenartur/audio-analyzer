@@ -9,6 +9,19 @@ This API exposes collaboration-session lifecycle and actor membership without co
 
 The canonical workflow of each session is held by one `WorkflowOperationLog`. Browser transports and future authentication adapters provide `OperationActor` metadata but do not define its semantics.
 
+## Runtime technology
+
+The API is part of the existing Spring Boot workbench application and uses:
+
+- Spring Boot 4.1.0;
+- Spring MVC controllers;
+- Jakarta Bean Validation for request contracts;
+- Jackson 3 for JSON binding;
+- RFC 9457 `ProblemDetail` responses;
+- Spring MockMvc for controller integration tests.
+
+The framework boundary remains in `audio-app`. `audio-core` contains no Spring, Servlet, JSON or HTTP dependencies.
+
 ## Lifecycle rules
 
 - Session identifiers are stable and unique until the session is explicitly closed.
@@ -53,6 +66,8 @@ DELETE /workflow/sessions/{sessionId}
 }
 ```
 
+A successful creation returns `201 Created`, a `Location` header and the created session representation.
+
 `workflowId` and `workflowName` are optional. The initial session graph is empty; loading a stored workflow is integrated by the persistence work tracked in #240.
 
 ### Join
@@ -73,27 +88,42 @@ DELETE /workflow/sessions/{sessionId}
 }
 ```
 
-For `DELETE`, the actor must be the session owner.
+For `DELETE`, the actor must be the session owner. A successful close returns `204 No Content`.
 
-## Error mapping
+## Error responses
 
-|                               Condition                               | HTTP status |
-|-----------------------------------------------------------------------|------------:|
-| Invalid or incomplete request                                         |         400 |
-| Unknown session                                                       |         404 |
-| Duplicate session, private-session join, invalid lifecycle transition |         409 |
-| Wrong HTTP method                                                     |         405 |
+Errors use `application/problem+json`. Domain failures expose stable error codes rather than requiring clients to parse exception messages.
 
-## Running standalone
-
-The API has a dedicated headless launcher:
-
-```text
-org.hammer.audio.workflow.editor.http.WorkflowSessionHttpServerLauncher [port]
+```json
+{
+  "type": "https://audio-analyzer.dev/problems/session-not-found",
+  "title": "Session not found",
+  "status": 404,
+  "detail": "Unknown session: experiment-42",
+  "instance": "/workflow/sessions/experiment-42",
+  "code": "SESSION_NOT_FOUND",
+  "sessionId": "experiment-42"
+}
 ```
 
-The default port is `8081`. Integration into the combined production workbench launcher can happen with #240/#242 when persistent session wiring and event streaming are introduced.
+| Condition | HTTP status |
+|---|---:|
+| Invalid JSON or failed Bean Validation | 400 |
+| Invalid operation author | 400 |
+| Unknown session | 404 |
+| Duplicate session, private-session access or invalid lifecycle transition | 409 |
+| Wrong HTTP method | 405 |
+
+## Running
+
+The API starts together with the workflow workbench:
+
+```text
+java -jar audio-app-0.0.4-SNAPSHOT-workbench.jar
+```
+
+The default port is `8080` and can be changed with `--server.port=<port>`.
 
 ## Architectural boundary
 
-`WorkflowSessionRegistry` is an application-layer service in `audio-core`. It depends only on workflow and collaboration-domain types. `WorkflowSessionHttpAdapter` is a replaceable transport adapter in `audio-app`.
+`WorkflowSessionRegistry`, `WorkflowSessionException` and the collaboration model are application/domain services in `audio-core`. They depend only on workflow and collaboration types. `WorkflowSessionHttpAdapter`, request/response DTOs and `WorkflowApiExceptionHandler` are replaceable Spring MVC transport adapters in `audio-app`.
