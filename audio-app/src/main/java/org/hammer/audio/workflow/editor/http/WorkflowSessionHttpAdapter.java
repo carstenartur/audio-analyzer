@@ -7,13 +7,13 @@ import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Objects;
 import org.hammer.audio.workflow.Workflow;
 import org.hammer.audio.workflow.collaboration.CollaborationMode;
 import org.hammer.audio.workflow.collaboration.OperationActor;
 import org.hammer.audio.workflow.collaboration.WorkflowSessionRegistry;
+import org.hammer.audio.workflow.editor.WorkflowProjection;
 
 /** HTTP adapter for collaboration-session lifecycle from issue #241. */
 public final class WorkflowSessionHttpAdapter {
@@ -31,24 +31,42 @@ public final class WorkflowSessionHttpAdapter {
   private final ObjectMapper mapper = new ObjectMapper();
   private HttpServer server;
 
+  /**
+   * Creates the lifecycle HTTP adapter.
+   *
+   * @param registry transport-neutral session registry
+   */
   public WorkflowSessionHttpAdapter(WorkflowSessionRegistry registry) {
     this.registry = Objects.requireNonNull(registry, "registry");
   }
 
-  /** Starts a standalone lifecycle API server. Port {@code 0} requests an ephemeral port. */
+  /**
+   * Starts a standalone lifecycle API server. Port {@code 0} requests an ephemeral port.
+   *
+   * @param port requested TCP port
+   * @throws IOException if the server cannot bind
+   */
   public void start(int port) throws IOException {
     HttpServer httpServer = HttpServer.create(new InetSocketAddress(port), 0);
     registerContexts(httpServer);
     httpServer.start();
   }
 
-  /** Registers the session API on an existing HTTP server. */
+  /**
+   * Registers the session API on an existing HTTP server.
+   *
+   * @param httpServer target server
+   */
   public void registerContexts(HttpServer httpServer) {
     server = Objects.requireNonNull(httpServer, "httpServer");
     httpServer.createContext(BASE_PATH, this::handleSessions);
   }
 
-  /** Returns the bound port after {@link #start(int)}. */
+  /**
+   * Returns the bound port after {@link #start(int)}.
+   *
+   * @return bound TCP port
+   */
   public int port() {
     if (server == null) {
       throw new IllegalStateException("Session HTTP adapter is not started");
@@ -56,7 +74,11 @@ public final class WorkflowSessionHttpAdapter {
     return server.getAddress().getPort();
   }
 
-  /** Stops the standalone or shared HTTP server. */
+  /**
+   * Stops the standalone or shared HTTP server.
+   *
+   * @param delaySeconds graceful-stop delay
+   */
   public void stop(int delaySeconds) {
     if (server != null) {
       server.stop(delaySeconds);
@@ -92,16 +114,20 @@ public final class WorkflowSessionHttpAdapter {
       }
       if (segments.size() == 4 && "projection".equals(segments.get(3))) {
         requireMethod(exchange, "GET");
-        sendJson(exchange, HTTP_OK, registry.projection(sessionId));
+        sendJson(
+            exchange,
+            HTTP_OK,
+            WorkflowProjection.fromWorkflow(registry.workflow(sessionId)));
         return;
       }
       sendError(exchange, HTTP_NOT_FOUND, "Unknown session endpoint");
     } catch (MethodNotAllowedException ex) {
       sendError(exchange, HTTP_METHOD_NOT_ALLOWED, ex.getMessage());
     } catch (IllegalArgumentException ex) {
-      int status = ex.getMessage() != null && ex.getMessage().startsWith("Unknown session:")
-          ? HTTP_NOT_FOUND
-          : HTTP_BAD_REQUEST;
+      int status =
+          ex.getMessage() != null && ex.getMessage().startsWith("Unknown session:")
+              ? HTTP_NOT_FOUND
+              : HTTP_BAD_REQUEST;
       sendError(exchange, status, ex.getMessage());
     } catch (IllegalStateException ex) {
       sendError(exchange, HTTP_CONFLICT, ex.getMessage());
@@ -159,14 +185,19 @@ public final class WorkflowSessionHttpAdapter {
   }
 
   private static String requiredText(JsonNode node, String field) {
-    if (node == null || node.isMissingNode() || !node.has(field) || node.get(field).asText().isBlank()) {
+    if (node == null
+        || node.isMissingNode()
+        || !node.has(field)
+        || node.get(field).asText().isBlank()) {
       throw new IllegalArgumentException("Missing or blank field: " + field);
     }
     return node.get(field).asText();
   }
 
   private static String textOrDefault(JsonNode node, String field, String fallback) {
-    return node.has(field) && !node.get(field).asText().isBlank() ? node.get(field).asText() : fallback;
+    return node.has(field) && !node.get(field).asText().isBlank()
+        ? node.get(field).asText()
+        : fallback;
   }
 
   private static List<String> pathSegments(String path) {
