@@ -37,7 +37,9 @@ class WorkflowSessionRegistryTest {
     registry.create("session.private", CollaborationMode.PRIVATE_WORKSPACE, OWNER, emptyWorkflow());
     registry.leave("session.private", OWNER.actorId());
 
-    assertThrows(IllegalStateException.class, () -> registry.join("session.private", GUEST));
+    assertCode(
+        WorkflowSessionException.Code.PRIVATE_WORKSPACE_ACCESS_DENIED,
+        () -> registry.join("session.private", GUEST));
     WorkflowSessionRegistry.SessionSnapshot rejoined = registry.join("session.private", OWNER);
     assertEquals(List.of(OWNER), rejoined.participants());
   }
@@ -52,8 +54,9 @@ class WorkflowSessionRegistryTest {
     assertEquals(2, registry.join("session.shared", GUEST).participants().size());
     OperationActor changedGuest =
         new OperationActor(GUEST.actorId(), GUEST.userId(), "Changed display name");
-    assertThrows(
-        IllegalArgumentException.class, () -> registry.join("session.shared", changedGuest));
+    assertCode(
+        WorkflowSessionException.Code.ACTOR_METADATA_MISMATCH,
+        () -> registry.join("session.shared", changedGuest));
   }
 
   @Test
@@ -66,13 +69,13 @@ class WorkflowSessionRegistryTest {
         new WorkflowOperation.CreateNode(
             "operation.create", Instant.parse("2026-07-12T00:00:00Z"), OWNER.actorId(), node);
 
-    assertThrows(
-        IllegalArgumentException.class,
+    assertCode(
+        WorkflowSessionException.Code.SESSION_MODE_MISMATCH,
         () ->
             registry.applyOperation(
                 "session.shared", CollaborationMode.SHARED_SESSION_SHARED_UNDO, OWNER, operation));
-    assertThrows(
-        IllegalStateException.class,
+    assertCode(
+        WorkflowSessionException.Code.ACTOR_NOT_JOINED,
         () ->
             registry.applyOperation(
                 "session.shared",
@@ -101,10 +104,19 @@ class WorkflowSessionRegistryTest {
     registry.leave("session.shared", OWNER.actorId());
 
     assertTrue(registry.inspect("session.shared").participants().isEmpty());
-    assertThrows(
-        IllegalStateException.class, () -> registry.close("session.shared", GUEST.actorId()));
+    assertCode(
+        WorkflowSessionException.Code.SESSION_CLOSE_FORBIDDEN,
+        () -> registry.close("session.shared", GUEST.actorId()));
     registry.close("session.shared", OWNER.actorId());
-    assertThrows(IllegalArgumentException.class, () -> registry.inspect("session.shared"));
+    assertCode(
+        WorkflowSessionException.Code.SESSION_NOT_FOUND,
+        () -> registry.inspect("session.shared"));
+  }
+
+  private static void assertCode(
+      WorkflowSessionException.Code expected, org.junit.jupiter.api.function.Executable executable) {
+    WorkflowSessionException exception = assertThrows(WorkflowSessionException.class, executable);
+    assertEquals(expected, exception.code());
   }
 
   private static Workflow emptyWorkflow() {
