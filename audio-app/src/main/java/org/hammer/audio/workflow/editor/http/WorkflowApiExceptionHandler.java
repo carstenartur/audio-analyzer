@@ -64,8 +64,7 @@ public final class WorkflowApiExceptionHandler {
   @ExceptionHandler(IllegalArgumentException.class)
   public ProblemDetail handleIllegalArgument(
       IllegalArgumentException exception, HttpServletRequest request) {
-    return problem(
-        HttpStatus.BAD_REQUEST, "invalid-request", exception.getMessage(), request);
+    return problem(HttpStatus.BAD_REQUEST, "invalid-request", exception.getMessage(), request);
   }
 
   private static ProblemDetail problem(
@@ -81,11 +80,12 @@ public final class WorkflowApiExceptionHandler {
     return switch (code) {
       case SESSION_NOT_FOUND -> HttpStatus.NOT_FOUND;
       case SESSION_ALREADY_EXISTS,
-          PRIVATE_WORKSPACE_ACCESS_DENIED,
-          ACTOR_METADATA_MISMATCH,
-          ACTOR_NOT_JOINED,
-          SESSION_MODE_MISMATCH,
-          SESSION_CLOSE_FORBIDDEN -> HttpStatus.CONFLICT;
+              PRIVATE_WORKSPACE_ACCESS_DENIED,
+              ACTOR_METADATA_MISMATCH,
+              ACTOR_NOT_JOINED,
+              SESSION_MODE_MISMATCH,
+              SESSION_CLOSE_FORBIDDEN ->
+          HttpStatus.CONFLICT;
       case INVALID_OPERATION_AUTHOR -> HttpStatus.BAD_REQUEST;
     };
   }

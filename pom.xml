@@ -40,7 +40,7 @@
     <flatlaf.version>3.7.1</flatlaf.version>
     <jackson.version>2.22.1</jackson.version>
     <jgit.version>7.7.0.202606012155-r</jgit.version>
-    <spring-boot.version>3.3.0</spring-boot.version>
+    <spring-boot.version>4.1.0</spring-boot.version>
 
     <maven-compiler-plugin.version>3.15.0</maven-compiler-plugin.version>
     <maven-jar-plugin.version>3.5.0</maven-jar-plugin.version>

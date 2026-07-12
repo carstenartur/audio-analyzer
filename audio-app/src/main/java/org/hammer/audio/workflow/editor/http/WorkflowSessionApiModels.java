@@ -36,9 +36,7 @@ public final class WorkflowSessionApiModels {
       String resolvedWorkflowId =
           workflowId == null || workflowId.isBlank() ? "workflow." + sessionId : workflowId;
       String resolvedWorkflowName =
-          workflowName == null || workflowName.isBlank()
-              ? "Workflow " + sessionId
-              : workflowName;
+          workflowName == null || workflowName.isBlank() ? "Workflow " + sessionId : workflowName;
       return new Workflow(resolvedWorkflowId, resolvedWorkflowName, List.of(), List.of());
     }
   }

@@ -33,8 +33,7 @@ public final class WorkflowSessionHttpAdapter {
 
   /** Creates a session and joins its owner. */
   @PostMapping
-  public ResponseEntity<SessionResponse> create(
-      @Valid @RequestBody CreateSessionRequest request) {
+  public ResponseEntity<SessionResponse> create(@Valid @RequestBody CreateSessionRequest request) {
     SessionResponse response =
         SessionResponse.from(
             registry.create(

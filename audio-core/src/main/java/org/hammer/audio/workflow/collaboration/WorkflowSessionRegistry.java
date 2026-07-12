@@ -167,8 +167,7 @@ public final class WorkflowSessionRegistry {
 
     synchronized SessionSnapshot leave(String actorId) {
       if (!participants.containsKey(actorId)) {
-        throw error(
-            Code.ACTOR_NOT_JOINED, sessionId, "Actor is not joined: " + actorId);
+        throw error(Code.ACTOR_NOT_JOINED, sessionId, "Actor is not joined: " + actorId);
       }
       participants.remove(actorId);
       sessionService.clearPresence(actorId);
@@ -185,14 +184,11 @@ public final class WorkflowSessionRegistry {
       }
       OperationActor joinedActor = participants.get(actor.actorId());
       if (joinedActor == null) {
-        throw error(
-            Code.ACTOR_NOT_JOINED, sessionId, "Actor is not joined: " + actor.actorId());
+        throw error(Code.ACTOR_NOT_JOINED, sessionId, "Actor is not joined: " + actor.actorId());
       }
       if (!joinedActor.equals(actor)) {
         throw error(
-            Code.ACTOR_METADATA_MISMATCH,
-            sessionId,
-            "Actor metadata mismatch: " + actor.actorId());
+            Code.ACTOR_METADATA_MISMATCH, sessionId, "Actor metadata mismatch: " + actor.actorId());
       }
       WorkflowOperationEnvelope envelope =
           new WorkflowOperationEnvelope(sessionId, mode, actor, operation, Instant.now());
