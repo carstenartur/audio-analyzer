@@ -184,7 +184,7 @@ public final class WorkflowSessionRegistry {
         throw new IllegalArgumentException("Actor metadata mismatch: " + actor.actorId());
       }
       WorkflowOperationEnvelope envelope =
-          new WorkflowOperationEnvelope(sessionId, mode, actor, operation);
+          new WorkflowOperationEnvelope(sessionId, mode, actor, operation, Instant.now());
       return WorkflowProjection.fromWorkflow(sessionService.applyOperation(envelope));
     }
 
