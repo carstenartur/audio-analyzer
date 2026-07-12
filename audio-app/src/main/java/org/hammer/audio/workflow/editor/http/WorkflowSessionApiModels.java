@@ -5,6 +5,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import java.time.Instant;
 import java.util.List;
+import java.util.Objects;
 import org.hammer.audio.workflow.Workflow;
 import org.hammer.audio.workflow.collaboration.CollaborationMode;
 import org.hammer.audio.workflow.collaboration.OperationActor;
@@ -75,7 +76,7 @@ public final class WorkflowSessionApiModels {
    */
   public record ActorIdRequest(@NotBlank String actorId) {
     public ActorIdRequest {
-      actorId = java.util.Objects.requireNonNull(actorId, "actorId");
+      actorId = Objects.requireNonNull(actorId, "actorId");
     }
   }
 
@@ -113,7 +114,7 @@ public final class WorkflowSessionApiModels {
       int operationCount,
       String workflowId) {
     public SessionResponse {
-      participants = List.copyOf(java.util.Objects.requireNonNull(participants, "participants"));
+      participants = List.copyOf(Objects.requireNonNull(participants, "participants"));
     }
 
     static SessionResponse from(SessionSnapshot snapshot) {

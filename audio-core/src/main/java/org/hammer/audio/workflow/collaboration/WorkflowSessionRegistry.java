@@ -179,7 +179,7 @@ public final class WorkflowSessionRegistry {
               "Actor metadata mismatch for already joined actor: " + actor.actorId());
         }
         participants.putIfAbsent(actor.actorId(), actor);
-        return snapshotUnchecked();
+        return snapshotLocked();
       } finally {
         lock.unlock();
       }
@@ -194,7 +194,7 @@ public final class WorkflowSessionRegistry {
         }
         participants.remove(actorId);
         sessionService.clearPresence(actorId);
-        return snapshotUnchecked();
+        return snapshotLocked();
       } finally {
         lock.unlock();
       }
@@ -243,7 +243,7 @@ public final class WorkflowSessionRegistry {
       lock.lock();
       try {
         requireOpen();
-        return snapshotUnchecked();
+        return snapshotLocked();
       } finally {
         lock.unlock();
       }
@@ -274,7 +274,7 @@ public final class WorkflowSessionRegistry {
       }
     }
 
-    private SessionSnapshot snapshotUnchecked() {
+    private SessionSnapshot snapshotLocked() {
       requireOpen();
       List<OperationActor> actors = new ArrayList<>(participants.values());
       actors.sort(Comparator.comparing(OperationActor::actorId));

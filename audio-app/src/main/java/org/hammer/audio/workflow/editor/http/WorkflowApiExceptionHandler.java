@@ -3,6 +3,7 @@ package org.hammer.audio.workflow.editor.http;
 import jakarta.servlet.http.HttpServletRequest;
 import java.net.URI;
 import java.util.List;
+import java.util.Objects;
 import org.hammer.audio.workflow.collaboration.WorkflowSessionException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
@@ -46,8 +47,7 @@ public final class WorkflowApiExceptionHandler {
             .map(
                 error ->
                     new FieldViolation(
-                        error.getField(),
-                        java.util.Objects.toString(error.getDefaultMessage(), "")))
+                        error.getField(), Objects.toString(error.getDefaultMessage(), "")))
             .toList();
     problem.setProperty("violations", violations);
     return problem;
@@ -118,8 +118,8 @@ public final class WorkflowApiExceptionHandler {
    */
   public record FieldViolation(String field, String message) {
     public FieldViolation {
-      field = java.util.Objects.requireNonNull(field, "field");
-      message = java.util.Objects.requireNonNull(message, "message");
+      field = Objects.requireNonNull(field, "field");
+      message = Objects.requireNonNull(message, "message");
     }
   }
 }
