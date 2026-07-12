@@ -106,13 +106,13 @@ Errors use `application/problem+json`. Domain failures expose stable error codes
 }
 ```
 
-| Condition | HTTP status |
-|---|---:|
-| Invalid JSON or failed Bean Validation | 400 |
-| Invalid operation author | 400 |
-| Unknown session | 404 |
-| Duplicate session, private-session access or invalid lifecycle transition | 409 |
-| Wrong HTTP method | 405 |
+|                                 Condition                                 | HTTP status |
+|---------------------------------------------------------------------------|------------:|
+| Invalid JSON or failed Bean Validation                                    |         400 |
+| Invalid operation author                                                  |         400 |
+| Unknown session                                                           |         404 |
+| Duplicate session, private-session access or invalid lifecycle transition |         409 |
+| Wrong HTTP method                                                         |         405 |
 
 ## Running
 
