@@ -1,0 +1,81 @@
+[INFO] Scanning for projects...
+[INFO] ------------------------------------------------------------------------
+[INFO] Reactor Build Order:
+[INFO] 
+[INFO] Audio Analyzer Parent                                              [pom]
+[INFO] Audio Analyzer Core                                                [jar]
+[INFO] Audio Analyzer Geometry                                            [jar]
+[INFO] Audio Analyzer Acquisition                                         [jar]
+[INFO] Audio Analyzer DSP and Analysis                                    [jar]
+[INFO] Audio Analyzer Plugin API                                          [jar]
+[INFO] Audio Analyzer Experimental Acoustic                               [jar]
+[INFO] Audio Analyzer App                                                 [jar]
+[INFO] 
+[INFO] -----------------------< audioin:audioin-parent >-----------------------
+[INFO] Building Audio Analyzer Parent 0.0.4-SNAPSHOT                      [1/8]
+[INFO]   from pom.xml
+[INFO] --------------------------------[ pom ]---------------------------------
+[INFO] 
+[INFO] --- enforcer:3.6.3:enforce (enforce-java) @ audioin-parent ---
+[INFO] Rule 0: org.apache.maven.enforcer.rules.version.RequireJavaVersion passed
+[INFO] 
+[INFO] --- jacoco:0.8.15:prepare-agent (prepare-agent) @ audioin-parent ---
+[INFO] argLine set to -javaagent:/home/runner/.m2/repository/org/jacoco/org.jacoco.agent/0.8.15/org.jacoco.agent-0.8.15-runtime.jar=destfile=/home/runner/work/audio-analyzer/audio-analyzer/target/jacoco.exec
+[INFO] 
+[INFO] --- jacoco:0.8.15:report (report) @ audioin-parent ---
+[INFO] Skipping JaCoCo execution due to missing execution data file.
+[INFO] 
+[INFO] --- spotless:3.8.0:check (default) @ audioin-parent ---
+[INFO] Index file does not exist. Fallback to an empty index
+[INFO] Sorting file /tmp/pom10544010095203070703.xml
+[INFO] Pom file is already sorted, exiting
+[INFO] Spotless.Pom is keeping 1 files clean - 0 needs changes to be clean, 1 were already clean, 0 were skipped because caching determined they were already clean
+[INFO] Spotless.Markdown is keeping 56 files clean - 1 needs changes to be clean, 55 were already clean, 0 were skipped because caching determined they were already clean
+[INFO] ------------------------------------------------------------------------
+[INFO] Reactor Summary for Audio Analyzer Parent 0.0.4-SNAPSHOT:
+[INFO] 
+[INFO] Audio Analyzer Parent .............................. FAILURE [  6.788 s]
+[INFO] Audio Analyzer Core ................................ SKIPPED
+[INFO] Audio Analyzer Geometry ............................ SKIPPED
+[INFO] Audio Analyzer Acquisition ......................... SKIPPED
+[INFO] Audio Analyzer DSP and Analysis .................... SKIPPED
+[INFO] Audio Analyzer Plugin API .......................... SKIPPED
+[INFO] Audio Analyzer Experimental Acoustic ............... SKIPPED
+[INFO] Audio Analyzer App ................................. SKIPPED
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD FAILURE
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  7.173 s
+[INFO] Finished at: 2026-07-12T05:17:28Z
+[INFO] ------------------------------------------------------------------------
+[ERROR] Failed to execute goal com.diffplug.spotless:spotless-maven-plugin:3.8.0:check (default) on project audioin-parent: The following files had format violations:
+[ERROR]     docs/architecture/collaboration-session-api.md
+[ERROR]         @@ -106,13 +106,13 @@
+[ERROR]          }
+[ERROR]          ```
+[ERROR]          
+[ERROR]         -|·Condition·|·HTTP·status·|
+[ERROR]         -|---|---:|
+[ERROR]         -|·Invalid·JSON·or·failed·Bean·Validation·|·400·|
+[ERROR]         -|·Invalid·operation·author·|·400·|
+[ERROR]         -|·Unknown·session·|·404·|
+[ERROR]         -|·Duplicate·session,·private-session·access·or·invalid·lifecycle·transition·|·409·|
+[ERROR]         -|·Wrong·HTTP·method·|·405·|
+[ERROR]         +|·································Condition·································|·HTTP·status·|
+[ERROR]         +|---------------------------------------------------------------------------|------------:|
+[ERROR]         +|·Invalid·JSON·or·failed·Bean·Validation····································|·········400·|
+[ERROR]         +|·Invalid·operation·author··················································|·········400·|
+[ERROR]         +|·Unknown·session···························································|·········404·|
+[ERROR]         +|·Duplicate·session,·private-session·access·or·invalid·lifecycle·transition·|·········409·|
+[ERROR]         +|·Wrong·HTTP·method·························································|·········405·|
+[ERROR]          
+[ERROR]          ##·Running
+[ERROR]          
+[ERROR] Run 'mvn spotless:apply' to fix these violations.
+[ERROR] -> [Help 1]
+[ERROR] 
+[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.
+[ERROR] Re-run Maven using the -X switch to enable full debug logging.
+[ERROR] 
+[ERROR] For more information about the errors and possible solutions, please read the following articles:
+[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoExecutionException
