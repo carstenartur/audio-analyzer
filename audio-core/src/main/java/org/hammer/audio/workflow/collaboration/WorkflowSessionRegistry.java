@@ -11,7 +11,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.hammer.audio.workflow.Workflow;
 import org.hammer.audio.workflow.WorkflowOperation;
 import org.hammer.audio.workflow.WorkflowOperationLog;
-import org.hammer.audio.workflow.editor.WorkflowProjection;
 
 /**
  * Thread-safe application service for collaboration-session lifecycle and actor membership.
@@ -57,13 +56,13 @@ public final class WorkflowSessionRegistry {
     return requireSession(sessionId).snapshot();
   }
 
-  /** Returns the current server-authoritative workflow projection. */
-  public WorkflowProjection projection(String sessionId) {
-    return requireSession(sessionId).projection();
+  /** Returns the current server-authoritative workflow. */
+  public Workflow workflow(String sessionId) {
+    return requireSession(sessionId).workflow();
   }
 
   /** Applies an actor-authored semantic operation to an existing joined session. */
-  public WorkflowProjection applyOperation(
+  public Workflow applyOperation(
       String sessionId,
       CollaborationMode mode,
       OperationActor actor,
@@ -170,7 +169,7 @@ public final class WorkflowSessionRegistry {
       return snapshot();
     }
 
-    synchronized WorkflowProjection apply(
+    synchronized Workflow apply(
         CollaborationMode requestedMode, OperationActor actor, WorkflowOperation operation) {
       if (mode != requestedMode) {
         throw new IllegalArgumentException(
@@ -185,11 +184,11 @@ public final class WorkflowSessionRegistry {
       }
       WorkflowOperationEnvelope envelope =
           new WorkflowOperationEnvelope(sessionId, mode, actor, operation, Instant.now());
-      return WorkflowProjection.fromWorkflow(sessionService.applyOperation(envelope));
+      return sessionService.applyOperation(envelope);
     }
 
-    synchronized WorkflowProjection projection() {
-      return WorkflowProjection.fromWorkflow(operationLog.currentWorkflow());
+    synchronized Workflow workflow() {
+      return operationLog.currentWorkflow();
     }
 
     synchronized SessionSnapshot snapshot() {
