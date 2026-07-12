@@ -14,11 +14,13 @@ import org.junit.jupiter.api.Test;
 
 class WorkflowSessionRegistryTest {
 
-  private static final OperationActor OWNER = new OperationActor("actor.owner", "user.owner", "Owner");
-  private static final OperationActor GUEST = new OperationActor("actor.guest", "user.guest", "Guest");
+  private static final OperationActor OWNER =
+      new OperationActor("actor.owner", "user.owner", "Owner");
+  private static final OperationActor GUEST =
+      new OperationActor("actor.guest", "user.guest", "Guest");
 
   @Test
-  void sharedSessionSupportsTwoActorsAndCanonicalProjection() {
+  void sharedSessionSupportsTwoActorsAndCanonicalWorkflow() {
     WorkflowSessionRegistry registry = new WorkflowSessionRegistry();
     registry.create(
         "session.shared",
@@ -29,7 +31,7 @@ class WorkflowSessionRegistryTest {
     WorkflowSessionRegistry.SessionSnapshot joined = registry.join("session.shared", GUEST);
 
     assertEquals(2, joined.participants().size());
-    assertEquals("workflow.session", registry.projection("session.shared").workflowId());
+    assertEquals("workflow.session", registry.workflow("session.shared").id());
   }
 
   @Test
