@@ -24,6 +24,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: feature/242-session-event-streaming
+
       - name: Detect staged implementation patch
         id: patch
         shell: bash
@@ -35,12 +36,14 @@ jobs:
           else
             echo "present=true" >> "$GITHUB_OUTPUT"
           fi
+
       - name: Set up JDK ${{ env.JAVA_VERSION }}
         if: steps.patch.outputs.present == 'true'
         uses: actions/setup-java@v5
         with:
           java-version: ${{ env.JAVA_VERSION }}
           distribution: temurin
+
       - name: Apply implementation patch
         if: steps.patch.outputs.present == 'true'
         shell: bash
@@ -48,104 +51,34 @@ jobs:
           cat .github/feature-239.patch.part.* > /tmp/feature-242.patch
           git apply --check /tmp/feature-242.patch
           git apply /tmp/feature-242.patch
-          python3 <<'PY'
-          from pathlib import Path
-
-          hub = Path("audio-core/src/main/java/org/hammer/audio/workflow/collaboration/WorkflowSessionEventHub.java")
-          text = hub.read_text()
-          replacements = [
-              (
-                  "import java.util.concurrent.ArrayBlockingQueue;\n",
-                  "import java.util.concurrent.ArrayBlockingQueue;\nimport java.util.concurrent.BlockingQueue;\n",
-              ),
-              (
-                  "  static final int DEFAULT_REPLAY_CAPACITY = 256;\n",
-                  "  private static final String ACTOR_FIELD = \"actor\";\n\n"
-                  "  static final int DEFAULT_REPLAY_CAPACITY = 256;\n",
-              ),
-              (
-                  "private final ArrayBlockingQueue<WorkflowSessionEvent> queue;",
-                  "private final BlockingQueue<WorkflowSessionEvent> queue;",
-              ),
-          ]
-          for old, new in replacements:
-              if text.count(old) != 1:
-                  raise SystemExit(f"Unexpected WorkflowSessionEventHub source while replacing: {old!r}")
-              text = text.replace(old, new)
-          actor_literal = 'Objects.requireNonNull(actor, "actor")'
-          if text.count(actor_literal) != 4:
-              raise SystemExit("Expected four actor null-check literals")
-          text = text.replace(actor_literal, "Objects.requireNonNull(actor, ACTOR_FIELD)")
-          hub.write_text(text)
-
-          registry = Path("audio-core/src/main/java/org/hammer/audio/workflow/collaboration/WorkflowSessionRegistry.java")
-          text = registry.read_text()
-          replacements = [
-              (
-                  "  private final WorkflowSessionEventHub eventHub;\n",
-                  "  private final WorkflowSessionEventHub sessionEventHub;\n",
-              ),
-              (
-                  "    this.eventHub = Objects.requireNonNull(eventHub, \"eventHub\");\n",
-                  "    this.sessionEventHub = Objects.requireNonNull(eventHub, \"eventHub\");\n",
-              ),
-              (
-                  "    return eventHub;\n",
-                  "    return sessionEventHub;\n",
-              ),
-              (
-                  "new SessionEntry(requiredSessionId, mode, owner, initialWorkflow, eventHub);",
-                  "new SessionEntry(requiredSessionId, mode, owner, initialWorkflow, sessionEventHub);",
-              ),
-              (
-                  "    eventHub.openSession(requiredSessionId, owner, initialWorkflow);\n",
-                  "    sessionEventHub.openSession(requiredSessionId, owner, initialWorkflow);\n",
-              ),
-              (
-                  "    eventHub.closeSession(requiredSessionId, entry.owner());\n",
-                  "    sessionEventHub.closeSession(requiredSessionId, entry.sessionOwner());\n",
-              ),
-              (
-                  "    OperationActor owner() {\n      return owner;\n    }",
-                  "    OperationActor sessionOwner() {\n      return owner;\n    }",
-              ),
-          ]
-          for old, new in replacements:
-              if old not in text:
-                  raise SystemExit(f"Unexpected WorkflowSessionRegistry source while replacing: {old!r}")
-              text = text.replace(old, new, 1)
-          registry.write_text(text)
-
-          for relative_path in (
-              "audio-app/src/main/java/org/hammer/audio/workflow/editor/http/WorkflowEditorHttpAdapter.java",
-              "audio-app/src/main/java/org/hammer/audio/workflow/editor/http/WorkflowOperationHttpParser.java",
-              "audio-app/src/main/java/org/hammer/audio/workflow/editor/http/WorkflowSessionApiModels.java",
-          ):
-              path = Path(relative_path)
-              text = path.read_text()
-              old = "import com.fasterxml.jackson.databind.JsonNode;"
-              if text.count(old) != 1:
-                  raise SystemExit(f"Unexpected Jackson import in {relative_path}")
-              path.write_text(text.replace(old, "import tools.jackson.databind.JsonNode;"))
-          PY
+          python3 .github/feature-242-postprocess.py
           rm .github/feature-239.patch.part.*
+          rm .github/feature-242-postprocess.py
           rm .github/workflows/export-feature-239-source.yml
+
       - name: Apply repository formatting
         if: steps.patch.outputs.present == 'true'
         run: mvn -B spotless:apply --file pom.xml
+
       - name: Build and verify implementation
         if: steps.patch.outputs.present == 'true'
         id: verify
-        continue-on-error: true
         shell: bash
         run: |
           set +e
           mvn -B clean verify --file pom.xml 2>&1 | tee /tmp/feature-242-maven.log
           status=${PIPESTATUS[0]}
-          exit "$status"
+          if (( status == 0 )); then
+            echo "result=success" >> "$GITHUB_OUTPUT"
+          else
+            echo "result=failure" >> "$GITHUB_OUTPUT"
+          fi
+          exit 0
+
       - name: Archive formatted implementation
         if: steps.patch.outputs.present == 'true' && always()
         run: tar --exclude=.git --exclude=target --exclude='*/target' -czf /tmp/audio-analyzer-feature-242.tar.gz .
+
       - name: Upload formatted implementation
         if: steps.patch.outputs.present == 'true' && always()
         uses: actions/upload-artifact@v7
@@ -153,6 +86,7 @@ jobs:
           name: feature-242-formatted-source
           path: /tmp/audio-analyzer-feature-242.tar.gz
           retention-days: 1
+
       - name: Upload Maven verification log
         if: steps.patch.outputs.present == 'true' && always()
         uses: actions/upload-artifact@v7
@@ -161,8 +95,9 @@ jobs:
           path: /tmp/feature-242-maven.log
           if-no-files-found: error
           retention-days: 1
+
       - name: Commit verified implementation
-        if: steps.patch.outputs.present == 'true' && steps.verify.outcome == 'success'
+        if: steps.patch.outputs.present == 'true' && steps.verify.outputs.result == 'success'
         shell: bash
         run: |
           git config user.name github-actions[bot]
@@ -170,6 +105,7 @@ jobs:
           git add -A
           git commit -m "Implement ordered workflow session SSE streaming (#242)"
           git push origin HEAD:feature/242-session-event-streaming
+
       - name: Fail when verification failed
-        if: steps.patch.outputs.present == 'true' && steps.verify.outcome != 'success'
+        if: steps.patch.outputs.present == 'true' && steps.verify.outputs.result != 'success'
         run: exit 1
