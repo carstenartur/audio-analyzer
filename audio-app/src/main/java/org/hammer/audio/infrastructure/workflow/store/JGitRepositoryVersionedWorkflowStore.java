@@ -1,10 +1,7 @@
 package org.hammer.audio.infrastructure.workflow.store;
 
-import java.io.Closeable;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
@@ -21,7 +18,6 @@ import org.eclipse.jgit.lib.RefUpdate;
 import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.revwalk.RevCommit;
 import org.eclipse.jgit.revwalk.RevWalk;
-import org.eclipse.jgit.storage.file.FileRepositoryBuilder;
 import org.eclipse.jgit.treewalk.TreeWalk;
 import org.eclipse.jgit.util.RawParseUtils;
 import org.hammer.audio.workflow.store.CommitId;
@@ -32,12 +28,12 @@ import org.hammer.audio.workflow.store.VersionedWorkflowStore;
 import org.hammer.audio.workflow.store.WorkflowSnapshot;
 
 /**
- * JGit-backed {@link VersionedWorkflowStore} implementation.
+ * Repository-based {@link VersionedWorkflowStore} implementation shared by storage adapters.
  *
- * <p>This adapter is the infrastructure boundary. JGit types are intentionally contained inside
- * this class and never exposed through the Audio Analyzer facade API.
+ * <p>The repository lifecycle belongs to the surrounding adapter. This class deliberately uses only
+ * public JGit APIs and never opens a filesystem repository itself.
  */
-public final class JGitVersionedWorkflowStore implements VersionedWorkflowStore, Closeable {
+final class JGitRepositoryVersionedWorkflowStore implements VersionedWorkflowStore {
 
   private static final String WORKFLOW_DSL_PATH = "workflow.dsl";
   private static final String WORKFLOW_ID_PATH = "workflow.id";
@@ -45,8 +41,8 @@ public final class JGitVersionedWorkflowStore implements VersionedWorkflowStore,
 
   private final Repository repository;
 
-  public JGitVersionedWorkflowStore(Path gitDirectory) {
-    this.repository = openOrCreateRepository(gitDirectory);
+  JGitRepositoryVersionedWorkflowStore(Repository repository) {
+    this.repository = Objects.requireNonNull(repository, "repository");
   }
 
   @Override
@@ -198,26 +194,6 @@ public final class JGitVersionedWorkflowStore implements VersionedWorkflowStore,
       return List.copyOf(history);
     } catch (IOException ex) {
       throw new IllegalStateException("Failed to load history for ref: " + refName, ex);
-    }
-  }
-
-  @Override
-  public void close() throws IOException {
-    repository.close();
-  }
-
-  private static Repository openOrCreateRepository(Path gitDirectory) {
-    Objects.requireNonNull(gitDirectory, "gitDirectory");
-    try {
-      Files.createDirectories(gitDirectory);
-      Repository repo =
-          new FileRepositoryBuilder().setGitDir(gitDirectory.toFile()).setBare().build();
-      if (!repo.getObjectDatabase().exists()) {
-        repo.create(true);
-      }
-      return repo;
-    } catch (IOException ex) {
-      throw new IllegalStateException("Failed to initialize repository at " + gitDirectory, ex);
     }
   }
 

@@ -38,6 +38,7 @@ class ArchitectureFitnessTest {
   private static final String JAVAX_SWING = "javax.swing..";
   private static final String JAVA_AWT = "java.awt..";
   private static final String JGIT_PKG = "org.eclipse.jgit..";
+  private static final String JGIT_INTERNAL_PKG = "org.eclipse.jgit.internal..";
   private static final ClassFileImporter PRODUCTION_IMPORTER =
       new ClassFileImporter().withImportOption(ImportOption.Predefined.DO_NOT_INCLUDE_TESTS);
   private static final JavaClasses WORKFLOW_CLASSES = importProduction("org.hammer.audio.workflow");
@@ -287,6 +288,18 @@ class ArchitectureFitnessTest {
    * <p>The editor adapter may call application-service and store-facade APIs, but never concrete
    * infrastructure/JGit classes.
    */
+  /** Infrastructure adapters may use public JGit APIs but never JGit implementation internals. */
+  @Test
+  void workflowStoreInfrastructureDoesNotDependOnJGitInternals() {
+    noClasses()
+        .that()
+        .resideInAPackage(WORKFLOW_STORE_INFRA_PKG)
+        .should()
+        .dependOnClassesThat()
+        .resideInAPackage(JGIT_INTERNAL_PKG)
+        .check(ROOT_CLASSES);
+  }
+
   @Test
   void editorHttpAdapterDoesNotDependOnStorageInternals() {
     noClasses()

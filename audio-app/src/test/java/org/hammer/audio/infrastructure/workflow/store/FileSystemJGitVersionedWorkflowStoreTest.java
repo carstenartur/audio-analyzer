@@ -24,7 +24,7 @@ import org.hammer.audio.workflow.store.RefUpdateResult;
 import org.hammer.audio.workflow.store.WorkflowSnapshot;
 import org.junit.jupiter.api.Test;
 
-class JGitVersionedWorkflowStoreTest {
+class FileSystemJGitVersionedWorkflowStoreTest {
 
   private static final WorkflowDslSerializer SERIALIZER = new WorkflowDslSerializer();
   private static final WorkflowDslParser PARSER = new WorkflowDslParser();
@@ -40,13 +40,15 @@ class JGitVersionedWorkflowStoreTest {
         new CommitMetadata("author-2", "second", Instant.parse("2026-01-02T00:00:00Z"));
 
     CommitId firstCommit;
-    try (JGitVersionedWorkflowStore store = new JGitVersionedWorkflowStore(gitDir)) {
+    try (FileSystemJGitVersionedWorkflowStore store =
+        new FileSystemJGitVersionedWorkflowStore(gitDir)) {
       firstCommit = store.commit("main", toSnapshot(firstWorkflow), firstMetadata);
       assertEquals(firstWorkflow, PARSER.parse(store.loadHead("main").dslText()));
     }
 
     CommitId secondCommit;
-    try (JGitVersionedWorkflowStore reopenedStore = new JGitVersionedWorkflowStore(gitDir)) {
+    try (FileSystemJGitVersionedWorkflowStore reopenedStore =
+        new FileSystemJGitVersionedWorkflowStore(gitDir)) {
       assertEquals(firstWorkflow, PARSER.parse(reopenedStore.loadHead("main").dslText()));
       secondCommit = reopenedStore.commit("main", toSnapshot(secondWorkflow), secondMetadata);
 
@@ -64,7 +66,8 @@ class JGitVersionedWorkflowStoreTest {
     CommitMetadata metadata =
         new CommitMetadata("author", "commit", Instant.parse("2026-01-01T00:00:00Z"));
 
-    try (JGitVersionedWorkflowStore store = new JGitVersionedWorkflowStore(gitDir)) {
+    try (FileSystemJGitVersionedWorkflowStore store =
+        new FileSystemJGitVersionedWorkflowStore(gitDir)) {
       CommitId base = store.commit("main", toSnapshot(buildMinimalWorkflow()), metadata);
       CommitId candidate =
           store.commit(

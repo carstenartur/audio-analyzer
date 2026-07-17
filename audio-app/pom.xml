@@ -26,6 +26,10 @@
     </dependency>
     <dependency>
       <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-jdbc</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-validation</artifactId>
     </dependency>
     <dependency>
@@ -97,11 +101,32 @@
       <scope>test</scope>
     </dependency>
     <dependency>
+      <groupId>io.github.carstenartur</groupId>
+      <artifactId>jgit-storage-hibernate-core</artifactId>
+      <version>${jgit-storage-hibernate.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.hibernate.orm</groupId>
+      <artifactId>hibernate-core</artifactId>
+      <version>${hibernate.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>com.h2database</groupId>
+      <artifactId>h2</artifactId>
+      <scope>runtime</scope>
+    </dependency>
+    <dependency>
       <groupId>org.eclipse.jgit</groupId>
       <artifactId>org.eclipse.jgit</artifactId>
       <version>${jgit.version}</version>
     </dependency>
   </dependencies>
+  <repositories>
+    <repository>
+      <id>github</id>
+      <url>https://maven.pkg.github.com/carstenartur/jgit-storage-hibernate</url>
+    </repository>
+  </repositories>
   <build>
     <plugins>
       <plugin>
@@ -152,28 +177,4 @@
       </plugin>
     </plugins>
   </build>
-  <profiles>
-    <profile>
-      <id>jgit-storage-hibernate-artifact-check</id>
-      <activation>
-        <property>
-          <name>jgitStorageHibernateArtifactCheck</name>
-        </property>
-      </activation>
-      <dependencies>
-        <dependency>
-          <groupId>io.github.carstenartur</groupId>
-          <artifactId>jgit-storage-hibernate-core</artifactId>
-          <version>0.1.2</version>
-          <scope>test</scope>
-        </dependency>
-      </dependencies>
-      <repositories>
-        <repository>
-          <id>github</id>
-          <url>https://maven.pkg.github.com/carstenartur/jgit-storage-hibernate</url>
-        </repository>
-      </repositories>
-    </profile>
-  </profiles>
 </project>

@@ -46,14 +46,14 @@ The following first-experiment requirements are already met by the existing mode
 
 ## Minimal additions identified
 
-|                          Addition                          |                                                           Reason                                                           |         Layer          |
-|------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------|------------------------|
-| `workflow.catalog.ExperimentNodeCatalog`                   | Factory methods for typed node prototypes (issue #215). Avoids inventing ad-hoc string constants everywhere.               | Workflow domain        |
-| `workflow.catalog.ExperimentMetadataKeys`                  | Standard metadata key constants for experiment setup, dataset provenance, calibration and outputs (issue #214, see below). | Workflow domain        |
-| `workflow.dsl.WorkflowDslSerializer`                       | Deterministic text representation for Git checkpoints, semantic diffs and human review (issue #217).                       | DSL layer              |
-| `workflow.dsl.WorkflowDslParser`                           | Inverse of the serializer. Required for loading persisted workflows back into the domain model.                            | DSL layer              |
-| `workflow.store.VersionedWorkflowStore`                    | Facade that hides JGit and Hibernate internals from all Audio Analyzer workflow services (issue #218).                     | Persistence facade     |
-| `infrastructure.workflow.store.JGitVersionedWorkflowStore` | Infrastructure-owned adapter that implements the facade while keeping JGit internals out of workflow/editor APIs.          | Infrastructure adapter |
+|                              Addition                               |                                                           Reason                                                           |         Layer          |
+|---------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------|------------------------|
+| `workflow.catalog.ExperimentNodeCatalog`                            | Factory methods for typed node prototypes (issue #215). Avoids inventing ad-hoc string constants everywhere.               | Workflow domain        |
+| `workflow.catalog.ExperimentMetadataKeys`                           | Standard metadata key constants for experiment setup, dataset provenance, calibration and outputs (issue #214, see below). | Workflow domain        |
+| `workflow.dsl.WorkflowDslSerializer`                                | Deterministic text representation for Git checkpoints, semantic diffs and human review (issue #217).                       | DSL layer              |
+| `workflow.dsl.WorkflowDslParser`                                    | Inverse of the serializer. Required for loading persisted workflows back into the domain model.                            | DSL layer              |
+| `workflow.store.VersionedWorkflowStore`                             | Facade that hides JGit and Hibernate internals from all Audio Analyzer workflow services (issue #218).                     | Persistence facade     |
+| `infrastructure.workflow.store.HibernateJGitVersionedWorkflowStore` | Infrastructure-owned adapter that implements the facade while keeping JGit internals out of workflow/editor APIs.          | Infrastructure adapter |
 
 ### Metadata keys for experiment configuration
 

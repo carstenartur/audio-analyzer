@@ -40,6 +40,8 @@
     <flatlaf.version>3.7.2</flatlaf.version>
     <jackson.version>2.22.1</jackson.version>
     <jgit.version>7.7.0.202606012155-r</jgit.version>
+    <hibernate.version>7.4.5.Final</hibernate.version>
+    <jgit-storage-hibernate.version>0.1.4</jgit-storage-hibernate.version>
     <spring-boot.version>4.1.0</spring-boot.version>
 
     <maven-compiler-plugin.version>3.15.0</maven-compiler-plugin.version>

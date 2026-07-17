@@ -25,6 +25,7 @@ on:
 
 permissions:
   contents: write
+  packages: read
   pull-requests: write
 
 concurrency:
@@ -47,6 +48,9 @@ jobs:
         with:
           java-version: '21'
           distribution: 'temurin'
+          server-id: github
+          server-username: GITHUB_ACTOR
+          server-password: GITHUB_TOKEN
 
       - name: Cache Maven dependencies
         uses: actions/cache@v6
@@ -65,6 +69,7 @@ jobs:
       - name: Build, publish and prepare next development version
         env:
           GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
           RELEASE_VERSION: ${{ inputs.release_version }}
           NEXT_VERSION_INPUT: ${{ inputs.next_development_version }}
           SKIP_TESTS: ${{ inputs.skip_tests }}

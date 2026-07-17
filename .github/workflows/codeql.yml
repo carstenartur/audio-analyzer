@@ -27,7 +27,11 @@ jobs:
     permissions:
       actions: read
       contents: read
+      packages: read
       security-events: write
+
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     strategy:
       fail-fast: false
@@ -46,6 +50,9 @@ jobs:
         java-version: '21'
         distribution: 'temurin'
         cache: maven
+        server-id: github
+        server-username: GITHUB_ACTOR
+        server-password: GITHUB_TOKEN
 
     # Initializes the CodeQL tools for scanning.
     - name: Initialize CodeQL
