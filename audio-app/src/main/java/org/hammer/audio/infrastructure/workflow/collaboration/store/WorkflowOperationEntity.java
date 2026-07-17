@@ -19,9 +19,7 @@ import org.hammer.audio.workflow.collaboration.store.WorkflowOperationPersistenc
     name = "workflow_collaboration_operation",
     indexes = {
       @Index(name = "idx_workflow_operation_session", columnList = "session_id"),
-      @Index(
-          name = "idx_workflow_operation_revision",
-          columnList = "session_id, semantic_revision")
+      @Index(name = "idx_workflow_operation_revision", columnList = "session_id, semantic_revision")
     },
     uniqueConstraints = {
       @UniqueConstraint(name = "uk_workflow_operation_id", columnNames = "operation_id"),
@@ -63,10 +61,7 @@ public class WorkflowOperationEntity {
   protected WorkflowOperationEntity() {}
 
   static WorkflowOperationEntity accepted(
-      String sessionId,
-      WorkflowOperationPersistenceData operation,
-      long sequence,
-      long revision) {
+      String sessionId, WorkflowOperationPersistenceData operation, long sequence, long revision) {
     WorkflowOperationEntity entity = new WorkflowOperationEntity();
     entity.sessionId = sessionId;
     entity.operationId = operation.operationId();

@@ -34,7 +34,8 @@ public final class HibernateWorkflowSessionStateStore implements WorkflowSession
   public StoredWorkflowSession create(StoredWorkflowSession storedSession) {
     Objects.requireNonNull(storedSession, "storedSession");
     if (storedSession.revision() != 0 || storedSession.sequence() != 0) {
-      throw new IllegalArgumentException("A new workflow session must start at revision/sequence 0");
+      throw new IllegalArgumentException(
+          "A new workflow session must start at revision/sequence 0");
     }
     if (storedSession.closed()) {
       throw new IllegalArgumentException("A new workflow session must be open");
@@ -150,16 +151,11 @@ public final class HibernateWorkflowSessionStateStore implements WorkflowSession
     session.flush();
 
     return new WorkflowSessionAppendResult(
-        aggregate.toStoredSession(),
-        operation.toStoredOperation(),
-        outbox.toStoredEntry(),
-        false);
+        aggregate.toStoredSession(), operation.toStoredOperation(), outbox.toStoredEntry(), false);
   }
 
   private static WorkflowSessionAppendResult duplicateResult(
-      Session session,
-      WorkflowOperationEntity existing,
-      WorkflowSessionAppendCommand command) {
+      Session session, WorkflowOperationEntity existing, WorkflowSessionAppendCommand command) {
     if (!existing.hasSameSemanticContent(command.sessionId(), command.operation())
         || command.expectedRevision() != existing.semanticRevision() - 1) {
       throw operationConflict(command);
@@ -179,8 +175,7 @@ public final class HibernateWorkflowSessionStateStore implements WorkflowSession
             .uniqueResult();
     if (aggregate == null || outbox == null) {
       throw new IllegalStateException(
-          "Durable operation is missing its aggregate or outbox event: "
-              + existing.operationId());
+          "Durable operation is missing its aggregate or outbox event: " + existing.operationId());
     }
 
     boolean currentSnapshotIsOriginal = aggregate.semanticRevision() == existing.semanticRevision();
@@ -195,10 +190,7 @@ public final class HibernateWorkflowSessionStateStore implements WorkflowSession
     }
 
     return new WorkflowSessionAppendResult(
-        aggregate.toStoredSession(),
-        existing.toStoredOperation(),
-        outbox.toStoredEntry(),
-        true);
+        aggregate.toStoredSession(), existing.toStoredOperation(), outbox.toStoredEntry(), true);
   }
 
   private static WorkflowOperationEntity findOperation(Session session, String operationId) {

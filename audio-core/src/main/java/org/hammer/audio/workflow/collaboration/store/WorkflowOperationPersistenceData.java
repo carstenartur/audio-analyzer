@@ -5,11 +5,7 @@ import java.util.Objects;
 
 /** Canonically serialized semantic operation supplied to the durable session store. */
 public record WorkflowOperationPersistenceData(
-    String operationId,
-    String actorId,
-    String operationType,
-    Instant occurredAt,
-    String payload) {
+    String operationId, String actorId, String operationType, Instant occurredAt, String payload) {
 
   public WorkflowOperationPersistenceData {
     operationId = requireNotBlank(operationId, "operationId");

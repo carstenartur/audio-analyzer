@@ -135,8 +135,7 @@ class HibernateWorkflowSessionStateStoreTest {
           assertThrows(
               WorkflowOperationPersistenceConflictException.class,
               () ->
-                  store.append(
-                      command(initial, "operation.same", "event.two", 0, "payload-one")));
+                  store.append(command(initial, "operation.same", "event.two", 0, "payload-one")));
 
           assertEquals(1, store.find(initial.sessionId()).orElseThrow().revision());
           assertEquals(1, store.operations(initial.sessionId()).size());
@@ -279,8 +278,7 @@ class HibernateWorkflowSessionStateStoreTest {
   private static void withStore(StoreScenario scenario) {
     Properties properties = new Properties();
     properties.put(
-        "hibernate.connection.url",
-        "jdbc:h2:mem:" + UUID.randomUUID() + ";DB_CLOSE_DELAY=-1");
+        "hibernate.connection.url", "jdbc:h2:mem:" + UUID.randomUUID() + ";DB_CLOSE_DELAY=-1");
     properties.put("hibernate.connection.driver_class", "org.h2.Driver");
     properties.put("hibernate.dialect", "org.hibernate.dialect.H2Dialect");
     properties.put("hibernate.hbm2ddl.auto", "create-drop");

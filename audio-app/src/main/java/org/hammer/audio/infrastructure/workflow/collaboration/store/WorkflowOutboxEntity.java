@@ -16,9 +16,7 @@ import org.hammer.audio.workflow.collaboration.store.WorkflowOutboxEventData;
 @Table(
     name = "workflow_collaboration_outbox",
     indexes = {
-      @Index(
-          name = "idx_workflow_outbox_pending",
-          columnList = "published_at, next_attempt_at"),
+      @Index(name = "idx_workflow_outbox_pending", columnList = "published_at, next_attempt_at"),
       @Index(name = "idx_workflow_outbox_session", columnList = "session_id")
     },
     uniqueConstraints = {
