@@ -96,6 +96,7 @@ public class WorkflowOperationEntity {
     return sessionId.equals(expectedSessionId)
         && actorId.equals(candidate.actorId())
         && operationType.equals(candidate.operationType())
+        && occurredAt.equals(candidate.occurredAt())
         && payload.equals(candidate.payload());
   }
 
@@ -109,5 +110,9 @@ public class WorkflowOperationEntity {
 
   long operationSequence() {
     return operationSequence;
+  }
+
+  long semanticRevision() {
+    return semanticRevision;
   }
 }
