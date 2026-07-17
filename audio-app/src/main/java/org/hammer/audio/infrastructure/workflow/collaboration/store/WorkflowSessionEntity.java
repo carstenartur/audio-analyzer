@@ -108,6 +108,10 @@ public class WorkflowSessionEntity {
     this.storedEventSequence = updatedSequence;
   }
 
+  void markClosed() {
+    this.sessionClosed = true;
+  }
+
   String sessionId() {
     return storedSessionId;
   }
