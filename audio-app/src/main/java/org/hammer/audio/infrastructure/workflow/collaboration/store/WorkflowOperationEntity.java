@@ -58,7 +58,9 @@ public class WorkflowOperationEntity {
   @Column(name = "operation_payload", nullable = false)
   private String payload;
 
-  protected WorkflowOperationEntity() {}
+  protected WorkflowOperationEntity() {
+    // Required by Jakarta Persistence.
+  }
 
   static WorkflowOperationEntity accepted(
       String sessionId, WorkflowOperationPersistenceData operation, long sequence, long revision) {
