@@ -62,12 +62,42 @@ public final class HibernateWorkflowSessionStateStore implements WorkflowSession
   }
 
   @Override
+  public List<StoredWorkflowSession> openSessions() {
+    try (Session session = sessionFactory.openSession()) {
+      return session
+          .createQuery(
+              "FROM WorkflowSessionEntity aggregate "
+                  + "WHERE aggregate.sessionClosed = false "
+                  + "ORDER BY aggregate.storedSessionId",
+              WorkflowSessionEntity.class)
+          .getResultList()
+          .stream()
+          .map(WorkflowSessionEntity::toStoredSession)
+          .toList();
+    }
+  }
+
+  @Override
   public WorkflowSessionAppendResult append(WorkflowSessionAppendCommand command) {
     Objects.requireNonNull(command, "command");
     try {
       return inTransaction(session -> appendWithinTransaction(session, command));
     } catch (OptimisticLockException | StaleStateException | ConstraintViolationException failure) {
       return recoverConcurrentAppend(command, failure);
+    }
+  }
+
+  @Override
+  public StoredWorkflowSession close(String sessionId, long expectedRevision) {
+    String requiredSessionId = requireNotBlank(sessionId, SESSION_ID_PARAMETER);
+    if (expectedRevision < 0) {
+      throw new IllegalArgumentException("expectedRevision must be >= 0");
+    }
+    try {
+      return inTransaction(
+          session -> closeWithinTransaction(session, requiredSessionId, expectedRevision));
+    } catch (OptimisticLockException | StaleStateException failure) {
+      return recoverConcurrentClose(requiredSessionId, expectedRevision, failure);
     }
   }
 
@@ -153,6 +183,24 @@ public final class HibernateWorkflowSessionStateStore implements WorkflowSession
         aggregate.toStoredSession(), operation.toStoredOperation(), outbox.toStoredEntry(), false);
   }
 
+  private static StoredWorkflowSession closeWithinTransaction(
+      Session session, String sessionId, long expectedRevision) {
+    WorkflowSessionEntity aggregate = session.find(WorkflowSessionEntity.class, sessionId);
+    if (aggregate == null) {
+      throw new NoSuchElementException("Unknown workflow session: " + sessionId);
+    }
+    if (aggregate.closed()) {
+      return aggregate.toStoredSession();
+    }
+    if (aggregate.semanticRevision() != expectedRevision) {
+      throw new WorkflowSessionRevisionConflictException(
+          sessionId, expectedRevision, aggregate.semanticRevision());
+    }
+    aggregate.markClosed();
+    session.flush();
+    return aggregate.toStoredSession();
+  }
+
   private static WorkflowSessionAppendResult duplicateResult(
       Session session, WorkflowOperationEntity existing, WorkflowSessionAppendCommand command) {
     if (!existing.hasSameSemanticContent(command.sessionId(), command.operation())
@@ -207,6 +255,22 @@ public final class HibernateWorkflowSessionStateStore implements WorkflowSession
     throw new IllegalStateException(
         "Durable append constraint failed without advancing session " + command.sessionId(),
         failure);
+  }
+
+  private StoredWorkflowSession recoverConcurrentClose(
+      String sessionId, long expectedRevision, RuntimeException failure) {
+    StoredWorkflowSession current =
+        find(sessionId)
+            .orElseThrow(() -> new NoSuchElementException("Unknown workflow session: " + sessionId));
+    if (current.closed() && current.revision() == expectedRevision) {
+      return current;
+    }
+    if (current.revision() != expectedRevision) {
+      throw new WorkflowSessionRevisionConflictException(
+          sessionId, expectedRevision, current.revision());
+    }
+    throw new IllegalStateException(
+        "Durable close failed without advancing session " + sessionId, failure);
   }
 
   private WorkflowSessionAppendResult duplicateAfterConcurrentFailure(
