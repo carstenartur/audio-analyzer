@@ -1,5 +1,6 @@
 package org.hammer.audio.workflow.collaboration.store;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.TreeMap;
@@ -23,11 +24,14 @@ public final class WorkflowOperationPersistenceCodec {
         requiredOperation.author(),
         requiredOperation.getClass().getSimpleName(),
         requiredOperation.timestamp(),
-        encodePayload(requiredOperation.payload()));
+        encodeSemanticIdentity(requiredOperation));
   }
 
   /**
    * Compares a durable operation with a retry candidate without applying it again.
+   *
+   * <p>The timestamp is intentionally excluded to preserve the existing command-idempotency
+   * contract: a transport retry may recreate an otherwise identical operation with a new timestamp.
    *
    * @param stored durable accepted operation
    * @param candidate semantic retry candidate
@@ -39,7 +43,6 @@ public final class WorkflowOperationPersistenceCodec {
     return requiredStored.operationId().equals(encodedCandidate.operationId())
         && requiredStored.actorId().equals(encodedCandidate.actorId())
         && requiredStored.operationType().equals(encodedCandidate.operationType())
-        && requiredStored.occurredAt().equals(encodedCandidate.occurredAt())
         && requiredStored.payload().equals(encodedCandidate.payload());
   }
 
@@ -57,6 +60,21 @@ public final class WorkflowOperationPersistenceCodec {
       appendValue(encoded, entry.getValue());
     }
     return encoded.toString();
+  }
+
+  private static String encodeSemanticIdentity(WorkflowOperation operation) {
+    StringBuilder encoded = new StringBuilder();
+    appendList(encoded, operation.affectedObjectIds());
+    encoded.append(encodePayload(operation.payload()));
+    return encoded.toString();
+  }
+
+  private static void appendList(StringBuilder encoded, List<String> values) {
+    List<String> requiredValues = List.copyOf(Objects.requireNonNull(values, "values"));
+    encoded.append(requiredValues.size()).append(':');
+    for (String value : requiredValues) {
+      appendValue(encoded, value);
+    }
   }
 
   private static void appendValue(StringBuilder encoded, String value) {
