@@ -3,7 +3,15 @@ package org.hammer.audio.workflow.collaboration.store;
 import java.time.Instant;
 import java.util.Objects;
 
-/** Canonically serialized semantic operation supplied to the durable session store. */
+/**
+ * Canonically serialized semantic operation supplied to the durable session store.
+ *
+ * @param operationId stable idempotency identifier for the operation
+ * @param actorId actor that authored the operation
+ * @param operationType stable semantic operation type
+ * @param occurredAt operation occurrence timestamp
+ * @param payload deterministic serialized operation payload
+ */
 public record WorkflowOperationPersistenceData(
     String operationId, String actorId, String operationType, Instant occurredAt, String payload) {
 
