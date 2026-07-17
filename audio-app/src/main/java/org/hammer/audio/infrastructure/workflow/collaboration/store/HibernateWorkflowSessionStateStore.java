@@ -64,8 +64,8 @@ public final class HibernateWorkflowSessionStateStore implements WorkflowSession
     Objects.requireNonNull(command, "command");
     try {
       return inTransaction(session -> appendWithinTransaction(session, command));
-    } catch (RuntimeException exception) {
-      return recoverConcurrentAppend(command, exception);
+    } catch (OptimisticLockException | StaleStateException | ConstraintViolationException failure) {
+      return recoverConcurrentAppend(command, failure);
     }
   }
 
@@ -192,10 +192,6 @@ public final class HibernateWorkflowSessionStateStore implements WorkflowSession
 
   private WorkflowSessionAppendResult recoverConcurrentAppend(
       WorkflowSessionAppendCommand command, RuntimeException failure) {
-    if (!isOptimisticLockFailure(failure) && !isConstraintViolationFailure(failure)) {
-      throw failure;
-    }
-
     WorkflowSessionAppendResult duplicate = duplicateAfterConcurrentFailure(command);
     if (duplicate != null) {
       return duplicate;
@@ -206,7 +202,8 @@ public final class HibernateWorkflowSessionStateStore implements WorkflowSession
       throw new WorkflowSessionRevisionConflictException(
           command.sessionId(), command.expectedRevision(), actualRevision);
     }
-    throw failure;
+    throw new IllegalStateException(
+        "Durable append constraint failed without advancing session " + command.sessionId(), failure);
   }
 
   private WorkflowSessionAppendResult duplicateAfterConcurrentFailure(
@@ -245,35 +242,12 @@ public final class HibernateWorkflowSessionStateStore implements WorkflowSession
         T result = work.apply(session);
         transaction.commit();
         return result;
-      } catch (RuntimeException exception) {
+      } finally {
         if (transaction.isActive()) {
           transaction.rollback();
         }
-        throw exception;
       }
     }
-  }
-
-  private static boolean isOptimisticLockFailure(Throwable throwable) {
-    Throwable current = throwable;
-    while (current != null) {
-      if (current instanceof OptimisticLockException || current instanceof StaleStateException) {
-        return true;
-      }
-      current = current.getCause();
-    }
-    return false;
-  }
-
-  private static boolean isConstraintViolationFailure(Throwable throwable) {
-    Throwable current = throwable;
-    while (current != null) {
-      if (current instanceof ConstraintViolationException) {
-        return true;
-      }
-      current = current.getCause();
-    }
-    return false;
   }
 
   private static String requireNotBlank(String value, String name) {
