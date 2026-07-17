@@ -40,7 +40,8 @@ replace_once(
 replace_once(
     session_adapter,
     "    var actor = request.actor().toDomain();\n"
-    "    var operation = WorkflowOperationHttpParser.parse(request.operation(), actor.actorId());\n",
+    "    var operation =\n"
+    "        WorkflowOperationHttpParser.parse(request.operation(), actor.actorId());\n",
     "    OperationActor actor = request.actor().toDomain();\n"
     "    WorkflowOperation operation =\n"
     "        WorkflowOperationHttpParser.parse(request.operation(), actor.actorId());\n",
