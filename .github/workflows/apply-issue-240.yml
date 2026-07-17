@@ -60,6 +60,36 @@ jobs:
           while IFS= read -r path; do
             [[ -z "$path" ]] || rm -f "$path"
           done < .issue-240-delete
+          python3 <<'PY'
+          from pathlib import Path
+
+          path = Path(
+              'audio-app/src/main/java/org/hammer/audio/app/'
+              'WorkflowPersistenceConfiguration.java'
+          )
+          content = path.read_text(encoding='utf-8')
+          class_marker = 'public class WorkflowPersistenceConfiguration {\n'
+          constant = (
+              class_marker
+              + '\n  private static final String PERSISTENCE_MODE_PROPERTY = '
+              + '"workbench.persistence.mode";\n'
+          )
+          if content.count(class_marker) != 1:
+              raise SystemExit('Unexpected WorkflowPersistenceConfiguration class declaration')
+          content = content.replace(class_marker, constant, 1)
+          annotation_literal = 'name = "workbench.persistence.mode"'
+          if content.count(annotation_literal) != 4:
+              raise SystemExit('Unexpected persistence mode annotation count')
+          content = content.replace(annotation_literal, 'name = PERSISTENCE_MODE_PROPERTY')
+          message_literal = '"workbench.persistence.mode=hibernate requires spring.datasource.url "'
+          if content.count(message_literal) != 1:
+              raise SystemExit('Unexpected persistence mode error message')
+          content = content.replace(
+              message_literal,
+              'PERSISTENCE_MODE_PROPERTY + "=hibernate requires spring.datasource.url "',
+          )
+          path.write_text(content, encoding='utf-8')
+          PY
           rm .issue-240-delete
           rm -rf .github/issue240
           rm .github/workflows/apply-issue-240.yml
@@ -107,7 +137,7 @@ jobs:
         shell: bash
         run: |
           git config user.name github-actions[bot]
-          git config user.email 418982749+github-actions[bot]@users.noreply.github.com
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add -A
           git commit -m 'Wire production workbench to Hibernate-backed JGit store (#240)'
           git push origin HEAD:feature/240-hibernate-jgit-persistence
