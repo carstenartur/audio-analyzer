@@ -1,0 +1,98 @@
+diff --git a/audio-app/src/main/java/org/hammer/audio/app/WorkbenchConfiguration.java b/audio-app/src/main/java/org/hammer/audio/app/WorkbenchConfiguration.java
+index 64d695e..8e50470 100644
+--- a/audio-app/src/main/java/org/hammer/audio/app/WorkbenchConfiguration.java
++++ b/audio-app/src/main/java/org/hammer/audio/app/WorkbenchConfiguration.java
+@@ -9,6 +9,7 @@ import org.hammer.audio.workflow.Workflow;
+ import org.hammer.audio.workflow.WorkflowOperationLog;
+ import org.hammer.audio.workflow.WorkflowValidator;
+ import org.hammer.audio.workflow.catalog.ExperimentNodeCatalog;
++import org.hammer.audio.workflow.collaboration.WorkflowSessionEventHub;
+ import org.hammer.audio.workflow.collaboration.WorkflowSessionRegistry;
+ import org.hammer.audio.workflow.editor.WorkflowEditorService;
+ import org.hammer.audio.workflow.store.VersionedWorkflowStore;
+@@ -50,10 +51,16 @@ public class WorkbenchConfiguration implements WebMvcConfigurer {
+     return new WorkflowEditorService(log, validator, store);
+   }
+ 
++  /** Creates the bounded transport-neutral collaboration event hub. */
++  @Bean
++  public WorkflowSessionEventHub workflowSessionEventHub() {
++    return new WorkflowSessionEventHub();
++  }
++
+   /** Creates the transport-neutral collaboration-session application service. */
+   @Bean
+-  public WorkflowSessionRegistry workflowSessionRegistry() {
+-    return new WorkflowSessionRegistry();
++  public WorkflowSessionRegistry workflowSessionRegistry(WorkflowSessionEventHub eventHub) {
++    return new WorkflowSessionRegistry(eventHub);
+   }
+ 
+   /** Registers a filesystem resource handler when configured. */
+diff --git a/audio-app/src/main/java/org/hammer/audio/workflow/editor/http/WorkflowApiExceptionHandler.java b/audio-app/src/main/java/org/hammer/audio/workflow/editor/http/WorkflowApiExceptionHandler.java
+index 882e773..4ec7eb3 100644
+--- a/audio-app/src/main/java/org/hammer/audio/workflow/editor/http/WorkflowApiExceptionHandler.java
++++ b/audio-app/src/main/java/org/hammer/audio/workflow/editor/http/WorkflowApiExceptionHandler.java
+@@ -88,7 +88,8 @@ public final class WorkflowApiExceptionHandler {
+               ACTOR_METADATA_MISMATCH,
+               ACTOR_NOT_JOINED,
+               SESSION_MODE_MISMATCH,
+-              SESSION_CLOSE_FORBIDDEN ->
++              SESSION_CLOSE_FORBIDDEN,
++              DUPLICATE_OPERATION_ID ->
+           HttpStatus.CONFLICT;
+       case INVALID_OPERATION_AUTHOR -> HttpStatus.BAD_REQUEST;
+     };
+diff --git a/audio-app/src/main/java/org/hammer/audio/workflow/editor/http/WorkflowEditorHttpAdapter.java b/audio-app/src/main/java/org/hammer/audio/workflow/editor/http/WorkflowEditorHttpAdapter.java
+index 465308b..4a604fc 100644
+--- a/audio-app/src/main/java/org/hammer/audio/workflow/editor/http/WorkflowEditorHttpAdapter.java
++++ b/audio-app/src/main/java/org/hammer/audio/workflow/editor/http/WorkflowEditorHttpAdapter.java
+@@ -2,10 +2,8 @@ package org.hammer.audio.workflow.editor.http;
+ 
+ import com.fasterxml.jackson.databind.JsonNode;
+ import java.time.Instant;
+-import java.util.Arrays;
+ import java.util.List;
+ import java.util.Objects;
+-import org.hammer.audio.workflow.Edge;
+ import org.hammer.audio.workflow.Node;
+ import org.hammer.audio.workflow.Workflow;
+ import org.hammer.audio.workflow.WorkflowOperation;
+@@ -75,7 +73,7 @@ public final class WorkflowEditorHttpAdapter {
+    */
+   @PostMapping("/operations")
+   public ResponseEntity<?> operations(@RequestBody JsonNode json) {
+-    WorkflowOperation operation = parseOperation(json);
++    WorkflowOperation operation = WorkflowOperationHttpParser.parse(json, "web-editor");
+     WorkflowProjection projection = editorService.applyOperation(operation);
+     return ResponseEntity.ok(projection);
+   }
+@@ -152,96 +150,6 @@ public final class WorkflowEditorHttpAdapter {
+     return ResponseEntity.badRequest().body(ex.getMessage());
+   }
+ 
+-  // -------------------------------------------------------------------------
+-  // Parsing helpers
+-  // -------------------------------------------------------------------------
+-
+-  private static WorkflowOperation parseOperation(JsonNode json) {
+-    String type = requiredText(json, "type");
+-    String operationId = requiredText(json, "operationId");
+-    String author = json.has("author") ? json.get("author").asText() : "web-editor";
+-    Instant timestamp =
+-        json.has(JSON_FIELD_TIMESTAMP)
+-            ? Instant.parse(json.get(JSON_FIELD_TIMESTAMP).asText())
+-            : Instant.now();
+-    return switch (type) {
+-      case "CreateNode" -> {
+-        String nodeId = requiredText(json, "nodeId");
+-        String catalogType = requiredText(json, "catalogType");
+-        Node node = createCatalogNode(catalogType, nodeId);
+-        yield new WorkflowOperation.CreateNode(operationId, timestamp, author, node);
+-      }
+-      case "ConnectPorts" -> {
+-        JsonNode edgeJson = requireObject(json, "edge");
+-        Edge edge =
+-            new Edge(
+-                requiredText(edgeJson, "id"),
+- 

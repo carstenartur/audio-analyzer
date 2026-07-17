@@ -1,0 +1,138 @@
+0) {
++      throw new IllegalArgumentException("subscriberQueueCapacity must be > 0");
++    }
++    this.replayCapacity = replayCapacity;
++    this.subscriberQueueCapacity = subscriberQueueCapacity;
++  }
++
++  /** Opens a new event stream and publishes creation plus owner-presence events. */
++  public void openSession(String sessionId, OperationActor owner, Workflow workflow) {
++    String requiredSessionId = requireNotBlank(sessionId, "sessionId");
++    Objects.requireNonNull(owner, "owner");
++    Objects.requireNonNull(workflow, "workflow");
++    SessionBuffer created =
++        new SessionBuffer(requiredSessionId, workflow, replayCapacity, subscriberQueueCapacity);
++    SessionBuffer previous = sessions.putIfAbsent(requiredSessionId, created);
++    if (previous != null) {
++      if (!previous.isClosed() || !sessions.replace(requiredSessionId, previous, created)) {
++        throw new IllegalStateException("Event stream already exists: " + requiredSessionId);
++      }
++      previous.stopSubscribers();
++    }
++    created.publish(
++        WorkflowSessionEvent.Type.SESSION_CREATED,
++        owner,
++        null,
++        workflow,
++        Map.of(),
++        false,
++        Instant.now());
++    created.publish(
++        WorkflowSessionEvent.Type.PRESENCE_JOINED,
++        owner,
++        null,
++        null,
++        Map.of(),
++        false,
++        Instant.now());
++  }
++
++  /** Publishes a newly joined actor without changing the semantic revision. */
++  public void actorJoined(String sessionId, OperationActor actor) {
++    requireSession(sessionId)
++        .publish(
++            WorkflowSessionEvent.Type.PRESENCE_JOINED,
++            Objects.requireNonNull(actor, "actor"),
++            null,
++            null,
++            Map.of(),
++            false,
++            Instant.now());
++  }
++
++  /** Publishes non-semantic presence data without changing the semantic revision. */
++  public void presenceUpdated(
++      String sessionId, OperationActor actor, PresenceState presenceState) {
++    Objects.requireNonNull(actor, "actor");
++    Objects.requireNonNull(presenceState, "presenceState");
++    requireSession(sessionId)
++        .publish(
++            WorkflowSessionEvent.Type.PRESENCE_UPDATED,
++            actor,
++            null,
++            null,
++            presenceState.attributes(),
++            false,
++            presenceState.observedAt());
++  }
++
++  /** Publishes an actor departure without deleting the session stream. */
++  public void actorLeft(String sessionId, OperationActor actor) {
++    requireSession(sessionId)
++        .publish(
++            WorkflowSessionEvent.Type.PRESENCE_LEFT,
++            Objects.requireNonNull(actor, "actor"),
++            null,
++            null,
++            Map.of(),
++            false,
++            Instant.now());
++  }
++
++  /** Publishes one server-accepted semantic operation and advances the semantic revision. */
++  public WorkflowSessionEvent operationAccepted(
++      String sessionId,
++      OperationActor actor,
++      WorkflowOperation operation,
++      Workflow resultingWorkflow) {
++    Objects.requireNonNull(operation, "operation");
++    Map<String, String> attributes =
++        Map.of(
++            "operationType", operation.getClass().getSimpleName(),
++            "operationAuthor", operation.author());
++    return requireSession(sessionId)
++        .publish(
++            WorkflowSessionEvent.Type.OPERATION_ACCEPTED,
++            Objects.requireNonNull(actor, "actor"),
++            operation.operationId(),
++            Objects.requireNonNull(resultingWorkflow, "resultingWorkflow"),
++            attributes,
++            true,
++            Instant.now());
++  }
++
++  /** Publishes closure and terminates all active transport subscriptions. */
++  public void closeSession(String sessionId, OperationActor requestedBy) {
++    SessionBuffer buffer = requireSession(sessionId);
++    buffer.publish(
++        WorkflowSessionEvent.Type.SESSION_CLOSED,
++        Objects.requireNonNull(requestedBy, "requestedBy"),
++        null,
++        null,
++        Map.of(),
++        false,
++        Instant.now());
++    buffer.markClosed();
++  }
++
++  /** Returns retained events after the supplied sequence, or a canonical snapshot after a gap. */
++  public List<WorkflowSessionEvent> replay(String sessionId, long afterSequence) {
++    if (afterSequence < 0) {
++      throw new IllegalArgumentException("afterSequence must be >= 0");
++    }
++    return requireSession(sessionId).replay(afterSequence);
++  }
++
++  /**
++   * Subscribes to retained and future events after a sequence.
++   *
++   * <p>The callback executes on a dedicated virtual thread. Closing the returned handle is
++   * idempotent.
++   */
++  public Subscription subscribe(
++      String sessionId, long afterSequence, Consumer<WorkflowSessionEvent> callback) {
++    if (afterSequence < 0) {
++      throw new IllegalArgumentException("afterSequence must be >= 0");
++    }
++    return requireSession(sessionId)
++        .subscribe(after

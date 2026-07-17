@@ -1,0 +1,176 @@
+criber) {
++      lock.lock();
++      try {
++        subscribers.remove(subscriber);
++      } finally {
++        lock.unlock();
++      }
++    }
++
++    private List<WorkflowSessionEvent> replayLocked(long afterSequence) {
++      if (afterSequence > sequence || replayGap(afterSequence)) {
++        return List.of(snapshotEvent());
++      }
++      return retainedEvents.stream().filter(event -> event.sequence() > afterSequence).toList();
++    }
++
++    private boolean replayGap(long afterSequence) {
++      WorkflowSessionEvent oldest = retainedEvents.peekFirst();
++      return oldest != null && afterSequence < oldest.sequence() - 1;
++    }
++
++    private WorkflowSessionEvent snapshotEvent() {
++      return new WorkflowSessionEvent(
++          eventId(sequence) + ":snapshot",
++          sessionId,
++          sequence,
++          revision,
++          Instant.now(),
++          WorkflowSessionEvent.Type.SNAPSHOT,
++          null,
++          null,
++          currentWorkflow,
++          Map.of());
++    }
++
++    long currentSequence() {
++      lock.lock();
++      try {
++        return sequence;
++      } finally {
++        lock.unlock();
++      }
++    }
++
++    long currentRevision() {
++      lock.lock();
++      try {
++        return revision;
++      } finally {
++        lock.unlock();
++      }
++    }
++
++    int subscriberCount() {
++      lock.lock();
++      try {
++        return subscribers.size();
++      } finally {
++        lock.unlock();
++      }
++    }
++
++    boolean isClosed() {
++      lock.lock();
++      try {
++        return closed;
++      } finally {
++        lock.unlock();
++      }
++    }
++
++    void markClosed() {
++      lock.lock();
++      try {
++        closed = true;
++      } finally {
++        lock.unlock();
++      }
++    }
++
++    void stopSubscribers() {
++      List<Subscriber> active;
++      lock.lock();
++      try {
++        active = List.copyOf(subscribers);
++        subscribers.clear();
++        closed = true;
++      } finally {
++        lock.unlock();
++      }
++      active.forEach(Subscriber::stop);
++    }
++
++    private String eventId(long eventSequence) {
++      return sessionId + ":" + eventSequence;
++    }
++  }
++
++  private static final class Subscriber {
++    private final ArrayBlockingQueue<WorkflowSessionEvent> queue;
++    private final Consumer<WorkflowSessionEvent> callback;
++    private final AtomicBoolean stopped = new AtomicBoolean();
++    private final String threadName;
++    private volatile Thread dispatchThread;
++    private Runnable removalCallback;
++
++    Subscriber(
++        String sessionId, int queueCapacity, Consumer<WorkflowSessionEvent> callback) {
++      this.queue = new ArrayBlockingQueue<>(queueCapacity);
++      this.callback = callback;
++      this.threadName = "workflow-session-events-" + sessionId;
++    }
++
++    void setRemovalCallback(Runnable removalCallback) {
++      this.removalCallback = Objects.requireNonNull(removalCallback, "removalCallback");
++    }
++
++    boolean enqueue(WorkflowSessionEvent event) {
++      return !stopped.get() && queue.offer(event);
++    }
++
++    boolean enqueueAll(List<WorkflowSessionEvent> events) {
++      for (WorkflowSessionEvent event : events) {
++        if (!enqueue(event)) {
++          return false;
++        }
++      }
++      return true;
++    }
++
++    void start() {
++      dispatchThread = Thread.ofVirtual().name(threadName).start(this::dispatch);
++    }
++
++    void stop() {
++      if (stopped.compareAndSet(false, true)) {
++        Thread thread = dispatchThread;
++        if (thread != null) {
++          thread.interrupt();
++        }
++      }
++    }
++
++    private void dispatch() {
++      try {
++        while (!stopped.get()) {
++          WorkflowSessionEvent event = queue.take();
++          callback.accept(event);
++          if (event.type() == WorkflowSessionEvent.Type.SESSION_CLOSED) {
++            break;
++          }
++        }
++      } catch (InterruptedException exception) {
++        Thread.currentThread().interrupt();
++      } catch (RuntimeException ignored) {
++        // A failed transport callback is isolated and removed below.
++      } finally {
++        stopped.set(true);
++        removalCallback.run();
++      }
++    }
++  }
++}
+diff --git a/audio-core/src/main/java/org/hammer/audio/workflow/collaboration/WorkflowSessionException.java b/audio-core/src/main/java/org/hammer/audio/workflow/collaboration/WorkflowSessionException.java
+index b364e9c..88c4e69 100644
+--- a/audio-core/src/main/java/org/hammer/audio/workflow/collaboration/WorkflowSessionException.java
++++ b/audio-core/src/main/java/org/hammer/audio/workflow/collaboration/WorkflowSessionException.java
+@@ -14,6 +14,7 @@ public final class WorkflowSessionException extends RuntimeException {
+     ACTOR_NOT_JOINED,
+     SESSION_MODE_MISMATCH,
+     SESSION_CLOSE_FORBIDDEN,
++    DUPLICATE_OPERATION_ID,
+     INVALID_OPERATION_AUTHOR
+   }
+ 
+diff --git a/audio-core/src/main/java/org/hammer/audio/workflow/collaboration/WorkflowSessionRegistry.java b/audio-core/src/main/java/org

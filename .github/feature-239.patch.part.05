@@ -1,0 +1,99 @@
+t;
+ import org.hammer.audio.workflow.editor.http.WorkflowSessionApiModels.CreateSessionRequest;
+ import org.hammer.audio.workflow.editor.http.WorkflowSessionApiModels.JoinSessionRequest;
++import org.hammer.audio.workflow.editor.http.WorkflowSessionApiModels.PresenceRequest;
++import org.hammer.audio.workflow.editor.http.WorkflowSessionApiModels.PresenceResponse;
++import org.hammer.audio.workflow.editor.http.WorkflowSessionApiModels.SessionOperationRequest;
+ import org.hammer.audio.workflow.editor.http.WorkflowSessionApiModels.SessionResponse;
+ import org.springframework.http.ResponseEntity;
+ import org.springframework.web.bind.annotation.DeleteMapping;
+ import org.springframework.web.bind.annotation.GetMapping;
+ import org.springframework.web.bind.annotation.PathVariable;
+ import org.springframework.web.bind.annotation.PostMapping;
++import org.springframework.web.bind.annotation.PutMapping;
+ import org.springframework.web.bind.annotation.RequestBody;
+ import org.springframework.web.bind.annotation.RequestMapping;
+ import org.springframework.web.bind.annotation.RestController;
+@@ -72,6 +76,27 @@ public final class WorkflowSessionHttpAdapter {
+     return SessionResponse.from(registry.leave(sessionId, request.actorId()));
+   }
+ 
++
++  /** Applies one joined actor's semantic operation and returns the canonical projection. */
++  @PostMapping("/{sessionId}/operations")
++  public WorkflowProjection applyOperation(
++      @PathVariable(SESSION_ID) String sessionId,
++      @Valid @RequestBody SessionOperationRequest request) {
++    var actor = request.actor().toDomain();
++    var operation =
++        WorkflowOperationHttpParser.parse(request.operation(), actor.actorId());
++    return WorkflowProjection.fromWorkflow(
++        registry.applyOperation(sessionId, request.mode(), actor, operation));
++  }
++
++  /** Updates non-semantic presence and broadcasts it separately from workflow history. */
++  @PutMapping("/{sessionId}/presence")
++  public PresenceResponse updatePresence(
++      @PathVariable(SESSION_ID) String sessionId, @Valid @RequestBody PresenceRequest request) {
++    var actor = request.actor().toDomain();
++    return PresenceResponse.from(registry.updatePresence(sessionId, actor, request.toDomain()));
++  }
++
+   /** Returns immutable session metadata. */
+   @GetMapping("/{sessionId}")
+   public SessionResponse inspect(@PathVariable(SESSION_ID) String sessionId) {
+diff --git a/audio-app/src/test/java/org/hammer/audio/workflow/editor/http/WorkflowSessionEventHttpAdapterTest.java b/audio-app/src/test/java/org/hammer/audio/workflow/editor/http/WorkflowSessionEventHttpAdapterTest.java
+new file mode 100644
+index 0000000..4ff6dab
+--- /dev/null
++++ b/audio-app/src/test/java/org/hammer/audio/workflow/editor/http/WorkflowSessionEventHttpAdapterTest.java
+@@ -0,0 +1,124 @@
++package org.hammer.audio.workflow.editor.http;
++
++import static org.junit.jupiter.api.Assertions.assertTrue;
++import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch;
++import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
++import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
++import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
++import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
++
++import java.time.Instant;
++import java.util.List;
++import java.util.Map;
++import org.hammer.audio.workflow.Metadata;
++import org.hammer.audio.workflow.Node;
++import org.hammer.audio.workflow.Workflow;
++import org.hammer.audio.workflow.WorkflowOperation;
++import org.hammer.audio.workflow.collaboration.CollaborationMode;
++import org.hammer.audio.workflow.collaboration.OperationActor;
++import org.hammer.audio.workflow.collaboration.PresenceState;
++import org.hammer.audio.workflow.collaboration.WorkflowSessionEventHub;
++import org.hammer.audio.workflow.collaboration.WorkflowSessionRegistry;
++import org.junit.jupiter.api.BeforeEach;
++import org.junit.jupiter.api.Test;
++import org.springframework.http.MediaType;
++import org.springframework.test.web.servlet.MockMvc;
++import org.springframework.test.web.servlet.MvcResult;
++import org.springframework.test.web.servlet.setup.MockMvcBuilders;
++
++class WorkflowSessionEventHttpAdapterTest {
++
++  private static final String SESSION_ID = "session.stream";
++  private static final OperationActor OWNER =
++      new OperationActor("actor.owner", "user.owner", "Owner");
++
++  private WorkflowSessionEventHub eventHub;
++  private WorkflowSessionRegistry registry;
++  private MockMvc mvc;
++
++  @BeforeEach
++  void configureSpringMvc() {
++    eventHub = new WorkflowSessionEventHub(8, 4);
++    registry = new WorkflowSessionRegistry(eventHub);
++    registry.create(
++        SESSION_ID,
++        CollaborationMode.SHARED_SESSION_PERSONAL_UNDO,
++        OWNER,
++        new Workflow("workflow.stream", "Stream", List.of(), List.of()));
++    mvc =
++        MockMvcBuilders.standalon

@@ -1,0 +1,108 @@
+eSetup(
++                new WorkflowSessionEventHttpAdapter(registry, eventHub))
++            .setControllerAdvice(new WorkflowApiExceptionHandler())
++            .build();
++  }
++
++  @Test
++  void sseStreamUsesSequenceIdsAndCompletesAfterSessionClose() throws Exception {
++    long cursor = eventHub.currentSequence(SESSION_ID);
++    MvcResult stream =
++        mvc.perform(get("/workflow/sessions/{sessionId}/events", SESSION_ID)
++                .queryParam("afterSequence", Long.toString(cursor)))
++            .andExpect(request().asyncStarted())
++            .andReturn();
++
++    Node node =
++        new Node("node.input", "input", "Input", List.of(), List.of(), Metadata.empty());
++    registry.applyOperation(
++        SESSION_ID,
++        CollaborationMode.SHARED_SESSION_PERSONAL_UNDO,
++        OWNER,
++        new WorkflowOperation.CreateNode(
++            "operation.input", Instant.parse("2026-07-17T03:00:00Z"), OWNER.actorId(), node));
++    registry.close(SESSION_ID, OWNER.actorId());
++
++    MvcResult completed =
++        mvc.perform(asyncDispatch(stream))
++            .andExpect(status().isOk())
++            .andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_EVENT_STREAM))
++            .andReturn();
++    String body = completed.getResponse().getContentAsString();
++    assertTrue(body.contains("event:OPERATION_ACCEPTED"));
++    assertTrue(body.contains("event:SESSION_CLOSED"));
++    assertTrue(body.contains("\"operationId\":\"operation.input\""));
++    assertTrue(body.contains("id:" + (cursor + 1)));
++  }
++
++  @Test
++  void replayGapSendsCanonicalSnapshotInsteadOfPartialHistory() throws Exception {
++    WorkflowSessionEventHub smallHub = new WorkflowSessionEventHub(2, 4);
++    WorkflowSessionRegistry smallRegistry = new WorkflowSessionRegistry(smallHub);
++    smallRegistry.create(
++        SESSION_ID,
++        CollaborationMode.SHARED_SESSION_PERSONAL_UNDO,
++        OWNER,
++        new Workflow("workflow.stream", "Stream", List.of(), List.of()));
++    for (int index = 0; index < 3; index++) {
++      smallRegistry.updatePresence(
++          SESSION_ID,
++          OWNER,
++          new PresenceState(
++              OWNER.actorId(),
++              Instant.parse("2026-07-17T03:00:0" + index + "Z"),
++              Map.of("cursor.x", Integer.toString(index))));
++    }
++    MockMvc smallMvc =
++        MockMvcBuilders.standaloneSetup(
++                new WorkflowSessionEventHttpAdapter(smallRegistry, smallHub))
++            .setControllerAdvice(new WorkflowApiExceptionHandler())
++            .build();
++
++    MvcResult stream =
++        smallMvc.perform(
++                get("/workflow/sessions/{sessionId}/events", SESSION_ID)
++                    .header("Last-Event-ID", "0"))
++            .andExpect(request().asyncStarted())
++            .andReturn();
++    smallRegistry.close(SESSION_ID, OWNER.actorId());
++
++    MvcResult completed =
++        smallMvc.perform(asyncDispatch(stream)).andExpect(status().isOk()).andReturn();
++    String body = completed.getResponse().getContentAsString();
++    assertTrue(body.contains("event:SNAPSHOT"));
++    assertTrue(body.contains("\"workflowId\":\"workflow.stream\""));
++  }
++}
+diff --git a/audio-app/src/test/java/org/hammer/audio/workflow/editor/http/WorkflowSessionHttpAdapterTest.java b/audio-app/src/test/java/org/hammer/audio/workflow/editor/http/WorkflowSessionHttpAdapterTest.java
+index 8204cdc..407661e 100644
+--- a/audio-app/src/test/java/org/hammer/audio/workflow/editor/http/WorkflowSessionHttpAdapterTest.java
++++ b/audio-app/src/test/java/org/hammer/audio/workflow/editor/http/WorkflowSessionHttpAdapterTest.java
+@@ -1,13 +1,17 @@
+ package org.hammer.audio.workflow.editor.http;
+ 
++import static org.junit.jupiter.api.Assertions.assertEquals;
++import static org.junit.jupiter.api.Assertions.assertTrue;
+ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
++import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+ 
++import org.hammer.audio.workflow.collaboration.WorkflowSessionEventHub;
+ import org.hammer.audio.workflow.collaboration.WorkflowSessionRegistry;
+ import org.junit.jupiter.api.BeforeEach;
+ import org.junit.jupiter.api.Test;
+@@ -28,14 +32,17 @@ class WorkflowSessionHttpAdapterTest {
+       """;
+ 
+   private MockMvc mvc;
++  private WorkflowSessionRegistry registry;
++  private WorkflowSessionEventHub eventHub;
+ 
+   @BeforeEach
+   void configureSpringMvc() {
+     Local
