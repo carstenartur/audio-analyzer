@@ -1,0 +1,86 @@
+name: Reconcile collaborative platform serially
+
+on:
+  push:
+    branches:
+      - feature/239-complete-collaborative-platform
+  workflow_dispatch:
+
+concurrency:
+  group: collaborative-platform-serial-reconciliation
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  reconcile:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Let earlier one-shot generators settle
+        run: sleep 180
+      - uses: actions/checkout@v7
+        with:
+          ref: feature/239-complete-collaborative-platform
+          fetch-depth: 0
+      - name: Reset to the latest branch head
+        run: |
+          git fetch origin feature/239-complete-collaborative-platform
+          git reset --hard origin/feature/239-complete-collaborative-platform
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+      - name: Run any remaining implementation generators in dependency order
+        run: |
+          test ! -f .github/scripts/generate_collaboration_core.py || python3 .github/scripts/generate_collaboration_core.py
+          test ! -f .github/scripts/generate_collaboration_app.py || python3 .github/scripts/generate_collaboration_app.py
+          test ! -f .github/scripts/generate_version_intelligence.py || python3 .github/scripts/generate_version_intelligence.py
+          test ! -f .github/scripts/generate_collaborative_ui.py || python3 .github/scripts/generate_collaborative_ui.py
+          test ! -f .github/scripts/finalize_collaborative_platform.py || python3 .github/scripts/finalize_collaborative_platform.py
+      - name: Assert the complete implementation exists
+        run: |
+          test -f audio-core/src/main/java/org/hammer/audio/workflow/collaboration/WorkflowSessionRegistry.java
+          test -f audio-core/src/main/java/org/hammer/audio/workflow/collaboration/BoundedWorkflowSessionEventHub.java
+          test -f audio-app/src/main/java/org/hammer/audio/infrastructure/workflow/collaboration/JdbcWorkflowSessionStateStore.java
+          test -f audio-app/src/main/java/org/hammer/audio/workflow/editor/http/WorkflowSessionSseAdapter.java
+          test -f audio-core/src/main/java/org/hammer/audio/workflow/version/WorkflowMergeService.java
+          test -f audio-core/src/main/java/org/hammer/audio/workflow/search/WorkflowHistorySearchIndex.java
+          test -f audio-core/src/main/java/org/hammer/audio/workflow/execution/WorkflowRunService.java
+          test -f audio-app/workbench-ui/src/main.jsx
+      - name: Resolve and build the production browser application
+        working-directory: audio-app/workbench-ui
+        run: npm install && npm run build
+      - name: Apply repository formatting
+        run: mvn -B -DskipTests spotless:apply
+      - name: Remove every temporary implementation helper
+        run: |
+          rm -f .github/workflows/apply-collaboration-foundation.yml
+          rm -f .github/workflows/apply-version-intelligence.yml
+          rm -f .github/workflows/apply-collaborative-ui.yml
+          rm -f .github/workflows/finalize-collaborative-platform.yml
+          rm -f .github/workflows/export-feature-239-source.yml
+          rm -f .github/workflows/reconcile-collaborative-platform.yml
+          rm -f .github/scripts/generate_collaboration_core.py
+          rm -f .github/scripts/generate_collaboration_app.py
+          rm -f .github/scripts/generate_version_intelligence.py
+          rm -f .github/scripts/generate_collaborative_ui.py
+          rm -f .github/scripts/finalize_collaborative_platform.py
+          rm -f PLATFORM_IMPLEMENTATION_PLAN.md
+      - name: Compile and run all unit/integration tests
+        run: mvn -B test
+      - name: Run the full quality gate
+        run: mvn -B verify
+      - name: Commit only a fully verified result
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m 'Complete and verify collaborative workflow platform'
+          git push origin HEAD:feature/239-complete-collaborative-platform
