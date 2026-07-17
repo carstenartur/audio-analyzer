@@ -111,9 +111,9 @@ jobs:
               ),
           ]
           for old, new in replacements:
-              if text.count(old) != 1:
+              if old not in text:
                   raise SystemExit(f"Unexpected WorkflowSessionRegistry source while replacing: {old!r}")
-              text = text.replace(old, new)
+              text = text.replace(old, new, 1)
           registry.write_text(text)
           PY
           rm .github/feature-239.patch.part.*
