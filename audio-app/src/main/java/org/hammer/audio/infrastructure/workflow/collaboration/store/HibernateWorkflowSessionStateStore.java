@@ -24,6 +24,8 @@ import org.hibernate.exception.ConstraintViolationException;
 /** Hibernate ORM implementation of the durable collaboration-session boundary. */
 public final class HibernateWorkflowSessionStateStore implements WorkflowSessionStateStore {
 
+  private static final String SESSION_ID_PARAMETER = "sessionId";
+
   private final SessionFactory sessionFactory;
 
   /** Creates a store using the application-managed shared Hibernate context. */
@@ -52,7 +54,7 @@ public final class HibernateWorkflowSessionStateStore implements WorkflowSession
 
   @Override
   public Optional<StoredWorkflowSession> find(String sessionId) {
-    String requiredSessionId = requireNotBlank(sessionId, "sessionId");
+    String requiredSessionId = requireNotBlank(sessionId, SESSION_ID_PARAMETER);
     try (Session session = sessionFactory.openSession()) {
       return Optional.ofNullable(session.find(WorkflowSessionEntity.class, requiredSessionId))
           .map(WorkflowSessionEntity::toStoredSession);
@@ -71,15 +73,15 @@ public final class HibernateWorkflowSessionStateStore implements WorkflowSession
 
   @Override
   public List<StoredWorkflowOperation> operations(String sessionId) {
-    String requiredSessionId = requireNotBlank(sessionId, "sessionId");
+    String requiredSessionId = requireNotBlank(sessionId, SESSION_ID_PARAMETER);
     try (Session session = sessionFactory.openSession()) {
       return session
           .createQuery(
               "FROM WorkflowOperationEntity operation "
-                  + "WHERE operation.sessionId = :sessionId "
-                  + "ORDER BY operation.operationSequence",
+                  + "WHERE operation.storedSessionId = :sessionId "
+                  + "ORDER BY operation.storedOperationSequence",
               WorkflowOperationEntity.class)
-          .setParameter("sessionId", requiredSessionId)
+          .setParameter(SESSION_ID_PARAMETER, requiredSessionId)
           .getResultList()
           .stream()
           .map(WorkflowOperationEntity::toStoredOperation)
@@ -97,7 +99,7 @@ public final class HibernateWorkflowSessionStateStore implements WorkflowSession
           .createQuery(
               "FROM WorkflowOutboxEntity event "
                   + "WHERE event.publishedAt IS NULL AND event.nextAttemptAt <= :now "
-                  + "ORDER BY event.occurredAt, event.sessionId, event.eventSequence",
+                  + "ORDER BY event.occurredAt, event.storedSessionId, event.storedEventSequence",
               WorkflowOutboxEntity.class)
           .setParameter("now", Instant.now())
           .setMaxResults(limit)
@@ -164,10 +166,10 @@ public final class HibernateWorkflowSessionStateStore implements WorkflowSession
         session
             .createQuery(
                 "FROM WorkflowOutboxEntity event "
-                    + "WHERE event.sessionId = :sessionId "
-                    + "AND event.eventSequence = :sequence",
+                    + "WHERE event.storedSessionId = :sessionId "
+                    + "AND event.storedEventSequence = :sequence",
                 WorkflowOutboxEntity.class)
-            .setParameter("sessionId", existing.sessionId())
+            .setParameter(SESSION_ID_PARAMETER, existing.sessionId())
             .setParameter("sequence", existing.operationSequence())
             .uniqueResult();
     if (aggregate == null || outbox == null) {
@@ -220,7 +222,8 @@ public final class HibernateWorkflowSessionStateStore implements WorkflowSession
   private static WorkflowOperationEntity findOperation(Session session, String operationId) {
     return session
         .createQuery(
-            "FROM WorkflowOperationEntity operation WHERE operation.operationId = :operationId",
+            "FROM WorkflowOperationEntity operation "
+                + "WHERE operation.storedOperationId = :operationId",
             WorkflowOperationEntity.class)
         .setParameter("operationId", operationId)
         .uniqueResult();
