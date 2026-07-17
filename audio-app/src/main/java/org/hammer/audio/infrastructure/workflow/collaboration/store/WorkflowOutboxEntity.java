@@ -8,7 +8,7 @@ import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import java.time.Instant;
-import org.hammer.audio.workflow.collaboration.store.PendingWorkflowOutboxEntry;
+import org.hammer.audio.workflow.collaboration.store.StoredWorkflowOutboxEntry;
 import org.hammer.audio.workflow.collaboration.store.WorkflowOutboxEventData;
 
 /** Hibernate-owned transactional outbox entry for an accepted collaboration command. */
@@ -76,8 +76,8 @@ public class WorkflowOutboxEntity {
     return entity;
   }
 
-  PendingWorkflowOutboxEntry toPendingEntry() {
-    return new PendingWorkflowOutboxEntry(
+  StoredWorkflowOutboxEntry toStoredEntry() {
+    return new StoredWorkflowOutboxEntry(
         eventId,
         sessionId,
         eventSequence,
@@ -86,7 +86,8 @@ public class WorkflowOutboxEntity {
         occurredAt,
         payload,
         attemptCount,
-        nextAttemptAt);
+        nextAttemptAt,
+        publishedAt);
   }
 
   String eventId() {
