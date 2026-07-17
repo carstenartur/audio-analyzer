@@ -105,7 +105,6 @@ The event broker is transport, not source of truth. ActiveMQ Artemis or another 
 Hibernate transaction:
   append workflow operation entity
   update session snapshot/revision
-  create optional Git checkpoint
   insert outbox entity
 commit
 
@@ -113,6 +112,8 @@ outbox dispatcher:
   publish committed event to SSE/WebSocket/broker clients
   mark delivery attempt/result idempotently
 ```
+
+A Git checkpoint is a separate application command through `VersionedWorkflowStore`. The system must define retry, idempotency and linkage between the relational session state and the resulting commit; it must not claim that an ORM transaction and a JGit ref update form one physical transaction.
 
 ## Consequences
 
@@ -147,4 +148,4 @@ This ADR is accepted only with the following gates:
 
 ## Follow-up
 
-The shared `jgit-storage-hibernate` module has been upgraded to Hibernate ORM 7.4.5.Final and Hibernate Search 8.4.0.Final. Audio Analyzer issue #245 implements the mapped collaboration/outbox store; issue #247 implements rebuildable Search projections. The raw-JDBC implementation path is superseded.
+The shared `jgit-storage-hibernate` module has been upgraded to Hibernate ORM 7.4.5.Final and Hibernate Search 8.4.0.Final. Audio Analyzer issue #245 tracks the mapped collaboration/outbox store, and issue #247 tracks rebuildable Search projections. The raw-JDBC implementation path is superseded.
