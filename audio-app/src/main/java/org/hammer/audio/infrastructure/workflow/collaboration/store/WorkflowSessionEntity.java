@@ -114,6 +114,10 @@ public class WorkflowSessionEntity {
     return workflowId;
   }
 
+  String workflowDsl() {
+    return workflowDsl;
+  }
+
   long semanticRevision() {
     return semanticRevision;
   }
