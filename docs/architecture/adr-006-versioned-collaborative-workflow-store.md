@@ -1,7 +1,8 @@
 # ADR-006: Versioned collaborative workflow store
 
 Status: Accepted with spike gates  
-Date: 2026-07-05
+Date: 2026-07-05  
+Persistence baseline updated: 2026-07-17
 
 ## Context
 
@@ -15,7 +16,18 @@ The desired future capability is a graphical workflow editor where users can cho
 
 Audio Analyzer will use the existing workflow model as the audio-domain basis and add a versioned, collaborative workflow-store layer around it.
 
-The Hibernate-backed JGit store will be consolidated as a separate reusable infrastructure module or repository, tentatively named `jgit-storage-hibernate` or `hibernate-jgit-store`. Audio Analyzer will use that store through a narrow persistence facade and must not depend directly on JGit internals such as `org.eclipse.jgit.internal.*`.
+The Hibernate-backed JGit store will be consolidated as a separate reusable infrastructure module or repository, named `jgit-storage-hibernate`. Audio Analyzer will use that store through a narrow persistence facade and must not depend directly on JGit internals such as `org.eclipse.jgit.internal.*`.
+
+The production collaboration store uses Hibernate ORM and Jakarta Persistence, not handwritten JDBC repositories. The accepted compatibility baseline is:
+
+```text
+Hibernate ORM    7.4.5.Final
+Hibernate Search 8.4.0.Final
+Jakarta Persistence 3.2
+Java             21
+```
+
+Hibernate ORM and Hibernate Search move as one compatibility unit. Search projections use the same ORM persistence context as the durable session, operation and outbox entities. A search index is rebuildable derived state and never the source of truth.
 
 The default strategy is **not** to fork JGit for Audio Analyzer. A JGit fork is only acceptable if a dedicated spike proves that upstream JGit cannot support the required transactional semantics through the available DFS/Reftable extension points.
 
@@ -27,12 +39,13 @@ Web graph editor / desktop bridge
     -> workflow operation log
     -> audio workflow domain model
     -> deterministic workflow DSL
+    -> Hibernate ORM session / operation / outbox transaction
     -> versioned workflow persistence facade
     -> jgit-storage-hibernate
     -> database-backed JGit objects/refs/reflog
     -> Hibernate Search projections
-    -> transactional outbox
-    -> event broker / WebSocket clients
+    -> outbox dispatcher
+    -> event broker / SSE/WebSocket clients
 ```
 
 ## Collaboration modes
@@ -57,25 +70,48 @@ SHARED_SESSION_SHARED_UNDO
 
 Undo and redo are represented as semantic operations. Git commits are durable history checkpoints, not the local editor undo stack.
 
+## Persistence decision
+
+The durable collaboration transaction contains one atomic unit of work:
+
+```text
+load session aggregate with optimistic version
+validate and append WorkflowOperation
+update deterministic workflow snapshot and semantic revision
+append ordered outbox event
+commit Hibernate transaction
+```
+
+The persistence adapter uses mapped entities, database constraints and `@Version` optimistic locking. Production schema evolution uses Flyway or Liquibase. Hibernate schema generation is limited to disposable development and integration-test databases.
+
+The following are not accepted as the production persistence implementation:
+
+- `JdbcTemplate`, `JdbcClient` or direct `Connection` repositories;
+- handwritten SQL CRUD and row mappers for session/operation/outbox state;
+- a second independent Hibernate persistence unit solely for search;
+- treating Lucene, Elasticsearch or a broker as authoritative storage.
+
 ## Web editor decision
 
 The collaborative graphical editor should be developed web-first, but the existing Swing application should not be rewritten in one step. A web editor can later be hosted as a browser UI, a desktop WebView, or a dedicated module.
 
-GLSP is the preferred architecture spike for the serious model-driven editor path because the server can remain authoritative over the semantic source model. A simpler React Flow prototype remains useful for UX validation, but it must not become the canonical workflow state by accident.
+React Flow plus Yjs is the accepted first editor stack. React Flow state remains derived from server projections, while Yjs is restricted to awareness and non-semantic UI state. Neither client technology owns canonical workflow semantics or durable history.
 
 ## Event transport decision
 
-The event broker is transport, not source of truth. ActiveMQ Artemis or another broker may be used behind an abstraction, but persistence must follow a transactional outbox pattern:
+The event broker is transport, not source of truth. ActiveMQ Artemis or another broker may be used behind an abstraction, but persistence follows a transactional outbox pattern:
 
 ```text
-DB transaction:
-  append workflow operation
-  update model/checkpoint/ref/projections
-  insert outbox event
+Hibernate transaction:
+  append workflow operation entity
+  update session snapshot/revision
+  create optional Git checkpoint
+  insert outbox entity
 commit
 
 outbox dispatcher:
-  publish committed event to broker/WebSocket clients
+  publish committed event to SSE/WebSocket/broker clients
+  mark delivery attempt/result idempotently
 ```
 
 ## Consequences
@@ -83,6 +119,8 @@ outbox dispatcher:
 Positive:
 
 - avoids a third copy of the JGit/Hibernate storage idea;
+- replaces brittle JDBC repositories with a mapped aggregate and optimistic locking;
+- aligns full-text projections with the same ORM lifecycle;
 - keeps Audio Analyzer focused on audio workflow semantics;
 - preserves the existing workflow operation model;
 - prepares multi-user editing without forcing an immediate Swing rewrite;
@@ -90,20 +128,23 @@ Positive:
 
 Costs and risks:
 
+- ORM 7.4 and Search 8.4 must be upgraded and tested together;
 - the storage spike becomes a required prerequisite;
 - JGit internal API usage must be isolated and version-pinned;
 - collaboration requires a persisted operation log, outbox and conflict policy;
-- shared undo must be opt-in because it can revert another user's work.
+- shared undo must be opt-in because it can revert another user's work;
+- Lucene/Search schema changes can require a full reindex.
 
 ## Spike gates
 
 This ADR is accepted only with the following gates:
 
 1. **JGit storage gate**: prove whether a separate Hibernate-backed storage module can compile and run against a regular JGit release without core patches.
-2. **Transactional gate**: prove that blob/tree/commit writes, ref updates, operation log entries and outbox events can be made atomically consistent.
-3. **Workflow gate**: prove a minimal `Input -> Gain -> Output` workflow roundtrip through domain model, DSL, DB-backed Git commit, search projection and reload.
+2. **Transactional gate**: prove that operation log entries, current session state and outbox events are atomically consistent through one Hibernate transaction, with Git checkpoint consistency defined explicitly.
+3. **Workflow gate**: prove a minimal `Input -> Gain -> Output` workflow roundtrip through domain model, DSL, DB-backed Git commit, Search projection and reload.
 4. **Collaboration gate**: prove private mode and a shared-session undo mode with at least two simulated clients.
+5. **Recovery gate**: prove optimistic conflict handling, process restart recovery and publication retry without data loss.
 
 ## Follow-up
 
-The JGit/Hibernate storage spike is now documented as a completed proof in `docs/architecture/jgit-storage-hibernate-spike.md`. The next implementation item after extraction is the `Input -> Gain -> Output` workflow-store vertical slice, which should be tracked as a dedicated follow-up issue.
+The shared `jgit-storage-hibernate` module has been upgraded to Hibernate ORM 7.4.5.Final and Hibernate Search 8.4.0.Final. Audio Analyzer issue #245 implements the mapped collaboration/outbox store; issue #247 implements rebuildable Search projections. The raw-JDBC implementation path is superseded.
