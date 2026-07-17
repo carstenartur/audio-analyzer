@@ -6,11 +6,12 @@ on:
       - feature/240-hibernate-jgit-persistence
 
 permissions:
-  contents: read
+  contents: write
   packages: read
 
 jobs:
   verify:
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -36,14 +37,17 @@ jobs:
           echo "status=$status" >> "$GITHUB_OUTPUT"
           exit 0
 
-      - name: Upload Maven log
+      - name: Capture diagnostics and remove temporary workflow
         if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: issue-240-complete-maven-log
-          path: /tmp/issue-240-maven.log
-          if-no-files-found: error
-          retention-days: 3
+        shell: bash
+        run: |
+          cp /tmp/issue-240-maven.log .github/issue-240-maven.log
+          rm .github/workflows/diagnose-issue-240.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add .github/issue-240-maven.log .github/workflows/diagnose-issue-240.yml
+          git commit -m 'Capture issue 240 Maven diagnostics [skip ci]'
+          git push origin HEAD:feature/240-hibernate-jgit-persistence
 
       - name: Preserve Maven gate result
         if: steps.verify.outputs.status != '0'
