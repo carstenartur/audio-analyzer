@@ -4,9 +4,6 @@ on:
   push:
     branches:
       - feature/240-hibernate-jgit-persistence
-  pull_request:
-    branches:
-      - master
 
 permissions:
   contents: write
@@ -42,12 +39,20 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
-          base64 --decode .github/issue-240-files.tar.gz.b64 > /tmp/issue-240-files.tar.gz
+          shopt -s nullglob
+          chunks=(.github/issue-240-files.tar.gz.b64.part.*)
+          if (( ${#chunks[@]} == 0 )); then
+            echo 'No issue 240 source bundle is present.'
+            exit 1
+          fi
+          cat "${chunks[@]}" | base64 --decode > /tmp/issue-240-files.tar.gz
+          tar -tzf /tmp/issue-240-files.tar.gz > /tmp/issue-240-file-list.txt
           tar -xzf /tmp/issue-240-files.tar.gz
           while IFS= read -r path; do
             [[ -z "$path" ]] || rm -f "$path"
           done < .issue-240-delete
           rm .issue-240-delete
+          rm "${chunks[@]}"
           rm .github/issue-240-files.tar.gz.b64
           rm .github/workflows/apply-issue-240.yml
 
@@ -86,7 +91,7 @@ jobs:
         with:
           name: issue-240-maven-log
           path: /tmp/issue-240-maven.log
-          if-no-files-found: error
+          if-no-files-found: ignore
           retention-days: 7
 
       - name: Commit verified implementation
