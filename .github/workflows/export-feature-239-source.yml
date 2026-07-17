@@ -115,6 +115,18 @@ jobs:
                   raise SystemExit(f"Unexpected WorkflowSessionRegistry source while replacing: {old!r}")
               text = text.replace(old, new, 1)
           registry.write_text(text)
+
+          for relative_path in (
+              "audio-app/src/main/java/org/hammer/audio/workflow/editor/http/WorkflowEditorHttpAdapter.java",
+              "audio-app/src/main/java/org/hammer/audio/workflow/editor/http/WorkflowOperationHttpParser.java",
+              "audio-app/src/main/java/org/hammer/audio/workflow/editor/http/WorkflowSessionApiModels.java",
+          ):
+              path = Path(relative_path)
+              text = path.read_text()
+              old = "import com.fasterxml.jackson.databind.JsonNode;"
+              if text.count(old) != 1:
+                  raise SystemExit(f"Unexpected Jackson import in {relative_path}")
+              path.write_text(text.replace(old, "import tools.jackson.databind.JsonNode;"))
           PY
           rm .github/feature-239.patch.part.*
           rm .github/workflows/export-feature-239-source.yml
