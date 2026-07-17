@@ -17,9 +17,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Archive repository source
-        run: tar --exclude=.git --exclude=target --exclude='*/target' -czf audio-analyzer-source.tar.gz .
+        run: tar --exclude=.git --exclude=target --exclude='*/target' -czf /tmp/audio-analyzer-source.tar.gz .
       - uses: actions/upload-artifact@v7
         with:
           name: feature-239-source
-          path: audio-analyzer-source.tar.gz
+          path: /tmp/audio-analyzer-source.tar.gz
           retention-days: 1
