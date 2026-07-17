@@ -26,6 +26,7 @@ jobs:
           set +e
           {
             set -euxo pipefail
+            wc -c .github/feature239/part*.b64
             cat .github/feature239/part*.b64 | base64 --decode > /tmp/feature239-changes.tar.gz
             tar -xzf /tmp/feature239-changes.tar.gz
             rm -rf .github/feature239
@@ -45,4 +46,10 @@ jobs:
         with:
           name: feature-239-bootstrap-log
           path: /tmp/feature239-bootstrap.log
+          retention-days: 1
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: feature-239-bootstrap-parts
+          path: .github/feature239
           retention-days: 1
