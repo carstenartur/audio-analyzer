@@ -5,7 +5,19 @@ import java.util.Objects;
 import org.hammer.audio.workflow.collaboration.CollaborationMode;
 import org.hammer.audio.workflow.collaboration.OperationActor;
 
-/** Immutable durable representation of a collaboration-session aggregate. */
+/**
+ * Immutable durable representation of a collaboration-session aggregate.
+ *
+ * @param sessionId stable collaboration-session identifier
+ * @param mode immutable collaboration mode
+ * @param owner owner actor metadata
+ * @param createdAt session creation timestamp
+ * @param workflowId identifier of the canonical workflow
+ * @param workflowDsl deterministic serialized canonical workflow
+ * @param revision current semantic revision
+ * @param sequence current durable event sequence
+ * @param closed whether the session has been explicitly closed
+ */
 public record StoredWorkflowSession(
     String sessionId,
     CollaborationMode mode,
