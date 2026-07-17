@@ -48,6 +48,74 @@ jobs:
           cat .github/feature-239.patch.part.* > /tmp/feature-242.patch
           git apply --check /tmp/feature-242.patch
           git apply /tmp/feature-242.patch
+          python3 <<'PY'
+          from pathlib import Path
+
+          hub = Path("audio-core/src/main/java/org/hammer/audio/workflow/collaboration/WorkflowSessionEventHub.java")
+          text = hub.read_text()
+          replacements = [
+              (
+                  "import java.util.concurrent.ArrayBlockingQueue;\n",
+                  "import java.util.concurrent.ArrayBlockingQueue;\nimport java.util.concurrent.BlockingQueue;\n",
+              ),
+              (
+                  "  static final int DEFAULT_REPLAY_CAPACITY = 256;\n",
+                  "  private static final String ACTOR_FIELD = \"actor\";\n\n"
+                  "  static final int DEFAULT_REPLAY_CAPACITY = 256;\n",
+              ),
+              (
+                  "private final ArrayBlockingQueue<WorkflowSessionEvent> queue;",
+                  "private final BlockingQueue<WorkflowSessionEvent> queue;",
+              ),
+          ]
+          for old, new in replacements:
+              if text.count(old) != 1:
+                  raise SystemExit(f"Unexpected WorkflowSessionEventHub source while replacing: {old!r}")
+              text = text.replace(old, new)
+          actor_literal = 'Objects.requireNonNull(actor, "actor")'
+          if text.count(actor_literal) != 4:
+              raise SystemExit("Expected four actor null-check literals")
+          text = text.replace(actor_literal, "Objects.requireNonNull(actor, ACTOR_FIELD)")
+          hub.write_text(text)
+
+          registry = Path("audio-core/src/main/java/org/hammer/audio/workflow/collaboration/WorkflowSessionRegistry.java")
+          text = registry.read_text()
+          replacements = [
+              (
+                  "  private final WorkflowSessionEventHub eventHub;\n",
+                  "  private final WorkflowSessionEventHub sessionEventHub;\n",
+              ),
+              (
+                  "    this.eventHub = Objects.requireNonNull(eventHub, \"eventHub\");\n",
+                  "    this.sessionEventHub = Objects.requireNonNull(eventHub, \"eventHub\");\n",
+              ),
+              (
+                  "    return eventHub;\n",
+                  "    return sessionEventHub;\n",
+              ),
+              (
+                  "new SessionEntry(requiredSessionId, mode, owner, initialWorkflow, eventHub);",
+                  "new SessionEntry(requiredSessionId, mode, owner, initialWorkflow, sessionEventHub);",
+              ),
+              (
+                  "    eventHub.openSession(requiredSessionId, owner, initialWorkflow);\n",
+                  "    sessionEventHub.openSession(requiredSessionId, owner, initialWorkflow);\n",
+              ),
+              (
+                  "    eventHub.closeSession(requiredSessionId, entry.owner());\n",
+                  "    sessionEventHub.closeSession(requiredSessionId, entry.sessionOwner());\n",
+              ),
+              (
+                  "    OperationActor owner() {\n      return owner;\n    }",
+                  "    OperationActor sessionOwner() {\n      return owner;\n    }",
+              ),
+          ]
+          for old, new in replacements:
+              if text.count(old) != 1:
+                  raise SystemExit(f"Unexpected WorkflowSessionRegistry source while replacing: {old!r}")
+              text = text.replace(old, new)
+          registry.write_text(text)
+          PY
           rm .github/feature-239.patch.part.*
           rm .github/workflows/export-feature-239-source.yml
       - name: Apply repository formatting
@@ -93,5 +161,3 @@ jobs:
       - name: Fail when verification failed
         if: steps.patch.outputs.present == 'true' && steps.verify.outcome != 'success'
         run: exit 1
-
-# Triggered after duplicate-PR triage on 2026-07-17.
