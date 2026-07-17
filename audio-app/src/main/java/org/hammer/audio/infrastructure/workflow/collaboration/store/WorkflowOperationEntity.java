@@ -34,10 +34,10 @@ public class WorkflowOperationEntity {
   private Long id;
 
   @Column(name = "session_id", nullable = false, length = 255)
-  private String sessionId;
+  private String storedSessionId;
 
   @Column(name = "operation_id", nullable = false, length = 255)
-  private String operationId;
+  private String storedOperationId;
 
   @Column(name = "actor_id", nullable = false, length = 255)
   private String actorId;
@@ -49,10 +49,10 @@ public class WorkflowOperationEntity {
   private Instant occurredAt;
 
   @Column(name = "operation_sequence", nullable = false)
-  private long operationSequence;
+  private long storedOperationSequence;
 
   @Column(name = "semantic_revision", nullable = false)
-  private long semanticRevision;
+  private long storedSemanticRevision;
 
   @Lob
   @Column(name = "operation_payload", nullable = false)
@@ -65,32 +65,32 @@ public class WorkflowOperationEntity {
   static WorkflowOperationEntity accepted(
       String sessionId, WorkflowOperationPersistenceData operation, long sequence, long revision) {
     WorkflowOperationEntity entity = new WorkflowOperationEntity();
-    entity.sessionId = sessionId;
-    entity.operationId = operation.operationId();
+    entity.storedSessionId = sessionId;
+    entity.storedOperationId = operation.operationId();
     entity.actorId = operation.actorId();
     entity.operationType = operation.operationType();
     entity.occurredAt = operation.occurredAt();
-    entity.operationSequence = sequence;
-    entity.semanticRevision = revision;
+    entity.storedOperationSequence = sequence;
+    entity.storedSemanticRevision = revision;
     entity.payload = operation.payload();
     return entity;
   }
 
   StoredWorkflowOperation toStoredOperation() {
     return new StoredWorkflowOperation(
-        sessionId,
-        operationId,
+        storedSessionId,
+        storedOperationId,
         actorId,
         operationType,
         occurredAt,
-        operationSequence,
-        semanticRevision,
+        storedOperationSequence,
+        storedSemanticRevision,
         payload);
   }
 
   boolean hasSameSemanticContent(
       String expectedSessionId, WorkflowOperationPersistenceData candidate) {
-    return sessionId.equals(expectedSessionId)
+    return storedSessionId.equals(expectedSessionId)
         && actorId.equals(candidate.actorId())
         && operationType.equals(candidate.operationType())
         && occurredAt.equals(candidate.occurredAt())
@@ -98,18 +98,18 @@ public class WorkflowOperationEntity {
   }
 
   String sessionId() {
-    return sessionId;
+    return storedSessionId;
   }
 
   String operationId() {
-    return operationId;
+    return storedOperationId;
   }
 
   long operationSequence() {
-    return operationSequence;
+    return storedOperationSequence;
   }
 
   long semanticRevision() {
-    return semanticRevision;
+    return storedSemanticRevision;
   }
 }
