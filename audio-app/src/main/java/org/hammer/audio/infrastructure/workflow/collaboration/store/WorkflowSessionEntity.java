@@ -110,11 +110,19 @@ public class WorkflowSessionEntity {
     return sessionId;
   }
 
+  String workflowId() {
+    return workflowId;
+  }
+
   long semanticRevision() {
     return semanticRevision;
   }
 
   long eventSequence() {
     return eventSequence;
+  }
+
+  boolean closed() {
+    return closed;
   }
 }
