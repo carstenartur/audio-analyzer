@@ -1,0 +1,83 @@
+name: Harden collaborative platform now
+
+on:
+  push:
+    branches:
+      - feature/239-complete-collaborative-platform
+  workflow_dispatch:
+
+concurrency:
+  group: collaborative-platform-final-hardening
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  harden:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feature/239-complete-collaborative-platform
+          fetch-depth: 0
+      - name: Reset to latest branch state
+        run: |
+          git fetch origin feature/239-complete-collaborative-platform
+          git reset --hard origin/feature/239-complete-collaborative-platform
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: audio-app/workbench-ui/package-lock.json
+      - name: Apply final reliability hardening
+        run: python3 .github/scripts/harden_collaborative_platform.py
+      - name: Rebuild packaged React Flow application
+        working-directory: audio-app/workbench-ui
+        run: npm ci && npm run build
+      - name: Format and run complete repository quality gate
+        run: |
+          mvn -B -DskipTests spotless:apply
+          mvn -B verify
+      - name: Install Playwright Chromium
+        run: >-
+          mvn -B -pl audio-app
+          -Dexec.mainClass=com.microsoft.playwright.CLI
+          -Dexec.classpathScope=test
+          -Dexec.args='install --with-deps chromium'
+          org.codehaus.mojo:exec-maven-plugin:3.6.2:java
+      - name: Run real two-browser scenario with traces
+        env:
+          RUN_COLLABORATION_E2E: 'true'
+        run: >-
+          mvn -B -pl audio-app -am
+          -Dtest=CollaborativeWorkflowPlatformE2ETest
+          -Dsurefire.failIfNoSpecifiedTests=false
+          test
+      - name: Remove temporary hardening machinery
+        run: |
+          rm -f .github/workflows/harden-collaborative-platform.yml
+          rm -f .github/workflows/harden-collaborative-platform-now.yml
+          rm -f .github/scripts/harden_collaborative_platform.py
+      - name: Commit only the fully verified hardening
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m 'Harden outbox retry and collaboration diagnostics'
+          git push origin HEAD:feature/239-complete-collaborative-platform
+      - name: Confirm PR readiness and issue linkage
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr ready 257 --repo carstenartur/audio-analyzer || true
+          gh pr comment 257 --repo carstenartur/audio-analyzer --body 'Final hardening passed: capped exponential outbox retry/backoff, session-scoped history enforcement, full Maven verification, reproducible React Flow build, and the real two-browser Playwright scenario with traces/screenshots.'
