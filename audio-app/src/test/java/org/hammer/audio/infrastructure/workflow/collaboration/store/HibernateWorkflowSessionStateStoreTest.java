@@ -13,7 +13,6 @@ import java.util.UUID;
 import org.hammer.audio.workflow.collaboration.CollaborationMode;
 import org.hammer.audio.workflow.collaboration.OperationActor;
 import org.hammer.audio.workflow.collaboration.store.PendingWorkflowOutboxEntry;
-import org.hammer.audio.workflow.collaboration.store.StoredWorkflowOperation;
 import org.hammer.audio.workflow.collaboration.store.StoredWorkflowSession;
 import org.hammer.audio.workflow.collaboration.store.WorkflowOperationPersistenceConflictException;
 import org.hammer.audio.workflow.collaboration.store.WorkflowOperationPersistenceData;
@@ -149,7 +148,6 @@ class HibernateWorkflowSessionStateStoreTest {
       String payload) {
     long ordinal = expectedRevision + 1;
     Instant occurredAt = CREATED_AT.plusSeconds(ordinal);
-    StoredWorkflowOperation ignored = null;
     return new WorkflowSessionAppendCommand(
         session.sessionId(),
         expectedRevision,
