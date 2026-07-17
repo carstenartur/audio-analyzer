@@ -6,7 +6,7 @@ import java.util.Objects;
 public record WorkflowSessionAppendResult(
     StoredWorkflowSession session,
     StoredWorkflowOperation operation,
-    PendingWorkflowOutboxEntry outboxEntry,
+    StoredWorkflowOutboxEntry outboxEntry,
     boolean duplicate) {
 
   public WorkflowSessionAppendResult {
