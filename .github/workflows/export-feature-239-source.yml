@@ -77,3 +77,5 @@ jobs:
       - name: Fail when verification failed
         if: steps.patch.outputs.present == 'true' && steps.verify.outcome != 'success'
         run: exit 1
+
+# Triggered after duplicate-PR triage on 2026-07-17.
