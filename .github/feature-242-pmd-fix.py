@@ -20,6 +20,13 @@ replace_once(
 )
 replace_once(
     event_adapter,
+    "  private static final class SubscriptionHolder {\n",
+    "  // The holder owns the subscription until an emitter completion callback closes it.\n"
+    "  @SuppressWarnings(\"PMD.CloseResource\")\n"
+    "  private static final class SubscriptionHolder {\n",
+)
+replace_once(
+    event_adapter,
     "        WorkflowSessionEventHub.Subscription attachedSubscription = subscription.get();",
     "        WorkflowSessionEventHub.Subscription attachedSubscription = subscription.getAndSet(null);",
 )
