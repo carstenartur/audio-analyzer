@@ -108,12 +108,7 @@ class WorkflowSessionPersistenceModelTest {
                 IllegalArgumentException.class,
                 () ->
                     new WorkflowSessionAppendCommand(
-                        "session.test",
-                        -1,
-                        operationData(),
-                        "workflow.test",
-                        "dsl",
-                        eventData())),
+                        "session.test", -1, operationData(), "workflow.test", "dsl", eventData())),
         () ->
             assertThrows(
                 IllegalArgumentException.class,
