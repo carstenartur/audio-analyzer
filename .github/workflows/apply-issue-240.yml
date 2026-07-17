@@ -1,0 +1,101 @@
+name: Apply issue 240 Hibernate persistence
+
+on:
+  push:
+    branches:
+      - feature/240-hibernate-jgit-persistence
+
+permissions:
+  contents: write
+  packages: read
+
+concurrency:
+  group: feature-240-hibernate-jgit-persistence
+  cancel-in-progress: true
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v7
+        with:
+          ref: feature/240-hibernate-jgit-persistence
+
+      - name: Set up JDK 21 and GitHub Packages authentication
+        uses: actions/setup-java@v5
+        with:
+          java-version: '21'
+          distribution: temurin
+          cache: maven
+          server-id: github
+          server-username: GITHUB_ACTOR
+          server-password: GITHUB_TOKEN
+
+      - name: Apply source bundle
+        shell: bash
+        run: |
+          set -euxo pipefail
+          base64 --decode .github/issue-240-files.tar.gz.b64 > /tmp/issue-240-files.tar.gz
+          tar -xzf /tmp/issue-240-files.tar.gz
+          while IFS= read -r path; do
+            [[ -z "$path" ]] || rm -f "$path"
+          done < .issue-240-delete
+          rm .issue-240-delete
+          rm .github/issue-240-files.tar.gz.b64
+          rm .github/workflows/apply-issue-240.yml
+
+      - name: Apply repository formatting
+        run: mvn -B spotless:apply --file pom.xml
+
+      - name: Build and verify implementation
+        id: verify
+        shell: bash
+        run: |
+          set +e
+          mvn -B clean verify --file pom.xml 2>&1 | tee /tmp/issue-240-maven.log
+          status=${PIPESTATUS[0]}
+          if (( status == 0 )); then
+            echo 'result=success' >> "$GITHUB_OUTPUT"
+          else
+            echo 'result=failure' >> "$GITHUB_OUTPUT"
+          fi
+          exit 0
+
+      - name: Archive formatted implementation
+        if: always()
+        run: tar --exclude=.git --exclude=target --exclude='*/target' -czf /tmp/audio-analyzer-issue-240-source.tar.gz .
+
+      - name: Upload formatted implementation
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: issue-240-formatted-source
+          path: /tmp/audio-analyzer-issue-240-source.tar.gz
+          retention-days: 7
+
+      - name: Upload Maven verification log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: issue-240-maven-log
+          path: /tmp/issue-240-maven.log
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Commit verified implementation
+        if: steps.verify.outputs.result == 'success'
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m 'Wire production workbench to Hibernate-backed JGit store (#240)'
+          git push origin HEAD:feature/240-hibernate-jgit-persistence
+
+      - name: Fail when verification failed
+        if: steps.verify.outputs.result != 'success'
+        run: exit 1
