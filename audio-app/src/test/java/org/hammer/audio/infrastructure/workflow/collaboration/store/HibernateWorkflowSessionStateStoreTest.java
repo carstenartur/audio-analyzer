@@ -177,36 +177,69 @@ class HibernateWorkflowSessionStateStoreTest {
               command(initial, "operation.left", "event.left", 0, "left");
           WorkflowSessionAppendCommand secondCommand =
               command(initial, "operation.right", "event.right", 0, "right");
-          CountDownLatch ready = new CountDownLatch(2);
-          CountDownLatch start = new CountDownLatch(1);
-          ExecutorService executor = Executors.newFixedThreadPool(2);
-          try {
-            Future<AppendAttempt> first =
-                executor.submit(() -> attempt(store, firstCommand, ready, start));
-            Future<AppendAttempt> second =
-                executor.submit(() -> attempt(store, secondCommand, ready, start));
 
-            await(ready);
-            start.countDown();
-            List<AppendAttempt> attempts = List.of(get(first), get(second));
+          List<AppendAttempt> attempts = runConcurrently(store, firstCommand, secondCommand);
 
-            assertEquals(1, attempts.stream().filter(AppendAttempt::accepted).count());
-            assertEquals(1, attempts.stream().filter(AppendAttempt::conflicted).count());
-            WorkflowSessionRevisionConflictException conflict =
-                attempts.stream()
-                    .filter(AppendAttempt::conflicted)
-                    .map(AppendAttempt::conflict)
-                    .findFirst()
-                    .orElseThrow();
-            assertEquals(0, conflict.expectedRevision());
-            assertEquals(1, conflict.actualRevision());
-            assertEquals(1, store.find(initial.sessionId()).orElseThrow().revision());
-            assertEquals(1, store.operations(initial.sessionId()).size());
-            assertEquals(1, store.pendingOutbox(10).size());
-          } finally {
-            executor.shutdownNow();
-          }
+          assertEquals(1, attempts.stream().filter(AppendAttempt::accepted).count());
+          assertEquals(1, attempts.stream().filter(AppendAttempt::conflicted).count());
+          WorkflowSessionRevisionConflictException conflict =
+              attempts.stream()
+                  .filter(AppendAttempt::conflicted)
+                  .map(AppendAttempt::conflict)
+                  .findFirst()
+                  .orElseThrow();
+          assertEquals(0, conflict.expectedRevision());
+          assertEquals(1, conflict.actualRevision());
+          assertEquals(1, store.find(initial.sessionId()).orElseThrow().revision());
+          assertEquals(1, store.operations(initial.sessionId()).size());
+          assertEquals(1, store.pendingOutbox(10).size());
         });
+  }
+
+  @Test
+  void concurrentIdenticalAppendsCommitOnceAndReturnOneIdempotentRetry() {
+    withStore(
+        store -> {
+          StoredWorkflowSession initial = session("session.concurrent-retry");
+          store.create(initial);
+          WorkflowSessionAppendCommand command =
+              command(initial, "operation.same", "event.same", 0, "same");
+
+          List<AppendAttempt> attempts = runConcurrently(store, command, command);
+          List<WorkflowSessionAppendResult> results =
+              attempts.stream()
+                  .filter(AppendAttempt::accepted)
+                  .map(AppendAttempt::result)
+                  .toList();
+
+          assertEquals(2, results.size());
+          assertEquals(0, attempts.stream().filter(AppendAttempt::conflicted).count());
+          assertEquals(1, results.stream().filter(WorkflowSessionAppendResult::duplicate).count());
+          assertEquals(1, results.stream().filter(result -> !result.duplicate()).count());
+          assertEquals(1, store.find(initial.sessionId()).orElseThrow().revision());
+          assertEquals(1, store.operations(initial.sessionId()).size());
+          assertEquals(1, store.pendingOutbox(10).size());
+        });
+  }
+
+  private static List<AppendAttempt> runConcurrently(
+      HibernateWorkflowSessionStateStore store,
+      WorkflowSessionAppendCommand firstCommand,
+      WorkflowSessionAppendCommand secondCommand) {
+    CountDownLatch ready = new CountDownLatch(2);
+    CountDownLatch start = new CountDownLatch(1);
+    ExecutorService executor = Executors.newFixedThreadPool(2);
+    try {
+      Future<AppendAttempt> first =
+          executor.submit(() -> attempt(store, firstCommand, ready, start));
+      Future<AppendAttempt> second =
+          executor.submit(() -> attempt(store, secondCommand, ready, start));
+      await(ready);
+      start.countDown();
+      return List.of(get(first), get(second));
+    } finally {
+      executor.shutdownNow();
+    }
   }
 
   private static AppendAttempt attempt(
