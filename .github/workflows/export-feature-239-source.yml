@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - feature/239-complete-collaborative-platform
+  pull_request:
+    branches:
+      - master
 
 permissions:
   contents: read
