@@ -90,6 +90,20 @@ public class WorkflowOutboxEntity {
         publishedAt);
   }
 
+  boolean hasSameSemanticContent(
+      String expectedSessionId,
+      WorkflowOutboxEventData candidate,
+      long expectedSequence,
+      long expectedRevision) {
+    return sessionId.equals(expectedSessionId)
+        && eventId.equals(candidate.eventId())
+        && eventSequence == expectedSequence
+        && semanticRevision == expectedRevision
+        && eventType.equals(candidate.eventType())
+        && occurredAt.equals(candidate.occurredAt())
+        && payload.equals(candidate.payload());
+  }
+
   String eventId() {
     return eventId;
   }
