@@ -3,7 +3,14 @@ package org.hammer.audio.workflow.collaboration.store;
 import java.time.Instant;
 import java.util.Objects;
 
-/** Canonically serialized collaboration event inserted into the transactional outbox. */
+/**
+ * Canonically serialized collaboration event inserted into the transactional outbox.
+ *
+ * @param eventId stable idempotency identifier for the event
+ * @param eventType stable collaboration event type
+ * @param occurredAt event occurrence timestamp
+ * @param payload deterministic serialized event payload
+ */
 public record WorkflowOutboxEventData(
     String eventId, String eventType, Instant occurredAt, String payload) {
 
