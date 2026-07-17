@@ -3,7 +3,18 @@ package org.hammer.audio.workflow.collaboration.store;
 import java.time.Instant;
 import java.util.Objects;
 
-/** Immutable accepted operation read back from durable collaboration history. */
+/**
+ * Immutable accepted operation read back from durable collaboration history.
+ *
+ * @param sessionId owning collaboration-session identifier
+ * @param operationId stable idempotency identifier for the semantic operation
+ * @param actorId actor that authored the operation
+ * @param operationType stable semantic operation type
+ * @param occurredAt operation occurrence timestamp
+ * @param sequence durable session event sequence
+ * @param revision semantic revision produced by the operation
+ * @param payload deterministic serialized operation payload
+ */
 public record StoredWorkflowOperation(
     String sessionId,
     String operationId,
