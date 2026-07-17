@@ -1,0 +1,67 @@
+name: Repair collaborative quality gate
+
+on:
+  push:
+    branches:
+      - feature/239-complete-collaborative-platform
+  workflow_dispatch:
+
+concurrency:
+  group: collaborative-platform-quality-repair
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Wait for serial reconciliation
+        run: sleep 360
+      - uses: actions/checkout@v7
+        with:
+          ref: feature/239-complete-collaborative-platform
+          fetch-depth: 0
+      - name: Reset to the current branch head
+        run: |
+          git fetch origin feature/239-complete-collaborative-platform
+          git reset --hard origin/feature/239-complete-collaborative-platform
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: audio-app/workbench-ui/package-lock.json
+      - name: Ensure production UI is reproducible
+        working-directory: audio-app/workbench-ui
+        run: npm ci && npm run build
+      - name: Try the unmodified quality gate
+        id: initial
+        continue-on-error: true
+        run: mvn -B verify > initial-verify.log 2>&1
+      - name: Apply narrow Javadoc and serialization repair only after failure
+        if: steps.initial.outcome == 'failure'
+        run: |
+          python3 .github/scripts/repair_collaborative_quality.py
+          mvn -B -DskipTests spotless:apply
+          mvn -B verify
+      - name: Remove temporary quality-repair machinery
+        run: |
+          rm -f .github/workflows/repair-collaborative-quality.yml
+          rm -f .github/scripts/repair_collaborative_quality.py
+          rm -f initial-verify.log
+      - name: Commit verified repairs or cleanup
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'Pass collaborative platform repository quality gate'
+          git push origin HEAD:feature/239-complete-collaborative-platform
