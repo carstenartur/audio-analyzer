@@ -5,21 +5,21 @@ import java.util.Objects;
 /** Typed failure raised when an operation id is reused for different semantic content. */
 public final class WorkflowOperationPersistenceConflictException extends RuntimeException {
 
-  private final String sessionId;
-  private final String operationId;
+  private final String conflictingSessionId;
+  private final String conflictingOperationId;
 
   /** Creates an operation-id conflict. */
   public WorkflowOperationPersistenceConflictException(String sessionId, String operationId) {
     super("Operation id " + operationId + " is already used in session " + sessionId);
-    this.sessionId = Objects.requireNonNull(sessionId, "sessionId");
-    this.operationId = Objects.requireNonNull(operationId, "operationId");
+    this.conflictingSessionId = Objects.requireNonNull(sessionId, "sessionId");
+    this.conflictingOperationId = Objects.requireNonNull(operationId, "operationId");
   }
 
   public String sessionId() {
-    return sessionId;
+    return conflictingSessionId;
   }
 
   public String operationId() {
-    return operationId;
+    return conflictingOperationId;
   }
 }
