@@ -21,9 +21,11 @@ jobs:
     permissions:
       contents: write
       checks: write
+      packages: read
 
     env:
       JAVA_VERSION: '21'
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
     - uses: actions/checkout@v7
@@ -33,6 +35,9 @@ jobs:
       with:
         java-version: ${{ env.JAVA_VERSION }}
         distribution: 'temurin'
+        server-id: github
+        server-username: GITHUB_ACTOR
+        server-password: GITHUB_TOKEN
 
     - name: Cache Maven packages
       uses: actions/cache@v6
