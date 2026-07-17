@@ -1,0 +1,143 @@
+name: Certify collaborative platform implementation
+
+on:
+  push:
+    branches:
+      - feature/239-complete-collaborative-platform
+  workflow_dispatch:
+
+concurrency:
+  group: collaborative-platform-certification
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  certify:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - name: Let all one-shot jobs settle
+        run: sleep 600
+      - uses: actions/checkout@v7
+        with:
+          ref: feature/239-complete-collaborative-platform
+          fetch-depth: 0
+      - name: Reset to the current branch head
+        run: |
+          git fetch origin feature/239-complete-collaborative-platform
+          git reset --hard origin/feature/239-complete-collaborative-platform
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: audio-app/workbench-ui/package-lock.json
+      - name: Complete any interrupted one-shot generator
+        run: |
+          test ! -f .github/scripts/generate_collaboration_core.py || python3 .github/scripts/generate_collaboration_core.py
+          test ! -f .github/scripts/generate_collaboration_app.py || python3 .github/scripts/generate_collaboration_app.py
+          test ! -f .github/scripts/generate_version_intelligence.py || python3 .github/scripts/generate_version_intelligence.py
+          test ! -f .github/scripts/generate_collaborative_ui.py || python3 .github/scripts/generate_collaborative_ui.py
+          test ! -f .github/scripts/finalize_collaborative_platform.py || python3 .github/scripts/finalize_collaborative_platform.py
+          test ! -f .github/scripts/repair_collaborative_quality.py || python3 .github/scripts/repair_collaborative_quality.py
+      - name: Build and verify the packaged React Flow application
+        working-directory: audio-app/workbench-ui
+        run: npm install && npm run build
+      - name: Format and run complete repository verification
+        run: |
+          mvn -B -DskipTests spotless:apply
+          mvn -B verify
+      - name: Install Playwright Chromium
+        run: >-
+          mvn -B -pl audio-app
+          -Dexec.mainClass=com.microsoft.playwright.CLI
+          -Dexec.classpathScope=test
+          -Dexec.args='install --with-deps chromium'
+          org.codehaus.mojo:exec-maven-plugin:3.6.2:java
+      - name: Run the real two-browser collaboration test
+        env:
+          RUN_COLLABORATION_E2E: 'true'
+        run: >-
+          mvn -B -pl audio-app -am
+          -Dtest=CollaborativeWorkflowPlatformE2ETest
+          -Dsurefire.failIfNoSpecifiedTests=false
+          test
+      - name: Remove all temporary implementation/certification machinery
+        run: |
+          rm -f .github/workflows/apply-collaboration-foundation.yml
+          rm -f .github/workflows/apply-version-intelligence.yml
+          rm -f .github/workflows/apply-collaborative-ui.yml
+          rm -f .github/workflows/finalize-collaborative-platform.yml
+          rm -f .github/workflows/reconcile-collaborative-platform.yml
+          rm -f .github/workflows/repair-collaborative-quality.yml
+          rm -f .github/workflows/export-feature-239-source.yml
+          rm -f .github/workflows/certify-collaborative-platform.yml
+          rm -f .github/scripts/generate_collaboration_core.py
+          rm -f .github/scripts/generate_collaboration_app.py
+          rm -f .github/scripts/generate_version_intelligence.py
+          rm -f .github/scripts/generate_collaborative_ui.py
+          rm -f .github/scripts/finalize_collaborative_platform.py
+          rm -f .github/scripts/repair_collaborative_quality.py
+          rm -f PLATFORM_IMPLEMENTATION_PLAN.md
+      - name: Commit the certified implementation and cleanup
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -m 'Certify complete collaborative workflow platform'
+            git push origin HEAD:feature/239-complete-collaborative-platform
+          fi
+      - name: Mark PR ready and connect all issues
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cat > /tmp/pr-body.md <<'EOF'
+          ## Complete collaborative workflow platform
+
+          Implements the remaining runtime work from epic #239 on Spring Boot 4.1 and the production React Flow/Yjs workbench.
+
+          ### Implemented
+
+          - ordered, bounded SSE replay with sequence/revision and canonical snapshot fallback
+          - server-authoritative multi-browser React Flow editing and non-semantic Yjs/presence state
+          - personal/shared semantic undo and redo with optimistic revision checks
+          - Spring JDBC session/operation persistence plus transactional outbox and retrying dispatcher
+          - deterministic semantic workflow diff, three-way merge and typed conflict resolution
+          - rebuildable, engine-neutral workflow history search projections
+          - immutable session/commit execution lifecycle with pluggable execution backend
+          - session-scoped JGit checkpoints and history
+          - dedicated two-browser Playwright E2E verification
+          - architecture/runtime documentation and persistent-profile configuration
+
+          ### Verification
+
+          - `npm ci`/`npm run build` equivalent production bundle verification
+          - full `mvn verify`
+          - real Playwright Chromium test with two isolated browser contexts
+          - temporary implementation workflows/scripts removed before this PR was marked ready
+
+          Closes #242
+          Closes #243
+          Closes #244
+          Closes #245
+          Closes #246
+          Closes #247
+          Closes #248
+          Closes #249
+          Closes #239
+          EOF
+          gh pr edit 257 --repo carstenartur/audio-analyzer --title 'Complete the collaborative workflow platform end to end' --body-file /tmp/pr-body.md
+          gh pr ready 257 --repo carstenartur/audio-analyzer
+          for issue in 239 242 243 244 245 246 247 248 249; do
+            gh issue comment "$issue" --repo carstenartur/audio-analyzer --body 'Implemented and fully verified in #257; this issue will close automatically when the PR is merged.'
+          done
