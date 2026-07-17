@@ -97,8 +97,14 @@ A subscriber is removed when:
 - the client closes the transport;
 - the session emits `SESSION_CLOSED`.
 
+The SSE adapter transfers subscription ownership to a callback-bound holder. Completion, timeout, emitter error and explicit session close all atomically detach and close that subscription.
+
 Removing a transport subscription never removes the collaboration session or its workflow. Session lifecycle remains owned by `WorkflowSessionRegistry`.
 
 ## Durability boundary
 
-This implementation is deliberately in-memory and bounded. Durable operation persistence, transactional outbox delivery and recovery across process restarts belong to #245. A future broker or WebSocket adapter must consume the same transport-neutral event contract instead of bypassing the registry.
+This implementation is deliberately in-memory and bounded. Durable operation persistence, transactional outbox delivery and recovery across process restarts belong to #245. That follow-up uses Hibernate ORM rather than a raw JDBC repository. A future broker or WebSocket adapter must consume the same transport-neutral event contract instead of bypassing the registry.
+
+## Verification
+
+The implementation is covered by focused core and HTTP tests for ordering, reconnect replay, snapshot fallback, idempotent retries, conflicting duplicate ids, presence isolation and failed/slow subscriber cleanup. The complete repository passes `mvn -B clean verify --file pom.xml`, including Checkstyle, SpotBugs and PMD.
