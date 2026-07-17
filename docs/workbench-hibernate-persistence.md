@@ -39,6 +39,25 @@ workbench.persistence.schema-action=validate
 Starting `hibernate` mode without an explicit `spring.datasource.url` or
 `spring.datasource.jndi-name` fails immediately with an actionable configuration error.
 
+## Application-specific entity registration
+
+Audio Analyzer modules register only their own ORM mappings through a
+`WorkflowPersistenceEntityContributor` bean:
+
+```java
+@Bean
+WorkflowPersistenceEntityContributor collaborationPersistenceEntities() {
+  return () -> List.of(
+      WorkflowSessionEntity.class,
+      WorkflowOperationEntity.class,
+      WorkflowOutboxEntity.class);
+}
+```
+
+The resulting classes are added to the same application-managed `SessionFactory` as the generic
+JGit storage entities. This is the extension point used by #245; it does not copy or replace any
+mapping from `jgit-storage-hibernate-core`.
+
 ## GitHub Packages access
 
 The artifact is currently published through GitHub Packages. Maven uses repository id `github`.

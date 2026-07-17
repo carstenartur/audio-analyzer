@@ -2,12 +2,16 @@ package org.hammer.audio.app;
 
 import io.github.carstenartur.jgit.storage.hibernate.config.HibernateSessionFactoryProvider;
 import java.nio.file.Path;
+import java.util.Collection;
+import java.util.List;
+import java.util.Objects;
 import java.util.Properties;
 import javax.sql.DataSource;
 import org.hammer.audio.infrastructure.workflow.store.FileSystemJGitVersionedWorkflowStore;
 import org.hammer.audio.infrastructure.workflow.store.HibernateJGitVersionedWorkflowStore;
 import org.hammer.audio.workflow.store.VersionedWorkflowStore;
 import org.hibernate.SessionFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -27,6 +31,7 @@ public class WorkflowPersistenceConfiguration {
   public HibernateSessionFactoryProvider workflowHibernateSessionFactoryProvider(
       DataSource dataSource,
       Environment environment,
+      ObjectProvider<WorkflowPersistenceEntityContributor> entityContributors,
       @Value("${workbench.persistence.schema-action:validate}") String schemaAction) {
     requireExplicitDataSource(environment);
     Properties properties = new Properties();
@@ -34,7 +39,8 @@ public class WorkflowPersistenceConfiguration {
     properties.setProperty("hibernate.hbm2ddl.auto", requireNotBlank(schemaAction, "schemaAction"));
     properties.setProperty("hibernate.show_sql", "false");
     properties.setProperty("hibernate.format_sql", "false");
-    return new HibernateSessionFactoryProvider(properties);
+    return new HibernateSessionFactoryProvider(
+        properties, additionalAnnotatedClasses(entityContributors));
   }
 
   /**
@@ -65,6 +71,19 @@ public class WorkflowPersistenceConfiguration {
       @Value("${workbench.persistence.filesystem.path}") String repositoryPath) {
     return new FileSystemJGitVersionedWorkflowStore(
         Path.of(requireNotBlank(repositoryPath, "repositoryPath")));
+  }
+
+  private static List<Class<?>> additionalAnnotatedClasses(
+      ObjectProvider<WorkflowPersistenceEntityContributor> entityContributors) {
+    Objects.requireNonNull(entityContributors, "entityContributors");
+    return entityContributors
+        .orderedStream()
+        .map(WorkflowPersistenceEntityContributor::annotatedClasses)
+        .map(classes -> Objects.requireNonNull(classes, "annotatedClasses"))
+        .flatMap(Collection::stream)
+        .map(annotatedClass -> Objects.requireNonNull(annotatedClass, "annotatedClass"))
+        .distinct()
+        .toList();
   }
 
   private static void requireExplicitDataSource(Environment environment) {
