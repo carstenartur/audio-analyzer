@@ -64,7 +64,9 @@ public class WorkflowSessionEntity {
   @Column(name = "session_closed", nullable = false)
   private boolean closed;
 
-  protected WorkflowSessionEntity() {}
+  protected WorkflowSessionEntity() {
+    // Required by Jakarta Persistence.
+  }
 
   static WorkflowSessionEntity from(StoredWorkflowSession stored) {
     WorkflowSessionEntity entity = new WorkflowSessionEntity();
