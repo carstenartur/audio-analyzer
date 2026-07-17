@@ -58,7 +58,9 @@ public class WorkflowOutboxEntity {
   @Column(name = "published_at")
   private Instant publishedAt;
 
-  protected WorkflowOutboxEntity() {}
+  protected WorkflowOutboxEntity() {
+    // Required by Jakarta Persistence.
+  }
 
   static WorkflowOutboxEntity pending(
       String sessionId, WorkflowOutboxEventData event, long sequence, long revision) {
