@@ -1,13 +1,17 @@
 package org.hammer.audio.workflow.editor.http;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import org.hammer.audio.workflow.collaboration.WorkflowSessionEventHub;
 import org.hammer.audio.workflow.collaboration.WorkflowSessionRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -28,14 +32,17 @@ class WorkflowSessionHttpAdapterTest {
       """;
 
   private MockMvc mvc;
+  private WorkflowSessionRegistry registry;
+  private WorkflowSessionEventHub eventHub;
 
   @BeforeEach
   void configureSpringMvc() {
     LocalValidatorFactoryBean validator = new LocalValidatorFactoryBean();
     validator.afterPropertiesSet();
+    eventHub = new WorkflowSessionEventHub(32, 8);
+    registry = new WorkflowSessionRegistry(eventHub);
     mvc =
-        MockMvcBuilders.standaloneSetup(
-                new WorkflowSessionHttpAdapter(new WorkflowSessionRegistry()))
+        MockMvcBuilders.standaloneSetup(new WorkflowSessionHttpAdapter(registry))
             .setControllerAdvice(new WorkflowApiExceptionHandler())
             .setValidator(validator)
             .build();
@@ -166,6 +173,96 @@ class WorkflowSessionHttpAdapterTest {
                     """))
         .andExpect(status().isConflict())
         .andExpect(jsonPath("$.code").value("ACTOR_METADATA_MISMATCH"));
+  }
+
+  @Test
+  void sessionOperationAndPresenceUseServerAuthoritativeRegistry() throws Exception {
+    createSharedSession();
+    long cursor = eventHub.currentSequence("session.shared");
+
+    String operationRequest =
+        """
+        {
+          "mode":"SHARED_SESSION_PERSONAL_UNDO",
+          "actor":%s,
+          "operation":{
+            "type":"CreateNode",
+            "operationId":"operation.input",
+            "catalogType":"recording-input",
+            "nodeId":"node.input"
+          }
+        }
+        """
+            .formatted(OWNER_JSON);
+    mvc.perform(
+            post("/workflow/sessions/session.shared/operations")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(operationRequest))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.nodes.length()").value(1));
+
+    mvc.perform(
+            post("/workflow/sessions/session.shared/operations")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(operationRequest))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.nodes.length()").value(1));
+
+    mvc.perform(
+            put("/workflow/sessions/session.shared/presence")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    """
+                    {
+                      "actor":%s,
+                      "observedAt":"2026-07-17T02:00:00Z",
+                      "attributes":{"cursor.x":"42","selection":"node.input"}
+                    }
+                    """
+                        .formatted(OWNER_JSON)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.attributes['cursor.x']").value("42"));
+
+    mvc.perform(get("/workflow/sessions/session.shared"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.operationCount").value(1));
+    long acceptedEvents =
+        eventHub.replay("session.shared", cursor).stream()
+            .filter(event -> event.operationId() != null)
+            .count();
+    assertEquals(1, acceptedEvents);
+  }
+
+  @Test
+  void rejectedOperationIsNotPublishedAsAcceptedState() throws Exception {
+    createSharedSession();
+    long cursor = eventHub.currentSequence("session.shared");
+
+    mvc.perform(
+            post("/workflow/sessions/session.shared/operations")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    """
+                    {
+                      "mode":"SHARED_SESSION_PERSONAL_UNDO",
+                      "actor":%s,
+                      "operation":{
+                        "type":"ConnectPorts",
+                        "operationId":"operation.invalid",
+                        "edge":{
+                          "id":"edge.invalid",
+                          "sourceNodeId":"missing.source",
+                          "sourcePortId":"out",
+                          "targetNodeId":"missing.target",
+                          "targetPortId":"in"
+                        }
+                      }
+                    }
+                    """
+                        .formatted(OWNER_JSON)))
+        .andExpect(status().isBadRequest());
+
+    assertTrue(eventHub.replay("session.shared", cursor).isEmpty());
   }
 
   private void createSharedSession() throws Exception {

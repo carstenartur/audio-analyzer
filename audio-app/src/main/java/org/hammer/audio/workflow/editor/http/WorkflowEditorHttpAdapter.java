@@ -1,11 +1,8 @@
 package org.hammer.audio.workflow.editor.http;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import java.time.Instant;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
-import org.hammer.audio.workflow.Edge;
 import org.hammer.audio.workflow.Node;
 import org.hammer.audio.workflow.Workflow;
 import org.hammer.audio.workflow.WorkflowOperation;
@@ -26,6 +23,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import tools.jackson.databind.JsonNode;
 
 /** Spring MVC REST controller for the workflow editor MVP (ADR-007 / issue #210). */
 @RestController
@@ -75,7 +73,7 @@ public final class WorkflowEditorHttpAdapter {
    */
   @PostMapping("/operations")
   public ResponseEntity<?> operations(@RequestBody JsonNode json) {
-    WorkflowOperation operation = parseOperation(json);
+    WorkflowOperation operation = WorkflowOperationHttpParser.parse(json, "web-editor");
     WorkflowProjection projection = editorService.applyOperation(operation);
     return ResponseEntity.ok(projection);
   }
@@ -152,96 +150,6 @@ public final class WorkflowEditorHttpAdapter {
     return ResponseEntity.badRequest().body(ex.getMessage());
   }
 
-  // -------------------------------------------------------------------------
-  // Parsing helpers
-  // -------------------------------------------------------------------------
-
-  private static WorkflowOperation parseOperation(JsonNode json) {
-    String type = requiredText(json, "type");
-    String operationId = requiredText(json, "operationId");
-    String author = json.has("author") ? json.get("author").asText() : "web-editor";
-    Instant timestamp =
-        json.has(JSON_FIELD_TIMESTAMP)
-            ? Instant.parse(json.get(JSON_FIELD_TIMESTAMP).asText())
-            : Instant.now();
-    return switch (type) {
-      case "CreateNode" -> {
-        String nodeId = requiredText(json, "nodeId");
-        String catalogType = requiredText(json, "catalogType");
-        Node node = createCatalogNode(catalogType, nodeId);
-        yield new WorkflowOperation.CreateNode(operationId, timestamp, author, node);
-      }
-      case "ConnectPorts" -> {
-        JsonNode edgeJson = requireObject(json, "edge");
-        Edge edge =
-            new Edge(
-                requiredText(edgeJson, "id"),
-                requiredText(edgeJson, "sourceNodeId"),
-                requiredText(edgeJson, "sourcePortId"),
-                requiredText(edgeJson, "targetNodeId"),
-                requiredText(edgeJson, "targetPortId"));
-        yield new WorkflowOperation.ConnectPorts(operationId, timestamp, author, edge);
-      }
-      case "DisconnectPorts" -> {
-        String edgeId = requiredText(json, "edgeId");
-        JsonNode edgeJson = requireObject(json, "disconnectedEdge");
-        Edge disconnectedEdge =
-            new Edge(
-                requiredText(edgeJson, "id"),
-                requiredText(edgeJson, "sourceNodeId"),
-                requiredText(edgeJson, "sourcePortId"),
-                requiredText(edgeJson, "targetNodeId"),
-                requiredText(edgeJson, "targetPortId"));
-        yield new WorkflowOperation.DisconnectPorts(
-            operationId, timestamp, author, edgeId, disconnectedEdge);
-      }
-      case "UpdateProperty" -> {
-        String target = requiredText(json, "target");
-        String targetId = requiredText(json, "targetId");
-        String propertyKey = requiredText(json, "propertyKey");
-        String newValue = json.has("newValue") ? json.get("newValue").asText() : null;
-        String previousValue =
-            json.has("previousValue") ? json.get("previousValue").asText() : null;
-        WorkflowOperation.PropertyTarget propertyTarget = parsePropertyTarget(target);
-        yield new WorkflowOperation.UpdateProperty(
-            operationId,
-            timestamp,
-            author,
-            propertyTarget,
-            targetId,
-            propertyKey,
-            previousValue,
-            newValue);
-      }
-      default -> throw new IllegalArgumentException("Unknown operation type: " + type);
-    };
-  }
-
-  private static WorkflowOperation.PropertyTarget parsePropertyTarget(String target) {
-    return Arrays.stream(WorkflowOperation.PropertyTarget.values())
-        .filter(t -> t.name().equals(target))
-        .findFirst()
-        .orElseThrow(() -> new IllegalArgumentException("Unknown PropertyTarget: " + target));
-  }
-
-  private static Node createCatalogNode(String catalogType, String nodeId) {
-    return switch (catalogType) {
-      case "recording-input" -> ExperimentNodeCatalog.recordingInput(nodeId);
-      case "synthetic-signal-generator" -> ExperimentNodeCatalog.syntheticSignalGenerator(nodeId);
-      case "humbug-db-import" -> ExperimentNodeCatalog.humBugDbImport(nodeId);
-      case "gain" -> ExperimentNodeCatalog.gain(nodeId);
-      case "bandpass-filter" -> ExperimentNodeCatalog.bandpassFilter(nodeId);
-      case "fft" -> ExperimentNodeCatalog.fft(nodeId);
-      case "wingbeat-feature-extraction" -> ExperimentNodeCatalog.wingbeatFeatureExtraction(nodeId);
-      case "classifier" -> ExperimentNodeCatalog.classifier(nodeId);
-      case "localization" -> ExperimentNodeCatalog.localization(nodeId);
-      case "benchmark" -> ExperimentNodeCatalog.benchmark(nodeId);
-      case "report" -> ExperimentNodeCatalog.report(nodeId);
-      case "evidence-export" -> ExperimentNodeCatalog.evidenceExport(nodeId);
-      default -> throw new IllegalArgumentException("Unknown catalog node type: " + catalogType);
-    };
-  }
-
   private static List<CatalogEntry> catalogEntries() {
     return List.of(
         CatalogEntry.from(
@@ -265,22 +173,6 @@ public final class WorkflowEditorHttpAdapter {
         CatalogEntry.from("report", ExperimentNodeCatalog.report("catalog.report")),
         CatalogEntry.from(
             "evidence-export", ExperimentNodeCatalog.evidenceExport("catalog.evidence")));
-  }
-
-  private static JsonNode requireObject(JsonNode node, String field) {
-    JsonNode value = node.get(field);
-    if (value == null || !value.isObject()) {
-      throw new IllegalArgumentException("Missing required object field: " + field);
-    }
-    return value;
-  }
-
-  private static String requiredText(JsonNode node, String field) {
-    JsonNode value = node.get(field);
-    if (value == null || value.isNull()) {
-      throw new IllegalArgumentException("Missing required field: " + field);
-    }
-    return value.asText();
   }
 
   private static String textOrDefault(JsonNode node, String field, String fallback) {

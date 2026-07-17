@@ -9,6 +9,7 @@ import org.hammer.audio.workflow.Workflow;
 import org.hammer.audio.workflow.WorkflowOperationLog;
 import org.hammer.audio.workflow.WorkflowValidator;
 import org.hammer.audio.workflow.catalog.ExperimentNodeCatalog;
+import org.hammer.audio.workflow.collaboration.WorkflowSessionEventHub;
 import org.hammer.audio.workflow.collaboration.WorkflowSessionRegistry;
 import org.hammer.audio.workflow.editor.WorkflowEditorService;
 import org.hammer.audio.workflow.store.VersionedWorkflowStore;
@@ -50,10 +51,16 @@ public class WorkbenchConfiguration implements WebMvcConfigurer {
     return new WorkflowEditorService(log, validator, store);
   }
 
+  /** Creates the bounded transport-neutral collaboration event hub. */
+  @Bean
+  public WorkflowSessionEventHub workflowSessionEventHub() {
+    return new WorkflowSessionEventHub();
+  }
+
   /** Creates the transport-neutral collaboration-session application service. */
   @Bean
-  public WorkflowSessionRegistry workflowSessionRegistry() {
-    return new WorkflowSessionRegistry();
+  public WorkflowSessionRegistry workflowSessionRegistry(WorkflowSessionEventHub eventHub) {
+    return new WorkflowSessionRegistry(eventHub);
   }
 
   /** Registers a filesystem resource handler when configured. */

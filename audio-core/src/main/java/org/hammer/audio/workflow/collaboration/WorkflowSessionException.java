@@ -14,6 +14,7 @@ public final class WorkflowSessionException extends RuntimeException {
     ACTOR_NOT_JOINED,
     SESSION_MODE_MISMATCH,
     SESSION_CLOSE_FORBIDDEN,
+    DUPLICATE_OPERATION_ID,
     INVALID_OPERATION_AUTHOR
   }
 

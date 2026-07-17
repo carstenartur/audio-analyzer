@@ -25,6 +25,22 @@ public final class WorkflowSessionRegistry {
   private static final String SESSION_ID_FIELD = "sessionId";
 
   private final Map<String, SessionEntry> sessionEntries = new ConcurrentHashMap<>();
+  private final WorkflowSessionEventHub sessionEventHub;
+
+  /** Creates a registry with an in-memory bounded session-event hub. */
+  public WorkflowSessionRegistry() {
+    this(new WorkflowSessionEventHub());
+  }
+
+  /** Creates a registry publishing lifecycle and accepted-operation events to the supplied hub. */
+  public WorkflowSessionRegistry(WorkflowSessionEventHub eventHub) {
+    this.sessionEventHub = Objects.requireNonNull(eventHub, "eventHub");
+  }
+
+  /** Returns the transport-neutral event hub used by this registry. */
+  public WorkflowSessionEventHub eventHub() {
+    return sessionEventHub;
+  }
 
   /** Creates a new session and joins its owner. */
   public SessionSnapshot create(
@@ -33,7 +49,8 @@ public final class WorkflowSessionRegistry {
     Objects.requireNonNull(mode, "mode");
     Objects.requireNonNull(owner, "owner");
     Objects.requireNonNull(initialWorkflow, "initialWorkflow");
-    SessionEntry created = new SessionEntry(requiredSessionId, mode, owner, initialWorkflow);
+    SessionEntry created =
+        new SessionEntry(requiredSessionId, mode, owner, initialWorkflow, sessionEventHub);
     SessionEntry previous = sessionEntries.putIfAbsent(requiredSessionId, created);
     if (previous != null) {
       throw error(
@@ -41,6 +58,7 @@ public final class WorkflowSessionRegistry {
           requiredSessionId,
           "Session already exists: " + requiredSessionId);
     }
+    sessionEventHub.openSession(requiredSessionId, owner, initialWorkflow);
     return created.snapshot();
   }
 
@@ -83,6 +101,24 @@ public final class WorkflowSessionRegistry {
     return requireSession(sessionId).apply(mode, actor, operation);
   }
 
+  /** Updates non-semantic presence for a joined actor. */
+  public PresenceState updatePresence(
+      String sessionId, OperationActor actor, PresenceState presenceState) {
+    Objects.requireNonNull(actor, "actor");
+    Objects.requireNonNull(presenceState, "presenceState");
+    if (!presenceState.actorId().equals(actor.actorId())) {
+      throw error(
+          Code.ACTOR_METADATA_MISMATCH,
+          sessionId,
+          "Presence actor '"
+              + presenceState.actorId()
+              + "' does not match actor '"
+              + actor.actorId()
+              + "'");
+    }
+    return requireSession(sessionId).updatePresence(actor, presenceState);
+  }
+
   /** Explicitly closes a session. Only its owner may close it. */
   public void close(String sessionId, String requestedByActorId) {
     String requiredSessionId = requireNotBlank(sessionId, SESSION_ID_FIELD);
@@ -96,6 +132,7 @@ public final class WorkflowSessionRegistry {
           "Session changed while closing: " + requiredSessionId);
     }
     entry.close();
+    sessionEventHub.closeSession(requiredSessionId, entry.sessionOwner());
   }
 
   /** Returns all current sessions in stable identifier order. */
@@ -135,15 +172,22 @@ public final class WorkflowSessionRegistry {
     private final Instant createdAt;
     private final WorkflowOperationLog operationLog;
     private final CollaborativeWorkflowSessionService sessionService;
+    private final WorkflowSessionEventHub eventHub;
     private final Map<String, OperationActor> participants = new ConcurrentHashMap<>();
+    private final Map<String, WorkflowOperation> operationsById = new ConcurrentHashMap<>();
     private final ReentrantLock lock = new ReentrantLock();
     private volatile boolean closed;
 
     SessionEntry(
-        String sessionId, CollaborationMode mode, OperationActor owner, Workflow initialWorkflow) {
+        String sessionId,
+        CollaborationMode mode,
+        OperationActor owner,
+        Workflow initialWorkflow,
+        WorkflowSessionEventHub eventHub) {
       this.sessionId = sessionId;
       this.mode = mode;
       this.owner = owner;
+      this.eventHub = Objects.requireNonNull(eventHub, "eventHub");
       this.createdAt = Instant.now();
       this.operationLog = new WorkflowOperationLog(initialWorkflow);
       this.sessionService =
@@ -178,7 +222,9 @@ public final class WorkflowSessionRegistry {
               sessionId,
               "Actor metadata mismatch for already joined actor: " + actor.actorId());
         }
-        participants.putIfAbsent(actor.actorId(), actor);
+        if (participants.putIfAbsent(actor.actorId(), actor) == null) {
+          eventHub.actorJoined(sessionId, actor);
+        }
         return snapshotLocked();
       } finally {
         lock.unlock();
@@ -192,8 +238,9 @@ public final class WorkflowSessionRegistry {
         if (!participants.containsKey(actorId)) {
           throw error(Code.ACTOR_NOT_JOINED, sessionId, "Actor is not joined: " + actorId);
         }
-        participants.remove(actorId);
+        OperationActor actor = participants.remove(actorId);
         sessionService.clearPresence(actorId);
+        eventHub.actorLeft(sessionId, actor);
         return snapshotLocked();
       } finally {
         lock.unlock();
@@ -221,9 +268,45 @@ public final class WorkflowSessionRegistry {
               sessionId,
               "Actor metadata mismatch: " + actor.actorId());
         }
+        WorkflowOperation previous = operationsById.get(operation.operationId());
+        if (previous != null) {
+          if (sameSemanticOperation(previous, operation)) {
+            return operationLog.currentWorkflow();
+          }
+          throw error(
+              Code.DUPLICATE_OPERATION_ID,
+              sessionId,
+              "Operation id is already associated with different content: "
+                  + operation.operationId());
+        }
         WorkflowOperationEnvelope envelope =
             new WorkflowOperationEnvelope(sessionId, mode, actor, operation, Instant.now());
-        return sessionService.applyOperation(envelope);
+        Workflow updatedWorkflow = sessionService.applyOperation(envelope);
+        operationsById.put(operation.operationId(), operation);
+        eventHub.operationAccepted(sessionId, actor, operation, updatedWorkflow);
+        return updatedWorkflow;
+      } finally {
+        lock.unlock();
+      }
+    }
+
+    PresenceState updatePresence(OperationActor actor, PresenceState presenceState) {
+      lock.lock();
+      try {
+        requireOpen();
+        OperationActor joinedActor = participants.get(actor.actorId());
+        if (joinedActor == null) {
+          throw error(Code.ACTOR_NOT_JOINED, sessionId, "Actor is not joined: " + actor.actorId());
+        }
+        if (!joinedActor.equals(actor)) {
+          throw error(
+              Code.ACTOR_METADATA_MISMATCH,
+              sessionId,
+              "Actor metadata mismatch: " + actor.actorId());
+        }
+        sessionService.updatePresence(presenceState);
+        eventHub.presenceUpdated(sessionId, actor, presenceState);
+        return presenceState;
       } finally {
         lock.unlock();
       }
@@ -264,8 +347,21 @@ public final class WorkflowSessionRegistry {
       }
     }
 
+    OperationActor sessionOwner() {
+      return owner;
+    }
+
     void close() {
       closed = true;
+    }
+
+    private static boolean sameSemanticOperation(
+        WorkflowOperation existing, WorkflowOperation candidate) {
+      return existing.getClass().equals(candidate.getClass())
+          && existing.operationId().equals(candidate.operationId())
+          && existing.author().equals(candidate.author())
+          && existing.affectedObjectIds().equals(candidate.affectedObjectIds())
+          && existing.payload().equals(candidate.payload());
     }
 
     private void requireOpen() {
