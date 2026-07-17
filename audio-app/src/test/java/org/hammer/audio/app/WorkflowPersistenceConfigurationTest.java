@@ -8,7 +8,6 @@ import org.h2.jdbcx.JdbcDataSource;
 import org.hammer.audio.infrastructure.workflow.store.WorkflowPersistenceProbeEntity;
 import org.hibernate.SessionFactory;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.support.DefaultListableBeanFactory;
 import org.springframework.mock.env.MockEnvironment;
 
 class WorkflowPersistenceConfigurationTest {
@@ -18,21 +17,15 @@ class WorkflowPersistenceConfigurationTest {
     JdbcDataSource dataSource = new JdbcDataSource();
     dataSource.setURL("jdbc:h2:mem:workflow-persistence-configuration;DB_CLOSE_DELAY=-1");
 
-    DefaultListableBeanFactory beanFactory = new DefaultListableBeanFactory();
     WorkflowPersistenceEntityContributor contributor =
         () -> List.of(WorkflowPersistenceProbeEntity.class);
-    beanFactory.registerSingleton("probePersistenceEntities", contributor);
-
     MockEnvironment environment =
         new MockEnvironment().withProperty("spring.datasource.url", dataSource.getURL());
     WorkflowPersistenceConfiguration configuration = new WorkflowPersistenceConfiguration();
 
     try (HibernateSessionFactoryProvider provider =
         configuration.workflowHibernateSessionFactoryProvider(
-            dataSource,
-            environment,
-            beanFactory.getBeanProvider(WorkflowPersistenceEntityContributor.class),
-            "create-drop")) {
+            dataSource, environment, List.of(contributor), "create-drop")) {
       SessionFactory sessionFactory = provider.getSessionFactory();
       assertNotNull(sessionFactory.getMetamodel().entity(WorkflowPersistenceProbeEntity.class));
     }
