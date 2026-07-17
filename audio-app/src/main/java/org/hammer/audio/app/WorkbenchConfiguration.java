@@ -1,8 +1,6 @@
 package org.hammer.audio.app;
 
-import java.nio.file.Path;
 import java.util.List;
-import org.hammer.audio.infrastructure.workflow.store.JGitStorageHibernateWorkflowStoreAdapter;
 import org.hammer.audio.workflow.Edge;
 import org.hammer.audio.workflow.Node;
 import org.hammer.audio.workflow.Workflow;
@@ -13,8 +11,8 @@ import org.hammer.audio.workflow.collaboration.WorkflowSessionEventHub;
 import org.hammer.audio.workflow.collaboration.WorkflowSessionRegistry;
 import org.hammer.audio.workflow.editor.WorkflowEditorService;
 import org.hammer.audio.workflow.store.VersionedWorkflowStore;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
@@ -23,10 +21,10 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 /**
  * Spring configuration for the workflow workbench.
  *
- * <p>Provides workflow editing and collaboration application services, and optionally a {@link
- * VersionedWorkflowStore} when {@code workbench.data.dir} is set. Also registers a filesystem
- * resource handler when {@code workbench.static.dir} is configured; otherwise the built-in
- * classpath UI at {@code /workbench-ui/} is served.
+ * <p>Provides workflow editing and collaboration application services and consumes the optional
+ * {@link VersionedWorkflowStore} selected by {@link WorkflowPersistenceConfiguration}. Also
+ * registers a filesystem resource handler when {@code workbench.static.dir} is configured;
+ * otherwise the built-in classpath UI at {@code /workbench-ui/} is served.
  */
 @Configuration
 public class WorkbenchConfiguration implements WebMvcConfigurer {
@@ -34,21 +32,13 @@ public class WorkbenchConfiguration implements WebMvcConfigurer {
   @Value("${workbench.static.dir:}")
   private String staticDir;
 
-  /** Opens a JGit-backed persistent workflow store when configured. */
-  @Bean
-  @ConditionalOnProperty("workbench.data.dir")
-  public VersionedWorkflowStore versionedWorkflowStore(
-      @Value("${workbench.data.dir}") String dataDirPath) {
-    return new JGitStorageHibernateWorkflowStoreAdapter(Path.of(dataDirPath));
-  }
-
   /** Creates the single-user workflow editor service and injects the optional store. */
   @Bean
   public WorkflowEditorService workflowEditorService(
-      @Value("#{@versionedWorkflowStore?}") VersionedWorkflowStore store) {
+      ObjectProvider<VersionedWorkflowStore> storeProvider) {
     WorkflowOperationLog log = new WorkflowOperationLog(seedWorkflow());
     WorkflowValidator validator = new WorkflowValidator();
-    return new WorkflowEditorService(log, validator, store);
+    return new WorkflowEditorService(log, validator, storeProvider.getIfAvailable());
   }
 
   /** Creates the bounded transport-neutral collaboration event hub. */
