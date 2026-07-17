@@ -19,6 +19,7 @@ import org.hibernate.Session;
 import org.hibernate.SessionFactory;
 import org.hibernate.StaleStateException;
 import org.hibernate.Transaction;
+import org.hibernate.exception.ConstraintViolationException;
 
 /** Hibernate ORM implementation of the durable collaboration-session boundary. */
 public final class HibernateWorkflowSessionStateStore implements WorkflowSessionStateStore {
@@ -64,11 +65,7 @@ public final class HibernateWorkflowSessionStateStore implements WorkflowSession
     try {
       return inTransaction(session -> appendWithinTransaction(session, command));
     } catch (RuntimeException exception) {
-      if (isOptimisticLockFailure(exception)) {
-        throw new WorkflowSessionRevisionConflictException(
-            command.sessionId(), command.expectedRevision(), currentRevision(command.sessionId()));
-      }
-      throw exception;
+      return recoverConcurrentAppend(command, exception);
     }
   }
 
@@ -193,6 +190,35 @@ public final class HibernateWorkflowSessionStateStore implements WorkflowSession
         aggregate.toStoredSession(), existing.toStoredOperation(), outbox.toStoredEntry(), true);
   }
 
+  private WorkflowSessionAppendResult recoverConcurrentAppend(
+      WorkflowSessionAppendCommand command, RuntimeException failure) {
+    if (!isOptimisticLockFailure(failure) && !isConstraintViolationFailure(failure)) {
+      throw failure;
+    }
+
+    WorkflowSessionAppendResult duplicate = duplicateAfterConcurrentFailure(command);
+    if (duplicate != null) {
+      return duplicate;
+    }
+
+    long actualRevision = currentRevision(command.sessionId());
+    if (actualRevision != command.expectedRevision()) {
+      throw new WorkflowSessionRevisionConflictException(
+          command.sessionId(), command.expectedRevision(), actualRevision);
+    }
+    throw failure;
+  }
+
+  private WorkflowSessionAppendResult duplicateAfterConcurrentFailure(
+      WorkflowSessionAppendCommand command) {
+    return inTransaction(
+        session -> {
+          WorkflowOperationEntity existing =
+              findOperation(session, command.operation().operationId());
+          return existing == null ? null : duplicateResult(session, existing, command);
+        });
+  }
+
   private static WorkflowOperationEntity findOperation(Session session, String operationId) {
     return session
         .createQuery(
@@ -232,6 +258,17 @@ public final class HibernateWorkflowSessionStateStore implements WorkflowSession
     Throwable current = throwable;
     while (current != null) {
       if (current instanceof OptimisticLockException || current instanceof StaleStateException) {
+        return true;
+      }
+      current = current.getCause();
+    }
+    return false;
+  }
+
+  private static boolean isConstraintViolationFailure(Throwable throwable) {
+    Throwable current = throwable;
+    while (current != null) {
+      if (current instanceof ConstraintViolationException) {
         return true;
       }
       current = current.getCause();
