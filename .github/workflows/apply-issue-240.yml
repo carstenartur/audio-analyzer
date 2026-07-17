@@ -42,13 +42,14 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
-          base64 --decode .github/issue-240-files.tar.gz.b64 > /tmp/issue-240-files.tar.gz
+          cat .github/issue240/part*.b64 | base64 --decode > /tmp/issue-240-files.tar.gz
+          echo '8f6b4e59debbb71805966adfd3f5c56c2276c6b500046e50a21dc8a78b38417c  /tmp/issue-240-files.tar.gz' | sha256sum --check
           tar -xzf /tmp/issue-240-files.tar.gz
           while IFS= read -r path; do
             [[ -z "$path" ]] || rm -f "$path"
           done < .issue-240-delete
           rm .issue-240-delete
-          rm .github/issue-240-files.tar.gz.b64
+          rm -rf .github/issue240
           rm .github/workflows/apply-issue-240.yml
 
       - name: Apply repository formatting
