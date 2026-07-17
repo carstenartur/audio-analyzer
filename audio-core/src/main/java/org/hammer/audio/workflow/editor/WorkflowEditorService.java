@@ -12,6 +12,7 @@ import org.hammer.audio.workflow.store.CommitId;
 import org.hammer.audio.workflow.store.CommitInfo;
 import org.hammer.audio.workflow.store.CommitMetadata;
 import org.hammer.audio.workflow.store.VersionedWorkflowStore;
+import org.hammer.audio.workflow.store.WorkflowCheckpointListener;
 import org.hammer.audio.workflow.store.WorkflowSnapshot;
 
 /**
@@ -35,6 +36,7 @@ public final class WorkflowEditorService {
   private final VersionedWorkflowStore workflowStore;
   private final WorkflowDslSerializer serializer;
   private final WorkflowDslParser parser;
+  private WorkflowCheckpointListener checkpointListener = WorkflowCheckpointListener.noOp();
 
   /**
    * Creates a service backed by the given operation log and validator.
@@ -62,6 +64,11 @@ public final class WorkflowEditorService {
     this.workflowStore = workflowStore;
     this.serializer = new WorkflowDslSerializer();
     this.parser = new WorkflowDslParser();
+  }
+
+  /** Configures a post-commit projection hook while keeping the core independent of Spring. */
+  public void setCheckpointListener(WorkflowCheckpointListener checkpointListener) {
+    this.checkpointListener = Objects.requireNonNull(checkpointListener, "checkpointListener");
   }
 
   /**
@@ -183,7 +190,9 @@ public final class WorkflowEditorService {
     }
     VersionedWorkflowStore store = requireStore();
     WorkflowSnapshot snapshot = new WorkflowSnapshot(workflow.id(), serializer.serialize(workflow));
-    return store.commit(branch, snapshot, metadata);
+    CommitId commitId = store.commit(branch, snapshot, metadata);
+    checkpointListener.checkpointCreated(branch, commitId, snapshot, metadata);
+    return commitId;
   }
 
   /**

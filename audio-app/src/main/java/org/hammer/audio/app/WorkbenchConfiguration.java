@@ -12,6 +12,7 @@ import org.hammer.audio.workflow.catalog.ExperimentNodeCatalog;
 import org.hammer.audio.workflow.collaboration.WorkflowSessionRegistry;
 import org.hammer.audio.workflow.editor.WorkflowEditorService;
 import org.hammer.audio.workflow.store.VersionedWorkflowStore;
+import org.hammer.audio.workflow.store.WorkflowCheckpointListener;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
@@ -44,10 +45,13 @@ public class WorkbenchConfiguration implements WebMvcConfigurer {
   /** Creates the single-user workflow editor service and injects the optional store. */
   @Bean
   public WorkflowEditorService workflowEditorService(
-      @Value("#{@versionedWorkflowStore?}") VersionedWorkflowStore store) {
+      @Value("#{@versionedWorkflowStore?}") VersionedWorkflowStore store,
+      WorkflowCheckpointListener checkpointListener) {
     WorkflowOperationLog log = new WorkflowOperationLog(seedWorkflow());
     WorkflowValidator validator = new WorkflowValidator();
-    return new WorkflowEditorService(log, validator, store);
+    WorkflowEditorService service = new WorkflowEditorService(log, validator, store);
+    service.setCheckpointListener(checkpointListener);
+    return service;
   }
 
   /** Creates the transport-neutral collaboration-session application service. */
