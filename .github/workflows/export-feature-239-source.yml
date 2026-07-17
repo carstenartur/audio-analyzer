@@ -57,7 +57,12 @@ jobs:
         if: steps.patch.outputs.present == 'true'
         id: verify
         continue-on-error: true
-        run: mvn -B clean verify --file pom.xml
+        shell: bash
+        run: |
+          set +e
+          mvn -B clean verify --file pom.xml 2>&1 | tee /tmp/feature-242-maven.log
+          status=${PIPESTATUS[0]}
+          exit "$status"
       - name: Archive formatted implementation
         if: steps.patch.outputs.present == 'true' && always()
         run: tar --exclude=.git --exclude=target --exclude='*/target' -czf /tmp/audio-analyzer-feature-242.tar.gz .
@@ -67,6 +72,14 @@ jobs:
         with:
           name: feature-242-formatted-source
           path: /tmp/audio-analyzer-feature-242.tar.gz
+          retention-days: 1
+      - name: Upload Maven verification log
+        if: steps.patch.outputs.present == 'true' && always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: feature-242-maven-log
+          path: /tmp/feature-242-maven.log
+          if-no-files-found: error
           retention-days: 1
       - name: Commit verified implementation
         if: steps.patch.outputs.present == 'true' && steps.verify.outcome == 'success'
