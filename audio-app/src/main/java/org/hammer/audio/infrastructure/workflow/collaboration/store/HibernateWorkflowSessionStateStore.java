@@ -203,7 +203,8 @@ public final class HibernateWorkflowSessionStateStore implements WorkflowSession
           command.sessionId(), command.expectedRevision(), actualRevision);
     }
     throw new IllegalStateException(
-        "Durable append constraint failed without advancing session " + command.sessionId(), failure);
+        "Durable append constraint failed without advancing session " + command.sessionId(),
+        failure);
   }
 
   private WorkflowSessionAppendResult duplicateAfterConcurrentFailure(
