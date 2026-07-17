@@ -3,7 +3,6 @@ package org.hammer.audio.workflow.editor.http;
 import jakarta.servlet.http.HttpServletRequest;
 import java.net.URI;
 import java.util.List;
-import java.util.Objects;
 import org.hammer.audio.workflow.collaboration.WorkflowSessionException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
@@ -18,7 +17,6 @@ public final class WorkflowApiExceptionHandler {
 
   private static final String PROBLEM_BASE = "https://audio-analyzer.dev/problems/";
 
-  /** Maps typed collaboration-domain errors without inspecting exception-message text. */
   @ExceptionHandler(WorkflowSessionException.class)
   public ProblemDetail handleSessionException(
       WorkflowSessionException exception, HttpServletRequest request) {
@@ -32,7 +30,6 @@ public final class WorkflowApiExceptionHandler {
     return problem;
   }
 
-  /** Maps bean-validation failures to a structured invalid-request response. */
   @ExceptionHandler(MethodArgumentNotValidException.class)
   public ProblemDetail handleValidation(
       MethodArgumentNotValidException exception, HttpServletRequest request) {
@@ -44,16 +41,12 @@ public final class WorkflowApiExceptionHandler {
             request);
     List<FieldViolation> violations =
         exception.getBindingResult().getFieldErrors().stream()
-            .map(
-                error ->
-                    new FieldViolation(
-                        error.getField(), Objects.toString(error.getDefaultMessage(), "")))
+            .map(error -> new FieldViolation(error.getField(), error.getDefaultMessage()))
             .toList();
     problem.setProperty("violations", violations);
     return problem;
   }
 
-  /** Maps malformed JSON and incompatible enum values to a stable 400 response. */
   @ExceptionHandler(HttpMessageNotReadableException.class)
   public ProblemDetail handleUnreadableBody(
       HttpMessageNotReadableException exception, HttpServletRequest request) {
@@ -64,7 +57,6 @@ public final class WorkflowApiExceptionHandler {
         request);
   }
 
-  /** Maps remaining request-contract violations. */
   @ExceptionHandler(IllegalArgumentException.class)
   public ProblemDetail handleIllegalArgument(
       IllegalArgumentException exception, HttpServletRequest request) {
@@ -83,14 +75,17 @@ public final class WorkflowApiExceptionHandler {
   private static HttpStatus statusFor(WorkflowSessionException.Code code) {
     return switch (code) {
       case SESSION_NOT_FOUND -> HttpStatus.NOT_FOUND;
+      case INVALID_OPERATION_AUTHOR, INVALID_WORKFLOW_OPERATION -> HttpStatus.UNPROCESSABLE_ENTITY;
       case SESSION_ALREADY_EXISTS,
               PRIVATE_WORKSPACE_ACCESS_DENIED,
               ACTOR_METADATA_MISMATCH,
               ACTOR_NOT_JOINED,
               SESSION_MODE_MISMATCH,
-              SESSION_CLOSE_FORBIDDEN ->
+              SESSION_CLOSE_FORBIDDEN,
+              REVISION_CONFLICT,
+              NOTHING_TO_UNDO,
+              NOTHING_TO_REDO ->
           HttpStatus.CONFLICT;
-      case INVALID_OPERATION_AUTHOR -> HttpStatus.BAD_REQUEST;
     };
   }
 
@@ -110,16 +105,5 @@ public final class WorkflowApiExceptionHandler {
     return result.toString();
   }
 
-  /**
-   * Field-level validation detail included in invalid-request problem responses.
-   *
-   * @param field invalid field name
-   * @param message validation message
-   */
-  public record FieldViolation(String field, String message) {
-    public FieldViolation {
-      field = Objects.requireNonNull(field, "field");
-      message = Objects.requireNonNull(message, "message");
-    }
-  }
+  public record FieldViolation(String field, String message) {}
 }
