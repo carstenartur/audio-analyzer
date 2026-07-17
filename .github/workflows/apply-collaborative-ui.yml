@@ -1,0 +1,51 @@
+name: Apply collaborative React Flow UI
+
+on:
+  push:
+    branches:
+      - feature/239-complete-collaborative-platform
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feature/239-complete-collaborative-platform
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+      - name: Generate collaborative workbench and E2E path
+        run: python3 .github/scripts/generate_collaborative_ui.py
+      - name: Resolve and lock current frontend dependencies
+        working-directory: audio-app/workbench-ui
+        run: npm install
+      - name: Build packaged React Flow application
+        working-directory: audio-app/workbench-ui
+        run: npm run build
+      - name: Apply repository formatting
+        run: mvn -B -DskipTests spotless:apply
+      - name: Remove temporary generator
+        run: |
+          rm -f .github/workflows/apply-collaborative-ui.yml
+          rm -f .github/scripts/generate_collaborative_ui.py
+      - name: Commit generated implementation
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m 'Promote React Flow Yjs workbench and add two-browser verification'
+          git push origin HEAD:feature/239-complete-collaborative-platform
+      - name: Verify frontend and focused modules
+        run: |
+          cd audio-app/workbench-ui && npm ci && npm run build
+          cd ../.. && mvn -B -pl audio-core,audio-app -am test
