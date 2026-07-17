@@ -88,7 +88,8 @@ public final class WorkflowApiExceptionHandler {
               ACTOR_METADATA_MISMATCH,
               ACTOR_NOT_JOINED,
               SESSION_MODE_MISMATCH,
-              SESSION_CLOSE_FORBIDDEN ->
+              SESSION_CLOSE_FORBIDDEN,
+              DUPLICATE_OPERATION_ID ->
           HttpStatus.CONFLICT;
       case INVALID_OPERATION_AUTHOR -> HttpStatus.BAD_REQUEST;
     };

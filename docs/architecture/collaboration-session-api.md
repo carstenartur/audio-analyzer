@@ -36,7 +36,7 @@ The framework boundary remains in `audio-app`. `audio-core` contains no Spring, 
 - Collaboration mode is immutable for the lifetime of a session.
 - Semantic operations require a joined actor, matching session mode and an operation author equal to the actor identifier.
 
-Durable cleanup and expiration policies belong to #245. The in-memory registry intentionally performs no time-based deletion.
+Live event streaming and bounded replay are documented in [`session-event-streaming.md`](session-event-streaming.md). Durable cleanup and expiration policies belong to #245. The in-memory registry intentionally performs no time-based deletion.
 
 ## HTTP endpoints
 
@@ -47,6 +47,9 @@ POST   /workflow/sessions/{sessionId}/join
 POST   /workflow/sessions/{sessionId}/leave
 GET    /workflow/sessions/{sessionId}
 GET    /workflow/sessions/{sessionId}/projection
+POST   /workflow/sessions/{sessionId}/operations
+PUT    /workflow/sessions/{sessionId}/presence
+GET    /workflow/sessions/{sessionId}/events
 DELETE /workflow/sessions/{sessionId}
 ```
 

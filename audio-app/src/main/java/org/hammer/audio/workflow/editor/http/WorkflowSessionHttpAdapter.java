@@ -4,17 +4,23 @@ import jakarta.validation.Valid;
 import java.net.URI;
 import java.util.List;
 import java.util.Objects;
+import org.hammer.audio.workflow.WorkflowOperation;
+import org.hammer.audio.workflow.collaboration.OperationActor;
 import org.hammer.audio.workflow.collaboration.WorkflowSessionRegistry;
 import org.hammer.audio.workflow.editor.WorkflowProjection;
 import org.hammer.audio.workflow.editor.http.WorkflowSessionApiModels.ActorIdRequest;
 import org.hammer.audio.workflow.editor.http.WorkflowSessionApiModels.CreateSessionRequest;
 import org.hammer.audio.workflow.editor.http.WorkflowSessionApiModels.JoinSessionRequest;
+import org.hammer.audio.workflow.editor.http.WorkflowSessionApiModels.PresenceRequest;
+import org.hammer.audio.workflow.editor.http.WorkflowSessionApiModels.PresenceResponse;
+import org.hammer.audio.workflow.editor.http.WorkflowSessionApiModels.SessionOperationRequest;
 import org.hammer.audio.workflow.editor.http.WorkflowSessionApiModels.SessionResponse;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -70,6 +76,26 @@ public final class WorkflowSessionHttpAdapter {
   public SessionResponse leave(
       @PathVariable(SESSION_ID) String sessionId, @Valid @RequestBody ActorIdRequest request) {
     return SessionResponse.from(registry.leave(sessionId, request.actorId()));
+  }
+
+  /** Applies one joined actor's semantic operation and returns the canonical projection. */
+  @PostMapping("/{sessionId}/operations")
+  public WorkflowProjection applyOperation(
+      @PathVariable(SESSION_ID) String sessionId,
+      @Valid @RequestBody SessionOperationRequest request) {
+    OperationActor actor = request.actor().toDomain();
+    WorkflowOperation operation =
+        WorkflowOperationHttpParser.parse(request.operation(), actor.actorId());
+    return WorkflowProjection.fromWorkflow(
+        registry.applyOperation(sessionId, request.mode(), actor, operation));
+  }
+
+  /** Updates non-semantic presence and broadcasts it separately from workflow history. */
+  @PutMapping("/{sessionId}/presence")
+  public PresenceResponse updatePresence(
+      @PathVariable(SESSION_ID) String sessionId, @Valid @RequestBody PresenceRequest request) {
+    OperationActor actor = request.actor().toDomain();
+    return PresenceResponse.from(registry.updatePresence(sessionId, actor, request.toDomain()));
   }
 
   /** Returns immutable session metadata. */

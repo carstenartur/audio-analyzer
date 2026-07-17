@@ -1,0 +1,117 @@
+package org.hammer.audio.workflow.editor.http;
+
+import java.time.Instant;
+import java.util.Arrays;
+import org.hammer.audio.workflow.Edge;
+import org.hammer.audio.workflow.Node;
+import org.hammer.audio.workflow.WorkflowOperation;
+import org.hammer.audio.workflow.catalog.ExperimentNodeCatalog;
+import tools.jackson.databind.JsonNode;
+
+/** Parses transport JSON into semantic workflow operations shared by editor/session endpoints. */
+final class WorkflowOperationHttpParser {
+
+  private static final String JSON_FIELD_TIMESTAMP = "timestamp";
+
+  private WorkflowOperationHttpParser() {
+    throw new AssertionError("No instances");
+  }
+
+  static WorkflowOperation parse(JsonNode json, String defaultAuthor) {
+    String type = requiredText(json, "type");
+    String operationId = requiredText(json, "operationId");
+    String author = json.has("author") ? json.get("author").asText() : defaultAuthor;
+    Instant timestamp =
+        json.has(JSON_FIELD_TIMESTAMP)
+            ? Instant.parse(json.get(JSON_FIELD_TIMESTAMP).asText())
+            : Instant.now();
+    return switch (type) {
+      case "CreateNode" -> {
+        String nodeId = requiredText(json, "nodeId");
+        String catalogType = requiredText(json, "catalogType");
+        Node node = createCatalogNode(catalogType, nodeId);
+        yield new WorkflowOperation.CreateNode(operationId, timestamp, author, node);
+      }
+      case "ConnectPorts" -> {
+        JsonNode edgeJson = requireObject(json, "edge");
+        Edge edge = edge(edgeJson);
+        yield new WorkflowOperation.ConnectPorts(operationId, timestamp, author, edge);
+      }
+      case "DisconnectPorts" -> {
+        String edgeId = requiredText(json, "edgeId");
+        Edge disconnectedEdge = edge(requireObject(json, "disconnectedEdge"));
+        yield new WorkflowOperation.DisconnectPorts(
+            operationId, timestamp, author, edgeId, disconnectedEdge);
+      }
+      case "UpdateProperty" -> {
+        String target = requiredText(json, "target");
+        String targetId = requiredText(json, "targetId");
+        String propertyKey = requiredText(json, "propertyKey");
+        String newValue = json.has("newValue") ? json.get("newValue").asText() : null;
+        String previousValue =
+            json.has("previousValue") ? json.get("previousValue").asText() : null;
+        WorkflowOperation.PropertyTarget propertyTarget = parsePropertyTarget(target);
+        yield new WorkflowOperation.UpdateProperty(
+            operationId,
+            timestamp,
+            author,
+            propertyTarget,
+            targetId,
+            propertyKey,
+            previousValue,
+            newValue);
+      }
+      default -> throw new IllegalArgumentException("Unknown operation type: " + type);
+    };
+  }
+
+  private static Edge edge(JsonNode edgeJson) {
+    return new Edge(
+        requiredText(edgeJson, "id"),
+        requiredText(edgeJson, "sourceNodeId"),
+        requiredText(edgeJson, "sourcePortId"),
+        requiredText(edgeJson, "targetNodeId"),
+        requiredText(edgeJson, "targetPortId"));
+  }
+
+  private static WorkflowOperation.PropertyTarget parsePropertyTarget(String target) {
+    return Arrays.stream(WorkflowOperation.PropertyTarget.values())
+        .filter(value -> value.name().equals(target))
+        .findFirst()
+        .orElseThrow(() -> new IllegalArgumentException("Unknown PropertyTarget: " + target));
+  }
+
+  private static Node createCatalogNode(String catalogType, String nodeId) {
+    return switch (catalogType) {
+      case "recording-input" -> ExperimentNodeCatalog.recordingInput(nodeId);
+      case "synthetic-signal-generator" -> ExperimentNodeCatalog.syntheticSignalGenerator(nodeId);
+      case "humbug-db-import" -> ExperimentNodeCatalog.humBugDbImport(nodeId);
+      case "gain" -> ExperimentNodeCatalog.gain(nodeId);
+      case "bandpass-filter" -> ExperimentNodeCatalog.bandpassFilter(nodeId);
+      case "fft" -> ExperimentNodeCatalog.fft(nodeId);
+      case "wingbeat-feature-extraction" -> ExperimentNodeCatalog.wingbeatFeatureExtraction(nodeId);
+      case "classifier" -> ExperimentNodeCatalog.classifier(nodeId);
+      case "localization" -> ExperimentNodeCatalog.localization(nodeId);
+      case "benchmark" -> ExperimentNodeCatalog.benchmark(nodeId);
+      case "report" -> ExperimentNodeCatalog.report(nodeId);
+      case "evidence-export" -> ExperimentNodeCatalog.evidenceExport(nodeId);
+      default -> throw new IllegalArgumentException("Unknown catalog node type: " + catalogType);
+    };
+  }
+
+  private static JsonNode requireObject(JsonNode node, String field) {
+    JsonNode value = node.get(field);
+    if (value == null || !value.isObject()) {
+      throw new IllegalArgumentException("Missing required object field: " + field);
+    }
+    return value;
+  }
+
+  private static String requiredText(JsonNode node, String field) {
+    JsonNode value = node.get(field);
+    if (value == null || value.isNull() || value.asText().isBlank()) {
+      throw new IllegalArgumentException("Missing required field: " + field);
+    }
+    return value.asText();
+  }
+}

@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import org.hammer.audio.workflow.Metadata;
 import org.hammer.audio.workflow.Node;
 import org.hammer.audio.workflow.Workflow;
@@ -110,6 +111,72 @@ class WorkflowSessionRegistryTest {
     registry.close("session.shared", OWNER.actorId());
     assertCode(
         WorkflowSessionException.Code.SESSION_NOT_FOUND, () -> registry.inspect("session.shared"));
+  }
+
+  @Test
+  void duplicateOperationRetryIsIdempotentAndConflictingReuseIsRejected() {
+    WorkflowSessionEventHub eventHub = new WorkflowSessionEventHub(16, 4);
+    WorkflowSessionRegistry registry = new WorkflowSessionRegistry(eventHub);
+    registry.create(
+        "session.shared", CollaborationMode.SHARED_SESSION_PERSONAL_UNDO, OWNER, emptyWorkflow());
+    long cursor = eventHub.currentSequence("session.shared");
+    Node firstNode =
+        new Node("node.input", "input", "Input", List.of(), List.of(), Metadata.empty());
+    WorkflowOperation first =
+        new WorkflowOperation.CreateNode(
+            "operation.same", Instant.parse("2026-07-17T01:00:00Z"), OWNER.actorId(), firstNode);
+    WorkflowOperation retry =
+        new WorkflowOperation.CreateNode(
+            "operation.same", Instant.parse("2026-07-17T01:01:00Z"), OWNER.actorId(), firstNode);
+
+    registry.applyOperation(
+        "session.shared", CollaborationMode.SHARED_SESSION_PERSONAL_UNDO, OWNER, first);
+    registry.applyOperation(
+        "session.shared", CollaborationMode.SHARED_SESSION_PERSONAL_UNDO, OWNER, retry);
+
+    assertEquals(1, registry.inspect("session.shared").operationCount());
+    assertEquals(
+        List.of(WorkflowSessionEvent.Type.OPERATION_ACCEPTED),
+        eventHub.replay("session.shared", cursor).stream()
+            .map(WorkflowSessionEvent::type)
+            .toList());
+
+    Node differentNode =
+        new Node("node.other", "input", "Other", List.of(), List.of(), Metadata.empty());
+    WorkflowOperation conflicting =
+        new WorkflowOperation.CreateNode(
+            "operation.same",
+            Instant.parse("2026-07-17T01:02:00Z"),
+            OWNER.actorId(),
+            differentNode);
+    assertCode(
+        WorkflowSessionException.Code.DUPLICATE_OPERATION_ID,
+        () ->
+            registry.applyOperation(
+                "session.shared",
+                CollaborationMode.SHARED_SESSION_PERSONAL_UNDO,
+                OWNER,
+                conflicting));
+  }
+
+  @Test
+  void presenceEventDoesNotMutateSemanticOperationHistory() {
+    WorkflowSessionEventHub eventHub = new WorkflowSessionEventHub(16, 4);
+    WorkflowSessionRegistry registry = new WorkflowSessionRegistry(eventHub);
+    registry.create(
+        "session.shared", CollaborationMode.SHARED_SESSION_PERSONAL_UNDO, OWNER, emptyWorkflow());
+    long cursor = eventHub.currentSequence("session.shared");
+
+    registry.updatePresence(
+        "session.shared",
+        OWNER,
+        new PresenceState(
+            OWNER.actorId(), Instant.parse("2026-07-17T02:00:00Z"), Map.of("cursor.x", "42")));
+
+    assertEquals(0, registry.inspect("session.shared").operationCount());
+    WorkflowSessionEvent event = eventHub.replay("session.shared", cursor).getFirst();
+    assertEquals(WorkflowSessionEvent.Type.PRESENCE_UPDATED, event.type());
+    assertEquals("42", event.attributes().get("cursor.x"));
   }
 
   private static void assertCode(
