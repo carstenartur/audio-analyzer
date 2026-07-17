@@ -52,8 +52,10 @@ jobs:
           git apply --check /tmp/feature-242.patch
           git apply /tmp/feature-242.patch
           python3 .github/feature-242-postprocess.py
+          python3 .github/feature-242-spotbugs-fix.py
           rm .github/feature-239.patch.part.*
           rm .github/feature-242-postprocess.py
+          rm .github/feature-242-spotbugs-fix.py
           rm .github/workflows/export-feature-239-source.yml
 
       - name: Apply repository formatting
