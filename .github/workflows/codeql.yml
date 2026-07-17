@@ -54,21 +54,6 @@ jobs:
         server-username: GITHUB_ACTOR
         server-password: GITHUB_TOKEN
 
-    - name: Apply formatter and capture PR 262 patch
-      if: github.event_name == 'pull_request' && github.head_ref == 'feature/261-hibernate-collaboration-aggregate'
-      run: |
-        mvn -B spotless:apply --file pom.xml
-        git diff --binary > /tmp/pr262-format.patch
-
-    - name: Upload PR 262 formatting patch
-      if: github.event_name == 'pull_request' && github.head_ref == 'feature/261-hibernate-collaboration-aggregate'
-      uses: actions/upload-artifact@v7
-      with:
-        name: pr262-format-patch
-        path: /tmp/pr262-format.patch
-        if-no-files-found: error
-        retention-days: 3
-
     # Initializes the CodeQL tools for scanning.
     - name: Initialize CodeQL
       uses: github/codeql-action/init@v4
