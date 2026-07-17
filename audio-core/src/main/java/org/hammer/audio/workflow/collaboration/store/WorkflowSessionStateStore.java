@@ -19,5 +19,5 @@ public interface WorkflowSessionStateStore {
   List<StoredWorkflowOperation> operations(String sessionId);
 
   /** Returns unpublished outbox entries in stable event order. */
-  List<PendingWorkflowOutboxEntry> pendingOutbox(int limit);
+  List<StoredWorkflowOutboxEntry> pendingOutbox(int limit);
 }
