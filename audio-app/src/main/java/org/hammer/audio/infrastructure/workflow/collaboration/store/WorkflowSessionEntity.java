@@ -26,7 +26,7 @@ public class WorkflowSessionEntity {
 
   @Id
   @Column(name = "session_id", nullable = false, length = 255)
-  private String sessionId;
+  private String storedSessionId;
 
   @Version
   @Column(name = "lock_version", nullable = false)
@@ -49,20 +49,20 @@ public class WorkflowSessionEntity {
   private Instant createdAt;
 
   @Column(name = "workflow_id", nullable = false, length = 255)
-  private String workflowId;
+  private String storedWorkflowId;
 
   @Lob
   @Column(name = "workflow_dsl", nullable = false)
-  private String workflowDsl;
+  private String storedWorkflowDsl;
 
   @Column(name = "semantic_revision", nullable = false)
-  private long semanticRevision;
+  private long storedSemanticRevision;
 
   @Column(name = "event_sequence", nullable = false)
-  private long eventSequence;
+  private long storedEventSequence;
 
   @Column(name = "session_closed", nullable = false)
-  private boolean closed;
+  private boolean sessionClosed;
 
   protected WorkflowSessionEntity() {
     // Required by Jakarta Persistence.
@@ -70,31 +70,31 @@ public class WorkflowSessionEntity {
 
   static WorkflowSessionEntity from(StoredWorkflowSession stored) {
     WorkflowSessionEntity entity = new WorkflowSessionEntity();
-    entity.sessionId = stored.sessionId();
+    entity.storedSessionId = stored.sessionId();
     entity.mode = stored.mode();
     entity.ownerActorId = stored.owner().actorId();
     entity.ownerUserId = stored.owner().userId();
     entity.ownerDisplayName = stored.owner().displayName();
     entity.createdAt = stored.createdAt();
-    entity.workflowId = stored.workflowId();
-    entity.workflowDsl = stored.workflowDsl();
-    entity.semanticRevision = stored.revision();
-    entity.eventSequence = stored.sequence();
-    entity.closed = stored.closed();
+    entity.storedWorkflowId = stored.workflowId();
+    entity.storedWorkflowDsl = stored.workflowDsl();
+    entity.storedSemanticRevision = stored.revision();
+    entity.storedEventSequence = stored.sequence();
+    entity.sessionClosed = stored.closed();
     return entity;
   }
 
   StoredWorkflowSession toStoredSession() {
     return new StoredWorkflowSession(
-        sessionId,
+        storedSessionId,
         mode,
         new OperationActor(ownerActorId, ownerUserId, ownerDisplayName),
         createdAt,
-        workflowId,
-        workflowDsl,
-        semanticRevision,
-        eventSequence,
-        closed);
+        storedWorkflowId,
+        storedWorkflowDsl,
+        storedSemanticRevision,
+        storedEventSequence,
+        sessionClosed);
   }
 
   void applyAcceptedOperation(
@@ -102,33 +102,33 @@ public class WorkflowSessionEntity {
       String updatedWorkflowDsl,
       long updatedRevision,
       long updatedSequence) {
-    this.workflowId = updatedWorkflowId;
-    this.workflowDsl = updatedWorkflowDsl;
-    this.semanticRevision = updatedRevision;
-    this.eventSequence = updatedSequence;
+    this.storedWorkflowId = updatedWorkflowId;
+    this.storedWorkflowDsl = updatedWorkflowDsl;
+    this.storedSemanticRevision = updatedRevision;
+    this.storedEventSequence = updatedSequence;
   }
 
   String sessionId() {
-    return sessionId;
+    return storedSessionId;
   }
 
   String workflowId() {
-    return workflowId;
+    return storedWorkflowId;
   }
 
   String workflowDsl() {
-    return workflowDsl;
+    return storedWorkflowDsl;
   }
 
   long semanticRevision() {
-    return semanticRevision;
+    return storedSemanticRevision;
   }
 
   long eventSequence() {
-    return eventSequence;
+    return storedEventSequence;
   }
 
   boolean closed() {
-    return closed;
+    return sessionClosed;
   }
 }
