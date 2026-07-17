@@ -12,8 +12,14 @@ public interface WorkflowSessionStateStore {
   /** Finds a durable session by its stable identifier. */
   Optional<StoredWorkflowSession> find(String sessionId);
 
+  /** Returns all open durable sessions in stable identifier order. */
+  List<StoredWorkflowSession> openSessions();
+
   /** Atomically appends one accepted operation, aggregate update and outbox event. */
   WorkflowSessionAppendResult append(WorkflowSessionAppendCommand command);
+
+  /** Atomically closes a session at the expected semantic revision. */
+  StoredWorkflowSession close(String sessionId, long expectedRevision);
 
   /** Returns accepted operations in stable session sequence order. */
   List<StoredWorkflowOperation> operations(String sessionId);
