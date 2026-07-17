@@ -81,8 +81,9 @@ public class WorkflowPersistenceConfiguration {
     for (WorkflowPersistenceEntityContributor contributor : entityContributors) {
       Collection<Class<?>> contributedClasses =
           Objects.requireNonNull(contributor, "entityContributor").annotatedClasses();
-      for (Class<?> contributedClass :
-          Objects.requireNonNull(contributedClasses, "annotatedClasses")) {
+      Collection<Class<?>> requiredClasses =
+          Objects.requireNonNull(contributedClasses, "annotatedClasses");
+      for (Class<?> contributedClass : requiredClasses) {
         annotatedClasses.add(Objects.requireNonNull(contributedClass, "annotatedClass"));
       }
     }
