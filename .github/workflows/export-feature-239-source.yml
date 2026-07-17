@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - feature/242-session-event-streaming
+  pull_request:
+    branches:
+      - master
 
 permissions:
   contents: write
