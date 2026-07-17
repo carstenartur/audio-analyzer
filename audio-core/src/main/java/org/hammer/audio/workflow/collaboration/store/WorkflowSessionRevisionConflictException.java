@@ -5,9 +5,9 @@ import java.util.Objects;
 /** Typed durable-session failure raised when an append targets a stale semantic revision. */
 public final class WorkflowSessionRevisionConflictException extends RuntimeException {
 
-  private final String sessionId;
-  private final long expectedRevision;
-  private final long actualRevision;
+  private final String conflictingSessionId;
+  private final long requiredRevision;
+  private final long observedRevision;
 
   /** Creates a revision conflict with stable machine-readable values. */
   public WorkflowSessionRevisionConflictException(
@@ -19,20 +19,20 @@ public final class WorkflowSessionRevisionConflictException extends RuntimeExcep
             + actualRevision
             + " for session "
             + sessionId);
-    this.sessionId = Objects.requireNonNull(sessionId, "sessionId");
-    this.expectedRevision = expectedRevision;
-    this.actualRevision = actualRevision;
+    this.conflictingSessionId = Objects.requireNonNull(sessionId, "sessionId");
+    this.requiredRevision = expectedRevision;
+    this.observedRevision = actualRevision;
   }
 
   public String sessionId() {
-    return sessionId;
+    return conflictingSessionId;
   }
 
   public long expectedRevision() {
-    return expectedRevision;
+    return requiredRevision;
   }
 
   public long actualRevision() {
-    return actualRevision;
+    return observedRevision;
   }
 }
