@@ -1,0 +1,88 @@
+name: Apply issue 245 durable collaboration core
+
+on:
+  push:
+    branches:
+      - feature/245-hibernate-session-outbox
+
+permissions:
+  contents: write
+
+concurrency:
+  group: feature-245-hibernate-session-outbox-core
+  cancel-in-progress: true
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feature/245-hibernate-session-outbox
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Apply framework-independent persistence boundary
+        shell: bash
+        run: |
+          python3 .github/feature-245-core.py
+          python3 .github/feature-245-core-fix.py
+          rm .github/feature-245-core.py
+          rm .github/feature-245-core-fix.py
+          rm .github/workflows/apply-feature-245-core.yml
+
+      - name: Format repository
+        run: mvn -B spotless:apply --file pom.xml
+
+      - name: Verify full Maven reactor
+        id: verify
+        shell: bash
+        run: |
+          set +e
+          mvn -B clean verify --file pom.xml 2>&1 | tee /tmp/feature-245-core-maven.log
+          status=${PIPESTATUS[0]}
+          if (( status == 0 )); then
+            echo "result=success" >> "$GITHUB_OUTPUT"
+          else
+            echo "result=failure" >> "$GITHUB_OUTPUT"
+          fi
+          exit 0
+
+      - name: Archive formatted source
+        if: always()
+        run: tar --exclude=.git --exclude=target --exclude='*/target' -czf /tmp/feature-245-core-source.tar.gz .
+
+      - name: Upload source artifact
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: feature-245-core-source
+          path: /tmp/feature-245-core-source.tar.gz
+          retention-days: 2
+
+      - name: Upload Maven log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: feature-245-core-maven-log
+          path: /tmp/feature-245-core-maven.log
+          if-no-files-found: error
+          retention-days: 2
+
+      - name: Commit verified core
+        if: steps.verify.outputs.result == 'success'
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "Add durable collaboration state-store boundary (#245)"
+          git push origin HEAD:feature/245-hibernate-session-outbox
+
+      - name: Fail when verification failed
+        if: steps.verify.outputs.result != 'success'
+        run: exit 1
