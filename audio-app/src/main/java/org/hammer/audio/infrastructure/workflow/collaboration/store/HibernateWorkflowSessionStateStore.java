@@ -160,10 +160,11 @@ public final class HibernateWorkflowSessionStateStore implements WorkflowSession
       Session session,
       WorkflowOperationEntity existing,
       WorkflowSessionAppendCommand command) {
-    if (!existing.hasSameSemanticContent(command.sessionId(), command.operation())) {
-      throw new WorkflowOperationPersistenceConflictException(
-          command.sessionId(), command.operation().operationId());
+    if (!existing.hasSameSemanticContent(command.sessionId(), command.operation())
+        || command.expectedRevision() != existing.semanticRevision() - 1) {
+      throw operationConflict(command);
     }
+
     WorkflowSessionEntity aggregate =
         session.find(WorkflowSessionEntity.class, existing.sessionId());
     WorkflowOutboxEntity outbox =
@@ -181,6 +182,18 @@ public final class HibernateWorkflowSessionStateStore implements WorkflowSession
           "Durable operation is missing its aggregate or outbox event: "
               + existing.operationId());
     }
+
+    boolean currentSnapshotIsOriginal = aggregate.semanticRevision() == existing.semanticRevision();
+    if (!aggregate.workflowId().equals(command.workflowId())
+        || (currentSnapshotIsOriginal && !aggregate.workflowDsl().equals(command.workflowDsl()))
+        || !outbox.hasSameSemanticContent(
+            command.sessionId(),
+            command.outboxEvent(),
+            existing.operationSequence(),
+            existing.semanticRevision())) {
+      throw operationConflict(command);
+    }
+
     return new WorkflowSessionAppendResult(
         aggregate.toStoredSession(),
         existing.toStoredOperation(),
@@ -195,6 +208,12 @@ public final class HibernateWorkflowSessionStateStore implements WorkflowSession
             WorkflowOperationEntity.class)
         .setParameter("operationId", operationId)
         .uniqueResult();
+  }
+
+  private static WorkflowOperationPersistenceConflictException operationConflict(
+      WorkflowSessionAppendCommand command) {
+    return new WorkflowOperationPersistenceConflictException(
+        command.sessionId(), command.operation().operationId());
   }
 
   private long currentRevision(String sessionId) {
