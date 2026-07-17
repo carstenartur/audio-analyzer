@@ -207,10 +207,7 @@ class HibernateWorkflowSessionStateStoreTest {
 
           List<AppendAttempt> attempts = runConcurrently(store, command, command);
           List<WorkflowSessionAppendResult> results =
-              attempts.stream()
-                  .filter(AppendAttempt::accepted)
-                  .map(AppendAttempt::result)
-                  .toList();
+              attempts.stream().filter(AppendAttempt::accepted).map(AppendAttempt::result).toList();
 
           assertEquals(2, results.size());
           assertEquals(0, attempts.stream().filter(AppendAttempt::conflicted).count());
