@@ -2,7 +2,16 @@ package org.hammer.audio.workflow.collaboration.store;
 
 import java.util.Objects;
 
-/** Atomic durable append request for one accepted collaboration command. */
+/**
+ * Atomic durable append request for one accepted collaboration command.
+ *
+ * @param sessionId target collaboration-session identifier
+ * @param expectedRevision semantic revision required by the caller
+ * @param operation canonically serialized accepted operation
+ * @param workflowId identifier of the resulting canonical workflow
+ * @param workflowDsl deterministic serialized resulting workflow
+ * @param outboxEvent event to persist atomically with the operation
+ */
 public record WorkflowSessionAppendCommand(
     String sessionId,
     long expectedRevision,
