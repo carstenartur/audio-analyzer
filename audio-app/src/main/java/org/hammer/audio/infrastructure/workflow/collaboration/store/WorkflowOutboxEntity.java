@@ -28,13 +28,13 @@ public class WorkflowOutboxEntity {
 
   @Id
   @Column(name = "event_id", nullable = false, length = 255)
-  private String eventId;
+  private String storedEventId;
 
   @Column(name = "session_id", nullable = false, length = 255)
-  private String sessionId;
+  private String storedSessionId;
 
   @Column(name = "event_sequence", nullable = false)
-  private long eventSequence;
+  private long storedEventSequence;
 
   @Column(name = "semantic_revision", nullable = false)
   private long semanticRevision;
@@ -65,9 +65,9 @@ public class WorkflowOutboxEntity {
   static WorkflowOutboxEntity pending(
       String sessionId, WorkflowOutboxEventData event, long sequence, long revision) {
     WorkflowOutboxEntity entity = new WorkflowOutboxEntity();
-    entity.eventId = event.eventId();
-    entity.sessionId = sessionId;
-    entity.eventSequence = sequence;
+    entity.storedEventId = event.eventId();
+    entity.storedSessionId = sessionId;
+    entity.storedEventSequence = sequence;
     entity.semanticRevision = revision;
     entity.eventType = event.eventType();
     entity.occurredAt = event.occurredAt();
@@ -78,9 +78,9 @@ public class WorkflowOutboxEntity {
 
   StoredWorkflowOutboxEntry toStoredEntry() {
     return new StoredWorkflowOutboxEntry(
-        eventId,
-        sessionId,
-        eventSequence,
+        storedEventId,
+        storedSessionId,
+        storedEventSequence,
         semanticRevision,
         eventType,
         occurredAt,
@@ -95,9 +95,9 @@ public class WorkflowOutboxEntity {
       WorkflowOutboxEventData candidate,
       long expectedSequence,
       long expectedRevision) {
-    return sessionId.equals(expectedSessionId)
-        && eventId.equals(candidate.eventId())
-        && eventSequence == expectedSequence
+    return storedSessionId.equals(expectedSessionId)
+        && storedEventId.equals(candidate.eventId())
+        && storedEventSequence == expectedSequence
         && semanticRevision == expectedRevision
         && eventType.equals(candidate.eventType())
         && occurredAt.equals(candidate.occurredAt())
@@ -105,14 +105,14 @@ public class WorkflowOutboxEntity {
   }
 
   String eventId() {
-    return eventId;
+    return storedEventId;
   }
 
   String sessionId() {
-    return sessionId;
+    return storedSessionId;
   }
 
   long eventSequence() {
-    return eventSequence;
+    return storedEventSequence;
   }
 }
