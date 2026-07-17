@@ -7,8 +7,8 @@ import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Function;
-import org.hammer.audio.workflow.collaboration.store.PendingWorkflowOutboxEntry;
 import org.hammer.audio.workflow.collaboration.store.StoredWorkflowOperation;
+import org.hammer.audio.workflow.collaboration.store.StoredWorkflowOutboxEntry;
 import org.hammer.audio.workflow.collaboration.store.StoredWorkflowSession;
 import org.hammer.audio.workflow.collaboration.store.WorkflowOperationPersistenceConflictException;
 import org.hammer.audio.workflow.collaboration.store.WorkflowSessionAppendCommand;
@@ -64,9 +64,8 @@ public final class HibernateWorkflowSessionStateStore implements WorkflowSession
       return inTransaction(session -> appendWithinTransaction(session, command));
     } catch (RuntimeException exception) {
       if (isOptimisticLockFailure(exception)) {
-        long actualRevision = find(command.sessionId()).map(StoredWorkflowSession::revision).orElse(-1L);
         throw new WorkflowSessionRevisionConflictException(
-            command.sessionId(), command.expectedRevision(), actualRevision);
+            command.sessionId(), command.expectedRevision(), currentRevision(command.sessionId()));
       }
       throw exception;
     }
@@ -91,7 +90,7 @@ public final class HibernateWorkflowSessionStateStore implements WorkflowSession
   }
 
   @Override
-  public List<PendingWorkflowOutboxEntry> pendingOutbox(int limit) {
+  public List<StoredWorkflowOutboxEntry> pendingOutbox(int limit) {
     if (limit <= 0) {
       throw new IllegalArgumentException("limit must be > 0");
     }
@@ -106,7 +105,7 @@ public final class HibernateWorkflowSessionStateStore implements WorkflowSession
           .setMaxResults(limit)
           .getResultList()
           .stream()
-          .map(WorkflowOutboxEntity::toPendingEntry)
+          .map(WorkflowOutboxEntity::toStoredEntry)
           .toList();
     }
   }
@@ -153,7 +152,7 @@ public final class HibernateWorkflowSessionStateStore implements WorkflowSession
     return new WorkflowSessionAppendResult(
         aggregate.toStoredSession(),
         operation.toStoredOperation(),
-        outbox.toPendingEntry(),
+        outbox.toStoredEntry(),
         false);
   }
 
@@ -185,7 +184,7 @@ public final class HibernateWorkflowSessionStateStore implements WorkflowSession
     return new WorkflowSessionAppendResult(
         aggregate.toStoredSession(),
         existing.toStoredOperation(),
-        outbox.toPendingEntry(),
+        outbox.toStoredEntry(),
         true);
   }
 
@@ -196,6 +195,10 @@ public final class HibernateWorkflowSessionStateStore implements WorkflowSession
             WorkflowOperationEntity.class)
         .setParameter("operationId", operationId)
         .uniqueResult();
+  }
+
+  private long currentRevision(String sessionId) {
+    return find(sessionId).map(StoredWorkflowSession::revision).orElse(-1L);
   }
 
   private <T> T inTransaction(Function<Session, T> work) {
