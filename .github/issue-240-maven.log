@@ -1,0 +1,917 @@
+[INFO] Scanning for projects...
+[INFO] ------------------------------------------------------------------------
+[INFO] Reactor Build Order:
+[INFO] 
+[INFO] Audio Analyzer Parent                                              [pom]
+[INFO] Audio Analyzer Core                                                [jar]
+[INFO] Audio Analyzer Geometry                                            [jar]
+[INFO] Audio Analyzer Acquisition                                         [jar]
+[INFO] Audio Analyzer DSP and Analysis                                    [jar]
+[INFO] Audio Analyzer Plugin API                                          [jar]
+[INFO] Audio Analyzer Experimental Acoustic                               [jar]
+[INFO] Audio Analyzer App                                                 [jar]
+[INFO] 
+[INFO] -----------------------< audioin:audioin-parent >-----------------------
+[INFO] Building Audio Analyzer Parent 0.0.4-SNAPSHOT                      [1/8]
+[INFO]   from pom.xml
+[INFO] --------------------------------[ pom ]---------------------------------
+[INFO] 
+[INFO] --- clean:3.5.0:clean (default-clean) @ audioin-parent ---
+[INFO] 
+[INFO] --- enforcer:3.6.3:enforce (enforce-java) @ audioin-parent ---
+[INFO] Rule 0: org.apache.maven.enforcer.rules.version.RequireJavaVersion passed
+[INFO] 
+[INFO] --- jacoco:0.8.15:prepare-agent (prepare-agent) @ audioin-parent ---
+[INFO] argLine set to -javaagent:/home/runner/.m2/repository/org/jacoco/org.jacoco.agent/0.8.15/org.jacoco.agent-0.8.15-runtime.jar=destfile=/home/runner/work/audio-analyzer/audio-analyzer/target/jacoco.exec
+[INFO] 
+[INFO] --- jacoco:0.8.15:report (report) @ audioin-parent ---
+[INFO] Skipping JaCoCo execution due to missing execution data file.
+[INFO] 
+[INFO] --- spotless:3.8.0:check (default) @ audioin-parent ---
+[INFO] Index file does not exist. Fallback to an empty index
+[INFO] Sorting file /tmp/pom15555222974301208827.xml
+[INFO] Pom file is already sorted, exiting
+[INFO] Spotless.Pom is keeping 1 files clean - 0 needs changes to be clean, 1 were already clean, 0 were skipped because caching determined they were already clean
+[INFO] Spotless.Markdown is keeping 58 files clean - 0 needs changes to be clean, 58 were already clean, 0 were skipped because caching determined they were already clean
+[INFO] 
+[INFO] --- jacoco:0.8.15:check (check) @ audioin-parent ---
+[INFO] Skipping JaCoCo execution due to missing execution data file:/home/runner/work/audio-analyzer/audio-analyzer/target/jacoco.exec
+[INFO] 
+[INFO] --- checkstyle:3.6.0:check (checkstyle) @ audioin-parent ---
+[INFO] Starting audit...
+Audit done.
+[INFO] You have 0 Checkstyle violations.
+[INFO] 
+[INFO] >>> spotbugs:4.10.3.0:check (spotbugs) > :spotbugs @ audioin-parent >>>
+[INFO] 
+[INFO] --- spotbugs:4.10.3.0:spotbugs (spotbugs) @ audioin-parent ---
+[INFO] No files found to run spotbugs; check compile phase has been run.
+[INFO] Skipping com.github.spotbugs:spotbugs-maven-plugin:4.10.3.0:spotbugs report goal
+[INFO] 
+[INFO] <<< spotbugs:4.10.3.0:check (spotbugs) < :spotbugs @ audioin-parent <<<
+[INFO] 
+[INFO] 
+[INFO] --- spotbugs:4.10.3.0:check (spotbugs) @ audioin-parent ---
+[INFO] 
+[INFO] >>> pmd:3.28.0:check (pmd) > :pmd @ audioin-parent >>>
+[INFO] 
+[INFO] --- pmd:3.28.0:pmd (pmd) @ audioin-parent ---
+[INFO] Skipping org.apache.maven.plugins:maven-pmd-plugin:3.28.0:pmd report goal
+[INFO] 
+[INFO] <<< pmd:3.28.0:check (pmd) < :pmd @ audioin-parent <<<
+[INFO] 
+[INFO] 
+[INFO] --- pmd:3.28.0:check (pmd) @ audioin-parent ---
+[INFO] 
+[INFO] -------------------------< audioin:audio-core >-------------------------
+[INFO] Building Audio Analyzer Core 0.0.4-SNAPSHOT                        [2/8]
+[INFO]   from audio-core/pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- clean:3.5.0:clean (default-clean) @ audio-core ---
+[INFO] 
+[INFO] --- enforcer:3.6.3:enforce (enforce-java) @ audio-core ---
+[INFO] 
+[INFO] --- jacoco:0.8.15:prepare-agent (prepare-agent) @ audio-core ---
+[INFO] argLine set to -javaagent:/home/runner/.m2/repository/org/jacoco/org.jacoco.agent/0.8.15/org.jacoco.agent-0.8.15-runtime.jar=destfile=/home/runner/work/audio-analyzer/audio-analyzer/audio-core/target/jacoco.exec
+[INFO] 
+[INFO] --- resources:3.5.0:resources (default-resources) @ audio-core ---
+[INFO] skip non existing resourceDirectory /home/runner/work/audio-analyzer/audio-analyzer/audio-core/src/main/resources
+[INFO] 
+[INFO] --- compiler:3.15.0:compile (default-compile) @ audio-core ---
+[INFO] Recompiling the module because of changed source code.
+[INFO] Compiling 72 source files with javac [debug deprecation release 21] to target/classes
+[INFO] 
+[INFO] --- resources:3.5.0:testResources (default-testResources) @ audio-core ---
+[INFO] skip non existing resourceDirectory /home/runner/work/audio-analyzer/audio-analyzer/audio-core/src/test/resources
+[INFO] 
+[INFO] --- compiler:3.15.0:testCompile (default-testCompile) @ audio-core ---
+[INFO] Recompiling the module because of changed dependency.
+[INFO] Compiling 29 source files with javac [debug deprecation release 21] to target/test-classes
+[INFO] 
+[INFO] --- surefire:3.5.6:test (default-test) @ audio-core ---
+[INFO] Using auto detected provider org.apache.maven.surefire.junitplatform.JUnitPlatformProvider
+[INFO] 
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+[INFO] Running org.hammer.audio.core.AudioBlockTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.108 s -- in org.hammer.audio.core.AudioBlockTest
+[INFO] Running org.hammer.audio.core.AudioFormatDescriptorTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.027 s -- in org.hammer.audio.core.AudioFormatDescriptorTest
+[INFO] Running org.hammer.audio.buffer.AudioRingBufferTest
+[INFO] Tests run: 10, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.100 s -- in org.hammer.audio.buffer.AudioRingBufferTest
+[INFO] Running org.hammer.audio.workflow.WorkflowValidatorTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.035 s -- in org.hammer.audio.workflow.WorkflowValidatorTest
+[INFO] Running org.hammer.audio.workflow.dsl.WorkflowDslSerializerTest
+[INFO] Tests run: 13, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.040 s -- in org.hammer.audio.workflow.dsl.WorkflowDslSerializerTest
+[INFO] Running org.hammer.audio.workflow.WorkflowSerializationTest
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.614 s -- in org.hammer.audio.workflow.WorkflowSerializationTest
+[INFO] Running org.hammer.audio.workflow.history.WorkflowDiffTest
+[INFO] Tests run: 10, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.019 s -- in org.hammer.audio.workflow.history.WorkflowDiffTest
+[INFO] Running org.hammer.audio.workflow.history.WorkflowHistorySearchTest
+[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.078 s -- in org.hammer.audio.workflow.history.WorkflowHistorySearchTest
+[INFO] Running org.hammer.audio.workflow.history.MergeConflictReportTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.011 s -- in org.hammer.audio.workflow.history.MergeConflictReportTest
+[INFO] Running org.hammer.audio.workflow.WorkflowOperationLogTest
+[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.028 s -- in org.hammer.audio.workflow.WorkflowOperationLogTest
+[INFO] Running org.hammer.audio.workflow.MetadataTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.006 s -- in org.hammer.audio.workflow.MetadataTest
+[INFO] Running org.hammer.audio.workflow.collaboration.WorkflowSessionRegistryTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.033 s -- in org.hammer.audio.workflow.collaboration.WorkflowSessionRegistryTest
+[INFO] Running org.hammer.audio.workflow.collaboration.CollaborativeWorkflowSessionServiceTest
+Jul 17, 2026 9:26:12 PM org.hammer.audio.workflow.collaboration.CollaborativeWorkflowSessionService appendAndPublish
+WARNING: Failed to publish collaboration event for session session-1, outboxEntryId=00f741a6-b8b9-410b-8c96-63b4b7b5668f, eventType=WORKFLOW_OPERATION_APPLIED
+java.lang.IllegalStateException: broker unavailable
+	at org.hammer.audio.workflow.collaboration.CollaborativeWorkflowSessionServiceTest.lambda$publishFailureLeavesCommittedWorkflowChangeAndPendingOutboxEntry$4(CollaborativeWorkflowSessionServiceTest.java:127)
+	at org.hammer.audio.workflow.collaboration.CollaborativeWorkflowSessionService.appendAndPublish(CollaborativeWorkflowSessionService.java:198)
+	at org.hammer.audio.workflow.collaboration.CollaborativeWorkflowSessionService.applyOperation(CollaborativeWorkflowSessionService.java:66)
+	at org.hammer.audio.workflow.collaboration.CollaborativeWorkflowSessionServiceTest.publishFailureLeavesCommittedWorkflowChangeAndPendingOutboxEntry(CollaborativeWorkflowSessionServiceTest.java:134)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.junit.platform.commons.util.ReflectionUtils.invokeMethod(ReflectionUtils.java:701)
+	at org.junit.platform.commons.support.ReflectionSupport.invokeMethod(ReflectionSupport.java:502)
+	at org.junit.jupiter.engine.support.MethodReflectionUtils.invoke(MethodReflectionUtils.java:45)
+	at org.junit.jupiter.engine.execution.MethodInvocation.proceed(MethodInvocation.java:61)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain$ValidatingInvocation.proceed(InvocationInterceptorChain.java:124)
+	at org.junit.jupiter.engine.extension.TimeoutExtension.intercept(TimeoutExtension.java:163)
+	at org.junit.jupiter.engine.extension.TimeoutExtension.interceptTestableMethod(TimeoutExtension.java:148)
+	at org.junit.jupiter.engine.extension.TimeoutExtension.interceptTestMethod(TimeoutExtension.java:86)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker$ReflectiveInterceptorCall.lambda$ofVoidMethod$0(InterceptingExecutableInvoker.java:123)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.lambda$invoke$0(InterceptingExecutableInvoker.java:105)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain$InterceptedInvocation.proceed(InvocationInterceptorChain.java:99)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.proceed(InvocationInterceptorChain.java:66)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.chainAndInvoke(InvocationInterceptorChain.java:47)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.invoke(InvocationInterceptorChain.java:39)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.invoke(InterceptingExecutableInvoker.java:104)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.invoke(InterceptingExecutableInvoker.java:98)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.invokeVoid(InterceptingExecutableInvoker.java:71)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.lambda$invokeTestMethod$0(TestMethodTestDescriptor.java:219)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:74)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.invokeTestMethod(TestMethodTestDescriptor.java:215)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.execute(TestMethodTestDescriptor.java:157)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.execute(TestMethodTestDescriptor.java:70)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$2(NodeTestTask.java:176)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:74)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$1(NodeTestTask.java:166)
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:138)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$0(NodeTestTask.java:164)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:74)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:163)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:116)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.invokeAll(SameThreadHierarchicalTestExecutorService.java:42)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$2(NodeTestTask.java:180)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:74)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$1(NodeTestTask.java:166)
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:138)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$0(NodeTestTask.java:164)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:74)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:163)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:116)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.invokeAll(SameThreadHierarchicalTestExecutorService.java:42)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$2(NodeTestTask.java:180)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:74)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$1(NodeTestTask.java:166)
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:138)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$0(NodeTestTask.java:164)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:74)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:163)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:116)
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.submit(SameThreadHierarchicalTestExecutorService.java:36)
+	at org.junit.platform.engine.support.hierarchical.HierarchicalTestExecutor.execute(HierarchicalTestExecutor.java:52)
+	at org.junit.platform.engine.support.hierarchical.HierarchicalTestEngine.execute(HierarchicalTestEngine.java:58)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.executeEngine(EngineExecutionOrchestrator.java:246)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.failOrExecuteEngine(EngineExecutionOrchestrator.java:218)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:179)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:108)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.lambda$execute$0(EngineExecutionOrchestrator.java:66)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.withInterceptedStreams(EngineExecutionOrchestrator.java:157)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:65)
+	at org.junit.platform.launcher.core.DefaultLauncher.execute(DefaultLauncher.java:125)
+	at org.junit.platform.launcher.core.DefaultLauncher.execute(DefaultLauncher.java:114)
+	at org.junit.platform.launcher.core.DelegatingLauncher.execute(DelegatingLauncher.java:58)
+	at org.junit.platform.launcher.core.InterceptingLauncher.lambda$execute$2(InterceptingLauncher.java:57)
+	at org.junit.platform.launcher.core.ClasspathAlignmentCheckingLauncherInterceptor.intercept(ClasspathAlignmentCheckingLauncherInterceptor.java:25)
+	at org.junit.platform.launcher.core.InterceptingLauncher.execute(InterceptingLauncher.java:56)
+	at org.junit.platform.launcher.core.DelegatingLauncher.execute(DelegatingLauncher.java:58)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.apache.maven.surefire.api.util.ReflectionUtils.invokeMethodWithArray(ReflectionUtils.java:125)
+	at org.apache.maven.surefire.junitplatform.LauncherAdapter.executeWithCancellationToken(LauncherAdapter.java:68)
+	at org.apache.maven.surefire.junitplatform.LauncherAdapter.execute(LauncherAdapter.java:54)
+	at org.apache.maven.surefire.junitplatform.JUnitPlatformProvider.execute(JUnitPlatformProvider.java:203)
+	at org.apache.maven.surefire.junitplatform.JUnitPlatformProvider.invokeAllTests(JUnitPlatformProvider.java:168)
+	at org.apache.maven.surefire.junitplatform.JUnitPlatformProvider.invoke(JUnitPlatformProvider.java:136)
+	at org.apache.maven.surefire.booter.ForkedBooter.runSuitesInProcess(ForkedBooter.java:385)
+	at org.apache.maven.surefire.booter.ForkedBooter.execute(ForkedBooter.java:162)
+	at org.apache.maven.surefire.booter.ForkedBooter.run(ForkedBooter.java:507)
+	at org.apache.maven.surefire.booter.ForkedBooter.main(ForkedBooter.java:495)
+
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.037 s -- in org.hammer.audio.workflow.collaboration.CollaborativeWorkflowSessionServiceTest
+[INFO] Running org.hammer.audio.workflow.collaboration.WorkflowSessionEventHubTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.029 s -- in org.hammer.audio.workflow.collaboration.WorkflowSessionEventHubTest
+[INFO] Running org.hammer.audio.workflow.execution.ExecutionContextTest
+[INFO] Tests run: 14, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.018 s -- in org.hammer.audio.workflow.execution.ExecutionContextTest
+[INFO] Running org.hammer.audio.workflow.execution.ExecutionResultTest
+[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.010 s -- in org.hammer.audio.workflow.execution.ExecutionResultTest
+[INFO] Running org.hammer.audio.workflow.execution.ExecutionPlanTest
+[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.018 s -- in org.hammer.audio.workflow.execution.ExecutionPlanTest
+[INFO] Running org.hammer.audio.workflow.execution.SnapshotExecutionServiceTest
+[INFO] Tests run: 17, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.021 s -- in org.hammer.audio.workflow.execution.SnapshotExecutionServiceTest
+[INFO] Running org.hammer.audio.workflow.execution.ExecutionSnapshotTest
+[INFO] Tests run: 10, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.011 s -- in org.hammer.audio.workflow.execution.ExecutionSnapshotTest
+[INFO] Running org.hammer.audio.workflow.execution.ReproducibilityBundleTest
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.010 s -- in org.hammer.audio.workflow.execution.ReproducibilityBundleTest
+[INFO] Running org.hammer.audio.workflow.StableIdsTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.004 s -- in org.hammer.audio.workflow.StableIdsTest
+[INFO] Running org.hammer.audio.workflow.catalog.ExperimentNodeCatalogTest
+[INFO] Tests run: 22, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.024 s -- in org.hammer.audio.workflow.catalog.ExperimentNodeCatalogTest
+[INFO] Running org.hammer.audio.workflow.catalog.ExperimentMetadataKeysTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.009 s -- in org.hammer.audio.workflow.catalog.ExperimentMetadataKeysTest
+[INFO] Running org.hammer.audio.workflow.store.InMemoryVersionedWorkflowStoreContractTest
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.015 s -- in org.hammer.audio.workflow.store.InMemoryVersionedWorkflowStoreContractTest
+[INFO] Running org.hammer.audio.workflow.store.WorkflowStoreRoundTripTest
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.023 s -- in org.hammer.audio.workflow.store.WorkflowStoreRoundTripTest
+[INFO] Running org.hammer.audio.workflow.editor.glsp.GlspWorkflowAdapterTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.029 s -- in org.hammer.audio.workflow.editor.glsp.GlspWorkflowAdapterTest
+[INFO] Running org.hammer.audio.workflow.editor.WorkflowEditorServiceTest
+[INFO] Tests run: 13, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.027 s -- in org.hammer.audio.workflow.editor.WorkflowEditorServiceTest
+[INFO] 
+[INFO] Results:
+[INFO] 
+[INFO] Tests run: 218, Failures: 0, Errors: 0, Skipped: 0
+[INFO] 
+[INFO] 
+[INFO] --- jacoco:0.8.15:report (report) @ audio-core ---
+[INFO] Loading execution data file /home/runner/work/audio-analyzer/audio-analyzer/audio-core/target/jacoco.exec
+[INFO] Analyzed bundle 'Audio Analyzer Core' with 96 classes
+[INFO] 
+[INFO] --- jar:3.5.0:jar (default-jar) @ audio-core ---
+[INFO] Building jar: /home/runner/work/audio-analyzer/audio-analyzer/audio-core/target/audio-core-0.0.4-SNAPSHOT.jar
+[INFO] 
+[INFO] --- spotless:3.8.0:check (default) @ audio-core ---
+[INFO] Index file does not exist. Fallback to an empty index
+[INFO] Spotless.Java is keeping 101 files clean - 0 needs changes to be clean, 101 were already clean, 0 were skipped because caching determined they were already clean
+[INFO] Sorting file /tmp/pom12910726390941735566.xml
+[INFO] Pom file is already sorted, exiting
+[INFO] Spotless.Pom is keeping 1 files clean - 0 needs changes to be clean, 1 were already clean, 0 were skipped because caching determined they were already clean
+[INFO] 
+[INFO] --- jacoco:0.8.15:check (check) @ audio-core ---
+[INFO] Loading execution data file /home/runner/work/audio-analyzer/audio-analyzer/audio-core/target/jacoco.exec
+[INFO] Analyzed bundle 'audio-core' with 96 classes
+[INFO] All coverage checks have been met.
+[INFO] 
+[INFO] --- checkstyle:3.6.0:check (checkstyle) @ audio-core ---
+[INFO] Starting audit...
+Audit done.
+[INFO] You have 0 Checkstyle violations.
+[INFO] 
+[INFO] >>> spotbugs:4.10.3.0:check (spotbugs) > :spotbugs @ audio-core >>>
+[INFO] 
+[INFO] --- spotbugs:4.10.3.0:spotbugs (spotbugs) @ audio-core ---
+[INFO] Done SpotBugs Analysis....
+[INFO] Skipping com.github.spotbugs:spotbugs-maven-plugin:4.10.3.0:spotbugs report goal
+[INFO] 
+[INFO] <<< spotbugs:4.10.3.0:check (spotbugs) < :spotbugs @ audio-core <<<
+[INFO] 
+[INFO] 
+[INFO] --- spotbugs:4.10.3.0:check (spotbugs) @ audio-core ---
+[INFO] BugInstance size is 0
+[INFO] Error size is 0
+[INFO] No errors/warnings found
+[INFO] 
+[INFO] >>> pmd:3.28.0:check (pmd) > :pmd @ audio-core >>>
+[INFO] 
+[INFO] --- pmd:3.28.0:pmd (pmd) @ audio-core ---
+[WARNING] Unable to locate Source XRef to link to -- DISABLED
+[WARNING] Unable to locate Source XRef to link to -- DISABLED
+[INFO] PMD version: 7.17.0
+[INFO] Rendering content with org.apache.maven.skins:maven-fluido-skin:jar:2.0.0-M9 skin
+[INFO] 
+[INFO] <<< pmd:3.28.0:check (pmd) < :pmd @ audio-core <<<
+[INFO] 
+[INFO] 
+[INFO] --- pmd:3.28.0:check (pmd) @ audio-core ---
+[INFO] 
+[INFO] -----------------------< audioin:audio-geometry >-----------------------
+[INFO] Building Audio Analyzer Geometry 0.0.4-SNAPSHOT                    [3/8]
+[INFO]   from audio-geometry/pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- clean:3.5.0:clean (default-clean) @ audio-geometry ---
+[INFO] 
+[INFO] --- enforcer:3.6.3:enforce (enforce-java) @ audio-geometry ---
+[INFO] 
+[INFO] --- jacoco:0.8.15:prepare-agent (prepare-agent) @ audio-geometry ---
+[INFO] argLine set to -javaagent:/home/runner/.m2/repository/org/jacoco/org.jacoco.agent/0.8.15/org.jacoco.agent-0.8.15-runtime.jar=destfile=/home/runner/work/audio-analyzer/audio-analyzer/audio-geometry/target/jacoco.exec
+[INFO] 
+[INFO] --- resources:3.5.0:resources (default-resources) @ audio-geometry ---
+[INFO] skip non existing resourceDirectory /home/runner/work/audio-analyzer/audio-analyzer/audio-geometry/src/main/resources
+[INFO] 
+[INFO] --- compiler:3.15.0:compile (default-compile) @ audio-geometry ---
+[INFO] Recompiling the module because of changed source code.
+[INFO] Compiling 6 source files with javac [debug deprecation release 21] to target/classes
+[INFO] 
+[INFO] --- resources:3.5.0:testResources (default-testResources) @ audio-geometry ---
+[INFO] skip non existing resourceDirectory /home/runner/work/audio-analyzer/audio-analyzer/audio-geometry/src/test/resources
+[INFO] 
+[INFO] --- compiler:3.15.0:testCompile (default-testCompile) @ audio-geometry ---
+[INFO] Recompiling the module because of changed dependency.
+[INFO] Compiling 2 source files with javac [debug deprecation release 21] to target/test-classes
+[INFO] 
+[INFO] --- surefire:3.5.6:test (default-test) @ audio-geometry ---
+[INFO] Using auto detected provider org.apache.maven.surefire.junitplatform.JUnitPlatformProvider
+[INFO] 
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+[INFO] Running org.hammer.audio.geometry.MicrophoneArrayGeometryTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.087 s -- in org.hammer.audio.geometry.MicrophoneArrayGeometryTest
+[INFO] Running org.hammer.audio.geometry.Vector2Test
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.005 s -- in org.hammer.audio.geometry.Vector2Test
+[INFO] 
+[INFO] Results:
+[INFO] 
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0
+[INFO] 
+[INFO] 
+[INFO] --- jacoco:0.8.15:report (report) @ audio-geometry ---
+[INFO] Loading execution data file /home/runner/work/audio-analyzer/audio-analyzer/audio-geometry/target/jacoco.exec
+[INFO] Analyzed bundle 'Audio Analyzer Geometry' with 6 classes
+[INFO] 
+[INFO] --- jar:3.5.0:jar (default-jar) @ audio-geometry ---
+[INFO] Building jar: /home/runner/work/audio-analyzer/audio-analyzer/audio-geometry/target/audio-geometry-0.0.4-SNAPSHOT.jar
+[INFO] 
+[INFO] --- spotless:3.8.0:check (default) @ audio-geometry ---
+[INFO] Index file does not exist. Fallback to an empty index
+[INFO] Spotless.Java is keeping 8 files clean - 0 needs changes to be clean, 8 were already clean, 0 were skipped because caching determined they were already clean
+[INFO] Sorting file /tmp/pom15448799353995139063.xml
+[INFO] Pom file is already sorted, exiting
+[INFO] Spotless.Pom is keeping 1 files clean - 0 needs changes to be clean, 1 were already clean, 0 were skipped because caching determined they were already clean
+[INFO] 
+[INFO] --- jacoco:0.8.15:check (check) @ audio-geometry ---
+[INFO] Loading execution data file /home/runner/work/audio-analyzer/audio-analyzer/audio-geometry/target/jacoco.exec
+[INFO] Analyzed bundle 'audio-geometry' with 6 classes
+[INFO] All coverage checks have been met.
+[INFO] 
+[INFO] --- checkstyle:3.6.0:check (checkstyle) @ audio-geometry ---
+[INFO] Starting audit...
+Audit done.
+[INFO] You have 0 Checkstyle violations.
+[INFO] 
+[INFO] >>> spotbugs:4.10.3.0:check (spotbugs) > :spotbugs @ audio-geometry >>>
+[INFO] 
+[INFO] --- spotbugs:4.10.3.0:spotbugs (spotbugs) @ audio-geometry ---
+[INFO] Done SpotBugs Analysis....
+[INFO] Skipping com.github.spotbugs:spotbugs-maven-plugin:4.10.3.0:spotbugs report goal
+[INFO] 
+[INFO] <<< spotbugs:4.10.3.0:check (spotbugs) < :spotbugs @ audio-geometry <<<
+[INFO] 
+[INFO] 
+[INFO] --- spotbugs:4.10.3.0:check (spotbugs) @ audio-geometry ---
+[INFO] BugInstance size is 0
+[INFO] Error size is 0
+[INFO] No errors/warnings found
+[INFO] 
+[INFO] >>> pmd:3.28.0:check (pmd) > :pmd @ audio-geometry >>>
+[INFO] 
+[INFO] --- pmd:3.28.0:pmd (pmd) @ audio-geometry ---
+[WARNING] Unable to locate Source XRef to link to -- DISABLED
+[WARNING] Unable to locate Source XRef to link to -- DISABLED
+[INFO] PMD version: 7.17.0
+[INFO] Rendering content with org.apache.maven.skins:maven-fluido-skin:jar:2.0.0-M9 skin
+[INFO] 
+[INFO] <<< pmd:3.28.0:check (pmd) < :pmd @ audio-geometry <<<
+[INFO] 
+[INFO] 
+[INFO] --- pmd:3.28.0:check (pmd) @ audio-geometry ---
+[INFO] 
+[INFO] ---------------------< audioin:audio-acquisition >----------------------
+[INFO] Building Audio Analyzer Acquisition 0.0.4-SNAPSHOT                 [4/8]
+[INFO]   from audio-acquisition/pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- clean:3.5.0:clean (default-clean) @ audio-acquisition ---
+[INFO] 
+[INFO] --- enforcer:3.6.3:enforce (enforce-java) @ audio-acquisition ---
+[INFO] 
+[INFO] --- jacoco:0.8.15:prepare-agent (prepare-agent) @ audio-acquisition ---
+[INFO] argLine set to -javaagent:/home/runner/.m2/repository/org/jacoco/org.jacoco.agent/0.8.15/org.jacoco.agent-0.8.15-runtime.jar=destfile=/home/runner/work/audio-analyzer/audio-analyzer/audio-acquisition/target/jacoco.exec
+[INFO] 
+[INFO] --- resources:3.5.0:resources (default-resources) @ audio-acquisition ---
+[INFO] skip non existing resourceDirectory /home/runner/work/audio-analyzer/audio-analyzer/audio-acquisition/src/main/resources
+[INFO] 
+[INFO] --- compiler:3.15.0:compile (default-compile) @ audio-acquisition ---
+[INFO] Recompiling the module because of changed dependency.
+[INFO] Compiling 5 source files with javac [debug deprecation release 21] to target/classes
+[INFO] 
+[INFO] --- resources:3.5.0:testResources (default-testResources) @ audio-acquisition ---
+[INFO] skip non existing resourceDirectory /home/runner/work/audio-analyzer/audio-analyzer/audio-acquisition/src/test/resources
+[INFO] 
+[INFO] --- compiler:3.15.0:testCompile (default-testCompile) @ audio-acquisition ---
+[INFO] No sources to compile
+[INFO] 
+[INFO] --- surefire:3.5.6:test (default-test) @ audio-acquisition ---
+[INFO] No tests to run.
+[INFO] 
+[INFO] --- jacoco:0.8.15:report (report) @ audio-acquisition ---
+[INFO] Skipping JaCoCo execution due to missing execution data file.
+[INFO] 
+[INFO] --- jar:3.5.0:jar (default-jar) @ audio-acquisition ---
+[INFO] Building jar: /home/runner/work/audio-analyzer/audio-analyzer/audio-acquisition/target/audio-acquisition-0.0.4-SNAPSHOT.jar
+[INFO] 
+[INFO] --- spotless:3.8.0:check (default) @ audio-acquisition ---
+[INFO] Index file does not exist. Fallback to an empty index
+[INFO] Spotless.Java is keeping 5 files clean - 0 needs changes to be clean, 5 were already clean, 0 were skipped because caching determined they were already clean
+[INFO] Sorting file /tmp/pom10923023554533926661.xml
+[INFO] Pom file is already sorted, exiting
+[INFO] Spotless.Pom is keeping 1 files clean - 0 needs changes to be clean, 1 were already clean, 0 were skipped because caching determined they were already clean
+[INFO] 
+[INFO] --- jacoco:0.8.15:check (check) @ audio-acquisition ---
+[INFO] Skipping JaCoCo execution due to missing execution data file:/home/runner/work/audio-analyzer/audio-analyzer/audio-acquisition/target/jacoco.exec
+[INFO] 
+[INFO] --- checkstyle:3.6.0:check (checkstyle) @ audio-acquisition ---
+[INFO] Starting audit...
+Audit done.
+[INFO] You have 0 Checkstyle violations.
+[INFO] 
+[INFO] >>> spotbugs:4.10.3.0:check (spotbugs) > :spotbugs @ audio-acquisition >>>
+[INFO] 
+[INFO] --- spotbugs:4.10.3.0:spotbugs (spotbugs) @ audio-acquisition ---
+[INFO] Done SpotBugs Analysis....
+[INFO] Skipping com.github.spotbugs:spotbugs-maven-plugin:4.10.3.0:spotbugs report goal
+[INFO] 
+[INFO] <<< spotbugs:4.10.3.0:check (spotbugs) < :spotbugs @ audio-acquisition <<<
+[INFO] 
+[INFO] 
+[INFO] --- spotbugs:4.10.3.0:check (spotbugs) @ audio-acquisition ---
+[INFO] BugInstance size is 0
+[INFO] Error size is 0
+[INFO] No errors/warnings found
+[INFO] 
+[INFO] >>> pmd:3.28.0:check (pmd) > :pmd @ audio-acquisition >>>
+[INFO] 
+[INFO] --- pmd:3.28.0:pmd (pmd) @ audio-acquisition ---
+[WARNING] Unable to locate Source XRef to link to -- DISABLED
+[WARNING] Unable to locate Source XRef to link to -- DISABLED
+[INFO] PMD version: 7.17.0
+[INFO] Rendering content with org.apache.maven.skins:maven-fluido-skin:jar:2.0.0-M9 skin
+[INFO] 
+[INFO] <<< pmd:3.28.0:check (pmd) < :pmd @ audio-acquisition <<<
+[INFO] 
+[INFO] 
+[INFO] --- pmd:3.28.0:check (pmd) @ audio-acquisition ---
+[INFO] 
+[INFO] -------------------------< audioin:audio-dsp >--------------------------
+[INFO] Building Audio Analyzer DSP and Analysis 0.0.4-SNAPSHOT            [5/8]
+[INFO]   from audio-dsp/pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- clean:3.5.0:clean (default-clean) @ audio-dsp ---
+[INFO] 
+[INFO] --- enforcer:3.6.3:enforce (enforce-java) @ audio-dsp ---
+[INFO] 
+[INFO] --- jacoco:0.8.15:prepare-agent (prepare-agent) @ audio-dsp ---
+[INFO] argLine set to -javaagent:/home/runner/.m2/repository/org/jacoco/org.jacoco.agent/0.8.15/org.jacoco.agent-0.8.15-runtime.jar=destfile=/home/runner/work/audio-analyzer/audio-analyzer/audio-dsp/target/jacoco.exec
+[INFO] 
+[INFO] --- resources:3.5.0:resources (default-resources) @ audio-dsp ---
+[INFO] skip non existing resourceDirectory /home/runner/work/audio-analyzer/audio-analyzer/audio-dsp/src/main/resources
+[INFO] 
+[INFO] --- compiler:3.15.0:compile (default-compile) @ audio-dsp ---
+[INFO] Recompiling the module because of changed dependency.
+[INFO] Compiling 44 source files with javac [debug deprecation release 21] to target/classes
+[INFO] 
+[INFO] --- resources:3.5.0:testResources (default-testResources) @ audio-dsp ---
+[INFO] skip non existing resourceDirectory /home/runner/work/audio-analyzer/audio-analyzer/audio-dsp/src/test/resources
+[INFO] 
+[INFO] --- compiler:3.15.0:testCompile (default-testCompile) @ audio-dsp ---
+[INFO] Recompiling the module because of changed dependency.
+[INFO] Compiling 13 source files with javac [debug deprecation release 21] to target/test-classes
+[INFO] 
+[INFO] --- surefire:3.5.6:test (default-test) @ audio-dsp ---
+[INFO] Using auto detected provider org.apache.maven.surefire.junitplatform.JUnitPlatformProvider
+[INFO] 
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+[INFO] Running org.hammer.audio.recording.AudioBlockRecordingRoundTripTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.150 s -- in org.hammer.audio.recording.AudioBlockRecordingRoundTripTest
+[INFO] Running org.hammer.audio.signal.SignalGeneratorTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.062 s -- in org.hammer.audio.signal.SignalGeneratorTest
+[INFO] Running org.hammer.audio.spectrogram.SpectrogramHistoryTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.015 s -- in org.hammer.audio.spectrogram.SpectrogramHistoryTest
+[INFO] Running org.hammer.audio.diagnosis.DiagnosisAnalyzerTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.063 s -- in org.hammer.audio.diagnosis.DiagnosisAnalyzerTest
+[INFO] Running org.hammer.audio.dsp.DSPPipelineTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.024 s -- in org.hammer.audio.dsp.DSPPipelineTest
+[INFO] Running org.hammer.audio.localization.StereoDelayAnalyzerTest
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.039 s -- in org.hammer.audio.localization.StereoDelayAnalyzerTest
+[INFO] Running org.hammer.audio.capture.SampleDecoderTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.007 s -- in org.hammer.audio.capture.SampleDecoderTest
+[INFO] Running org.hammer.audio.analysis.WaveformTriggerTest
+[INFO] Tests run: 11, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.021 s -- in org.hammer.audio.analysis.WaveformTriggerTest
+[INFO] Running org.hammer.audio.analysis.SpectrumAnalyzerTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.025 s -- in org.hammer.audio.analysis.SpectrumAnalyzerTest
+[INFO] Running org.hammer.audio.analysis.FftTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.027 s -- in org.hammer.audio.analysis.FftTest
+[INFO] Running org.hammer.audio.analysis.MeasurementCalculatorTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.011 s -- in org.hammer.audio.analysis.MeasurementCalculatorTest
+[INFO] Running org.hammer.audio.analysis.PeakHoldSpectrumTest
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.013 s -- in org.hammer.audio.analysis.PeakHoldSpectrumTest
+[INFO] Running org.hammer.audio.analysis.RmsPeakAnalyzerTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.014 s -- in org.hammer.audio.analysis.RmsPeakAnalyzerTest
+[INFO] 
+[INFO] Results:
+[INFO] 
+[INFO] Tests run: 76, Failures: 0, Errors: 0, Skipped: 0
+[INFO] 
+[INFO] 
+[INFO] --- jacoco:0.8.15:report (report) @ audio-dsp ---
+[INFO] Loading execution data file /home/runner/work/audio-analyzer/audio-analyzer/audio-dsp/target/jacoco.exec
+[INFO] Analyzed bundle 'Audio Analyzer DSP and Analysis' with 39 classes
+[INFO] 
+[INFO] --- jar:3.5.0:jar (default-jar) @ audio-dsp ---
+[INFO] Building jar: /home/runner/work/audio-analyzer/audio-analyzer/audio-dsp/target/audio-dsp-0.0.4-SNAPSHOT.jar
+[INFO] 
+[INFO] --- spotless:3.8.0:check (default) @ audio-dsp ---
+[INFO] Index file does not exist. Fallback to an empty index
+[INFO] Spotless.Java is keeping 57 files clean - 0 needs changes to be clean, 57 were already clean, 0 were skipped because caching determined they were already clean
+[INFO] Sorting file /tmp/pom8927776991352011514.xml
+[INFO] Pom file is already sorted, exiting
+[INFO] Spotless.Pom is keeping 1 files clean - 0 needs changes to be clean, 1 were already clean, 0 were skipped because caching determined they were already clean
+[INFO] 
+[INFO] --- jacoco:0.8.15:check (check) @ audio-dsp ---
+[INFO] Loading execution data file /home/runner/work/audio-analyzer/audio-analyzer/audio-dsp/target/jacoco.exec
+[INFO] Analyzed bundle 'audio-dsp' with 39 classes
+[INFO] All coverage checks have been met.
+[INFO] 
+[INFO] --- checkstyle:3.6.0:check (checkstyle) @ audio-dsp ---
+[INFO] Starting audit...
+Audit done.
+[INFO] You have 0 Checkstyle violations.
+[INFO] 
+[INFO] >>> spotbugs:4.10.3.0:check (spotbugs) > :spotbugs @ audio-dsp >>>
+[INFO] 
+[INFO] --- spotbugs:4.10.3.0:spotbugs (spotbugs) @ audio-dsp ---
+[INFO] Done SpotBugs Analysis....
+[INFO] Skipping com.github.spotbugs:spotbugs-maven-plugin:4.10.3.0:spotbugs report goal
+[INFO] 
+[INFO] <<< spotbugs:4.10.3.0:check (spotbugs) < :spotbugs @ audio-dsp <<<
+[INFO] 
+[INFO] 
+[INFO] --- spotbugs:4.10.3.0:check (spotbugs) @ audio-dsp ---
+[INFO] BugInstance size is 0
+[INFO] Error size is 0
+[INFO] No errors/warnings found
+[INFO] 
+[INFO] >>> pmd:3.28.0:check (pmd) > :pmd @ audio-dsp >>>
+[INFO] 
+[INFO] --- pmd:3.28.0:pmd (pmd) @ audio-dsp ---
+[WARNING] Unable to locate Source XRef to link to -- DISABLED
+[WARNING] Unable to locate Source XRef to link to -- DISABLED
+[INFO] PMD version: 7.17.0
+[INFO] Rendering content with org.apache.maven.skins:maven-fluido-skin:jar:2.0.0-M9 skin
+[INFO] 
+[INFO] <<< pmd:3.28.0:check (pmd) < :pmd @ audio-dsp <<<
+[INFO] 
+[INFO] 
+[INFO] --- pmd:3.28.0:check (pmd) @ audio-dsp ---
+[INFO] 
+[INFO] ----------------------< audioin:audio-plugin-api >----------------------
+[INFO] Building Audio Analyzer Plugin API 0.0.4-SNAPSHOT                  [6/8]
+[INFO]   from audio-plugin-api/pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- clean:3.5.0:clean (default-clean) @ audio-plugin-api ---
+[INFO] 
+[INFO] --- enforcer:3.6.3:enforce (enforce-java) @ audio-plugin-api ---
+[INFO] 
+[INFO] --- jacoco:0.8.15:prepare-agent (prepare-agent) @ audio-plugin-api ---
+[INFO] argLine set to -javaagent:/home/runner/.m2/repository/org/jacoco/org.jacoco.agent/0.8.15/org.jacoco.agent-0.8.15-runtime.jar=destfile=/home/runner/work/audio-analyzer/audio-analyzer/audio-plugin-api/target/jacoco.exec
+[INFO] 
+[INFO] --- resources:3.5.0:resources (default-resources) @ audio-plugin-api ---
+[INFO] skip non existing resourceDirectory /home/runner/work/audio-analyzer/audio-analyzer/audio-plugin-api/src/main/resources
+[INFO] 
+[INFO] --- compiler:3.15.0:compile (default-compile) @ audio-plugin-api ---
+[INFO] Recompiling the module because of changed source code.
+[INFO] Compiling 15 source files with javac [debug deprecation release 21] to target/classes
+[INFO] 
+[INFO] --- resources:3.5.0:testResources (default-testResources) @ audio-plugin-api ---
+[INFO] skip non existing resourceDirectory /home/runner/work/audio-analyzer/audio-analyzer/audio-plugin-api/src/test/resources
+[INFO] 
+[INFO] --- compiler:3.15.0:testCompile (default-testCompile) @ audio-plugin-api ---
+[INFO] Recompiling the module because of changed dependency.
+[INFO] Compiling 1 source file with javac [debug deprecation release 21] to target/test-classes
+[INFO] 
+[INFO] --- surefire:3.5.6:test (default-test) @ audio-plugin-api ---
+[INFO] Using auto detected provider org.apache.maven.surefire.junitplatform.JUnitPlatformProvider
+[INFO] 
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+[INFO] Running org.hammer.audio.plugin.AudioAnalyzerPluginApiTest
+[INFO] Tests run: 14, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.748 s -- in org.hammer.audio.plugin.AudioAnalyzerPluginApiTest
+[INFO] 
+[INFO] Results:
+[INFO] 
+[INFO] Tests run: 14, Failures: 0, Errors: 0, Skipped: 0
+[INFO] 
+[INFO] 
+[INFO] --- jacoco:0.8.15:report (report) @ audio-plugin-api ---
+[INFO] Loading execution data file /home/runner/work/audio-analyzer/audio-analyzer/audio-plugin-api/target/jacoco.exec
+[INFO] Analyzed bundle 'Audio Analyzer Plugin API' with 2 classes
+[INFO] 
+[INFO] --- jar:3.5.0:jar (default-jar) @ audio-plugin-api ---
+[INFO] Building jar: /home/runner/work/audio-analyzer/audio-analyzer/audio-plugin-api/target/audio-plugin-api-0.0.4-SNAPSHOT.jar
+[INFO] 
+[INFO] --- spotless:3.8.0:check (default) @ audio-plugin-api ---
+[INFO] Index file does not exist. Fallback to an empty index
+[INFO] Spotless.Java is keeping 16 files clean - 0 needs changes to be clean, 16 were already clean, 0 were skipped because caching determined they were already clean
+[INFO] Sorting file /tmp/pom5292473158466177036.xml
+[INFO] Pom file is already sorted, exiting
+[INFO] Spotless.Pom is keeping 1 files clean - 0 needs changes to be clean, 1 were already clean, 0 were skipped because caching determined they were already clean
+[INFO] 
+[INFO] --- jacoco:0.8.15:check (check) @ audio-plugin-api ---
+[INFO] Loading execution data file /home/runner/work/audio-analyzer/audio-analyzer/audio-plugin-api/target/jacoco.exec
+[INFO] Analyzed bundle 'audio-plugin-api' with 2 classes
+[INFO] All coverage checks have been met.
+[INFO] 
+[INFO] --- checkstyle:3.6.0:check (checkstyle) @ audio-plugin-api ---
+[INFO] Starting audit...
+Audit done.
+[INFO] You have 0 Checkstyle violations.
+[INFO] 
+[INFO] >>> spotbugs:4.10.3.0:check (spotbugs) > :spotbugs @ audio-plugin-api >>>
+[INFO] 
+[INFO] --- spotbugs:4.10.3.0:spotbugs (spotbugs) @ audio-plugin-api ---
+[INFO] Done SpotBugs Analysis....
+[INFO] Skipping com.github.spotbugs:spotbugs-maven-plugin:4.10.3.0:spotbugs report goal
+[INFO] 
+[INFO] <<< spotbugs:4.10.3.0:check (spotbugs) < :spotbugs @ audio-plugin-api <<<
+[INFO] 
+[INFO] 
+[INFO] --- spotbugs:4.10.3.0:check (spotbugs) @ audio-plugin-api ---
+[INFO] BugInstance size is 0
+[INFO] Error size is 0
+[INFO] No errors/warnings found
+[INFO] 
+[INFO] >>> pmd:3.28.0:check (pmd) > :pmd @ audio-plugin-api >>>
+[INFO] 
+[INFO] --- pmd:3.28.0:pmd (pmd) @ audio-plugin-api ---
+[WARNING] Unable to locate Source XRef to link to -- DISABLED
+[WARNING] Unable to locate Source XRef to link to -- DISABLED
+[INFO] PMD version: 7.17.0
+[INFO] Rendering content with org.apache.maven.skins:maven-fluido-skin:jar:2.0.0-M9 skin
+[INFO] 
+[INFO] <<< pmd:3.28.0:check (pmd) < :pmd @ audio-plugin-api <<<
+[INFO] 
+[INFO] 
+[INFO] --- pmd:3.28.0:check (pmd) @ audio-plugin-api ---
+[INFO] 
+[INFO] ----------------< audioin:audio-experimental-acoustic >-----------------
+[INFO] Building Audio Analyzer Experimental Acoustic 0.0.4-SNAPSHOT       [7/8]
+[INFO]   from audio-experimental-acoustic/pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- clean:3.5.0:clean (default-clean) @ audio-experimental-acoustic ---
+[INFO] 
+[INFO] --- enforcer:3.6.3:enforce (enforce-java) @ audio-experimental-acoustic ---
+[INFO] 
+[INFO] --- jacoco:0.8.15:prepare-agent (prepare-agent) @ audio-experimental-acoustic ---
+[INFO] argLine set to -javaagent:/home/runner/.m2/repository/org/jacoco/org.jacoco.agent/0.8.15/org.jacoco.agent-0.8.15-runtime.jar=destfile=/home/runner/work/audio-analyzer/audio-analyzer/audio-experimental-acoustic/target/jacoco.exec
+[INFO] 
+[INFO] --- resources:3.5.0:resources (default-resources) @ audio-experimental-acoustic ---
+[INFO] Copying 1 resource from src/main/resources to target/classes
+[INFO] 
+[INFO] --- compiler:3.15.0:compile (default-compile) @ audio-experimental-acoustic ---
+[INFO] Recompiling the module because of changed dependency.
+[INFO] Compiling 131 source files with javac [debug deprecation release 21] to target/classes
+[INFO] 
+[INFO] --- resources:3.5.0:testResources (default-testResources) @ audio-experimental-acoustic ---
+[INFO] skip non existing resourceDirectory /home/runner/work/audio-analyzer/audio-analyzer/audio-experimental-acoustic/src/test/resources
+[INFO] 
+[INFO] --- compiler:3.15.0:testCompile (default-testCompile) @ audio-experimental-acoustic ---
+[INFO] Recompiling the module because of changed dependency.
+[INFO] Compiling 42 source files with javac [debug deprecation release 21] to target/test-classes
+[INFO] 
+[INFO] --- surefire:3.5.6:test (default-test) @ audio-experimental-acoustic ---
+[INFO] Using auto detected provider org.apache.maven.surefire.junitplatform.JUnitPlatformProvider
+[INFO] 
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+[INFO] Running org.hammer.audio.experimental.acoustic.feature.evaluation.FeatureEvaluationServiceTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.100 s -- in org.hammer.audio.experimental.acoustic.feature.evaluation.FeatureEvaluationServiceTest
+[INFO] Running org.hammer.audio.experimental.acoustic.feature.ranking.FeatureRankingServiceTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.014 s -- in org.hammer.audio.experimental.acoustic.feature.ranking.FeatureRankingServiceTest
+[INFO] Running org.hammer.audio.experimental.acoustic.feature.comparison.SyntheticRealComparisonTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.014 s -- in org.hammer.audio.experimental.acoustic.feature.comparison.SyntheticRealComparisonTest
+[INFO] Running org.hammer.audio.experimental.acoustic.scenario.ScenarioModelTest
+[INFO] Tests run: 28, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.064 s -- in org.hammer.audio.experimental.acoustic.scenario.ScenarioModelTest
+[INFO] Running org.hammer.audio.experimental.acoustic.benchmark.TrackingBenchmarkComparatorTest
+[INFO] Tests run: 11, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 3.314 s -- in org.hammer.audio.experimental.acoustic.benchmark.TrackingBenchmarkComparatorTest
+[INFO] Running org.hammer.audio.experimental.acoustic.benchmark.classifier.ClassifierBenchmarkRunnerTest
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.014 s -- in org.hammer.audio.experimental.acoustic.benchmark.classifier.ClassifierBenchmarkRunnerTest
+[INFO] Running org.hammer.audio.experimental.acoustic.benchmark.localization.LocalizationBenchmarkRunnerTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.504 s -- in org.hammer.audio.experimental.acoustic.benchmark.localization.LocalizationBenchmarkRunnerTest
+[INFO] Running org.hammer.audio.experimental.acoustic.dataset.DatasetAnalyticsTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.202 s -- in org.hammer.audio.experimental.acoustic.dataset.DatasetAnalyticsTest
+[INFO] Running org.hammer.audio.experimental.acoustic.dataset.FeatureHistogramTest
+[INFO] Tests run: 18, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.037 s -- in org.hammer.audio.experimental.acoustic.dataset.FeatureHistogramTest
+[INFO] Running org.hammer.audio.experimental.acoustic.dataset.DatasetAudioLoaderTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.071 s -- in org.hammer.audio.experimental.acoustic.dataset.DatasetAudioLoaderTest
+[INFO] Running org.hammer.audio.experimental.acoustic.dataset.DatasetManifestTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.004 s -- in org.hammer.audio.experimental.acoustic.dataset.DatasetManifestTest
+[INFO] Running org.hammer.audio.experimental.acoustic.dataset.HumBugDbImporterTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.027 s -- in org.hammer.audio.experimental.acoustic.dataset.HumBugDbImporterTest
+[INFO] Running org.hammer.audio.experimental.acoustic.doppler.DopplerEstimatorTest
+[INFO] Tests run: 10, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.016 s -- in org.hammer.audio.experimental.acoustic.doppler.DopplerEstimatorTest
+[INFO] Running org.hammer.audio.experimental.acoustic.CrossCorrelationTdoaEstimatorTest
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.008 s -- in org.hammer.audio.experimental.acoustic.CrossCorrelationTdoaEstimatorTest
+[INFO] Running org.hammer.audio.experimental.acoustic.tracking.TrackingPipelineScenarioTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.691 s -- in org.hammer.audio.experimental.acoustic.tracking.TrackingPipelineScenarioTest
+[INFO] Running org.hammer.audio.experimental.acoustic.tracking.SourceTrackerTest
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.008 s -- in org.hammer.audio.experimental.acoustic.tracking.SourceTrackerTest
+[INFO] Running org.hammer.audio.experimental.acoustic.tracking.TrackingSnapshotTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in org.hammer.audio.experimental.acoustic.tracking.TrackingSnapshotTest
+[INFO] Running org.hammer.audio.experimental.acoustic.tracking.MultiPeakDetectorTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.013 s -- in org.hammer.audio.experimental.acoustic.tracking.MultiPeakDetectorTest
+[INFO] Running org.hammer.audio.experimental.acoustic.tracking.Kalman2DTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.005 s -- in org.hammer.audio.experimental.acoustic.tracking.Kalman2DTest
+[INFO] Running org.hammer.audio.experimental.acoustic.tracking.FrameScheduleAndBudgetTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.005 s -- in org.hammer.audio.experimental.acoustic.tracking.FrameScheduleAndBudgetTest
+[INFO] Running org.hammer.audio.experimental.acoustic.tracking.FrequencyClustererTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.005 s -- in org.hammer.audio.experimental.acoustic.tracking.FrequencyClustererTest
+[INFO] Running org.hammer.audio.experimental.acoustic.GccPhatTdoaEstimatorTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.003 s -- in org.hammer.audio.experimental.acoustic.GccPhatTdoaEstimatorTest
+[INFO] Running org.hammer.audio.experimental.acoustic.wingbeat.RuleBasedWingbeatClassifierTest
+[INFO] Tests run: 11, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.013 s -- in org.hammer.audio.experimental.acoustic.wingbeat.RuleBasedWingbeatClassifierTest
+[INFO] Running org.hammer.audio.experimental.acoustic.wingbeat.WingbeatFeatureVectorTest
+[INFO] Tests run: 12, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.012 s -- in org.hammer.audio.experimental.acoustic.wingbeat.WingbeatFeatureVectorTest
+[INFO] Running org.hammer.audio.experimental.acoustic.wingbeat.WingbeatFeatureExtractorTest
+[INFO] Tests run: 12, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.023 s -- in org.hammer.audio.experimental.acoustic.wingbeat.WingbeatFeatureExtractorTest
+[INFO] Running org.hammer.audio.experimental.acoustic.wingbeat.FeatureDistributionComparisonTest
+[INFO] Tests run: 14, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.017 s -- in org.hammer.audio.experimental.acoustic.wingbeat.FeatureDistributionComparisonTest
+[INFO] Running org.hammer.audio.experimental.acoustic.wingbeat.DatasetWingbeatEvaluationWorkflowTest
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.016 s -- in org.hammer.audio.experimental.acoustic.wingbeat.DatasetWingbeatEvaluationWorkflowTest
+[INFO] Running org.hammer.audio.experimental.acoustic.wingbeat.WingbeatDatasetEvaluationEdgeCasesTest
+[INFO] Tests run: 14, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.013 s -- in org.hammer.audio.experimental.acoustic.wingbeat.WingbeatDatasetEvaluationEdgeCasesTest
+[INFO] Running org.hammer.audio.experimental.acoustic.wingbeat.WingbeatDatasetTest
+[INFO] Tests run: 13, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.013 s -- in org.hammer.audio.experimental.acoustic.wingbeat.WingbeatDatasetTest
+[INFO] Running org.hammer.audio.experimental.acoustic.MosquitoLocalizationPipelineTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.009 s -- in org.hammer.audio.experimental.acoustic.MosquitoLocalizationPipelineTest
+[INFO] Running org.hammer.audio.experimental.acoustic.simulation.SimulatedMicrophoneArraySourceTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.011 s -- in org.hammer.audio.experimental.acoustic.simulation.SimulatedMicrophoneArraySourceTest
+[INFO] Running org.hammer.audio.experimental.acoustic.simulation.calibration.GeneratorCalibrationServiceTest
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.013 s -- in org.hammer.audio.experimental.acoustic.simulation.calibration.GeneratorCalibrationServiceTest
+[INFO] Running org.hammer.audio.experimental.acoustic.simulation.calibration.SyntheticCalibrationAnalysisTest
+[INFO] Tests run: 12, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.016 s -- in org.hammer.audio.experimental.acoustic.simulation.calibration.SyntheticCalibrationAnalysisTest
+[INFO] Running org.hammer.audio.experimental.acoustic.simulation.calibration.GeneratorComparisonReportTest
+[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.009 s -- in org.hammer.audio.experimental.acoustic.simulation.calibration.GeneratorComparisonReportTest
+[INFO] Running org.hammer.audio.experimental.acoustic.simulation.calibration.SyntheticParameterEstimatorTest
+[INFO] Tests run: 12, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.010 s -- in org.hammer.audio.experimental.acoustic.simulation.calibration.SyntheticParameterEstimatorTest
+[INFO] Running org.hammer.audio.experimental.acoustic.simulation.WingbeatSignalGeneratorTest
+[INFO] Tests run: 19, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.044 s -- in org.hammer.audio.experimental.acoustic.simulation.WingbeatSignalGeneratorTest
+[INFO] Running org.hammer.audio.experimental.acoustic.plugin.AcousticLocalizationPluginTest
+Jul 17, 2026 9:27:04 PM org.hammer.audio.experimental.acoustic.plugin.AcousticLocalizationPlugin$1 lambda$action$1
+INFO: Acoustic Localization plugin active: see docs/plugins/acoustic-localization.md
+[INFO] Tests run: 14, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 1.257 s -- in org.hammer.audio.experimental.acoustic.plugin.AcousticLocalizationPluginTest
+[INFO] Running org.hammer.audio.experimental.acoustic.workbench.PlaybackModelTest
+[INFO] Tests run: 25, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 1.759 s -- in org.hammer.audio.experimental.acoustic.workbench.PlaybackModelTest
+[INFO] Running org.hammer.audio.experimental.acoustic.workbench.WorkbenchScenarioRunnerTest
+[INFO] Tests run: 28, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 6.225 s -- in org.hammer.audio.experimental.acoustic.workbench.WorkbenchScenarioRunnerTest
+[INFO] Running org.hammer.audio.experimental.acoustic.workbench.ImportedRecordingWorkbenchPanelTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.094 s -- in org.hammer.audio.experimental.acoustic.workbench.ImportedRecordingWorkbenchPanelTest
+[INFO] Running org.hammer.audio.experimental.acoustic.workbench.AcousticLocalizationWorkbenchPanelTest
+[INFO] Tests run: 13, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 1.127 s -- in org.hammer.audio.experimental.acoustic.workbench.AcousticLocalizationWorkbenchPanelTest
+[INFO] Running org.hammer.audio.experimental.acoustic.WingbeatFrequencyTrackerTest
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in org.hammer.audio.experimental.acoustic.WingbeatFrequencyTrackerTest
+[INFO] 
+[INFO] Results:
+[INFO] 
+[INFO] Tests run: 390, Failures: 0, Errors: 0, Skipped: 0
+[INFO] 
+[INFO] 
+[INFO] --- jacoco:0.8.15:report (report) @ audio-experimental-acoustic ---
+[INFO] Loading execution data file /home/runner/work/audio-analyzer/audio-analyzer/audio-experimental-acoustic/target/jacoco.exec
+[INFO] Analyzed bundle 'Audio Analyzer Experimental Acoustic' with 157 classes
+[INFO] 
+[INFO] --- jar:3.5.0:jar (default-jar) @ audio-experimental-acoustic ---
+[INFO] Building jar: /home/runner/work/audio-analyzer/audio-analyzer/audio-experimental-acoustic/target/audio-experimental-acoustic-0.0.4-SNAPSHOT.jar
+[INFO] 
+[INFO] --- spotless:3.8.0:check (default) @ audio-experimental-acoustic ---
+[INFO] Index file does not exist. Fallback to an empty index
+[INFO] Spotless.Java is keeping 173 files clean - 0 needs changes to be clean, 173 were already clean, 0 were skipped because caching determined they were already clean
+[INFO] Sorting file /tmp/pom15484068251679717189.xml
+[INFO] Pom file is already sorted, exiting
+[INFO] Spotless.Pom is keeping 1 files clean - 0 needs changes to be clean, 1 were already clean, 0 were skipped because caching determined they were already clean
+[INFO] 
+[INFO] --- jacoco:0.8.15:check (check) @ audio-experimental-acoustic ---
+[INFO] Loading execution data file /home/runner/work/audio-analyzer/audio-analyzer/audio-experimental-acoustic/target/jacoco.exec
+[INFO] Analyzed bundle 'audio-experimental-acoustic' with 157 classes
+[INFO] All coverage checks have been met.
+[INFO] 
+[INFO] --- checkstyle:3.6.0:check (checkstyle) @ audio-experimental-acoustic ---
+[INFO] Starting audit...
+Audit done.
+[INFO] You have 0 Checkstyle violations.
+[INFO] 
+[INFO] >>> spotbugs:4.10.3.0:check (spotbugs) > :spotbugs @ audio-experimental-acoustic >>>
+[INFO] 
+[INFO] --- spotbugs:4.10.3.0:spotbugs (spotbugs) @ audio-experimental-acoustic ---
+[INFO] Done SpotBugs Analysis....
+[INFO] Skipping com.github.spotbugs:spotbugs-maven-plugin:4.10.3.0:spotbugs report goal
+[INFO] 
+[INFO] <<< spotbugs:4.10.3.0:check (spotbugs) < :spotbugs @ audio-experimental-acoustic <<<
+[INFO] 
+[INFO] 
+[INFO] --- spotbugs:4.10.3.0:check (spotbugs) @ audio-experimental-acoustic ---
+[INFO] BugInstance size is 0
+[INFO] Error size is 0
+[INFO] No errors/warnings found
+[INFO] 
+[INFO] >>> pmd:3.28.0:check (pmd) > :pmd @ audio-experimental-acoustic >>>
+[INFO] 
+[INFO] --- pmd:3.28.0:pmd (pmd) @ audio-experimental-acoustic ---
+[WARNING] Unable to locate Source XRef to link to -- DISABLED
+[WARNING] Unable to locate Source XRef to link to -- DISABLED
+[INFO] PMD version: 7.17.0
+[INFO] Rendering content with org.apache.maven.skins:maven-fluido-skin:jar:2.0.0-M9 skin
+[INFO] 
+[INFO] <<< pmd:3.28.0:check (pmd) < :pmd @ audio-experimental-acoustic <<<
+[INFO] 
+[INFO] 
+[INFO] --- pmd:3.28.0:check (pmd) @ audio-experimental-acoustic ---
+[INFO] 
+[INFO] -------------------------< audioin:audio-app >--------------------------
+[INFO] Building Audio Analyzer App 0.0.4-SNAPSHOT                         [8/8]
+[INFO]   from audio-app/pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- clean:3.5.0:clean (default-clean) @ audio-app ---
+[INFO] 
+[INFO] --- enforcer:3.6.3:enforce (enforce-java) @ audio-app ---
+[INFO] 
+[INFO] --- jacoco:0.8.15:prepare-agent (prepare-agent) @ audio-app ---
+[INFO] argLine set to -javaagent:/home/runner/.m2/repository/org/jacoco/org.jacoco.agent/0.8.15/org.jacoco.agent-0.8.15-runtime.jar=destfile=/home/runner/work/audio-analyzer/audio-analyzer/audio-app/target/jacoco.exec
+[INFO] 
+[INFO] --- resources:3.5.0:resources (default-resources) @ audio-app ---
+[INFO] Copying 2 resources from src/main/resources to target/classes
+[INFO] 
+[INFO] --- compiler:3.15.0:compile (default-compile) @ audio-app ---
+[INFO] Recompiling the module because of changed dependency.
+[INFO] Compiling 49 source files with javac [debug deprecation release 21] to target/classes
+[INFO] -------------------------------------------------------------
+[WARNING] COMPILATION WARNING : 
+[INFO] -------------------------------------------------------------
+[WARNING] /home/runner/work/audio-analyzer/audio-analyzer/audio-app/src/main/java/org/hammer/audio/workflow/editor/http/WorkflowEditorHttpAdapter.java:[94,59] asText() in tools.jackson.databind.JsonNode has been deprecated
+[WARNING] /home/runner/work/audio-analyzer/audio-analyzer/audio-app/src/main/java/org/hammer/audio/workflow/editor/http/WorkflowEditorHttpAdapter.java:[124,74] asText() in tools.jackson.databind.JsonNode has been deprecated
+[WARNING] /home/runner/work/audio-analyzer/audio-analyzer/audio-app/src/main/java/org/hammer/audio/workflow/editor/http/WorkflowEditorHttpAdapter.java:[125,87] asText() in tools.jackson.databind.JsonNode has been deprecated
+[WARNING] /home/runner/work/audio-analyzer/audio-analyzer/audio-app/src/main/java/org/hammer/audio/workflow/editor/http/WorkflowEditorHttpAdapter.java:[144,44] UNPROCESSABLE_ENTITY in org.springframework.http.HttpStatus has been deprecated
+[WARNING] /home/runner/work/audio-analyzer/audio-analyzer/audio-app/src/main/java/org/hammer/audio/workflow/editor/http/WorkflowEditorHttpAdapter.java:[180,49] asText() in tools.jackson.databind.JsonNode has been deprecated
+[WARNING] /home/runner/work/audio-analyzer/audio-analyzer/audio-app/src/main/java/org/hammer/audio/workflow/editor/http/WorkflowEditorHttpAdapter.java:[183,17] asText() in tools.jackson.databind.JsonNode has been deprecated
+[WARNING] /home/runner/work/audio-analyzer/audio-analyzer/audio-app/src/main/java/org/hammer/audio/workflow/editor/http/WorkflowOperationHttpParser.java:[23,60] asText() in tools.jackson.databind.JsonNode has been deprecated
+[WARNING] /home/runner/work/audio-analyzer/audio-analyzer/audio-app/src/main/java/org/hammer/audio/workflow/editor/http/WorkflowOperationHttpParser.java:[26,59] asText() in tools.jackson.databind.JsonNode has been deprecated
+[WARNING] /home/runner/work/audio-analyzer/audio-analyzer/audio-app/src/main/java/org/hammer/audio/workflow/editor/http/WorkflowOperationHttpParser.java:[50,70] asText() in tools.jackson.databind.JsonNode has been deprecated
+[WARNING] /home/runner/work/audio-analyzer/audio-analyzer/audio-app/src/main/java/org/hammer/audio/workflow/editor/http/WorkflowOperationHttpParser.java:[52,66] asText() in tools.jackson.databind.JsonNode has been deprecated
+[WARNING] /home/runner/work/audio-analyzer/audio-analyzer/audio-app/src/main/java/org/hammer/audio/workflow/editor/http/WorkflowOperationHttpParser.java:[112,49] asText() in tools.jackson.databind.JsonNode has been deprecated
+[WARNING] /home/runner/work/audio-analyzer/audio-analyzer/audio-app/src/main/java/org/hammer/audio/workflow/editor/http/WorkflowOperationHttpParser.java:[115,17] asText() in tools.jackson.databind.JsonNode has been deprecated
+[INFO] 12 warnings 
+[INFO] -------------------------------------------------------------
+[INFO] -------------------------------------------------------------
+[ERROR] COMPILATION ERROR : 
+[INFO] -------------------------------------------------------------
+[ERROR] /home/runner/work/audio-analyzer/audio-analyzer/audio-app/src/main/java/org/hammer/audio/app/WorkflowPersistenceConfiguration.java:[86,16] incompatible types: java.util.List<java.lang.Class<capture#1 of ?>> cannot be converted to java.util.List<java.lang.Class<?>>
+[INFO] 1 error
+[INFO] -------------------------------------------------------------
+[INFO] ------------------------------------------------------------------------
+[INFO] Reactor Summary for Audio Analyzer Parent 0.0.4-SNAPSHOT:
+[INFO] 
+[INFO] Audio Analyzer Parent .............................. SUCCESS [ 17.294 s]
+[INFO] Audio Analyzer Core ................................ SUCCESS [ 26.207 s]
+[INFO] Audio Analyzer Geometry ............................ SUCCESS [  5.535 s]
+[INFO] Audio Analyzer Acquisition ......................... SUCCESS [  3.542 s]
+[INFO] Audio Analyzer DSP and Analysis .................... SUCCESS [  8.950 s]
+[INFO] Audio Analyzer Plugin API .......................... SUCCESS [  5.350 s]
+[INFO] Audio Analyzer Experimental Acoustic ............... SUCCESS [ 37.489 s]
+[INFO] Audio Analyzer App ................................. FAILURE [ 25.796 s]
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD FAILURE
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  02:13 min
+[INFO] Finished at: 2026-07-17T21:27:57Z
+[INFO] ------------------------------------------------------------------------
+[ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.15.0:compile (default-compile) on project audio-app: Compilation failure
+[ERROR] /home/runner/work/audio-analyzer/audio-analyzer/audio-app/src/main/java/org/hammer/audio/app/WorkflowPersistenceConfiguration.java:[86,16] incompatible types: java.util.List<java.lang.Class<capture#1 of ?>> cannot be converted to java.util.List<java.lang.Class<?>>
+[ERROR] -> [Help 1]
+[ERROR] 
+[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.
+[ERROR] Re-run Maven using the -X switch to enable full debug logging.
+[ERROR] 
+[ERROR] For more information about the errors and possible solutions, please read the following articles:
+[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException
+[ERROR] 
+[ERROR] After correcting the problems, you can resume the build with the command
+[ERROR]   mvn <args> -rf :audio-app
