@@ -9,6 +9,7 @@ import org.hammer.audio.workflow.WorkflowValidator;
 import org.hammer.audio.workflow.catalog.ExperimentNodeCatalog;
 import org.hammer.audio.workflow.collaboration.WorkflowSessionEventHub;
 import org.hammer.audio.workflow.collaboration.WorkflowSessionRegistry;
+import org.hammer.audio.workflow.collaboration.store.WorkflowSessionStateStore;
 import org.hammer.audio.workflow.editor.WorkflowEditorService;
 import org.hammer.audio.workflow.store.VersionedWorkflowStore;
 import org.springframework.beans.factory.ObjectProvider;
@@ -47,10 +48,15 @@ public class WorkbenchConfiguration implements WebMvcConfigurer {
     return new WorkflowSessionEventHub();
   }
 
-  /** Creates the transport-neutral collaboration-session application service. */
+  /**
+   * Creates the collaboration-session application service and hydrates durable sessions when the
+   * Hibernate persistence mode contributes a state store.
+   */
   @Bean
-  public WorkflowSessionRegistry workflowSessionRegistry(WorkflowSessionEventHub eventHub) {
-    return new WorkflowSessionRegistry(eventHub);
+  public WorkflowSessionRegistry workflowSessionRegistry(
+      WorkflowSessionEventHub eventHub,
+      ObjectProvider<WorkflowSessionStateStore> stateStoreProvider) {
+    return new WorkflowSessionRegistry(eventHub, stateStoreProvider.getIfAvailable());
   }
 
   /** Registers a filesystem resource handler when configured. */
