@@ -5,9 +5,9 @@ import java.util.Objects;
 /** Typed durable-session failure raised when an event targets a stale collaboration sequence. */
 public final class WorkflowSessionSequenceConflictException extends RuntimeException {
 
-  private final String sessionId;
-  private final long expectedSequence;
-  private final long actualSequence;
+  private final String affectedSessionId;
+  private final long requestedSequence;
+  private final long currentSequence;
 
   /** Creates an event-sequence conflict with stable machine-readable values. */
   public WorkflowSessionSequenceConflictException(
@@ -19,23 +19,23 @@ public final class WorkflowSessionSequenceConflictException extends RuntimeExcep
             + actualSequence
             + " for session "
             + sessionId);
-    this.sessionId = Objects.requireNonNull(sessionId, "sessionId");
-    this.expectedSequence = expectedSequence;
-    this.actualSequence = actualSequence;
+    this.affectedSessionId = Objects.requireNonNull(sessionId, "sessionId");
+    this.requestedSequence = expectedSequence;
+    this.currentSequence = actualSequence;
   }
 
   /** Returns the affected stable session identifier. */
   public String sessionId() {
-    return sessionId;
+    return affectedSessionId;
   }
 
   /** Returns the event sequence supplied by the caller. */
   public long expectedSequence() {
-    return expectedSequence;
+    return requestedSequence;
   }
 
   /** Returns the event sequence currently stored in the database. */
   public long actualSequence() {
-    return actualSequence;
+    return currentSequence;
   }
 }
