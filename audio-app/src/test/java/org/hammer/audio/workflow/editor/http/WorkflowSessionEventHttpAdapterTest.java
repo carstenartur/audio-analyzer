@@ -52,7 +52,8 @@ class WorkflowSessionEventHttpAdapterTest {
   }
 
   @Test
-  void sseStreamUsesSequenceIdsAndCompletesAfterSessionClose() throws Exception {
+  void sseStreamFlushesConnectionThenUsesSequenceIdsAndCompletesAfterSessionClose()
+      throws Exception {
     long cursor = eventHub.currentSequence(SESSION_ID);
     MvcResult stream =
         mvc.perform(
@@ -76,6 +77,8 @@ class WorkflowSessionEventHttpAdapterTest {
             .andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_EVENT_STREAM))
             .andReturn();
     String body = completed.getResponse().getContentAsString();
+    assertTrue(body.contains(":connected"));
+    assertTrue(body.indexOf(":connected") < body.indexOf("event:OPERATION_ACCEPTED"));
     assertTrue(body.contains("event:OPERATION_ACCEPTED"));
     assertTrue(body.contains("event:SESSION_CLOSED"));
     assertTrue(body.contains("\"operationId\":\"operation.input\""));
@@ -118,6 +121,7 @@ class WorkflowSessionEventHttpAdapterTest {
     MvcResult completed =
         smallMvc.perform(asyncDispatch(stream)).andExpect(status().isOk()).andReturn();
     String body = completed.getResponse().getContentAsString();
+    assertTrue(body.contains(":connected"));
     assertTrue(body.contains("event:SNAPSHOT"));
     assertTrue(body.contains("\"workflowId\":\"workflow.stream\""));
   }
