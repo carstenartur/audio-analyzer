@@ -1,0 +1,144 @@
+package org.hammer.audio.infrastructure.workflow.collaboration.store;
+
+import static org.hammer.audio.infrastructure.workflow.collaboration.store.WorkflowOutboxStoreTestSupport.BASE_TIME;
+import static org.hammer.audio.infrastructure.workflow.collaboration.store.WorkflowOutboxStoreTestSupport.appendPendingEvent;
+import static org.hammer.audio.infrastructure.workflow.collaboration.store.WorkflowOutboxStoreTestSupport.inMemoryProperties;
+import static org.hammer.audio.infrastructure.workflow.collaboration.store.WorkflowOutboxStoreTestSupport.provider;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import io.github.carstenartur.jgit.storage.hibernate.config.HibernateSessionFactoryProvider;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.util.List;
+import org.hammer.audio.workflow.collaboration.retention.WorkflowOutboxRetentionDeletionResult;
+import org.hammer.audio.workflow.collaboration.retention.WorkflowOutboxRetentionPlan;
+import org.hammer.audio.workflow.collaboration.retention.WorkflowOutboxRetentionService;
+import org.hammer.audio.workflow.collaboration.retention.WorkflowOutboxRetentionSettings;
+import org.hammer.audio.workflow.collaboration.store.LeasedWorkflowOutboxEntry;
+import org.junit.jupiter.api.Test;
+
+class HibernateWorkflowOutboxRetentionStoreTest {
+
+  private static final Instant PLANNED_AT = BASE_TIME.plus(Duration.ofDays(60));
+  private static final Instant CUTOFF = PLANNED_AT.minus(Duration.ofDays(30));
+
+  @Test
+  void reportAndDeleteProtectEveryNonPublishedOrUncertainRow() {
+    try (HibernateSessionFactoryProvider provider = provider(inMemoryProperties())) {
+      HibernateWorkflowSessionStateStore sessionStore =
+          new HibernateWorkflowSessionStateStore(provider.getSessionFactory());
+      HibernateWorkflowOutboxStore outboxStore =
+          new HibernateWorkflowOutboxStore(provider.getSessionFactory());
+      HibernateWorkflowOutboxRetentionStore retentionStore =
+          new HibernateWorkflowOutboxRetentionStore(provider.getSessionFactory());
+
+      appendAndPublish(
+          sessionStore,
+          outboxStore,
+          "session.old",
+          "event.old",
+          BASE_TIME.plusSeconds(1),
+          CUTOFF);
+      appendAndPublish(
+          sessionStore,
+          outboxStore,
+          "session.recent",
+          "event.recent",
+          BASE_TIME.plusSeconds(2),
+          CUTOFF.plusSeconds(1));
+      appendPendingEvent(
+          sessionStore, "session.leased", "event.leased", BASE_TIME.plusSeconds(3));
+      LeasedWorkflowOutboxEntry activeLease =
+          outboxStore
+              .claimDue(
+                  "dispatcher.active",
+                  PLANNED_AT.minusSeconds(1),
+                  PLANNED_AT.plusSeconds(60),
+                  1)
+              .getFirst();
+      assertEquals("event.leased", activeLease.entry().eventId());
+      appendPendingEvent(
+          sessionStore, "session.pending", "event.pending", BASE_TIME.plusSeconds(4));
+
+      WorkflowOutboxRetentionService service =
+          new WorkflowOutboxRetentionService(
+              retentionStore,
+              Clock.fixed(PLANNED_AT, ZoneOffset.UTC),
+              new WorkflowOutboxRetentionSettings(Duration.ofDays(30), 10));
+      WorkflowOutboxRetentionPlan plan = service.plan();
+
+      assertEquals(2, plan.scannedCount());
+      assertEquals(List.of("event.old"), plan.candidateEventIds());
+      assertEquals(CUTOFF, plan.oldestPublishedAt().orElseThrow());
+      assertEquals(CUTOFF, plan.newestPublishedAt().orElseThrow());
+
+      WorkflowOutboxRetentionDeletionResult deleted = service.delete(plan);
+
+      assertEquals(List.of("event.old"), deleted.deletedEventIds());
+      assertTrue(outboxStore.find("event.old").isEmpty());
+      assertTrue(outboxStore.find("event.recent").isPresent());
+      assertTrue(outboxStore.find("event.leased").isPresent());
+      assertTrue(outboxStore.find("event.pending").isPresent());
+      assertFalse(outboxStore.find("event.recent").orElseThrow().pending());
+      assertTrue(outboxStore.find("event.pending").orElseThrow().pending());
+    }
+  }
+
+  @Test
+  void repeatedOrCompetingDeletionIsIdempotent() {
+    try (HibernateSessionFactoryProvider provider = provider(inMemoryProperties())) {
+      HibernateWorkflowSessionStateStore sessionStore =
+          new HibernateWorkflowSessionStateStore(provider.getSessionFactory());
+      HibernateWorkflowOutboxStore outboxStore =
+          new HibernateWorkflowOutboxStore(provider.getSessionFactory());
+      HibernateWorkflowOutboxRetentionStore firstStore =
+          new HibernateWorkflowOutboxRetentionStore(provider.getSessionFactory());
+      HibernateWorkflowOutboxRetentionStore secondStore =
+          new HibernateWorkflowOutboxRetentionStore(provider.getSessionFactory());
+      appendAndPublish(
+          sessionStore,
+          outboxStore,
+          "session.once",
+          "event.once",
+          BASE_TIME.plusSeconds(1),
+          CUTOFF.minusSeconds(1));
+
+      WorkflowOutboxRetentionPlan plan =
+          new WorkflowOutboxRetentionService(
+                  firstStore,
+                  Clock.fixed(PLANNED_AT, ZoneOffset.UTC),
+                  new WorkflowOutboxRetentionSettings(Duration.ofDays(30), 10))
+              .plan();
+
+      WorkflowOutboxRetentionDeletionResult first = firstStore.deletePublished(plan);
+      WorkflowOutboxRetentionDeletionResult second = secondStore.deletePublished(plan);
+
+      assertEquals(List.of("event.once"), first.deletedEventIds());
+      assertEquals(List.of(), first.skippedEventIds());
+      assertEquals(List.of(), second.deletedEventIds());
+      assertEquals(List.of("event.once"), second.skippedEventIds());
+    }
+  }
+
+  private static void appendAndPublish(
+      HibernateWorkflowSessionStateStore sessionStore,
+      HibernateWorkflowOutboxStore outboxStore,
+      String sessionId,
+      String eventId,
+      Instant occurredAt,
+      Instant publishedAt) {
+    appendPendingEvent(sessionStore, sessionId, eventId, occurredAt);
+    Instant claimedAt = occurredAt.plusSeconds(1);
+    LeasedWorkflowOutboxEntry lease =
+        outboxStore
+            .claimDue("dispatcher." + eventId, claimedAt, claimedAt.plusSeconds(30), 1)
+            .getFirst();
+    assertEquals(eventId, lease.entry().eventId());
+    outboxStore.markPublished(
+        eventId, "dispatcher." + eventId, lease.leaseToken(), publishedAt);
+  }
+}
