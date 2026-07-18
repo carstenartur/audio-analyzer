@@ -31,7 +31,7 @@ jobs:
 
       - name: Commit lockfile
         run: |
-          if git diff --quiet -- workflow-editor/package-lock.json; then
+          if [[ -z "$(git status --porcelain -- workflow-editor/package-lock.json)" ]]; then
             echo "Lockfile already current"
             exit 0
           fi
