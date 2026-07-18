@@ -87,6 +87,8 @@ mvn -B -Pscreenshot-tests verify -DupdateScreenshots=true --file pom.xml
 
 `WorkbenchInitialLoadIT` owns the seed-workflow screenshots. `WorkbenchCollaborationScreenshotIT` creates a deterministic live session, waits for ordered SSE, submits two semantic operations and generates `docs/assets/screenshots/workbench/collaboration-session.png`. The root README and the collaboration architecture page embed these committed outputs directly.
 
+The scenarios seed fixed actor metadata and render accepted revisions rather than collision-resistant operation ids. This keeps the documentation output stable while the production command ids remain unique and retry-safe.
+
 ## Packaging
 
 Vite writes generated files only below `target/`. Maven copies the verified production output into the module JAR under:
@@ -113,4 +115,3 @@ The collaboration slice exposes stable `data-testid` hooks for session id, actor
 - A permanently reconnecting client should first verify the session still exists and inspect the RFC 9457 API error shown by the UI.
 - A rejected `WORKFLOW_SESSION_REVISION_CONFLICT` is recovered by reloading session metadata and the canonical projection; do not add optimistic browser merges.
 - API failures shown by the UI originate from the `/workflow` application-service contract; do not add browser-side persistence fallbacks.
-
