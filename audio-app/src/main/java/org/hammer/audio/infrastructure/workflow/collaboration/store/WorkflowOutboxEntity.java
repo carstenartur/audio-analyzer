@@ -116,6 +116,15 @@ public class WorkflowOutboxEntity {
         && (leaseExpiresAt == null || !leaseExpiresAt.isAfter(requiredInstant));
   }
 
+  boolean retentionEligibleAt(Instant publishedCutoff) {
+    Instant requiredCutoff = Objects.requireNonNull(publishedCutoff, "publishedCutoff");
+    return publishedAt != null
+        && !publishedAt.isAfter(requiredCutoff)
+        && leaseOwner == null
+        && leaseToken == null
+        && leaseExpiresAt == null;
+  }
+
   LeasedWorkflowOutboxEntry lease(
       String owner, String token, Instant claimedAt, Instant expiresAt) {
     Instant requiredClaimedAt = Objects.requireNonNull(claimedAt, "claimedAt");
@@ -172,6 +181,11 @@ public class WorkflowOutboxEntity {
 
   long eventSequence() {
     return storedEventSequence;
+  }
+
+  /** Returns the durable publication timestamp without changing the mapped HQL field name. */
+  Instant publicationTime() {
+    return publishedAt;
   }
 
   private void requireLease(String owner, String token) {
