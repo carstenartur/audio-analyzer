@@ -16,7 +16,9 @@ import org.hammer.audio.workflow.collaboration.store.WorkflowSessionStateStore;
 import org.hammer.audio.workflow.dsl.WorkflowDslParser;
 import org.hammer.audio.workflow.dsl.WorkflowDslSerializer;
 
-/** Coordinates optional durable persistence without leaking storage details into session runtime. */
+/**
+ * Coordinates optional durable persistence without leaking storage details into session runtime.
+ */
 final class WorkflowSessionPersistenceCoordinator {
 
   private static final String OPERATION_EVENT_TYPE = "WORKFLOW_OPERATION_ACCEPTED";
@@ -98,8 +100,7 @@ final class WorkflowSessionPersistenceCoordinator {
     long nextRevision = Math.addExact(expectedRevision, 1);
     long nextSequence = Math.addExact(expectedSequence, 1);
     if (!durable()) {
-      return new AppendOutcome(
-          updatedWorkflow, candidate, nextRevision, nextSequence, false);
+      return new AppendOutcome(updatedWorkflow, candidate, nextRevision, nextSequence, false);
     }
 
     WorkflowOperationPersistenceData persistenceData =
@@ -118,8 +119,7 @@ final class WorkflowSessionPersistenceCoordinator {
                     operation.timestamp(),
                     persistenceData.payload())));
     validateAppendResult(sessionId, expectedSequence, result);
-    Workflow durableWorkflow =
-        result.duplicate() ? parse(result.session()) : updatedWorkflow;
+    Workflow durableWorkflow = result.duplicate() ? parse(result.session()) : updatedWorkflow;
     return new AppendOutcome(
         durableWorkflow,
         candidate,
@@ -134,8 +134,7 @@ final class WorkflowSessionPersistenceCoordinator {
     if (!durable()) {
       return new LifecycleState(currentRevision, nextSequence, false);
     }
-    StoredWorkflowSession advanced =
-        stateStore.advanceEventSequence(sessionId, currentSequence);
+    StoredWorkflowSession advanced = stateStore.advanceEventSequence(sessionId, currentSequence);
     validateLifecycleState(sessionId, advanced, currentRevision, nextSequence, false);
     return LifecycleState.from(advanced);
   }
@@ -145,8 +144,7 @@ final class WorkflowSessionPersistenceCoordinator {
     if (!durable()) {
       return new LifecycleState(currentRevision, nextSequence, true);
     }
-    StoredWorkflowSession closed =
-        stateStore.close(sessionId, currentRevision, currentSequence);
+    StoredWorkflowSession closed = stateStore.close(sessionId, currentRevision, currentSequence);
     validateLifecycleState(sessionId, closed, currentRevision, nextSequence, true);
     return LifecycleState.from(closed);
   }
@@ -159,8 +157,7 @@ final class WorkflowSessionPersistenceCoordinator {
       validateRecoveredHistory(storedSession, operations);
       List<OperationIdentity> identities =
           operations.stream().map(OperationIdentity::from).toList();
-      long distinctIds =
-          identities.stream().map(OperationIdentity::operationId).distinct().count();
+      long distinctIds = identities.stream().map(OperationIdentity::operationId).distinct().count();
       if (distinctIds != identities.size()) {
         throw new WorkflowSessionRecoveryException(
             sessionId, "Duplicate durable operation id in session " + sessionId);
@@ -203,7 +200,8 @@ final class WorkflowSessionPersistenceCoordinator {
     for (StoredWorkflowOperation operation : operations) {
       if (!operation.sessionId().equals(session.sessionId())) {
         throw recoveryFailure(
-            session, "Durable operation belongs to a different session: " + operation.operationId());
+            session,
+            "Durable operation belongs to a different session: " + operation.operationId());
       }
       if (operation.revision() != expectedRevision) {
         throw recoveryFailure(
@@ -213,19 +211,16 @@ final class WorkflowSessionPersistenceCoordinator {
       }
       if (operation.sequence() <= previousSequence || operation.sequence() > session.sequence()) {
         throw recoveryFailure(
-            session,
-            "Durable event sequence is invalid at operation " + operation.operationId());
+            session, "Durable event sequence is invalid at operation " + operation.operationId());
       }
       expectedRevision++;
       previousSequence = operation.sequence();
     }
     if (session.revision() != operations.size()) {
-      throw recoveryFailure(
-          session, "Durable aggregate revision does not match operation history");
+      throw recoveryFailure(session, "Durable aggregate revision does not match operation history");
     }
     if (session.sequence() < previousSequence || session.sequence() < session.revision()) {
-      throw recoveryFailure(
-          session, "Durable aggregate event sequence precedes recovered history");
+      throw recoveryFailure(session, "Durable aggregate event sequence precedes recovered history");
     }
   }
 

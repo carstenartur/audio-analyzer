@@ -105,8 +105,7 @@ final class WorkflowSessionEntry {
     lock.lock();
     try {
       requireOpen();
-      if (mode == CollaborationMode.PRIVATE_WORKSPACE
-          && !owner.actorId().equals(actor.actorId())) {
+      if (mode == CollaborationMode.PRIVATE_WORKSPACE && !owner.actorId().equals(actor.actorId())) {
         throw error(
             Code.PRIVATE_WORKSPACE_ACCESS_DENIED,
             "Private workspace can only be joined by its owner: " + owner.actorId());
@@ -254,8 +253,7 @@ final class WorkflowSessionEntry {
       throw duplicateOperation(operation.operationId());
     }
     if (expectedRevision != revision) {
-      throw new WorkflowSessionRevisionConflictException(
-          sessionId, expectedRevision, revision);
+      throw new WorkflowSessionRevisionConflictException(sessionId, expectedRevision, revision);
     }
 
     Workflow updatedWorkflow = operation.apply(operationLog.currentWorkflow());
@@ -386,10 +384,7 @@ final class WorkflowSessionEntry {
   }
 
   private record RecoveryState(
-      List<OperationIdentity> operations,
-      boolean ownerConnected,
-      long revision,
-      long sequence) {
+      List<OperationIdentity> operations, boolean ownerConnected, long revision, long sequence) {
 
     RecoveryState {
       operations = List.copyOf(Objects.requireNonNull(operations, "operations"));

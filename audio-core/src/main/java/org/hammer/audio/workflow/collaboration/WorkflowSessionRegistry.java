@@ -73,13 +73,7 @@ public final class WorkflowSessionRegistry {
     Instant createdAt = Instant.now();
     WorkflowSessionEntry created =
         WorkflowSessionEntry.created(
-            requiredSessionId,
-            mode,
-            owner,
-            createdAt,
-            initialWorkflow,
-            eventHub,
-            persistence);
+            requiredSessionId, mode, owner, createdAt, initialWorkflow, eventHub, persistence);
     WorkflowSessionEntry previous = sessionEntries.putIfAbsent(requiredSessionId, created);
     if (previous != null) {
       throw error(
@@ -202,8 +196,7 @@ public final class WorkflowSessionRegistry {
 
   private void recoverDurableSessions() {
     for (RecoveredSession recovered : persistence.recoverOpenSessions()) {
-      WorkflowSessionEntry entry =
-          WorkflowSessionEntry.recovered(recovered, eventHub, persistence);
+      WorkflowSessionEntry entry = WorkflowSessionEntry.recovered(recovered, eventHub, persistence);
       if (sessionEntries.putIfAbsent(recovered.sessionId(), entry) != null) {
         throw new WorkflowSessionRecoveryException(
             recovered.sessionId(),
