@@ -27,10 +27,10 @@ import org.hammer.audio.workflow.WorkflowOperation.PropertyTarget;
 /**
  * Versioned deterministic codec for complete semantic workflow operations.
  *
- * <p>The existing persistence payload remains the compact idempotency fingerprint. This codec stores
- * the complete reconstructible operation body required for restart-safe undo and redo. The format is a
- * length-prefixed binary document transported as unpadded URL-safe Base64. It is not Java object
- * serialization and has no framework or persistence dependency.
+ * <p>The existing persistence payload remains the compact idempotency fingerprint. This codec
+ * stores the complete reconstructible operation body required for restart-safe undo and redo. The
+ * format is a length-prefixed binary document transported as unpadded URL-safe Base64. It is not
+ * Java object serialization and has no framework or persistence dependency.
  */
 public final class WorkflowOperationBodyCodec {
 
@@ -58,13 +58,16 @@ public final class WorkflowOperationBodyCodec {
         writeSpecific(output, requiredOperation);
       }
       return new EncodedBody(
-          CURRENT_VERSION, Base64.getUrlEncoder().withoutPadding().encodeToString(bytes.toByteArray()));
+          CURRENT_VERSION,
+          Base64.getUrlEncoder().withoutPadding().encodeToString(bytes.toByteArray()));
     } catch (IOException exception) {
       throw new IllegalStateException("Failed to encode workflow operation body", exception);
     }
   }
 
-  /** Decodes a complete operation body previously produced by {@link #encode(WorkflowOperation)}. */
+  /**
+   * Decodes a complete operation body previously produced by {@link #encode(WorkflowOperation)}.
+   */
   public static WorkflowOperation decode(int version, String body) {
     if (version != CURRENT_VERSION) {
       throw new IllegalArgumentException("Unsupported workflow operation body version: " + version);
@@ -186,8 +189,7 @@ public final class WorkflowOperationBodyCodec {
   }
 
   private static CommonFields readCommon(DataInputStream input) throws IOException {
-    return new CommonFields(
-        readString(input), Instant.parse(readString(input)), readString(input));
+    return new CommonFields(readString(input), Instant.parse(readString(input)), readString(input));
   }
 
   private static void writeSpecific(DataOutputStream output, WorkflowOperation operation)
@@ -314,7 +316,8 @@ public final class WorkflowOperationBodyCodec {
               common.author(),
               readNode(input),
               readEdges(input));
-      default -> throw new IllegalArgumentException("Unknown workflow operation body type: " + type);
+      default ->
+          throw new IllegalArgumentException("Unknown workflow operation body type: " + type);
     };
   }
 
@@ -411,7 +414,8 @@ public final class WorkflowOperationBodyCodec {
     return entries.isEmpty() ? Metadata.empty() : new Metadata(entries);
   }
 
-  private static void writeStrings(DataOutputStream output, List<String> values) throws IOException {
+  private static void writeStrings(DataOutputStream output, List<String> values)
+      throws IOException {
     writeSize(output, values.size());
     for (String value : values) {
       writeString(output, value);
@@ -430,7 +434,8 @@ public final class WorkflowOperationBodyCodec {
   private static void writeMap(DataOutputStream output, Map<String, String> values)
       throws IOException {
     writeSize(output, values.size());
-    for (Map.Entry<String, String> entry : values.entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
+    for (Map.Entry<String, String> entry :
+        values.entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
       writeString(output, entry.getKey());
       writeString(output, entry.getValue());
     }
@@ -443,13 +448,15 @@ public final class WorkflowOperationBodyCodec {
       String key = readString(input);
       String previous = values.put(key, readString(input));
       if (previous != null) {
-        throw new IllegalArgumentException("Workflow operation body contains duplicate map key: " + key);
+        throw new IllegalArgumentException(
+            "Workflow operation body contains duplicate map key: " + key);
       }
     }
     return Map.copyOf(values);
   }
 
-  private static void writeNullableString(DataOutputStream output, String value) throws IOException {
+  private static void writeNullableString(DataOutputStream output, String value)
+      throws IOException {
     output.writeBoolean(value != null);
     if (value != null) {
       writeString(output, value);
@@ -472,14 +479,16 @@ public final class WorkflowOperationBodyCodec {
   private static String readString(DataInputStream input) throws IOException {
     int length = input.readInt();
     if (length < 0 || length > MAX_STRING_BYTES) {
-      throw new IllegalArgumentException("Invalid workflow operation body string length: " + length);
+      throw new IllegalArgumentException(
+          "Invalid workflow operation body string length: " + length);
     }
     return new String(input.readNBytes(length), StandardCharsets.UTF_8);
   }
 
   private static void writeSize(DataOutputStream output, int size) throws IOException {
     if (size < 0 || size > MAX_COLLECTION_SIZE) {
-      throw new IllegalArgumentException("Invalid workflow operation body collection size: " + size);
+      throw new IllegalArgumentException(
+          "Invalid workflow operation body collection size: " + size);
     }
     output.writeInt(size);
   }
@@ -487,7 +496,8 @@ public final class WorkflowOperationBodyCodec {
   private static int readSize(DataInputStream input) throws IOException {
     int size = input.readInt();
     if (size < 0 || size > MAX_COLLECTION_SIZE) {
-      throw new IllegalArgumentException("Invalid workflow operation body collection size: " + size);
+      throw new IllegalArgumentException(
+          "Invalid workflow operation body collection size: " + size);
     }
     return size;
   }

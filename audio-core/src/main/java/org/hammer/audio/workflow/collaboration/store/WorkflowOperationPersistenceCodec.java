@@ -20,7 +20,8 @@ public final class WorkflowOperationPersistenceCodec {
    */
   public static WorkflowOperationPersistenceData encode(WorkflowOperation operation) {
     WorkflowOperation requiredOperation = Objects.requireNonNull(operation, "operation");
-    WorkflowOperationBodyCodec.EncodedBody body = WorkflowOperationBodyCodec.encode(requiredOperation);
+    WorkflowOperationBodyCodec.EncodedBody body =
+        WorkflowOperationBodyCodec.encode(requiredOperation);
     return new WorkflowOperationPersistenceData(
         requiredOperation.operationId(),
         requiredOperation.author(),
@@ -56,10 +57,7 @@ public final class WorkflowOperationPersistenceCodec {
     }
     WorkflowOperation normalizedCandidate =
         WorkflowOperationBodyCodec.reidentify(
-            candidate,
-            candidate.operationId(),
-            requiredStored.occurredAt(),
-            candidate.author());
+            candidate, candidate.operationId(), requiredStored.occurredAt(), candidate.author());
     WorkflowOperationBodyCodec.EncodedBody normalizedBody =
         WorkflowOperationBodyCodec.encode(normalizedCandidate);
     return requiredStored.bodyVersion() == normalizedBody.version()
