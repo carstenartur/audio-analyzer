@@ -97,7 +97,7 @@ public final class HibernateWorkflowSessionStateStore implements WorkflowSession
           session ->
               advanceEventSequenceWithinTransaction(session, requiredSessionId, expectedSequence));
     } catch (OptimisticLockException | StaleStateException failure) {
-      throw sequenceConflict(requiredSessionId, expectedSequence);
+      throw sequenceConflict(requiredSessionId, expectedSequence, failure);
     }
   }
 
@@ -116,10 +116,10 @@ public final class HibernateWorkflowSessionStateStore implements WorkflowSession
       StoredWorkflowSession current = requireStoredSession(requiredSessionId);
       if (current.revision() != expectedRevision) {
         throw new WorkflowSessionRevisionConflictException(
-            requiredSessionId, expectedRevision, current.revision());
+            requiredSessionId, expectedRevision, current.revision(), failure);
       }
       throw new WorkflowSessionSequenceConflictException(
-          requiredSessionId, expectedSequence, current.sequence());
+          requiredSessionId, expectedSequence, current.sequence(), failure);
     }
   }
 
@@ -282,7 +282,7 @@ public final class HibernateWorkflowSessionStateStore implements WorkflowSession
     long actualRevision = currentRevision(command.sessionId());
     if (actualRevision != command.expectedRevision()) {
       throw new WorkflowSessionRevisionConflictException(
-          command.sessionId(), command.expectedRevision(), actualRevision);
+          command.sessionId(), command.expectedRevision(), actualRevision, failure);
     }
     throw new IllegalStateException(
         "Durable append constraint failed without advancing session " + command.sessionId(),
@@ -332,9 +332,9 @@ public final class HibernateWorkflowSessionStateStore implements WorkflowSession
   }
 
   private WorkflowSessionSequenceConflictException sequenceConflict(
-      String sessionId, long expectedSequence) {
+      String sessionId, long expectedSequence, RuntimeException cause) {
     return new WorkflowSessionSequenceConflictException(
-        sessionId, expectedSequence, requireStoredSession(sessionId).sequence());
+        sessionId, expectedSequence, requireStoredSession(sessionId).sequence(), cause);
   }
 
   private StoredWorkflowSession requireStoredSession(String sessionId) {
