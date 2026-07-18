@@ -202,14 +202,4 @@
     <Class name="org.hammer.audio.experimental.acoustic.dataset.DatasetAnalytics$DistributionStats"/>
     <Bug pattern="NM_CONFUSING"/>
   </Match>
-
-
-  <!-- WorkflowSessionStateStore is an application-scoped injected port. Its identity and
-       lifecycle are intentionally shared with Spring; copying it is neither possible nor
-       semantically correct, and the reference is never exposed by the registry. -->
-  <Match>
-    <Class name="org.hammer.audio.workflow.collaboration.WorkflowSessionRegistry"/>
-    <Field name="stateStore"/>
-    <Bug pattern="EI_EXPOSE_REP2"/>
-  </Match>
 </FindBugsFilter>
