@@ -12,13 +12,23 @@ public final class WorkflowOperationPersistenceCodec {
     // Utility class.
   }
 
+  /** Encodes one ordinary forward operation. */
+  public static WorkflowOperationPersistenceData encode(WorkflowOperation operation) {
+    WorkflowOperation requiredOperation = Objects.requireNonNull(operation, "operation");
+    return encode(
+        requiredOperation,
+        WorkflowOperationCommandMetadata.normal(requiredOperation.operationId()));
+  }
+
   /**
    * Encodes one operation for durable append, restart-safe idempotency and semantic reconstruction.
    *
    * @param operation semantic workflow operation
+   * @param command durable normal/undo/redo command relation
    * @return deterministic persistence data
    */
-  public static WorkflowOperationPersistenceData encode(WorkflowOperation operation) {
+  public static WorkflowOperationPersistenceData encode(
+      WorkflowOperation operation, WorkflowOperationCommandMetadata command) {
     WorkflowOperation requiredOperation = Objects.requireNonNull(operation, "operation");
     WorkflowOperationBodyCodec.EncodedBody body =
         WorkflowOperationBodyCodec.encode(requiredOperation);
@@ -29,7 +39,8 @@ public final class WorkflowOperationPersistenceCodec {
         requiredOperation.timestamp(),
         encodeSemanticIdentity(requiredOperation),
         body.version(),
-        body.body());
+        body.body(),
+        Objects.requireNonNull(command, "command"));
   }
 
   /**
@@ -46,7 +57,7 @@ public final class WorkflowOperationPersistenceCodec {
    */
   public static boolean matches(StoredWorkflowOperation stored, WorkflowOperation candidate) {
     StoredWorkflowOperation requiredStored = Objects.requireNonNull(stored, "stored");
-    WorkflowOperationPersistenceData encodedCandidate = encode(candidate);
+    WorkflowOperationPersistenceData encodedCandidate = encode(candidate, requiredStored.command());
     boolean identityMatches =
         requiredStored.operationId().equals(encodedCandidate.operationId())
             && requiredStored.actorId().equals(encodedCandidate.actorId())
