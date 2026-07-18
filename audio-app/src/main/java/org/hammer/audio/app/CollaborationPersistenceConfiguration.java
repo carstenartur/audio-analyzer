@@ -2,7 +2,9 @@ package org.hammer.audio.app;
 
 import java.util.Objects;
 import org.hammer.audio.infrastructure.workflow.collaboration.store.CollaborationPersistenceEntities;
+import org.hammer.audio.infrastructure.workflow.collaboration.store.HibernateWorkflowOutboxStore;
 import org.hammer.audio.infrastructure.workflow.collaboration.store.HibernateWorkflowSessionStateStore;
+import org.hammer.audio.workflow.collaboration.store.WorkflowOutboxStore;
 import org.hammer.audio.workflow.collaboration.store.WorkflowSessionStateStore;
 import org.hibernate.SessionFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -26,6 +28,14 @@ public class CollaborationPersistenceConfiguration {
   public WorkflowSessionStateStore workflowSessionStateStore(
       @Qualifier("workflowPersistenceSessionFactory") SessionFactory sessionFactory) {
     return new HibernateWorkflowSessionStateStore(
+        Objects.requireNonNull(sessionFactory, "sessionFactory"));
+  }
+
+  /** Creates leased outbox persistence over the same shared application SessionFactory. */
+  @Bean
+  public WorkflowOutboxStore workflowOutboxStore(
+      @Qualifier("workflowPersistenceSessionFactory") SessionFactory sessionFactory) {
+    return new HibernateWorkflowOutboxStore(
         Objects.requireNonNull(sessionFactory, "sessionFactory"));
   }
 }
