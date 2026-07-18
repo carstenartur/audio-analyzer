@@ -1,0 +1,84 @@
+name: Bootstrap issue 269 frontend
+
+on:
+  push:
+    branches: [ feature/269-production-react-flow-frontend ]
+
+permissions:
+  contents: write
+  packages: read
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v7
+        with:
+          ref: feature/269-production-react-flow-frontend
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Node.js 22.14.0
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22.14.0
+          registry-url: https://registry.npmjs.org
+
+      - name: Generate immutable npm lockfile
+        working-directory: audio-web-editor
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+
+      - name: Wire Maven reactor and application dependency
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          root = Path('pom.xml')
+          text = root.read_text(encoding='utf-8')
+          module_marker = '    <module>audio-app</module>'
+          if '    <module>audio-web-editor</module>' not in text:
+              text = text.replace(
+                  module_marker,
+                  '    <module>audio-web-editor</module>\n' + module_marker,
+                  1,
+              )
+          dependency_marker = '''      <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>audio-experimental-acoustic</artifactId>
+            <version>${project.version}</version>
+          </dependency>'''
+          web_dependency = '''      <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>audio-web-editor</artifactId>
+            <version>${project.version}</version>
+          </dependency>'''
+          if '<artifactId>audio-web-editor</artifactId>' not in text:
+              text = text.replace(dependency_marker, dependency_marker + '\n' + web_dependency, 1)
+          root.write_text(text, encoding='utf-8')
+
+          app = Path('audio-app/pom.xml')
+          text = app.read_text(encoding='utf-8')
+          app_marker = '''    <dependency>
+              <groupId>${project.groupId}</groupId>
+              <artifactId>audio-plugin-api</artifactId>
+            </dependency>'''
+          app_dependency = '''    <dependency>
+              <groupId>${project.groupId}</groupId>
+              <artifactId>audio-web-editor</artifactId>
+            </dependency>'''
+          if '<artifactId>audio-web-editor</artifactId>' not in text:
+              text = text.replace(app_marker, app_marker + '\n' + app_dependency, 1)
+          app.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Remove superseded built-in HTML UI
+        run: git rm audio-app/src/main/resources/workbench-ui/index.html
+
+      - name: Remove bootstrap workflow and commit
+        run: |
+          git rm .github/workflows/bootstrap-269-frontend.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add pom.xml audio-app/pom.xml audio-web-editor/package-lock.json
+          git commit -m 'Wire reproducible production frontend into Maven reactor'
+          git push origin HEAD:feature/269-production-react-flow-frontend
