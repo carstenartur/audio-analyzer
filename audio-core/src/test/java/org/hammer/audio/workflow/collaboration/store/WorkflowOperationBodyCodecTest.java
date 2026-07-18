@@ -6,7 +6,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Stream;
 import org.hammer.audio.workflow.DataType;
 import org.hammer.audio.workflow.Edge;
 import org.hammer.audio.workflow.Metadata;
@@ -17,8 +16,6 @@ import org.hammer.audio.workflow.PortMultiplicity;
 import org.hammer.audio.workflow.WorkflowOperation;
 import org.hammer.audio.workflow.WorkflowOperation.PropertyTarget;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.MethodSource;
 
 class WorkflowOperationBodyCodecTest {
 
@@ -66,15 +63,17 @@ class WorkflowOperationBodyCodecTest {
           INPUT_PORT.id(),
           new Metadata(Map.of("label", "audio")));
 
-  @ParameterizedTest
-  @MethodSource("operations")
-  void roundTripsEverySemanticOperation(WorkflowOperation operation) {
-    WorkflowOperationBodyCodec.EncodedBody encoded = WorkflowOperationBodyCodec.encode(operation);
+  @Test
+  void roundTripsEverySemanticOperation() {
+    for (WorkflowOperation operation : operations()) {
+      WorkflowOperationBodyCodec.EncodedBody encoded = WorkflowOperationBodyCodec.encode(operation);
 
-    WorkflowOperation decoded = WorkflowOperationBodyCodec.decode(encoded.version(), encoded.body());
+      WorkflowOperation decoded =
+          WorkflowOperationBodyCodec.decode(encoded.version(), encoded.body());
 
-    assertEquals(operation, decoded);
-    assertEquals(encoded, WorkflowOperationBodyCodec.encode(decoded));
+      assertEquals(operation, decoded, operation.getClass().getSimpleName());
+      assertEquals(encoded, WorkflowOperationBodyCodec.encode(decoded));
+    }
   }
 
   @Test
@@ -110,8 +109,8 @@ class WorkflowOperationBodyCodecTest {
         () -> WorkflowOperationBodyCodec.decode(encoded.version(), "not-base64!"));
   }
 
-  private static Stream<WorkflowOperation> operations() {
-    return Stream.of(
+  private static List<WorkflowOperation> operations() {
+    return List.of(
         new WorkflowOperation.CreateNode("operation.create", OCCURRED_AT, "actor.one", SOURCE_NODE),
         new WorkflowOperation.DeleteNode(
             "operation.delete",
