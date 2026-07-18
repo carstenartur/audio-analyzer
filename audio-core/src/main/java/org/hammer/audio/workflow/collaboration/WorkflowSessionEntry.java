@@ -359,10 +359,7 @@ final class WorkflowSessionEntry {
   }
 
   record RecoveryState(
-      List<OperationIdentity> operations,
-      boolean ownerConnected,
-      long revision,
-      long sequence) {
+      List<OperationIdentity> operations, boolean ownerConnected, long revision, long sequence) {
 
     RecoveryState {
       operations = List.copyOf(Objects.requireNonNull(operations, "operations"));
