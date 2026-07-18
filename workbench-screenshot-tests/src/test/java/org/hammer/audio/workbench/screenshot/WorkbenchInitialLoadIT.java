@@ -137,9 +137,10 @@ class WorkbenchInitialLoadIT {
       assertNotNull(catalogTypes, "Catalog list must not be null");
       assertTrue(catalogTypes.size() >= 3, "At least 3 catalog node types must be visible");
 
-      // Assert: graph canvas is visible
-      Locator graphCanvas = page.locator("[data-testid='graph-canvas']");
+      // Assert: React Flow rendered inside the stable graph-area boundary.
+      Locator graphCanvas = page.locator("[data-testid='graph-area'] .react-flow");
       graphCanvas.waitFor(new Locator.WaitForOptions().setTimeout(PAGE_LOAD_TIMEOUT_MS));
+      assertTrue(graphCanvas.isVisible(), "React Flow canvas must be visible");
 
       // Assert: workbench title is present
       Locator title = page.locator("[data-testid='workbench-title']");
