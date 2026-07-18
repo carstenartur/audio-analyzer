@@ -71,6 +71,14 @@ or:
 
 The query parameter wins when both are present. SSE `id` is the numeric sequence and SSE `event` is the event type.
 
+After the transport subscription is attached, the HTTP adapter writes one SSE comment:
+
+```text
+:connected
+```
+
+This comment exists only to flush an otherwise empty replay response so the browser's `EventSource` can enter the open state before a later domain event occurs. It has no event id, no event type and no JSON payload. It does not advance sequence or revision, is not retained or replayed by `WorkflowSessionEventHub` and must never be interpreted as workflow, presence or lifecycle state.
+
 ## Replay and reconnect
 
 Each session retains a bounded event window. A reconnect cursor still inside that window receives all later events in order. A cursor older than the retained window, or ahead of the server sequence, receives one current `SNAPSHOT` event instead of a misleading partial replay.
@@ -97,7 +105,7 @@ A subscriber is removed when:
 - the client closes the transport;
 - the session emits `SESSION_CLOSED`.
 
-The SSE adapter transfers subscription ownership to a callback-bound holder. Completion, timeout, emitter error and explicit session close all atomically detach and close that subscription.
+The SSE adapter transfers subscription ownership to a callback-bound holder. Completion, timeout, emitter error, a failed connection-flush write and explicit session close all atomically detach and close that subscription.
 
 Removing a transport subscription never removes the collaboration session or its workflow. Session lifecycle remains owned by `WorkflowSessionRegistry`.
 
@@ -107,4 +115,4 @@ This implementation is deliberately in-memory and bounded. Durable operation per
 
 ## Verification
 
-The implementation is covered by focused core and HTTP tests for ordering, reconnect replay, snapshot fallback, idempotent retries, conflicting duplicate ids, presence isolation and failed/slow subscriber cleanup. The complete repository passes `mvn -B clean verify --file pom.xml`, including Checkstyle, SpotBugs and PMD.
+The implementation is covered by focused core and HTTP tests for ordering, the empty-replay connection handshake, reconnect replay, snapshot fallback, idempotent retries, conflicting duplicate ids, presence isolation and failed/slow subscriber cleanup. The complete repository passes `mvn -B clean verify --file pom.xml`, including Checkstyle, SpotBugs and PMD.

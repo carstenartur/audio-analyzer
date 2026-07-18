@@ -23,6 +23,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 public final class WorkflowSessionEventHttpAdapter {
 
   private static final long EMITTER_TIMEOUT_MILLIS = 30L * 60L * 1000L;
+  private static final String CONNECTED_COMMENT = "connected";
 
   private final WorkflowSessionRegistry registry;
   private final WorkflowSessionEventHub eventHub;
@@ -38,7 +39,10 @@ public final class WorkflowSessionEventHttpAdapter {
    * Streams retained and future events after a reconnect cursor.
    *
    * <p>The explicit {@code afterSequence} query parameter takes precedence over {@code
-   * Last-Event-ID}. A replay gap is represented by one canonical {@code SNAPSHOT} event.
+   * Last-Event-ID}. A replay gap is represented by one canonical {@code SNAPSHOT} event. A
+   * transport comment is written after subscription so an empty replay still flushes the HTTP
+   * response and allows the browser's {@code EventSource} to become open without inventing a domain
+   * event.
    */
   @SuppressWarnings("PMD.CloseResource")
   @GetMapping(path = "/{sessionId}/events", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
@@ -56,7 +60,17 @@ public final class WorkflowSessionEventHttpAdapter {
     WorkflowSessionEventHub.Subscription subscription =
         eventHub.subscribe(sessionId, cursor, event -> send(emitter, holder, event));
     holder.attach(subscription);
+    flushConnection(emitter, holder);
     return emitter;
+  }
+
+  private static void flushConnection(SseEmitter emitter, SubscriptionHolder holder) {
+    try {
+      emitter.send(SseEmitter.event().comment(CONNECTED_COMMENT));
+    } catch (IOException | IllegalStateException exception) {
+      holder.close();
+      emitter.completeWithError(exception);
+    }
   }
 
   private static void send(

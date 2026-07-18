@@ -60,6 +60,10 @@ class WorkbenchInitialLoadIT {
   private static final int VIEWPORT_HEIGHT = 720;
   private static final int PAGE_LOAD_TIMEOUT_MS = 15_000;
   private static final String EXPECTED_STATUS_PREFIX = "Loaded:";
+  private static final String ACTOR_INIT_SCRIPT =
+      "window.sessionStorage.setItem('audio-analyzer.workflow.actor',"
+          + " JSON.stringify({actorId:'actor-docs',userId:'user-docs',"
+          + "displayName:'Documentation User'}));";
 
   private GenericContainer<?> container;
   private Playwright playwright;
@@ -110,6 +114,7 @@ class WorkbenchInitialLoadIT {
 
     try (Page page = browser.newPage()) {
       page.setViewportSize(VIEWPORT_WIDTH, VIEWPORT_HEIGHT);
+      page.addInitScript(ACTOR_INIT_SCRIPT);
 
       // Navigate to the workbench
       page.navigate(baseUrl + "/");
@@ -137,9 +142,10 @@ class WorkbenchInitialLoadIT {
       assertNotNull(catalogTypes, "Catalog list must not be null");
       assertTrue(catalogTypes.size() >= 3, "At least 3 catalog node types must be visible");
 
-      // Assert: graph canvas is visible
-      Locator graphCanvas = page.locator("[data-testid='graph-canvas']");
+      // Assert: React Flow rendered inside the stable graph-area boundary.
+      Locator graphCanvas = page.locator("[data-testid='graph-area'] .react-flow");
       graphCanvas.waitFor(new Locator.WaitForOptions().setTimeout(PAGE_LOAD_TIMEOUT_MS));
+      assertTrue(graphCanvas.isVisible(), "React Flow canvas must be visible");
 
       // Assert: workbench title is present
       Locator title = page.locator("[data-testid='workbench-title']");
@@ -185,6 +191,7 @@ class WorkbenchInitialLoadIT {
 
     try (Page page = browser.newPage()) {
       page.setViewportSize(VIEWPORT_WIDTH, VIEWPORT_HEIGHT);
+      page.addInitScript(ACTOR_INIT_SCRIPT);
       page.navigate(baseUrl + "/");
       page.waitForLoadState();
 

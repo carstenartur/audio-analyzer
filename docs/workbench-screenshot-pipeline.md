@@ -8,9 +8,9 @@ captured.
 
 ```text
 Maven (-Pscreenshot-tests)
-  -> build audio-app JAR (package phase)
+  -> build audio-app JAR and verified audio-web-editor assets
   -> Testcontainers starts workbench container (eclipse-temurin:21-jre-alpine)
-  -> WorkflowHttpServerLauncher starts HTTP server with seed workflow
+  -> WorkbenchApplication starts the packaged Spring Boot workbench
   -> Playwright (headless Chromium) navigates to the running app
   -> browser drives scenarios and asserts expected behaviour
   -> screenshots are written to docs/assets/screenshots/workbench/
@@ -45,13 +45,15 @@ mvn -Pscreenshot-tests verify -DupdateScreenshots=true
   impact.
 - Never runs implicitly during normal verification.
 
+A pull request that intentionally changes a documented UI state must update the integration scenario,
+its committed PNG baseline and the documentation that embeds it together. Hand-edited or independently
+captured replacement images are not accepted as equivalent evidence.
+
 ## Volatile UI Regions
 
-The seed workflow served by `WorkflowHttpServerLauncher` contains no volatile data:
-
-- No timestamps, no live telemetry, no runtime indicators.
-- The workbench HTML page disables all CSS animations via `animation: none !important`.
-- Full-page screenshots are therefore deterministic across CI runs.
+The documented scenarios use fixed workflow/session names and test identities. No wall-clock timestamps,
+random operation identifiers or live telemetry are rendered in the captured regions. The tests also
+disable CSS animations and blinking carets before capture.
 
 If future scenarios document status bars with live telemetry values, use one of these mechanisms:
 
@@ -75,20 +77,22 @@ See `ScreenshotPipeline.java` for the implementation notes.
 
 ## Configuration
 
-| System Property            | Default                                     | Description                                    |
-|:---------------------------|:--------------------------------------------|:-----------------------------------------------|
-| `updateScreenshots`        | `false`                                     | Set `true` to regenerate committed screenshots |
-| `screenshot.tolerance.pct` | `2`                                         | Allowed pixel-difference ratio (0–100)         |
-| `docs.screenshots.dir`     | `docs/assets/screenshots/workbench`         | Committed baseline screenshot directory        |
-| `workbench.jar.path`       | `audio-app/target/audio-app-*.jar`          | Path to the built application JAR              |
-| `workbench.lib.dir`        | `audio-app/target/lib`                      | Path to the runtime library directory          |
-| `workbench.static.dir`     | `audio-app/src/main/resources/workbench-ui` | Path to the static workbench HTML/JS resources |
+| System Property            | Default                                 | Description                                    |
+|:---------------------------|:----------------------------------------|:-----------------------------------------------|
+| `updateScreenshots`        | `false`                                 | Set `true` to regenerate committed screenshots |
+| `screenshot.tolerance.pct` | `2`                                     | Allowed pixel-difference ratio (0–100)         |
+| `docs.screenshots.dir`     | `docs/assets/screenshots/workbench`     | Committed baseline screenshot directory        |
+| `workbench.jar.path`       | `audio-app/target/audio-app-*.jar`      | Path to the built application JAR              |
+| `workbench.lib.dir`        | `audio-app/target/lib`                  | Path to the runtime library directory          |
+| `workbench.static.dir`     | `audio-web-editor/target/frontend-dist` | Verified Vite production assets                |
 
-## First Scenario: Workbench Initial Load
+## Documented Scenarios
 
-The initial scenario (`WorkbenchInitialLoadIT`) documents the workbench with the seed workflow:
+### Initial workbench load
 
-```
+`WorkbenchInitialLoadIT` opens the packaged workbench with the deterministic seed workflow:
+
+```text
 Synthetic Signal Generator → Gain → Localization
 ```
 
@@ -97,30 +101,55 @@ Assertions:
 1. Node palette is visible with catalog nodes.
 2. The three seed nodes are rendered in the graph area.
 3. Typed port handles are visible on the Gain node.
-4. Status bar reports a successful load (no error message).
+4. Status bar reports a successful load.
 
-Screenshot captured: `docs/assets/screenshots/workbench/initial-load.png`
+Screenshots:
+
+- `docs/assets/screenshots/workbench/initial-load.png`
+- `docs/assets/screenshots/workbench/node-palette.png`
+
+### Live collaboration session
+
+`WorkbenchCollaborationScreenshotIT` documents the production session client, not a mocked component.
+It runs against the same packaged application and:
+
+1. saves a deterministic actor identity;
+2. creates `docs-collaboration` in `SHARED_SESSION_PERSONAL_UNDO` mode;
+3. waits for the ordered SSE transport to report `live`;
+4. submits a Synthetic Signal Generator and Gain node through revision-aware semantic commands;
+5. verifies the accepted projection, revision, command state and participant state;
+6. captures `docs/assets/screenshots/workbench/collaboration-session.png`.
+
+The corresponding architecture page and root README embed the generated image directly.
 
 ## Adding New Screenshot Scenarios
 
-1. Add a new test method to `WorkbenchInitialLoadIT` (or a new `*IT.java` class) annotated with
-   `@Test` and `@Tag("screenshot")`.
-2. Navigate to the workbench, drive the scenario, and call
-   `ScreenshotPipeline.processScreenshot("my-scenario.png", pngBytes)`.
-3. Run update mode once to generate the initial baseline.
-4. Commit the new baseline screenshot alongside the test code.
-5. Embed the screenshot in the relevant documentation page.
+1. Add a new test method to an existing `*IT.java` class or add a dedicated class annotated with
+   `@Tag("screenshot")`.
+2. Navigate to the packaged workbench, drive a deterministic scenario and assert the visible state.
+3. Call `ScreenshotPipeline.processScreenshot("my-scenario.png", pngBytes)`.
+4. Run update mode once to generate the initial baseline.
+5. Commit the new baseline screenshot alongside the test code and documentation reference.
+6. Run verify mode to prove the committed baseline is reproducible.
 
 ## CI Integration
 
 The default CI workflow (`maven.yml`) runs `mvn -B clean verify --file pom.xml` and does **not**
-activate `-Pscreenshot-tests`. If screenshot tests are run in CI with the profile enabled,
-generated screenshots are uploaded as CI artifacts named `workbench-screenshot-failures` on
-failure.
-
-To run screenshot tests in CI explicitly:
+activate `-Pscreenshot-tests`. This keeps Docker/Chromium integration separate from ordinary unit and
+quality gates. Screenshot verification is executed explicitly when UI documentation changes.
 
 ```yaml
+- name: Install screenshot-test reactor artifacts
+  run: mvn -B -Pscreenshot-tests -DskipTests install -pl workbench-screenshot-tests -am
+
+- name: Install Playwright Chromium
+  run: >-
+    mvn -B -Pscreenshot-tests -pl workbench-screenshot-tests
+    org.codehaus.mojo:exec-maven-plugin:3.5.0:java
+    -Dexec.mainClass=com.microsoft.playwright.CLI
+    -Dexec.classpathScope=test
+    -Dexec.args="install --with-deps chromium"
+
 - name: Run screenshot integration tests
   run: mvn -B -Pscreenshot-tests verify --file pom.xml
 
@@ -134,14 +163,18 @@ To run screenshot tests in CI explicitly:
     retention-days: 30
 ```
 
+A screenshot-update workflow may run update mode intentionally and commit only the generated PNG files.
+That workflow must be removed again after the baselines are updated; normal CI must never rewrite
+screenshots silently.
+
 ## Layer Boundaries
 
-| Allowed                                      | Forbidden                                               |
-|:---------------------------------------------|:--------------------------------------------------------|
-| Testcontainers test harness                  | Making screenshots require manual clicking              |
-| Playwright browser automation test code      | Committing screenshots that cannot be regenerated       |
-| Docs screenshot assets                       | Coupling workflow-domain code to Playwright             |
-| Test-only telemetry stubs or seed data       | Putting test-only APIs into the production domain       |
-| Documentation pages embedding screenshots    | Using screenshot tests as canonical workflow validation |
-| `WorkflowHttpServerLauncher` (launch wiring) | Silently rewriting screenshots during normal CI verify  |
+| Allowed                                   | Forbidden                                               |
+|:------------------------------------------|:--------------------------------------------------------|
+| Testcontainers test harness               | Making screenshots require manual clicking              |
+| Playwright browser automation test code   | Committing screenshots that cannot be regenerated       |
+| Docs screenshot assets                    | Coupling workflow-domain code to Playwright             |
+| Test-only deterministic identities/data   | Putting test-only APIs into the production domain       |
+| Documentation pages embedding screenshots | Using screenshot tests as canonical workflow validation |
+| `WorkbenchApplication` launch wiring      | Silently rewriting screenshots during normal CI verify  |
 
