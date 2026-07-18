@@ -1,0 +1,106 @@
+name: Fix CI report publication
+
+on:
+  pull_request:
+    branches:
+      - master
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.head_ref == 'fix/ci-report-publication'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.head_ref }}
+
+      - name: Separate report deployment from the build job
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          workflow = Path('.github/workflows/maven.yml')
+          source = workflow.read_text(encoding='utf-8')
+          source = source.replace('      contents: write\n', '      contents: read\n', 1)
+
+          start_marker = "\n    - name: Deploy reports to GitHub Pages\n"
+          end_marker = "        commit_message: 'Deploy test and coverage reports ${{ github.sha }}'\n"
+          start = source.find(start_marker)
+          if start < 0:
+              raise SystemExit('Pages deployment step not found in Maven workflow')
+          end = source.find(end_marker, start)
+          if end < 0:
+              raise SystemExit('Pages deployment end marker not found in Maven workflow')
+          end += len(end_marker)
+          workflow.write_text(source[:start] + source[end:], encoding='utf-8')
+
+          publisher = Path('.github/workflows/publish-reports.yml')
+          publisher.write_text(
+              '''name: Publish CI reports
+
+on:
+  workflow_run:
+    workflows:
+      - Java CI with Maven
+    types:
+      - completed
+    branches:
+      - master
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: publish-ci-reports
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download reports from the successful build
+        uses: actions/download-artifact@v7
+        with:
+          name: github-pages-reports
+          path: target/gh-pages
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish reports to the gh-pages branch
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: target/gh-pages
+          destination_dir: .
+          keep_files: true
+          force_orphan: true
+          user_name: github-actions[bot]
+          user_email: github-actions[bot]@users.noreply.github.com
+          commit_message: Deploy test and coverage reports ${{ github.event.workflow_run.head_sha }}
+''',
+              encoding='utf-8',
+          )
+
+          quality = Path('docs/quality.md')
+          text = quality.read_text(encoding='utf-8')
+          section = '''\n## CI report publication\n\nThe `Java CI with Maven` workflow owns compilation, tests, static analysis and creation of the\n`github-pages-reports` artifact. Publication is intentionally handled by the separate\n`Publish CI reports` workflow after a successful `master` build. A report-deployment outage therefore\nremains visible as a publication failure without misreporting the Java build itself as failed.\n'''
+          if '## CI report publication' not in text:
+              quality.write_text(text.rstrip() + '\n' + section, encoding='utf-8')
+          PY
+
+          rm .github/workflows/fix-ci-report-publication.yml
+
+      - name: Commit the CI fix
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add .github/workflows/maven.yml .github/workflows/publish-reports.yml docs/quality.md .github/workflows/fix-ci-report-publication.yml
+          git commit -m "ci: separate report publication from Java verification"
+          git push origin HEAD:${{ github.head_ref }}
