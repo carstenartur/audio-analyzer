@@ -1,14 +1,15 @@
 name: Complete issue 269 Maven wiring
 
 on:
-  push:
-    branches: [ feature/269-production-react-flow-frontend ]
+  pull_request:
+    branches: [ master ]
 
 permissions:
   contents: write
 
 jobs:
   wire:
+    if: github.head_ref == 'feature/269-production-react-flow-frontend'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout feature branch
@@ -25,10 +26,10 @@ jobs:
           root = Path('pom.xml')
           text = root.read_text(encoding='utf-8')
           marker = '''      <dependency>
-            <groupId>${project.groupId}</groupId>
-            <artifactId>audio-experimental-acoustic</artifactId>
-            <version>${project.version}</version>
-          </dependency>'''.replace('            ', '        ')
+        <groupId>${project.groupId}</groupId>
+        <artifactId>audio-experimental-acoustic</artifactId>
+        <version>${project.version}</version>
+      </dependency>'''
           dependency = '''      <dependency>
         <groupId>${project.groupId}</groupId>
         <artifactId>audio-web-editor</artifactId>
