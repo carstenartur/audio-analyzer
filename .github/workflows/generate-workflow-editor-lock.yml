@@ -3,12 +3,15 @@ name: Generate workflow editor lockfile
 on:
   push:
     branches: [ feature/269-production-react-flow ]
+  pull_request:
+    branches: [ master ]
 
 permissions:
   contents: write
 
 jobs:
   lockfile:
+    if: github.head_ref == 'feature/269-production-react-flow' || github.ref_name == 'feature/269-production-react-flow'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout frontend branch
