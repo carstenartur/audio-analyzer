@@ -10,28 +10,24 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 import org.hammer.audio.workflow.Workflow;
 import org.hammer.audio.workflow.WorkflowOperation;
-import org.hammer.audio.workflow.WorkflowOperationLog;
 import org.hammer.audio.workflow.collaboration.WorkflowSessionException.Code;
 import org.hammer.audio.workflow.collaboration.WorkflowSessionPersistenceCoordinator.AppendOutcome;
-import org.hammer.audio.workflow.collaboration.WorkflowSessionPersistenceCoordinator.LifecycleState;
 import org.hammer.audio.workflow.collaboration.WorkflowSessionPersistenceCoordinator.OperationIdentity;
-import org.hammer.audio.workflow.collaboration.WorkflowSessionPersistenceCoordinator.RecoveredSession;
-import org.hammer.audio.workflow.collaboration.store.WorkflowSessionRevisionConflictException;
 
 /** Owns the synchronized runtime state for one collaboration session. */
 final class WorkflowSessionEntry {
 
   private final String sessionId;
   private final CollaborationMode mode;
-  private final OperationActor owner;
+  private final OperationActor sessionOwner;
   private final Instant createdAt;
-  private final WorkflowOperationLog operationLog;
   private final WorkflowSessionEventHub eventHub;
   private final WorkflowSessionPersistenceCoordinator persistence;
   private final Map<String, OperationActor> participants = new ConcurrentHashMap<>();
   private final Map<String, PresenceState> presenceByActor = new ConcurrentHashMap<>();
   private final Map<String, OperationIdentity> operationsById = new ConcurrentHashMap<>();
   private final ReentrantLock lock = new ReentrantLock();
+  private Workflow currentWorkflow;
   private int operationCount;
   private long revision;
   private long sequence;
@@ -41,9 +37,9 @@ final class WorkflowSessionEntry {
       SessionDefinition definition, RecoveryState recovery, Services services) {
     this.sessionId = definition.sessionId();
     this.mode = definition.mode();
-    this.owner = definition.owner();
+    this.sessionOwner = definition.owner();
     this.createdAt = definition.createdAt();
-    this.operationLog = new WorkflowOperationLog(definition.workflow());
+    this.currentWorkflow = definition.workflow();
     this.eventHub = services.eventHub();
     this.persistence = services.persistence();
     this.revision = recovery.revision();
@@ -57,7 +53,7 @@ final class WorkflowSessionEntry {
     }
     this.operationCount = recovery.operations().size();
     if (recovery.ownerConnected()) {
-      participants.put(owner.actorId(), owner);
+      participants.put(sessionOwner.actorId(), sessionOwner);
     }
   }
 
@@ -76,19 +72,10 @@ final class WorkflowSessionEntry {
   }
 
   static WorkflowSessionEntry recovered(
-      RecoveredSession recovered,
+      SessionDefinition definition,
+      RecoveryState recovery,
       WorkflowSessionEventHub eventHub,
       WorkflowSessionPersistenceCoordinator persistence) {
-    SessionDefinition definition =
-        new SessionDefinition(
-            recovered.sessionId(),
-            recovered.mode(),
-            recovered.owner(),
-            recovered.createdAt(),
-            recovered.workflow());
-    RecoveryState recovery =
-        new RecoveryState(
-            recovered.operations(), false, recovered.revision(), recovered.sequence());
     return new WorkflowSessionEntry(definition, recovery, new Services(eventHub, persistence));
   }
 
@@ -105,10 +92,11 @@ final class WorkflowSessionEntry {
     lock.lock();
     try {
       requireOpen();
-      if (mode == CollaborationMode.PRIVATE_WORKSPACE && !owner.actorId().equals(actor.actorId())) {
+      if (mode == CollaborationMode.PRIVATE_WORKSPACE
+          && !sessionOwner.actorId().equals(actor.actorId())) {
         throw error(
             Code.PRIVATE_WORKSPACE_ACCESS_DENIED,
-            "Private workspace can only be joined by its owner: " + owner.actorId());
+            "Private workspace can only be joined by its owner: " + sessionOwner.actorId());
       }
       OperationActor existing = participants.get(actor.actorId());
       if (existing != null && !existing.equals(actor)) {
@@ -189,7 +177,7 @@ final class WorkflowSessionEntry {
     lock.lock();
     try {
       requireOpen();
-      return operationLog.currentWorkflow();
+      return currentWorkflow;
     } finally {
       lock.unlock();
     }
@@ -209,14 +197,12 @@ final class WorkflowSessionEntry {
     lock.lock();
     try {
       requireOpen();
-      if (!owner.actorId().equals(actorId)) {
+      if (!sessionOwner.actorId().equals(actorId)) {
         throw error(
             Code.SESSION_CLOSE_FORBIDDEN,
-            "Only the session owner may close it: " + owner.actorId());
+            "Only the session owner may close it: " + sessionOwner.actorId());
       }
-      LifecycleState closedState = persistence.close(sessionId, revision, sequence);
-      revision = closedState.revision();
-      sequence = closedState.sequence();
+      sequence = persistence.close(sessionId, revision, sequence);
       closed = true;
       return sequence;
     } finally {
@@ -234,7 +220,7 @@ final class WorkflowSessionEntry {
   }
 
   OperationActor owner() {
-    return owner;
+    return sessionOwner;
   }
 
   private Workflow applyLocked(
@@ -248,46 +234,38 @@ final class WorkflowSessionEntry {
     OperationIdentity previous = operationsById.get(operation.operationId());
     if (previous != null) {
       if (previous.equals(candidate)) {
-        return operationLog.currentWorkflow();
+        return currentWorkflow;
       }
       throw duplicateOperation(operation.operationId());
     }
-    if (expectedRevision != revision) {
-      throw new WorkflowSessionRevisionConflictException(sessionId, expectedRevision, revision);
-    }
+    persistence.requireExpectedRevision(sessionId, expectedRevision, revision);
 
-    Workflow updatedWorkflow = operation.apply(operationLog.currentWorkflow());
+    Workflow updatedWorkflow = operation.apply(currentWorkflow);
     AppendOutcome outcome =
         persistence.append(sessionId, revision, sequence, operation, updatedWorkflow);
     revision = outcome.revision();
     sequence = outcome.sequence();
+    currentWorkflow = outcome.workflow();
     if (outcome.duplicate()) {
-      operationLog.reset(outcome.workflow());
       operationsById.put(operation.operationId(), outcome.identity());
       operationCount = Math.toIntExact(revision);
-      return outcome.workflow();
+      return currentWorkflow;
     }
 
-    Workflow appliedWorkflow = operationLog.apply(operation);
-    if (!appliedWorkflow.equals(outcome.workflow())) {
+    if (!updatedWorkflow.equals(currentWorkflow)) {
       throw new IllegalStateException(
           "Persisted workflow differs from applied workflow for operation "
               + operation.operationId());
     }
     operationsById.put(operation.operationId(), outcome.identity());
     operationCount++;
-    eventHub.operationAccepted(sessionId, actor, operation, appliedWorkflow);
+    eventHub.operationAccepted(sessionId, actor, operation, currentWorkflow);
     verifyEventHubState(sequence, revision, "accepted operation");
-    return appliedWorkflow;
+    return currentWorkflow;
   }
 
   private long reserveNonSemanticEvent() {
-    LifecycleState advanced = persistence.advanceEventSequence(sessionId, revision, sequence);
-    if (advanced.closed() || advanced.revision() != revision) {
-      throw new IllegalStateException(
-          "Durable event sequence result is inconsistent for session " + sessionId);
-    }
-    return advanced.sequence();
+    return persistence.advanceEventSequence(sessionId, revision, sequence);
   }
 
   private void confirmNonSemanticEvent(long expectedSequence, String eventDescription) {
@@ -358,16 +336,16 @@ final class WorkflowSessionEntry {
     return new WorkflowSessionRegistry.SessionSnapshot(
         sessionId,
         mode,
-        owner,
+        sessionOwner,
         createdAt,
         actors,
         operationCount,
-        operationLog.currentWorkflow().id(),
+        currentWorkflow.id(),
         revision,
         sequence);
   }
 
-  private record SessionDefinition(
+  record SessionDefinition(
       String sessionId,
       CollaborationMode mode,
       OperationActor owner,
@@ -383,8 +361,11 @@ final class WorkflowSessionEntry {
     }
   }
 
-  private record RecoveryState(
-      List<OperationIdentity> operations, boolean ownerConnected, long revision, long sequence) {
+  record RecoveryState(
+      List<OperationIdentity> operations,
+      boolean ownerConnected,
+      long revision,
+      long sequence) {
 
     RecoveryState {
       operations = List.copyOf(Objects.requireNonNull(operations, "operations"));
