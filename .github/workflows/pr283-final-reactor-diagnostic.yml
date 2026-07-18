@@ -1,0 +1,49 @@
+name: PR 283 final reactor diagnostic
+
+on:
+  push:
+    branches:
+      - feature/271-durable-semantic-undo-redo
+  pull_request:
+    branches:
+      - master
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  diagnose:
+    if: github.ref == 'refs/heads/feature/271-durable-semantic-undo-redo' || github.head_ref == 'feature/271-durable-semantic-undo-redo'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v5
+        with:
+          java-version: '21'
+          distribution: temurin
+          cache: maven
+          server-id: github
+          server-username: GITHUB_ACTOR
+          server-password: GITHUB_TOKEN
+      - name: Verify complete reactor
+        id: verify
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          mvn -B clean verify --file pom.xml 2>&1 | tee pr283-final-reactor.log
+      - name: Upload complete reactor log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pr283-final-reactor-log
+          path: pr283-final-reactor.log
+          if-no-files-found: error
+          retention-days: 1
+      - name: Propagate failure
+        if: steps.verify.outcome != 'success'
+        run: exit 1
