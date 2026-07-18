@@ -1,0 +1,39 @@
+name: Generate workflow editor lockfile
+
+on:
+  push:
+    branches: [ feature/269-production-react-flow ]
+
+permissions:
+  contents: write
+
+jobs:
+  lockfile:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout frontend branch
+        uses: actions/checkout@v7
+        with:
+          ref: feature/269-production-react-flow
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up pinned Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '24.18.0'
+
+      - name: Generate exact npm lockfile
+        working-directory: workflow-editor
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+
+      - name: Commit lockfile
+        run: |
+          if git diff --quiet -- workflow-editor/package-lock.json; then
+            echo "Lockfile already current"
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add workflow-editor/package-lock.json
+          git commit -m "Add workflow editor npm lockfile"
+          git push origin HEAD:feature/269-production-react-flow
