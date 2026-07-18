@@ -11,8 +11,8 @@ import java.util.Objects;
  * @param operationType stable semantic operation type
  * @param occurredAt operation occurrence timestamp
  * @param payload deterministic serialized identity payload
- * @param bodyVersion version of the reconstructible operation body
- * @param operationBody complete deterministic operation body
+ * @param bodyVersion version of the reconstructible operation body, or zero for legacy data
+ * @param operationBody complete deterministic operation body, or {@code null} for legacy data
  */
 public record WorkflowOperationPersistenceData(
     String operationId,
@@ -29,10 +29,32 @@ public record WorkflowOperationPersistenceData(
     operationType = requireNotBlank(operationType, "operationType");
     Objects.requireNonNull(occurredAt, "occurredAt");
     payload = requireNotBlank(payload, "payload");
-    if (bodyVersion <= 0) {
-      throw new IllegalArgumentException("bodyVersion must be > 0");
+    if (bodyVersion < 0) {
+      throw new IllegalArgumentException("bodyVersion must be >= 0");
     }
-    operationBody = requireNotBlank(operationBody, "operationBody");
+    if (bodyVersion == 0) {
+      if (operationBody != null && !operationBody.isBlank()) {
+        throw new IllegalArgumentException("legacy operation body must be absent");
+      }
+      operationBody = null;
+    } else {
+      operationBody = requireNotBlank(operationBody, "operationBody");
+    }
+  }
+
+  /** Creates legacy identity-only persistence data. */
+  public WorkflowOperationPersistenceData(
+      String operationId,
+      String actorId,
+      String operationType,
+      Instant occurredAt,
+      String payload) {
+    this(operationId, actorId, operationType, occurredAt, payload, 0, null);
+  }
+
+  /** Returns whether this persistence value contains a reconstructible body. */
+  public boolean hasOperationBody() {
+    return bodyVersion > 0;
   }
 
   private static String requireNotBlank(String value, String name) {
