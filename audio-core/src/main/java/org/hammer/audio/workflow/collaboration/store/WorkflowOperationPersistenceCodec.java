@@ -9,7 +9,9 @@ import org.hammer.audio.workflow.WorkflowOperation;
 /** Converts semantic workflow operations into deterministic durable identity data. */
 public final class WorkflowOperationPersistenceCodec {
 
-  private WorkflowOperationPersistenceCodec() {}
+  private WorkflowOperationPersistenceCodec() {
+    // Utility class.
+  }
 
   /**
    * Encodes one operation for durable append and restart-safe idempotency checks.
