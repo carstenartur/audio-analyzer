@@ -3,10 +3,12 @@ package org.hammer.audio.workflow.collaboration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import org.hammer.audio.workflow.Workflow;
 import org.hammer.audio.workflow.WorkflowOperation;
 import org.hammer.audio.workflow.collaboration.store.StoredWorkflowOperation;
 import org.hammer.audio.workflow.collaboration.store.StoredWorkflowSession;
+import org.hammer.audio.workflow.collaboration.store.WorkflowOperationBodyCodec;
 import org.hammer.audio.workflow.collaboration.store.WorkflowOperationPersistenceCodec;
 import org.hammer.audio.workflow.collaboration.store.WorkflowOperationPersistenceData;
 import org.hammer.audio.workflow.collaboration.store.WorkflowOutboxEventData;
@@ -104,15 +106,15 @@ final class WorkflowSessionPersistenceCoordinator {
       long expectedSequence,
       WorkflowOperation operation,
       Workflow updatedWorkflow) {
-    OperationIdentity candidate = identity(operation);
+    WorkflowOperationPersistenceData persistenceData =
+        WorkflowOperationPersistenceCodec.encode(operation);
+    OperationIdentity candidate = OperationIdentity.from(persistenceData);
     long nextRevision = Math.addExact(expectedRevision, 1);
     long nextSequence = Math.addExact(expectedSequence, 1);
     if (!durable()) {
       return new AppendOutcome(updatedWorkflow, candidate, nextRevision, nextSequence, false);
     }
 
-    WorkflowOperationPersistenceData persistenceData =
-        WorkflowOperationPersistenceCodec.encode(operation);
     WorkflowSessionAppendResult result =
         stateStore.append(
             new WorkflowSessionAppendCommand(
@@ -130,7 +132,7 @@ final class WorkflowSessionPersistenceCoordinator {
     Workflow durableWorkflow = result.duplicate() ? parse(result.session()) : updatedWorkflow;
     return new AppendOutcome(
         durableWorkflow,
-        candidate,
+        OperationIdentity.from(result.operation()),
         result.session().revision(),
         result.session().sequence(),
         result.duplicate());
@@ -240,6 +242,7 @@ final class WorkflowSessionPersistenceCoordinator {
         || session.revision() != result.operation().revision()
         || session.sequence() != nextSequence
         || result.operation().sequence() != nextSequence
+        || !result.operation().hasOperationBody()
         || !result.outboxEntry().sessionId().equals(sessionId)
         || result.outboxEntry().sequence() != nextSequence) {
       throw new IllegalStateException(
@@ -268,13 +271,27 @@ final class WorkflowSessionPersistenceCoordinator {
   }
 
   record OperationIdentity(
-      String operationId, String operationType, String actorId, String payload) {
+      String operationId,
+      String operationType,
+      String actorId,
+      String payload,
+      int bodyVersion,
+      String operationBody) {
 
     OperationIdentity {
       Objects.requireNonNull(operationId, "operationId");
       Objects.requireNonNull(operationType, "operationType");
       Objects.requireNonNull(actorId, "actorId");
       Objects.requireNonNull(payload, "payload");
+      if (bodyVersion < 0) {
+        throw new IllegalArgumentException("bodyVersion must be >= 0");
+      }
+      if (bodyVersion == 0) {
+        operationBody = null;
+      } else {
+        Objects.requireNonNull(operationBody, "operationBody");
+        WorkflowOperationBodyCodec.decode(bodyVersion, operationBody);
+      }
     }
 
     static OperationIdentity from(WorkflowOperationPersistenceData operation) {
@@ -282,7 +299,9 @@ final class WorkflowSessionPersistenceCoordinator {
           operation.operationId(),
           operation.operationType(),
           operation.actorId(),
-          operation.payload());
+          operation.payload(),
+          operation.bodyVersion(),
+          operation.operationBody());
     }
 
     static OperationIdentity from(StoredWorkflowOperation operation) {
@@ -290,7 +309,52 @@ final class WorkflowSessionPersistenceCoordinator {
           operation.operationId(),
           operation.operationType(),
           operation.actorId(),
-          operation.payload());
+          operation.payload(),
+          operation.bodyVersion(),
+          operation.operationBody());
+    }
+
+    boolean hasOperationBody() {
+      return bodyVersion > 0;
+    }
+
+    Optional<WorkflowOperation> operation() {
+      return hasOperationBody()
+          ? Optional.of(WorkflowOperationBodyCodec.decode(bodyVersion, operationBody))
+          : Optional.empty();
+    }
+
+    @Override
+    public boolean equals(Object candidate) {
+      if (this == candidate) {
+        return true;
+      }
+      if (!(candidate instanceof OperationIdentity other)
+          || !operationId.equals(other.operationId)
+          || !operationType.equals(other.operationType)
+          || !actorId.equals(other.actorId)
+          || !payload.equals(other.payload)) {
+        return false;
+      }
+      if (!hasOperationBody() || !other.hasOperationBody()) {
+        return true;
+      }
+      WorkflowOperation storedOperation = operation().orElseThrow();
+      WorkflowOperation candidateOperation = other.operation().orElseThrow();
+      WorkflowOperation normalizedCandidate =
+          WorkflowOperationBodyCodec.reidentify(
+              candidateOperation,
+              candidateOperation.operationId(),
+              storedOperation.timestamp(),
+              candidateOperation.author());
+      WorkflowOperationBodyCodec.EncodedBody normalizedBody =
+          WorkflowOperationBodyCodec.encode(normalizedCandidate);
+      return bodyVersion == normalizedBody.version() && operationBody.equals(normalizedBody.body());
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(operationId, operationType, actorId, payload);
     }
   }
 
