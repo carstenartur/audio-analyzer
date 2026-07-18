@@ -115,3 +115,4 @@ The collaboration slice exposes stable `data-testid` hooks for session id, actor
 - A permanently reconnecting client should first verify the session still exists and inspect the RFC 9457 API error shown by the UI.
 - A rejected `WORKFLOW_SESSION_REVISION_CONFLICT` is recovered by reloading session metadata and the canonical projection; do not add optimistic browser merges.
 - API failures shown by the UI originate from the `/workflow` application-service contract; do not add browser-side persistence fallbacks.
+
