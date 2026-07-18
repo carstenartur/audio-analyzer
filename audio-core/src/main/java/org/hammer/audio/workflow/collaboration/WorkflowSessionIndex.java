@@ -15,8 +15,7 @@ final class WorkflowSessionIndex<K, V> {
   }
 
   V put(K key, V value) {
-    return entries.put(
-        Objects.requireNonNull(key, "key"), Objects.requireNonNull(value, "value"));
+    return entries.put(Objects.requireNonNull(key, "key"), Objects.requireNonNull(value, "value"));
   }
 
   V putIfAbsent(K key, V value) {
