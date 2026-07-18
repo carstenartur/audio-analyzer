@@ -1,0 +1,70 @@
+name: PR 281 authority patch
+
+on:
+  pull_request:
+    branches:
+      - master
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.head_ref }}
+
+      - name: Apply final browser-authority fixes
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          hook = Path('audio-web-editor/src/useWorkflowSession.ts')
+          source = hook.read_text(encoding='utf-8')
+          old = """  return generatedActor();
+}
+"""
+          new = """  const actor = generatedActor();
+  try {
+    sessionStorage.setItem(ACTOR_STORAGE_KEY, JSON.stringify(actor));
+  } catch {
+    // Identity remains stable for this page even when storage is unavailable.
+  }
+  return actor;
+}
+"""
+          if old not in source:
+            raise SystemExit('generated actor return pattern not found')
+          hook.write_text(source.replace(old, new, 1), encoding='utf-8')
+
+          editor = Path('audio-web-editor/src/WorkflowEditorApp.tsx')
+          source = editor.read_text(encoding='utf-8')
+          old = "const [nodes, setNodes, onNodesChange] = useNodesState<NodeProjection>([]);"
+          new = "const [nodes, setNodes, onNodesChangeDefault] = useNodesState<NodeProjection>([]);"
+          if old not in source:
+            raise SystemExit('node change hook pattern not found')
+          source = source.replace(old, new, 1)
+          old = "          onNodesChange={onNodesChange}\n"
+          new = """          onNodesChange={(changes) =>
+            onNodesChangeDefault(changes.filter((change) => change.type !== 'remove'))
+          }
+"""
+          if old not in source:
+            raise SystemExit('React Flow node change handler pattern not found')
+          editor.write_text(source.replace(old, new, 1), encoding='utf-8')
+          PY
+
+      - name: Commit fixes
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            exit 0
+          fi
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add audio-web-editor/src/useWorkflowSession.ts audio-web-editor/src/WorkflowEditorApp.tsx
+          git commit -m "fix(web): prevent local node deletion and persist tab actor"
+          git push origin HEAD:${{ github.head_ref }}
