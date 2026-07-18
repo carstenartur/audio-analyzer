@@ -1,0 +1,43 @@
+name: PR 283 Spotless normalization
+
+on:
+  pull_request:
+    branches:
+      - master
+
+permissions:
+  contents: write
+  packages: read
+
+jobs:
+  format:
+    if: github.head_ref == 'feature/271-durable-semantic-undo-redo'
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.head_ref }}
+
+      - uses: actions/setup-java@v5
+        with:
+          java-version: '21'
+          distribution: temurin
+          cache: maven
+          server-id: github
+          server-username: GITHUB_ACTOR
+          server-password: GITHUB_TOKEN
+
+      - name: Apply repository formatting
+        run: mvn -B spotless:apply --file pom.xml
+
+      - name: Commit formatting and remove workflow
+        shell: bash
+        run: |
+          rm .github/workflows/pr283-spotless.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "style(undo): apply repository formatting"
+          git push origin HEAD:${{ github.head_ref }}
