@@ -139,6 +139,14 @@ export function useWorkflowSession(callbacks: WorkflowSessionCallbacks): Workflo
   const presenceAttributes = useRef<Record<string, string>>({});
   const presenceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const clearPresenceBuffer = useCallback(() => {
+    presenceAttributes.current = {};
+    if (presenceTimer.current !== null) {
+      clearTimeout(presenceTimer.current);
+      presenceTimer.current = null;
+    }
+  }, []);
+
   const commitAcceptedState = useCallback(
     (next: AcceptedState) => {
       const previous = acceptedState.current;
@@ -160,6 +168,7 @@ export function useWorkflowSession(callbacks: WorkflowSessionCallbacks): Workflo
 
   const activate = useCallback(
     (metadata: SessionResponse, projection: WorkflowProjection) => {
+      clearPresenceBuffer();
       sessionId.current = metadata.sessionId;
       setSession(metadata);
       setConnectionState('connecting');
@@ -170,11 +179,12 @@ export function useWorkflowSession(callbacks: WorkflowSessionCallbacks): Workflo
       onError(null);
       onStatus(`Loaded: collaboration session ${metadata.sessionId}`);
     },
-    [commitAcceptedState, onError, onStatus],
+    [clearPresenceBuffer, commitAcceptedState, onError, onStatus],
   );
 
   const reset = useCallback(
     (status: string) => {
+      clearPresenceBuffer();
       sessionId.current = null;
       acceptedState.current = null;
       setSession(null);
@@ -189,7 +199,7 @@ export function useWorkflowSession(callbacks: WorkflowSessionCallbacks): Workflo
       onError(null);
       onStatus(status);
     },
-    [onError, onStatus],
+    [clearPresenceBuffer, onError, onStatus],
   );
 
   const reconcile = useCallback(
@@ -246,7 +256,7 @@ export function useWorkflowSession(callbacks: WorkflowSessionCallbacks): Workflo
         event = JSON.parse(message.data) as SessionEventResponse;
       } catch (failure) {
         onError(`Invalid collaboration event: ${errorMessage(failure)}`);
-        void reconcile('invalid SSE payload');
+        void reconcile('invalid SSE payload').catch(() => undefined);
         return;
       }
       if (event.sessionId !== activeSessionId || acceptedState.current === null) {
@@ -258,7 +268,7 @@ export function useWorkflowSession(callbacks: WorkflowSessionCallbacks): Workflo
       }
       if (reduced.kind === 'reconcile') {
         onStatus(`Reconnecting: sequence gap before ${event.sequence}`);
-        void reconcile('SSE sequence gap');
+        void reconcile('SSE sequence gap').catch(() => undefined);
         return;
       }
 
@@ -285,6 +295,7 @@ export function useWorkflowSession(callbacks: WorkflowSessionCallbacks): Workflo
         onStatus(`Loaded: canonical snapshot at sequence ${event.sequence}`);
       }
       if (reduced.state.closed) {
+        clearPresenceBuffer();
         source?.close();
         setConnectionState('closed');
         onStatus(`Session ${activeSessionId} was closed`);
@@ -330,7 +341,7 @@ export function useWorkflowSession(callbacks: WorkflowSessionCallbacks): Workflo
         clearTimeout(retryTimer);
       }
     };
-  }, [commitAcceptedState, onError, onStatus, reconcile, session?.sessionId]);
+  }, [clearPresenceBuffer, commitAcceptedState, onError, onStatus, reconcile, session?.sessionId]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -345,14 +356,7 @@ export function useWorkflowSession(callbacks: WorkflowSessionCallbacks): Workflo
     return () => clearInterval(timer);
   }, [commitAcceptedState]);
 
-  useEffect(
-    () => () => {
-      if (presenceTimer.current !== null) {
-        clearTimeout(presenceTimer.current);
-      }
-    },
-    [],
-  );
+  useEffect(() => clearPresenceBuffer, [clearPresenceBuffer]);
 
   const updateActor = useCallback((nextActor: ActorIdentity) => {
     if (!validActor(nextActor)) {
@@ -441,23 +445,36 @@ export function useWorkflowSession(callbacks: WorkflowSessionCallbacks): Workflo
         throw new Error('Semantic operation requires a stable operationId');
       }
       const expectedRevision = stateAtSubmission.revision;
+      const basePath = encodedSessionPath(activeSession.sessionId);
       setPendingOperationId(operationId);
       setCommandState('pending');
       onError(null);
       onStatus(`Submitting: ${operationId}`);
       try {
-        const projection = await postJson<WorkflowProjection>(
-          `${encodedSessionPath(activeSession.sessionId)}/operations`,
-          {
-            mode: activeSession.mode,
-            actor,
-            expectedRevision,
-            operation: { ...operation, author: actor.actorId },
-          },
-        );
+        const projection = await postJson<WorkflowProjection>(`${basePath}/operations`, {
+          mode: activeSession.mode,
+          actor,
+          expectedRevision,
+          operation: { ...operation, author: actor.actorId },
+        });
+        const metadata = await getJson<SessionResponse>(basePath).catch(() => null);
+        if (metadata !== null) {
+          setSession((current) =>
+            current === null ? null : { ...current, revision: metadata.revision },
+          );
+        }
         const current = acceptedState.current;
         if (current !== null && current.revision === expectedRevision) {
-          commitAcceptedState(acceptCommandProjection(current, projection));
+          commitAcceptedState(
+            acceptCommandProjection(
+              current,
+              projection,
+              metadata?.revision ?? expectedRevision + 1,
+            ),
+          );
+        }
+        if (metadata === null) {
+          void reconcile('command metadata unavailable').catch(() => undefined);
         }
         setCommandState('accepted');
         onStatus(`Loaded: server accepted ${operationId}`);
@@ -482,6 +499,9 @@ export function useWorkflowSession(callbacks: WorkflowSessionCallbacks): Workflo
 
   const publishPresence = useCallback(
     (attributes: Record<string, string>) => {
+      if (sessionId.current === null || acceptedState.current?.closed === true) {
+        return;
+      }
       presenceAttributes.current = { ...presenceAttributes.current, ...attributes };
       if (presenceTimer.current !== null) {
         return;
@@ -489,7 +509,8 @@ export function useWorkflowSession(callbacks: WorkflowSessionCallbacks): Workflo
       presenceTimer.current = setTimeout(() => {
         presenceTimer.current = null;
         const activeSessionId = sessionId.current;
-        if (activeSessionId === null) {
+        if (activeSessionId === null || acceptedState.current?.closed === true) {
+          presenceAttributes.current = {};
           return;
         }
         const nextAttributes = presenceAttributes.current;
