@@ -49,7 +49,7 @@ The collaboration panel exposes session mode, connection state, semantic revisio
 - A `SNAPSHOT` event is always authoritative, including when a restarted server reports a lower sequence than the browser cursor.
 - Revision conflicts reconcile the projection before another semantic edit is enabled.
 - Cursor, selection and viewport samples use the separate presence endpoint, are throttled and expire locally; they never enter workflow nodes, DSL or Git checkpoints.
-- Actor identity is stored in local browser storage when available. Two browser contexts should use different actor ids.
+- Actor identity is stored per browser tab when session storage is available, so independent tabs do not accidentally share one actor id.
 
 Checkpoint/undo integration for a live collaboration session is intentionally not emulated through the legacy single-workflow endpoints. Those user journeys are implemented by their dedicated follow-up slices.
 
@@ -99,3 +99,4 @@ The collaboration slice exposes stable `data-testid` hooks for session id, creat
 - A permanently reconnecting client should first verify the session still exists and inspect the RFC 9457 API error shown by the UI.
 - A rejected `WORKFLOW_SESSION_REVISION_CONFLICT` is recovered by reloading session metadata and the canonical projection; do not add optimistic browser merges.
 - API failures shown by the UI originate from the `/workflow` application-service contract; do not add browser-side persistence fallbacks.
+
