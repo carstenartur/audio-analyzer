@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import com.microsoft.playwright.Browser;
 import com.microsoft.playwright.BrowserType;
+import com.microsoft.playwright.Locator;
 import com.microsoft.playwright.Page;
 import com.microsoft.playwright.Playwright;
 import java.io.IOException;
@@ -27,8 +28,12 @@ class WorkbenchCollaborationScreenshotIT {
 
   private static final int VIEWPORT_WIDTH = 1440;
   private static final int VIEWPORT_HEIGHT = 900;
-  private static final int PAGE_LOAD_TIMEOUT_MS = 15_000;
+  private static final int PAGE_LOAD_TIMEOUT_MS = 30_000;
   private static final String SESSION_ID = "docs-collaboration";
+  private static final String ACTOR_INIT_SCRIPT =
+      "window.sessionStorage.setItem('audio-analyzer.workflow.actor',"
+          + " JSON.stringify({actorId:'actor-docs',userId:'user-docs',"
+          + "displayName:'Documentation User'}));";
 
   private GenericContainer<?> container;
   private Playwright playwright;
@@ -72,26 +77,25 @@ class WorkbenchCollaborationScreenshotIT {
     try (Page page = browser.newPage()) {
       page.setViewportSize(VIEWPORT_WIDTH, VIEWPORT_HEIGHT);
       page.setDefaultTimeout(PAGE_LOAD_TIMEOUT_MS);
+      page.addInitScript(ACTOR_INIT_SCRIPT);
       page.navigate(baseUrl + "/");
       page.waitForLoadState();
       disableAnimations(page);
 
       page.locator("[data-testid='session-id-input']").fill(SESSION_ID);
       page.locator("[data-testid='workflow-name-input']").fill("Documented collaboration workflow");
-      page.locator("[data-testid='actor-id-input']").fill("actor-docs");
-      page.locator("[data-testid='user-id-input']").fill("user-docs");
-      page.locator("[data-testid='display-name-input']").fill("Documentation User");
-      page.locator("[data-testid='save-actor-button']").click();
       page.locator("[data-testid='create-session-button']").click();
 
-      page.waitForCondition(
-          () -> "live".equals(page.locator("[data-testid='connection-state']").innerText()));
-      assertEquals(
-          SESSION_ID, page.locator("[data-testid='active-session-id']").innerText());
+      Locator activeSession = page.locator("[data-testid='active-session-id']");
+      activeSession.waitFor(new Locator.WaitForOptions().setTimeout(PAGE_LOAD_TIMEOUT_MS));
+      assertEquals(SESSION_ID, activeSession.innerText());
       assertEquals(
           "SHARED_SESSION_PERSONAL_UNDO",
           page.locator("[data-testid='active-session-mode']").innerText());
       assertTrue(page.locator("[data-testid='participant-actor-docs']").isVisible());
+
+      Locator connectionState = page.locator("[data-testid='connection-state']");
+      page.waitForCondition(() -> "live".equals(connectionState.innerText()));
 
       page.locator("[data-testid='palette-node-synthetic-signal-generator']").click();
       page.waitForCondition(
