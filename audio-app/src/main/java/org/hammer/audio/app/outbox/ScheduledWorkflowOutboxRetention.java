@@ -30,7 +30,15 @@ public final class ScheduledWorkflowOutboxRetention {
       fixedDelayString =
           "${workbench.collaboration.outbox.retention.interval-ms:3600000}")
   public void runRetention() {
-    WorkflowOutboxRetentionPlan plan = service.plan();
+    try {
+      execute(service.plan());
+    } catch (RuntimeException failure) {
+      LOGGER.error(
+          "Workflow outbox retention planning failed: mode={}, failedBatches=1", mode, failure);
+    }
+  }
+
+  private void execute(WorkflowOutboxRetentionPlan plan) {
     if (mode == WorkflowOutboxRetentionMode.REPORT_ONLY) {
       logReport(plan, 0, 0, 0);
       return;
@@ -41,12 +49,13 @@ public final class ScheduledWorkflowOutboxRetention {
     } catch (RuntimeException failure) {
       LOGGER.error(
           "Workflow outbox retention failed: mode={}, plannedAt={}, cutoff={}, scanned={}, "
-              + "eligible={}, deleted=0, skipped=0, failed={}",
+              + "eligible={}, reasons={}, deleted=0, skipped=0, failed={}",
           mode,
           plan.plannedAt(),
           plan.publishedCutoff(),
           plan.scannedCount(),
           plan.eligibleCount(),
+          plan.reasonCounts(),
           plan.eligibleCount(),
           failure);
     }
@@ -56,12 +65,13 @@ public final class ScheduledWorkflowOutboxRetention {
       WorkflowOutboxRetentionPlan plan, int deletedCount, int skippedCount, int failedCount) {
     LOGGER.info(
         "Workflow outbox retention: mode={}, plannedAt={}, cutoff={}, scanned={}, eligible={}, "
-            + "deleted={}, skipped={}, failed={}, oldest={}, newest={}",
+            + "reasons={}, deleted={}, skipped={}, failed={}, oldest={}, newest={}",
         mode,
         plan.plannedAt(),
         plan.publishedCutoff(),
         plan.scannedCount(),
         plan.eligibleCount(),
+        plan.reasonCounts(),
         deletedCount,
         skippedCount,
         failedCount,
