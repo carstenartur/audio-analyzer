@@ -7,8 +7,8 @@ import org.springframework.web.bind.annotation.GetMapping;
 @Controller
 public final class WorkbenchSpaController {
 
-  /** Serves known client-side workbench routes without shadowing workflow API or asset paths. */
-  @GetMapping({"/workbench", "/workbench/", "/workbench/{route:[A-Za-z0-9_-]+}"})
+  /** Serves client-side workbench routes without shadowing workflow API or asset paths. */
+  @GetMapping({"/workbench", "/workbench/", "/workbench/{*route}"})
   public String workbenchRoute() {
     return "forward:/index.html";
   }
