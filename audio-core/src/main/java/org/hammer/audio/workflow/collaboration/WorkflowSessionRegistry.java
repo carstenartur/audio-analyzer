@@ -1,6 +1,7 @@
 package org.hammer.audio.workflow.collaboration;
 
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -70,7 +71,7 @@ public final class WorkflowSessionRegistry {
     Objects.requireNonNull(mode, "mode");
     Objects.requireNonNull(owner, "owner");
     Objects.requireNonNull(initialWorkflow, "initialWorkflow");
-    Instant createdAt = Instant.now();
+    Instant createdAt = Instant.now().truncatedTo(ChronoUnit.MICROS);
     WorkflowSessionEntry created =
         WorkflowSessionEntry.created(
             requiredSessionId,
