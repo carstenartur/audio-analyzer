@@ -6,6 +6,7 @@ import {
   collaborationState,
   expirePresence,
   reconnectDelay,
+  recoveryForProblemCode,
   reduceSessionEvent,
 } from '../src/collaborationState.mjs';
 
@@ -135,6 +136,14 @@ test('idempotent command retry does not invent a revision', () => {
 
   assert.equal(accepted.revision, 2);
   assert.equal(accepted.sequence, 4);
+});
+
+test('structured command failures choose reconciliation reset or rejection', () => {
+  assert.equal(recoveryForProblemCode('WORKFLOW_SESSION_REVISION_CONFLICT'), 'reconcile');
+  assert.equal(recoveryForProblemCode('WORKFLOW_SESSION_SEQUENCE_CONFLICT'), 'reconcile');
+  assert.equal(recoveryForProblemCode('SESSION_NOT_FOUND'), 'reset');
+  assert.equal(recoveryForProblemCode('DUPLICATE_OPERATION_ID'), 'reject');
+  assert.equal(recoveryForProblemCode(null), 'reject');
 });
 
 test('stale presence expires without changing semantic state', () => {
