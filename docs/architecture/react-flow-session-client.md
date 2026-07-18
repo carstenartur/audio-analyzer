@@ -1,0 +1,121 @@
+# React Flow collaboration-session client
+
+Status: Implemented by issue #270  
+Depends on: session lifecycle #241, ordered SSE #242, production frontend #269
+
+## Purpose
+
+This document records the production browser boundary for collaboration sessions. React Flow remains a rendering/input adapter over server-owned workflow projections; it does not become a second workflow engine, presence authority or persistence layer.
+
+## Startup modes
+
+The workbench starts with the deterministic seed projection from the legacy single-workflow endpoint. That graph is useful for orientation, documentation screenshots and catalog discovery, but semantic controls are read-only.
+
+Editing is enabled only after all of the following are true:
+
+1. a stable actor identity exists;
+2. the browser has created or joined a server session;
+3. the canonical session projection has loaded;
+4. the ordered SSE connection reports `live`;
+5. no semantic command is currently pending.
+
+This avoids silently writing a session gesture into the unrelated legacy workbench aggregate.
+
+## Actor and session lifecycle
+
+The browser stores `actorId`, `userId` and `displayName` in local storage when available. Identity cannot change while a session is active because server membership and operation authorship use the actor id as a stable key.
+
+The collaboration panel maps directly to the lifecycle API:
+
+```text
+create  -> POST   /workflow/sessions
+join    -> POST   /workflow/sessions/{id}/join
+leave   -> POST   /workflow/sessions/{id}/leave
+close   -> DELETE /workflow/sessions/{id}
+inspect -> GET    /workflow/sessions/{id}
+project -> GET    /workflow/sessions/{id}/projection
+```
+
+The UI never infers ownership or mode transitions. It displays the immutable mode returned by the server and enables close only for the reported owner; the server remains the final authorization boundary.
+
+## Semantic command flow
+
+Each React Flow gesture is converted into one existing semantic operation payload:
+
+```text
+CreateNode
+ConnectPorts
+DisconnectPorts
+UpdateProperty
+```
+
+The request contains:
+
+- a collision-resistant operation id generated once for the gesture;
+- the joined actor metadata;
+- the immutable session mode;
+- the last accepted semantic revision;
+- no layout, cursor or persistence implementation data.
+
+The browser shows `pending` until the command response arrives. Rejected responses never mutate React Flow state. Accepted responses may update the projection immediately, while the matching SSE event remains responsible for ordered sequence advancement and remote convergence.
+
+A follow-up metadata read supplies the actual accepted revision. This matters for idempotent retries: replaying an already accepted operation id must not invent another local revision.
+
+## Ordered SSE and reconciliation
+
+The client subscribes to:
+
+```text
+GET /workflow/sessions/{id}/events?afterSequence={lastAcceptedSequence}
+```
+
+Named events are reduced by a framework-independent state function covered by Node-native tests.
+
+Rules:
+
+- an event with an already accepted sequence is ignored as a duplicate;
+- the next contiguous event is applied;
+- a non-snapshot sequence gap triggers metadata plus projection reconciliation;
+- `SNAPSHOT` always replaces the local sequence, revision and projection;
+- a snapshot may legitimately move sequence backwards when a restarted server receives a cursor ahead of its current event window;
+- revision/sequence conflicts returned by REST also trigger canonical reconciliation;
+- reconnect uses bounded exponential delay and resumes from the latest accepted sequence.
+
+The browser never fills a missing event by replaying local gestures or merging graph objects heuristically.
+
+## Presence boundary
+
+Cursor, selection and viewport hints are merged and throttled before being sent to:
+
+```text
+PUT /workflow/sessions/{id}/presence
+```
+
+Presence events update an actor-scoped view separate from the workflow projection. Remote samples expire locally after a short TTL. Expiration removes only the visual sample, not participant membership, semantic revision, event history, workflow DSL or Git state.
+
+Leaving, closing or receiving `SESSION_CLOSED` clears pending presence buffers and closes the event transport.
+
+## Browser diagnostics and test hooks
+
+The maintained UI exposes stable hooks for:
+
+- create, join, leave and close actions;
+- active session id and mode;
+- connection and reconnect state;
+- semantic revision and event sequence;
+- pending/accepted/rejected command state;
+- participant list;
+- remote presence samples.
+
+These hooks are the frontend seam for the process-level two-browser coverage in #249. That issue owns launching isolated browser contexts and proving convergence against the packaged Spring Boot process; this module owns deterministic reducer tests and transport adaptation.
+
+## Explicit exclusions
+
+This client does not implement:
+
+- semantic undo/redo policy or conflict previews (#271/#272);
+- live-session checkpoint UX;
+- a Yjs canonical document or second awareness channel;
+- browser-side DSL parsing;
+- JGit, Hibernate or database access;
+- cross-process test orchestration duplicated from #249.
