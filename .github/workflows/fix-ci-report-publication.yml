@@ -1,6 +1,9 @@
 name: Fix CI report publication
 
 on:
+  push:
+    branches:
+      - fix/ci-report-publication
   pull_request:
     branches:
       - master
@@ -10,12 +13,12 @@ permissions:
 
 jobs:
   patch:
-    if: github.head_ref == 'fix/ci-report-publication'
+    if: github.ref == 'refs/heads/fix/ci-report-publication' || github.head_ref == 'fix/ci-report-publication'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ github.head_ref }}
+          ref: ${{ github.head_ref || github.ref_name }}
 
       - name: Separate report deployment from the build job
         shell: bash
@@ -103,4 +106,4 @@ jobs:
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add .github/workflows/maven.yml .github/workflows/publish-reports.yml docs/quality.md .github/workflows/fix-ci-report-publication.yml
           git commit -m "ci: separate report publication from Java verification"
-          git push origin HEAD:${{ github.head_ref }}
+          git push origin HEAD:${{ github.head_ref || github.ref_name }}
