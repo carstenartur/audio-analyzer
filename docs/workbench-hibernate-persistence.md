@@ -5,16 +5,13 @@ outbox delivery require an explicit persistence mode.
 
 ## Shared persistence runtime
 
-Audio Analyzer consumes the migration-bearing 0.1.5 line of the shared storage library:
+Audio Analyzer consumes the released migration-bearing storage library:
 
 ```text
 io.github.carstenartur:jgit-storage-hibernate-core:0.1.5
 Hibernate ORM 7.4.5.Final
 Flyway 12.8.1
 ```
-
-Until the upstream 0.1.5 release is published, development branches use
-`0.1.5-SNAPSHOT`. A production merge must pin the immutable 0.1.5 release.
 
 The application creates one Spring-managed `DataSource` and one application-owned Hibernate
 `SessionFactory`. Shared JGit storage entities and Audio Analyzer collaboration/session/operation/
@@ -128,6 +125,54 @@ Database migrations are forward-moving. Application rollback must not assume tha
 DDL. Keep the pre-upgrade backup until the new version has completed recovery and outbox dispatch
 checks. If rollback requires the old physical schema, restore that backup rather than editing Flyway
 history or manually dropping lease columns.
+
+## Published-outbox retention
+
+Automatic retention is disabled by default. Even after it is enabled, the default mode is a read-only
+report so an operator can inspect the exact candidate set before any durable row is deleted:
+
+```properties
+workbench.collaboration.outbox.retention.enabled=true
+workbench.collaboration.outbox.retention.mode=report
+workbench.collaboration.outbox.retention.published-retention=P30D
+workbench.collaboration.outbox.retention.batch-size=100
+workbench.collaboration.outbox.retention.interval-ms=3600000
+```
+
+Each run captures one immutable logical time, computes an inclusive publication cutoff and reports:
+
+- published rows scanned;
+- eligible rows in stable `(publishedAt, eventId)` order;
+- oldest and newest candidate publication times;
+- deleted, skipped and failed counts.
+
+Only rows satisfying all of these conditions are candidates:
+
+1. publication completed and `published_at` is set;
+2. `published_at` is at or before the immutable cutoff;
+3. no lease owner, lease token or lease expiry remains;
+4. the row is still identical and eligible when locked for deletion.
+
+`mode=delete` is an explicit operational decision. The implementation re-reads each planned row under
+`PESSIMISTIC_WRITE`, checks the session identity and original publication timestamp, and deletes it in
+a bounded transaction only if it remains eligible. A competing cleanup that already removed the row,
+or any changed/uncertain state, is reported as skipped. Repeating the same plan is therefore
+idempotent.
+
+Retention never deletes:
+
+- pending, failed-due, leased or uncertain outbox rows;
+- open or closed collaboration sessions;
+- accepted operations or operation identifiers used for duplicate-command detection;
+- Git checkpoints, refs, commits, reflogs or other Git history;
+- search projections as a substitute for authoritative state.
+
+The default published-row horizon is an operational diagnostic and idempotency safeguard, not a legal
+retention recommendation. Choose a longer value where incident response, broker redelivery,
+organizational audit or regulatory policy requires it. Verify a restorable backup and review several
+report-only runs before enabling deletion. Closed-session cleanup and operation-history compaction are
+separate future policies and remain disabled until recovery and command-idempotency guarantees are
+proven by executable tests.
 
 ## Application-specific entity registration
 
