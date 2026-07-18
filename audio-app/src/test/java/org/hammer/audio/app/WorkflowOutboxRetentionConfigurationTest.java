@@ -3,12 +3,15 @@ package org.hammer.audio.app;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Mockito.mock;
 
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.List;
 import org.hammer.audio.app.outbox.ScheduledWorkflowOutboxRetention;
+import org.hammer.audio.workflow.collaboration.retention.WorkflowOutboxRetentionDeletionResult;
+import org.hammer.audio.workflow.collaboration.retention.WorkflowOutboxRetentionPlan;
+import org.hammer.audio.workflow.collaboration.retention.WorkflowOutboxRetentionSelection;
 import org.hammer.audio.workflow.collaboration.retention.WorkflowOutboxRetentionService;
 import org.hammer.audio.workflow.collaboration.retention.WorkflowOutboxRetentionSettings;
 import org.hammer.audio.workflow.collaboration.retention.WorkflowOutboxRetentionStore;
@@ -23,7 +26,7 @@ class WorkflowOutboxRetentionConfigurationTest {
               "workbench.persistence.mode=hibernate",
               "workbench.collaboration.outbox.retention.interval-ms=600000")
           .withUserConfiguration(WorkflowOutboxRetentionConfiguration.class)
-          .withBean(WorkflowOutboxRetentionStore.class, () -> mock(WorkflowOutboxRetentionStore.class))
+          .withBean(WorkflowOutboxRetentionStore.class, EmptyRetentionStore::new)
           .withBean(
               Clock.class, () -> Clock.fixed(Instant.parse("2026-07-18T12:00:00Z"), ZoneOffset.UTC));
 
@@ -58,5 +61,20 @@ class WorkflowOutboxRetentionConfigurationTest {
             "workbench.collaboration.outbox.retention.enabled=true",
             "workbench.collaboration.outbox.retention.mode=automatic")
         .run(context -> assertNotNull(context.getStartupFailure()));
+  }
+
+  private static final class EmptyRetentionStore implements WorkflowOutboxRetentionStore {
+
+    @Override
+    public WorkflowOutboxRetentionSelection selectPublishedBefore(
+        Instant publishedCutoff, int limit) {
+      return new WorkflowOutboxRetentionSelection(0, List.of());
+    }
+
+    @Override
+    public WorkflowOutboxRetentionDeletionResult deletePublished(
+        WorkflowOutboxRetentionPlan plan) {
+      return new WorkflowOutboxRetentionDeletionResult(List.of(), List.of());
+    }
   }
 }
