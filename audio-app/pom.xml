@@ -71,6 +71,11 @@
     </dependency>
     <dependency>
       <groupId>${project.groupId}</groupId>
+      <artifactId>audio-web-editor</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>${project.groupId}</groupId>
       <artifactId>audio-experimental-acoustic</artifactId>
       <scope>runtime</scope>
     </dependency>
