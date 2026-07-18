@@ -1,0 +1,61 @@
+name: PR 281 diagnostic
+
+on:
+  push:
+    branches:
+      - feature/270-react-flow-session-integration
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          java-version: '21'
+          distribution: temurin
+
+      - name: Verify native frontend gates
+        id: frontend
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          mvn -B -pl audio-web-editor -am generate-resources 2>&1 | tee frontend.log
+
+      - name: Check repository formatting
+        id: formatting
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          mvn -B spotless:check 2>&1 | tee spotless.log
+
+      - name: Show diagnostic tails
+        if: always()
+        shell: bash
+        run: |
+          echo '===== FRONTEND ====='
+          tail -n 160 frontend.log || true
+          echo '===== SPOTLESS ====='
+          tail -n 240 spotless.log || true
+
+      - name: Upload diagnostic logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pr281-diagnostic-logs
+          path: |
+            frontend.log
+            spotless.log
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Fail when a diagnostic failed
+        if: steps.frontend.outcome != 'success' || steps.formatting.outcome != 'success'
+        run: exit 1
