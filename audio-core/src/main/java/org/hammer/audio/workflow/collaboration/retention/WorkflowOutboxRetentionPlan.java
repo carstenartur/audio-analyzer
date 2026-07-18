@@ -1,8 +1,10 @@
 package org.hammer.audio.workflow.collaboration.retention;
 
 import java.time.Instant;
+import java.util.EnumMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -77,6 +79,16 @@ public record WorkflowOutboxRetentionPlan(
   /** Number of published rows that were not selected into this bounded plan. */
   public long ineligibleOrDeferredCount() {
     return scannedCount - candidates.size();
+  }
+
+  /** Eligibility-reason counts included in operational dry-run output. */
+  public Map<WorkflowOutboxRetentionReason, Long> reasonCounts() {
+    Map<WorkflowOutboxRetentionReason, Long> counts =
+        new EnumMap<>(WorkflowOutboxRetentionReason.class);
+    for (WorkflowOutboxRetentionCandidate candidate : candidates) {
+      counts.merge(candidate.reason(), 1L, Long::sum);
+    }
+    return Map.copyOf(counts);
   }
 
   /** Oldest candidate publication time, when the plan is non-empty. */
