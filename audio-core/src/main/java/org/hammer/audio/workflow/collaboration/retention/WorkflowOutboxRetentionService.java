@@ -9,24 +9,28 @@ public final class WorkflowOutboxRetentionService {
 
   private final WorkflowOutboxRetentionStore store;
   private final Clock clock;
-  private final WorkflowOutboxRetentionSettings settings;
+  private final WorkflowOutboxRetentionSettings retentionSettings;
 
   /** Creates a service with injectable time and conservative validated settings. */
   public WorkflowOutboxRetentionService(
       WorkflowOutboxRetentionStore store, Clock clock, WorkflowOutboxRetentionSettings settings) {
     this.store = Objects.requireNonNull(store, "store");
     this.clock = Objects.requireNonNull(clock, "clock");
-    this.settings = Objects.requireNonNull(settings, "settings");
+    this.retentionSettings = Objects.requireNonNull(settings, "settings");
   }
 
   /** Captures one immutable dry-run plan at the current injected-clock instant. */
   public WorkflowOutboxRetentionPlan plan() {
     Instant plannedAt = clock.instant();
-    Instant cutoff = settings.publishedCutoffAt(plannedAt);
+    Instant cutoff = retentionSettings.publishedCutoffAt(plannedAt);
     WorkflowOutboxRetentionSelection selection =
-        store.selectPublishedBefore(cutoff, settings.batchSize());
+        store.selectPublishedBefore(cutoff, retentionSettings.batchSize());
     return new WorkflowOutboxRetentionPlan(
-        plannedAt, cutoff, settings.batchSize(), selection.scannedCount(), selection.candidates());
+        plannedAt,
+        cutoff,
+        retentionSettings.batchSize(),
+        selection.scannedCount(),
+        selection.candidates());
   }
 
   /** Revalidates and executes a previously captured immutable plan. */
@@ -36,6 +40,6 @@ public final class WorkflowOutboxRetentionService {
 
   /** Returns the immutable settings used for every plan. */
   public WorkflowOutboxRetentionSettings settings() {
-    return settings;
+    return retentionSettings;
   }
 }
