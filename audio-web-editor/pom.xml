@@ -93,6 +93,19 @@
       <plugin>
         <artifactId>maven-jar-plugin</artifactId>
       </plugin>
+
+      <plugin>
+        <groupId>com.diffplug.spotless</groupId>
+        <artifactId>spotless-maven-plugin</artifactId>
+        <configuration>
+          <markdown>
+            <excludes>
+              <exclude>node_modules/**/*.md</exclude>
+              <exclude>target/**/*.md</exclude>
+            </excludes>
+          </markdown>
+        </configuration>
+      </plugin>
     </plugins>
   </build>
 </project>
