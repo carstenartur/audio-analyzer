@@ -20,8 +20,10 @@ public interface WorkflowOutboxStore {
       String leaseOwner, Instant claimedAt, Instant leaseExpiresAt, int limit);
 
   /** Marks a leased event published in a separate transaction and clears its lease. */
-  StoredWorkflowOutboxEntry markPublished(String eventId, String leaseToken, Instant publishedAt);
+  StoredWorkflowOutboxEntry markPublished(
+      String eventId, String leaseOwner, String leaseToken, Instant publishedAt);
 
   /** Records a failed publication attempt, schedules its retry and clears its lease. */
-  StoredWorkflowOutboxEntry markFailed(String eventId, String leaseToken, Instant nextAttemptAt);
+  StoredWorkflowOutboxEntry markFailed(
+      String eventId, String leaseOwner, String leaseToken, Instant nextAttemptAt);
 }

@@ -132,16 +132,17 @@ public class WorkflowOutboxEntity {
     return new LeasedWorkflowOutboxEntry(toStoredEntry(), leaseOwner, leaseToken, leaseExpiresAt);
   }
 
-  StoredWorkflowOutboxEntry markPublished(String token, Instant publicationTime) {
-    requireLease(token);
+  StoredWorkflowOutboxEntry markPublished(
+      String owner, String token, Instant publicationTime) {
+    requireLease(owner, token);
     attemptCount = Math.addExact(attemptCount, 1);
     publishedAt = Objects.requireNonNull(publicationTime, "publicationTime");
     clearLease();
     return toStoredEntry();
   }
 
-  StoredWorkflowOutboxEntry markFailed(String token, Instant retryTime) {
-    requireLease(token);
+  StoredWorkflowOutboxEntry markFailed(String owner, String token, Instant retryTime) {
+    requireLease(owner, token);
     attemptCount = Math.addExact(attemptCount, 1);
     nextAttemptAt = Objects.requireNonNull(retryTime, "retryTime");
     clearLease();
@@ -174,10 +175,15 @@ public class WorkflowOutboxEntity {
     return storedEventSequence;
   }
 
-  private void requireLease(String token) {
+  private void requireLease(String owner, String token) {
+    String requiredOwner = requireNotBlank(owner, "owner");
     String requiredToken = requireNotBlank(token, "token");
-    if (leaseToken == null || !leaseToken.equals(requiredToken)) {
-      throw new WorkflowOutboxLeaseConflictException(storedEventId, requiredToken);
+    if (leaseOwner == null
+        || !leaseOwner.equals(requiredOwner)
+        || leaseToken == null
+        || !leaseToken.equals(requiredToken)) {
+      throw new WorkflowOutboxLeaseConflictException(
+          storedEventId, requiredOwner, requiredToken);
     }
   }
 

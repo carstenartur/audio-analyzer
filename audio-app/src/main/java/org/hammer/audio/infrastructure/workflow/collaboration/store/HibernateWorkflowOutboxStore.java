@@ -58,8 +58,9 @@ public final class HibernateWorkflowOutboxStore implements WorkflowOutboxStore {
 
   @Override
   public StoredWorkflowOutboxEntry markPublished(
-      String eventId, String leaseToken, Instant publishedAt) {
+      String eventId, String leaseOwner, String leaseToken, Instant publishedAt) {
     String requiredEventId = requireNotBlank(eventId, "eventId");
+    String requiredLeaseOwner = requireNotBlank(leaseOwner, "leaseOwner");
     String requiredLeaseToken = requireNotBlank(leaseToken, "leaseToken");
     Instant requiredPublishedAt = Objects.requireNonNull(publishedAt, "publishedAt");
     try {
@@ -67,19 +68,22 @@ public final class HibernateWorkflowOutboxStore implements WorkflowOutboxStore {
           session -> {
             WorkflowOutboxEntity event = requireOutboxForUpdate(session, requiredEventId);
             StoredWorkflowOutboxEntry stored =
-                event.markPublished(requiredLeaseToken, requiredPublishedAt);
+                event.markPublished(
+                    requiredLeaseOwner, requiredLeaseToken, requiredPublishedAt);
             session.flush();
             return stored;
           });
     } catch (OptimisticLockException | StaleStateException failure) {
-      throw new WorkflowOutboxLeaseConflictException(requiredEventId, requiredLeaseToken, failure);
+      throw new WorkflowOutboxLeaseConflictException(
+          requiredEventId, requiredLeaseOwner, requiredLeaseToken, failure);
     }
   }
 
   @Override
   public StoredWorkflowOutboxEntry markFailed(
-      String eventId, String leaseToken, Instant nextAttemptAt) {
+      String eventId, String leaseOwner, String leaseToken, Instant nextAttemptAt) {
     String requiredEventId = requireNotBlank(eventId, "eventId");
+    String requiredLeaseOwner = requireNotBlank(leaseOwner, "leaseOwner");
     String requiredLeaseToken = requireNotBlank(leaseToken, "leaseToken");
     Instant requiredNextAttemptAt = Objects.requireNonNull(nextAttemptAt, "nextAttemptAt");
     try {
@@ -87,12 +91,14 @@ public final class HibernateWorkflowOutboxStore implements WorkflowOutboxStore {
           session -> {
             WorkflowOutboxEntity event = requireOutboxForUpdate(session, requiredEventId);
             StoredWorkflowOutboxEntry stored =
-                event.markFailed(requiredLeaseToken, requiredNextAttemptAt);
+                event.markFailed(
+                    requiredLeaseOwner, requiredLeaseToken, requiredNextAttemptAt);
             session.flush();
             return stored;
           });
     } catch (OptimisticLockException | StaleStateException failure) {
-      throw new WorkflowOutboxLeaseConflictException(requiredEventId, requiredLeaseToken, failure);
+      throw new WorkflowOutboxLeaseConflictException(
+          requiredEventId, requiredLeaseOwner, requiredLeaseToken, failure);
     }
   }
 

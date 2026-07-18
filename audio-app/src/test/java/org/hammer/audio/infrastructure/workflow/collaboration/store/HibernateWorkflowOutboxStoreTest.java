@@ -66,11 +66,18 @@ class HibernateWorkflowOutboxStoreTest {
                       "dispatcher.two", claimedAt.plusSeconds(30), claimedAt.plusSeconds(60), 10)
                   .getFirst();
           assertNotEquals(first.leaseToken(), reclaimed.leaseToken());
-          assertThrows(
-              WorkflowOutboxLeaseConflictException.class,
-              () ->
-                  outboxStore.markPublished(
-                      "event.lease", first.leaseToken(), claimedAt.plusSeconds(31)));
+          WorkflowOutboxLeaseConflictException conflict =
+              assertThrows(
+                  WorkflowOutboxLeaseConflictException.class,
+                  () ->
+                      outboxStore.markPublished(
+                          "event.lease",
+                          "dispatcher.one",
+                          first.leaseToken(),
+                          claimedAt.plusSeconds(31)));
+          assertEquals("event.lease", conflict.eventId());
+          assertEquals("dispatcher.one", conflict.leaseOwner());
+          assertEquals(first.leaseToken(), conflict.leaseToken());
         });
   }
 
@@ -88,7 +95,8 @@ class HibernateWorkflowOutboxStoreTest {
           Instant retryAt = claimedAt.plusSeconds(4);
 
           StoredWorkflowOutboxEntry failed =
-              outboxStore.markFailed("event.retry", first.leaseToken(), retryAt);
+              outboxStore.markFailed(
+                  "event.retry", "dispatcher.retry", first.leaseToken(), retryAt);
 
           assertEquals(1, failed.attemptCount());
           assertTrue(failed.pending());
@@ -103,7 +111,11 @@ class HibernateWorkflowOutboxStoreTest {
                   .claimDue("dispatcher.success", retryAt, retryAt.plusSeconds(30), 10)
                   .getFirst();
           StoredWorkflowOutboxEntry published =
-              outboxStore.markPublished("event.retry", second.leaseToken(), retryAt.plusSeconds(1));
+              outboxStore.markPublished(
+                  "event.retry",
+                  "dispatcher.success",
+                  second.leaseToken(),
+                  retryAt.plusSeconds(1));
 
           assertEquals(2, published.attemptCount());
           assertFalse(published.pending());

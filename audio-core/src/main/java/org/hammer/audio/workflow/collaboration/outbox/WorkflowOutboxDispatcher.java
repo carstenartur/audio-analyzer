@@ -57,7 +57,8 @@ public final class WorkflowOutboxDispatcher {
       return;
     }
     try {
-      outboxStore.markPublished(entry.eventId(), lease.leaseToken(), clock.instant());
+      outboxStore.markPublished(
+          entry.eventId(), settings.dispatcherId(), lease.leaseToken(), clock.instant());
     } catch (RuntimeException acknowledgementFailure) {
       throw new WorkflowOutboxDispatchException(
           entry.eventId(),
@@ -74,7 +75,8 @@ public final class WorkflowOutboxDispatcher {
     Instant nextAttemptAt =
         failedAt.plus(settings.backoffPolicy().delayAfterFailure(failedAttempt));
     try {
-      outboxStore.markFailed(entry.eventId(), lease.leaseToken(), nextAttemptAt);
+      outboxStore.markFailed(
+          entry.eventId(), settings.dispatcherId(), lease.leaseToken(), nextAttemptAt);
     } catch (RuntimeException persistenceFailure) {
       WorkflowOutboxDispatchException dispatchFailure =
           new WorkflowOutboxDispatchException(

@@ -215,14 +215,14 @@ class HibernateWorkflowOutboxDispatcherTest {
 
     @Override
     public StoredWorkflowOutboxEntry markPublished(
-        String eventId, String leaseToken, Instant publishedAt) {
+        String eventId, String leaseOwner, String leaseToken, Instant publishedAt) {
       throw new IllegalStateException("simulated crash before outbox acknowledgement");
     }
 
     @Override
     public StoredWorkflowOutboxEntry markFailed(
-        String eventId, String leaseToken, Instant nextAttemptAt) {
-      return delegate.markFailed(eventId, leaseToken, nextAttemptAt);
+        String eventId, String leaseOwner, String leaseToken, Instant nextAttemptAt) {
+      return delegate.markFailed(eventId, leaseOwner, leaseToken, nextAttemptAt);
     }
   }
 
