@@ -31,6 +31,9 @@ jobs:
           server-username: GITHUB_ACTOR
           server-password: GITHUB_TOKEN
 
+      - name: Format maintained screenshot sources and documentation
+        run: mvn -B -Pscreenshot-tests spotless:apply --file pom.xml
+
       - name: Install screenshot-test reactor artifacts
         run: >-
           mvn -B -Pscreenshot-tests -Dmaven.test.skip=true
@@ -58,9 +61,13 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: pr281-screenshot-update-log
-          path: screenshot-update.log
-          if-no-files-found: error
+          name: pr281-screenshot-update-evidence
+          path: |
+            screenshot-update.log
+            workbench-screenshot-tests/target/failsafe-reports/
+            workbench-screenshot-tests/target/screenshot-failures/
+            docs/assets/screenshots/workbench/
+          if-no-files-found: warn
           retention-days: 1
 
       - name: Stop after a failed screenshot integration test
@@ -73,7 +80,16 @@ jobs:
           rm .github/workflows/pr281-update-workbench-screenshots.yml
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add docs/assets/screenshots/workbench .github/workflows/pr281-update-workbench-screenshots.yml
+          git add \
+            README.md \
+            audio-web-editor/README.md \
+            audio-web-editor/src/CollaborationPanel.tsx \
+            docs/architecture/README.md \
+            docs/architecture/react-flow-session-client.md \
+            docs/workbench-screenshot-pipeline.md \
+            workbench-screenshot-tests/src/test/java/org/hammer/audio/workbench/screenshot/WorkbenchCollaborationScreenshotIT.java \
+            docs/assets/screenshots/workbench \
+            .github/workflows/pr281-update-workbench-screenshots.yml
           if git diff --cached --quiet; then
             echo "Screenshot integration tests produced no changed baselines."
             exit 1
