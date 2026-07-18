@@ -5,6 +5,8 @@ import java.net.URI;
 import java.util.List;
 import java.util.Objects;
 import org.hammer.audio.workflow.collaboration.WorkflowSessionException;
+import org.hammer.audio.workflow.collaboration.WorkflowUndoConflictException;
+import org.hammer.audio.workflow.collaboration.WorkflowUndoPreview;
 import org.hammer.audio.workflow.collaboration.store.WorkflowSessionRevisionConflictException;
 import org.hammer.audio.workflow.collaboration.store.WorkflowSessionSequenceConflictException;
 import org.springframework.http.HttpStatus;
@@ -31,6 +33,25 @@ public final class WorkflowApiExceptionHandler {
     if (exception.sessionId() != null) {
       problem.setProperty("sessionId", exception.sessionId());
     }
+    return problem;
+  }
+
+  /** Maps blocked undo/redo commands with the concrete conflicting operations. */
+  @ExceptionHandler(WorkflowUndoConflictException.class)
+  public ProblemDetail handleUndoConflict(
+      WorkflowUndoConflictException exception, HttpServletRequest request) {
+    ProblemDetail problem =
+        problem(
+            HttpStatus.CONFLICT,
+            "undo-conflict",
+            exception.getMessage(),
+            request);
+    problem.setProperty("code", "UNDO_CONFLICT");
+    problem.setProperty("sessionId", exception.sessionId());
+    problem.setProperty("targetOperationId", exception.targetOperationId());
+    problem.setProperty(
+        "blockingOperations",
+        exception.blockingOperations().stream().map(BlockingOperationDetail::from).toList());
     return problem;
   }
 
@@ -118,16 +139,22 @@ public final class WorkflowApiExceptionHandler {
 
   private static HttpStatus statusFor(WorkflowSessionException.Code code) {
     return switch (code) {
-      case SESSION_NOT_FOUND -> HttpStatus.NOT_FOUND;
+      case SESSION_NOT_FOUND, UNDO_TARGET_NOT_FOUND, REDO_TARGET_NOT_FOUND -> HttpStatus.NOT_FOUND;
       case SESSION_ALREADY_EXISTS,
               PRIVATE_WORKSPACE_ACCESS_DENIED,
               ACTOR_METADATA_MISMATCH,
               ACTOR_NOT_JOINED,
               SESSION_MODE_MISMATCH,
               SESSION_CLOSE_FORBIDDEN,
-              DUPLICATE_OPERATION_ID ->
+              DUPLICATE_OPERATION_ID,
+              OPERATION_NOT_UNDOABLE,
+              UNDO_PREVIEW_STALE,
+              UNDO_CONFLICT,
+              REDO_TARGET_INVALID,
+              REDO_ALREADY_APPLIED ->
           HttpStatus.CONFLICT;
-      case INVALID_OPERATION_AUTHOR -> HttpStatus.BAD_REQUEST;
+      case INVALID_OPERATION_AUTHOR, UNDO_TARGET_REQUIRED, UNDO_PREVIEW_REQUIRED ->
+          HttpStatus.BAD_REQUEST;
     };
   }
 
@@ -147,16 +174,26 @@ public final class WorkflowApiExceptionHandler {
     return result.toString();
   }
 
-  /**
-   * Field-level validation detail included in invalid-request problem responses.
-   *
-   * @param field invalid field name
-   * @param message validation message
-   */
+  /** Field-level validation detail included in invalid-request problem responses. */
   public record FieldViolation(String field, String message) {
     public FieldViolation {
       field = Objects.requireNonNull(field, "field");
       message = Objects.requireNonNull(message, "message");
+    }
+  }
+
+  /** Transport-safe blocker detail included in undo-conflict problem responses. */
+  public record BlockingOperationDetail(
+      String operationId, String actorId, List<String> conflictingObjectIds) {
+    public BlockingOperationDetail {
+      operationId = Objects.requireNonNull(operationId, "operationId");
+      actorId = Objects.requireNonNull(actorId, "actorId");
+      conflictingObjectIds = List.copyOf(conflictingObjectIds);
+    }
+
+    static BlockingOperationDetail from(WorkflowUndoPreview.BlockingOperation blocker) {
+      return new BlockingOperationDetail(
+          blocker.operationId(), blocker.actorId(), blocker.conflictingObjectIds());
     }
   }
 }
