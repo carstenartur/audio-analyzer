@@ -19,11 +19,14 @@ class WorkbenchSpaControllerTest {
   }
 
   @Test
-  void forwardsRootAndNamedClientRoutesToPackagedApplicationShell() throws Exception {
+  void forwardsRootAndNestedClientRoutesToPackagedApplicationShell() throws Exception {
     mvc.perform(get("/workbench"))
         .andExpect(status().isOk())
         .andExpect(forwardedUrl("/index.html"));
     mvc.perform(get("/workbench/history"))
+        .andExpect(status().isOk())
+        .andExpect(forwardedUrl("/index.html"));
+    mvc.perform(get("/workbench/history/commit/abc123"))
         .andExpect(status().isOk())
         .andExpect(forwardedUrl("/index.html"));
   }
