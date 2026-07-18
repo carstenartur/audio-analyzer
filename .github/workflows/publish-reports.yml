@@ -1,0 +1,42 @@
+name: Publish CI reports
+
+on:
+  workflow_run:
+    workflows:
+      - Java CI with Maven
+    types:
+      - completed
+    branches:
+      - master
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: publish-ci-reports
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download reports from the successful build
+        uses: actions/download-artifact@v7
+        with:
+          name: github-pages-reports
+          path: target/gh-pages
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish reports to the gh-pages branch
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: target/gh-pages
+          destination_dir: .
+          force_orphan: true
+          user_name: github-actions[bot]
+          user_email: github-actions[bot]@users.noreply.github.com
+          commit_message: Deploy test and coverage reports ${{ github.event.workflow_run.head_sha }}
