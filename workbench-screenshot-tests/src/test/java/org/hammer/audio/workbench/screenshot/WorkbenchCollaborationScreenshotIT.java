@@ -98,11 +98,9 @@ class WorkbenchCollaborationScreenshotIT {
       page.waitForCondition(() -> "live".equals(connectionState.innerText()));
 
       page.locator("[data-testid='palette-node-synthetic-signal-generator']").click();
-      page.waitForCondition(
-          () -> "1".equals(page.locator("[data-testid='semantic-revision']").innerText()));
+      waitForAcceptedRevision(page, 1);
       page.locator("[data-testid='palette-node-gain']").click();
-      page.waitForCondition(
-          () -> "2".equals(page.locator("[data-testid='semantic-revision']").innerText()));
+      waitForAcceptedRevision(page, 2);
 
       assertTrue(
           page.locator("[data-testid^='node-node.synthetic-signal-generator.']").isVisible(),
@@ -110,11 +108,26 @@ class WorkbenchCollaborationScreenshotIT {
       assertTrue(
           page.locator("[data-testid^='node-node.gain.']").isVisible(),
           "Accepted gain node must be rendered from the server projection");
-      assertEquals("accepted", page.locator("[data-testid='command-state']").innerText());
 
       byte[] pngBytes = page.screenshot(new Page.ScreenshotOptions().setFullPage(false));
       ScreenshotPipeline.processScreenshot("collaboration-session.png", pngBytes);
     }
+  }
+
+  private static void waitForAcceptedRevision(Page page, int expectedRevision) {
+    Locator revision = page.locator("[data-testid='semantic-revision']");
+    Locator commandState = page.locator("[data-testid='command-state']");
+    String expected = Integer.toString(expectedRevision);
+    page.waitForCondition(
+        () -> expected.equals(revision.innerText()) || "rejected".equals(commandState.innerText()));
+    String state = commandState.innerText();
+    String error = visibleText(page.locator("[data-testid='error-banner']"));
+    assertEquals("accepted", state, "Semantic operation was not accepted: " + error);
+    assertEquals(expected, revision.innerText(), "Unexpected semantic revision after acceptance");
+  }
+
+  private static String visibleText(Locator locator) {
+    return locator.count() > 0 && locator.isVisible() ? locator.innerText() : "no visible error detail";
   }
 
   private static void disableAnimations(Page page) {
