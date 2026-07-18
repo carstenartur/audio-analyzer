@@ -45,6 +45,10 @@ mvn -Pscreenshot-tests verify -DupdateScreenshots=true
   impact.
 - Never runs implicitly during normal verification.
 
+A pull request that intentionally changes a documented UI state must update the integration scenario,
+its committed PNG baseline and the documentation that embeds it together. Hand-edited or independently
+captured replacement images are not accepted as equivalent evidence.
+
 ## Volatile UI Regions
 
 The documented scenarios use fixed workflow/session names and test identities. No wall-clock timestamps,
@@ -116,7 +120,7 @@ It runs against the same packaged application and:
 5. verifies the accepted projection, revision, command state and participant state;
 6. captures `docs/assets/screenshots/workbench/collaboration-session.png`.
 
-The corresponding architecture page embeds the generated image directly.
+The corresponding architecture page and root README embed the generated image directly.
 
 ## Adding New Screenshot Scenarios
 
@@ -135,9 +139,16 @@ activate `-Pscreenshot-tests`. This keeps Docker/Chromium integration separate f
 quality gates. Screenshot verification is executed explicitly when UI documentation changes.
 
 ```yaml
+- name: Install screenshot-test reactor artifacts
+  run: mvn -B -Pscreenshot-tests -DskipTests install -pl workbench-screenshot-tests -am
+
 - name: Install Playwright Chromium
-  run: mvn -B -pl workbench-screenshot-tests dependency:build-classpath \
-    -Dmdep.outputFile=target/playwright-classpath.txt
+  run: >-
+    mvn -B -Pscreenshot-tests -pl workbench-screenshot-tests
+    org.codehaus.mojo:exec-maven-plugin:3.5.0:java
+    -Dexec.mainClass=com.microsoft.playwright.CLI
+    -Dexec.classpathScope=test
+    -Dexec.args="install --with-deps chromium"
 
 - name: Run screenshot integration tests
   run: mvn -B -Pscreenshot-tests verify --file pom.xml
