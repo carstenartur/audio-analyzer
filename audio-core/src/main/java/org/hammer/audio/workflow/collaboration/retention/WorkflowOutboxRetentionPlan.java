@@ -33,8 +33,7 @@ public record WorkflowOutboxRetentionPlan(
     }
     if (batchSize <= 0 || batchSize > WorkflowOutboxRetentionSettings.MAXIMUM_BATCH_SIZE) {
       throw new IllegalArgumentException(
-          "batchSize must be between 1 and "
-              + WorkflowOutboxRetentionSettings.MAXIMUM_BATCH_SIZE);
+          "batchSize must be between 1 and " + WorkflowOutboxRetentionSettings.MAXIMUM_BATCH_SIZE);
     }
     if (scannedCount < 0) {
       throw new IllegalArgumentException("scannedCount must be >= 0");

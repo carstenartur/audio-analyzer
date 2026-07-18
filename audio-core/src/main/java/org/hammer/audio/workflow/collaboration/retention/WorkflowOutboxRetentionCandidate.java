@@ -12,10 +12,7 @@ import java.util.Objects;
  * @param reason eligibility reason evaluated when the plan was created
  */
 public record WorkflowOutboxRetentionCandidate(
-    String eventId,
-    String sessionId,
-    Instant publishedAt,
-    WorkflowOutboxRetentionReason reason) {
+    String eventId, String sessionId, Instant publishedAt, WorkflowOutboxRetentionReason reason) {
 
   /** Validates the immutable candidate identity and eligibility evidence. */
   public WorkflowOutboxRetentionCandidate {

@@ -31,8 +31,7 @@ class WorkflowOutboxRetentionServiceTest {
     WorkflowOutboxRetentionSettings settings =
         new WorkflowOutboxRetentionSettings(Duration.ofDays(30), 25);
     WorkflowOutboxRetentionService service =
-        new WorkflowOutboxRetentionService(
-            store, Clock.fixed(NOW, ZoneOffset.UTC), settings);
+        new WorkflowOutboxRetentionService(store, Clock.fixed(NOW, ZoneOffset.UTC), settings);
 
     WorkflowOutboxRetentionPlan plan = service.plan();
 
@@ -79,7 +78,8 @@ class WorkflowOutboxRetentionServiceTest {
   @Test
   void blankModeIsReportOnlyAndDeleteMustBeExplicit() {
     assertEquals(WorkflowOutboxRetentionMode.REPORT_ONLY, WorkflowOutboxRetentionMode.parse(null));
-    assertEquals(WorkflowOutboxRetentionMode.REPORT_ONLY, WorkflowOutboxRetentionMode.parse("dry-run"));
+    assertEquals(
+        WorkflowOutboxRetentionMode.REPORT_ONLY, WorkflowOutboxRetentionMode.parse("dry-run"));
     assertEquals(WorkflowOutboxRetentionMode.DELETE, WorkflowOutboxRetentionMode.parse("delete"));
     assertThrows(
         IllegalArgumentException.class, () -> WorkflowOutboxRetentionMode.parse("automatic"));
@@ -105,8 +105,7 @@ class WorkflowOutboxRetentionServiceTest {
     }
 
     @Override
-    public WorkflowOutboxRetentionDeletionResult deletePublished(
-        WorkflowOutboxRetentionPlan plan) {
+    public WorkflowOutboxRetentionDeletionResult deletePublished(WorkflowOutboxRetentionPlan plan) {
       deletedPlan = plan;
       return new WorkflowOutboxRetentionDeletionResult(List.of(), plan.candidateEventIds());
     }

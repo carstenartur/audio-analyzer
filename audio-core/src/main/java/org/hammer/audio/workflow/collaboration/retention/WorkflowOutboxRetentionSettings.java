@@ -32,8 +32,7 @@ public record WorkflowOutboxRetentionSettings(Duration publishedRetention, int b
       throw new IllegalArgumentException("publishedRetention must be positive");
     }
     if (batchSize <= 0 || batchSize > MAXIMUM_BATCH_SIZE) {
-      throw new IllegalArgumentException(
-          "batchSize must be between 1 and " + MAXIMUM_BATCH_SIZE);
+      throw new IllegalArgumentException("batchSize must be between 1 and " + MAXIMUM_BATCH_SIZE);
     }
   }
 

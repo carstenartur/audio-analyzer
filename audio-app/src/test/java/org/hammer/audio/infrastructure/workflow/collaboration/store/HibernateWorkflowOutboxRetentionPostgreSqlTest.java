@@ -100,7 +100,6 @@ class HibernateWorkflowOutboxRetentionPostgreSqlTest {
         outboxStore
             .claimDue("dispatcher.postgres", claimedAt, claimedAt.plusSeconds(30), 1)
             .getFirst();
-    outboxStore.markPublished(
-        eventId, "dispatcher.postgres", lease.leaseToken(), publishedAt);
+    outboxStore.markPublished(eventId, "dispatcher.postgres", lease.leaseToken(), publishedAt);
   }
 }

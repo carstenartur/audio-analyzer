@@ -18,8 +18,7 @@ import org.hibernate.SessionFactory;
 import org.hibernate.Transaction;
 
 /** Hibernate implementation of bounded, revalidated published-outbox retention. */
-public final class HibernateWorkflowOutboxRetentionStore
-    implements WorkflowOutboxRetentionStore {
+public final class HibernateWorkflowOutboxRetentionStore implements WorkflowOutboxRetentionStore {
 
   private final SessionFactory sessionFactory;
 
@@ -63,8 +62,7 @@ public final class HibernateWorkflowOutboxRetentionStore
   }
 
   @Override
-  public WorkflowOutboxRetentionDeletionResult deletePublished(
-      WorkflowOutboxRetentionPlan plan) {
+  public WorkflowOutboxRetentionDeletionResult deletePublished(WorkflowOutboxRetentionPlan plan) {
     WorkflowOutboxRetentionPlan requiredPlan = Objects.requireNonNull(plan, "plan");
     return inTransaction(session -> deleteWithinTransaction(session, requiredPlan));
   }
@@ -75,7 +73,8 @@ public final class HibernateWorkflowOutboxRetentionStore
     List<String> skipped = new ArrayList<>();
     for (WorkflowOutboxRetentionCandidate candidate : plan.candidates()) {
       WorkflowOutboxEntity entity =
-          session.find(WorkflowOutboxEntity.class, candidate.eventId(), LockModeType.PESSIMISTIC_WRITE);
+          session.find(
+              WorkflowOutboxEntity.class, candidate.eventId(), LockModeType.PESSIMISTIC_WRITE);
       if (!matchesPlan(entity, candidate, plan.publishedCutoff())) {
         skipped.add(candidate.eventId());
         continue;
@@ -109,8 +108,7 @@ public final class HibernateWorkflowOutboxRetentionStore
   private static void requireValidLimit(int limit) {
     if (limit <= 0 || limit > WorkflowOutboxRetentionSettings.MAXIMUM_BATCH_SIZE) {
       throw new IllegalArgumentException(
-          "limit must be between 1 and "
-              + WorkflowOutboxRetentionSettings.MAXIMUM_BATCH_SIZE);
+          "limit must be between 1 and " + WorkflowOutboxRetentionSettings.MAXIMUM_BATCH_SIZE);
     }
   }
 

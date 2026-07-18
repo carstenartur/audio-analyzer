@@ -40,12 +40,7 @@ class HibernateWorkflowOutboxRetentionStoreTest {
           new HibernateWorkflowOutboxRetentionStore(provider.getSessionFactory());
 
       appendAndPublish(
-          sessionStore,
-          outboxStore,
-          "session.old",
-          "event.old",
-          BASE_TIME.plusSeconds(1),
-          CUTOFF);
+          sessionStore, outboxStore, "session.old", "event.old", BASE_TIME.plusSeconds(1), CUTOFF);
       appendAndPublish(
           sessionStore,
           outboxStore,
@@ -53,15 +48,11 @@ class HibernateWorkflowOutboxRetentionStoreTest {
           "event.recent",
           BASE_TIME.plusSeconds(2),
           CUTOFF.plusSeconds(1));
-      appendPendingEvent(
-          sessionStore, "session.leased", "event.leased", BASE_TIME.plusSeconds(3));
+      appendPendingEvent(sessionStore, "session.leased", "event.leased", BASE_TIME.plusSeconds(3));
       LeasedWorkflowOutboxEntry activeLease =
           outboxStore
               .claimDue(
-                  "dispatcher.active",
-                  PLANNED_AT.minusSeconds(1),
-                  PLANNED_AT.plusSeconds(60),
-                  1)
+                  "dispatcher.active", PLANNED_AT.minusSeconds(1), PLANNED_AT.plusSeconds(60), 1)
               .getFirst();
       assertEquals("event.leased", activeLease.entry().eventId());
       appendPendingEvent(
@@ -186,7 +177,6 @@ class HibernateWorkflowOutboxRetentionStoreTest {
             .claimDue("dispatcher." + eventId, claimedAt, claimedAt.plusSeconds(30), 1)
             .getFirst();
     assertEquals(eventId, lease.entry().eventId());
-    outboxStore.markPublished(
-        eventId, "dispatcher." + eventId, lease.leaseToken(), publishedAt);
+    outboxStore.markPublished(eventId, "dispatcher." + eventId, lease.leaseToken(), publishedAt);
   }
 }

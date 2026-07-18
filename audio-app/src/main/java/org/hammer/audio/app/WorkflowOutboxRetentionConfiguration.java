@@ -23,7 +23,9 @@ public class WorkflowOutboxRetentionConfiguration {
 
   private static final String PROPERTY_PREFIX = "workbench.collaboration.outbox.retention.";
 
-  /** Creates the retention service only when destructive or report scheduling is explicitly enabled. */
+  /**
+   * Creates the retention service only when destructive or report scheduling is explicitly enabled.
+   */
   @Bean
   @ConditionalOnBean(WorkflowOutboxRetentionStore.class)
   @ConditionalOnProperty(name = PROPERTY_PREFIX + "enabled", havingValue = "true")

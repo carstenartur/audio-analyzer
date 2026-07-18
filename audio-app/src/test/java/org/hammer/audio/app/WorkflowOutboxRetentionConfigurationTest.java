@@ -28,7 +28,8 @@ class WorkflowOutboxRetentionConfigurationTest {
           .withUserConfiguration(WorkflowOutboxRetentionConfiguration.class)
           .withBean(WorkflowOutboxRetentionStore.class, EmptyRetentionStore::new)
           .withBean(
-              Clock.class, () -> Clock.fixed(Instant.parse("2026-07-18T12:00:00Z"), ZoneOffset.UTC));
+              Clock.class,
+              () -> Clock.fixed(Instant.parse("2026-07-18T12:00:00Z"), ZoneOffset.UTC));
 
   @Test
   void retentionRemainsAbsentUnlessExplicitlyEnabled() {
@@ -72,8 +73,7 @@ class WorkflowOutboxRetentionConfigurationTest {
     }
 
     @Override
-    public WorkflowOutboxRetentionDeletionResult deletePublished(
-        WorkflowOutboxRetentionPlan plan) {
+    public WorkflowOutboxRetentionDeletionResult deletePublished(WorkflowOutboxRetentionPlan plan) {
       return new WorkflowOutboxRetentionDeletionResult(List.of(), List.of());
     }
   }

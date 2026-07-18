@@ -26,9 +26,7 @@ public final class ScheduledWorkflowOutboxRetention {
   }
 
   /** Creates one plan and either reports it or revalidates and deletes its candidates. */
-  @Scheduled(
-      fixedDelayString =
-          "${workbench.collaboration.outbox.retention.interval-ms:3600000}")
+  @Scheduled(fixedDelayString = "${workbench.collaboration.outbox.retention.interval-ms:3600000}")
   public void runRetention() {
     try {
       execute(service.plan());
