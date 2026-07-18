@@ -7,16 +7,22 @@ import jakarta.persistence.Index;
 import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
+import jakarta.persistence.Version;
 import java.time.Instant;
+import java.util.Objects;
+import org.hammer.audio.workflow.collaboration.store.LeasedWorkflowOutboxEntry;
 import org.hammer.audio.workflow.collaboration.store.StoredWorkflowOutboxEntry;
 import org.hammer.audio.workflow.collaboration.store.WorkflowOutboxEventData;
+import org.hammer.audio.workflow.collaboration.store.WorkflowOutboxLeaseConflictException;
 
 /** Hibernate-owned transactional outbox entry for an accepted collaboration command. */
 @Entity
 @Table(
     name = "workflow_collaboration_outbox",
     indexes = {
-      @Index(name = "idx_workflow_outbox_pending", columnList = "published_at, next_attempt_at"),
+      @Index(
+          name = "idx_workflow_outbox_pending",
+          columnList = "published_at, next_attempt_at, lease_expires_at"),
       @Index(name = "idx_workflow_outbox_session", columnList = "session_id")
     },
     uniqueConstraints = {
@@ -29,6 +35,10 @@ public class WorkflowOutboxEntity {
   @Id
   @Column(name = "event_id", nullable = false, length = 255)
   private String storedEventId;
+
+  @Version
+  @Column(name = "entity_version", nullable = false)
+  private long entityVersion;
 
   @Column(name = "session_id", nullable = false, length = 255)
   private String storedSessionId;
@@ -57,6 +67,15 @@ public class WorkflowOutboxEntity {
 
   @Column(name = "published_at")
   private Instant publishedAt;
+
+  @Column(name = "lease_owner", length = 255)
+  private String leaseOwner;
+
+  @Column(name = "lease_token", length = 255)
+  private String leaseToken;
+
+  @Column(name = "lease_expires_at")
+  private Instant leaseExpiresAt;
 
   protected WorkflowOutboxEntity() {
     // Required by Jakarta Persistence.
@@ -90,6 +109,45 @@ public class WorkflowOutboxEntity {
         publishedAt);
   }
 
+  boolean claimableAt(Instant instant) {
+    Instant requiredInstant = Objects.requireNonNull(instant, "instant");
+    return publishedAt == null
+        && !nextAttemptAt.isAfter(requiredInstant)
+        && (leaseExpiresAt == null || !leaseExpiresAt.isAfter(requiredInstant));
+  }
+
+  LeasedWorkflowOutboxEntry lease(
+      String owner, String token, Instant claimedAt, Instant expiresAt) {
+    Instant requiredClaimedAt = Objects.requireNonNull(claimedAt, "claimedAt");
+    Instant requiredExpiresAt = Objects.requireNonNull(expiresAt, "expiresAt");
+    if (!requiredExpiresAt.isAfter(requiredClaimedAt)) {
+      throw new IllegalArgumentException("expiresAt must be after claimedAt");
+    }
+    if (!claimableAt(requiredClaimedAt)) {
+      throw new IllegalStateException("Outbox event is not claimable: " + storedEventId);
+    }
+    leaseOwner = requireNotBlank(owner, "owner");
+    leaseToken = requireNotBlank(token, "token");
+    leaseExpiresAt = requiredExpiresAt;
+    return new LeasedWorkflowOutboxEntry(toStoredEntry(), leaseOwner, leaseToken, leaseExpiresAt);
+  }
+
+  StoredWorkflowOutboxEntry markPublished(String owner, String token, Instant publicationTime) {
+    requireLease(owner, token);
+    attemptCount = Math.addExact(attemptCount, 1);
+    publishedAt = Objects.requireNonNull(publicationTime, "publicationTime");
+    clearLease();
+    return toStoredEntry();
+  }
+
+  StoredWorkflowOutboxEntry markFailed(String owner, String token, Instant retryTime) {
+    requireLease(owner, token);
+    attemptCount = Math.addExact(attemptCount, 1);
+    nextAttemptAt = Objects.requireNonNull(retryTime, "retryTime");
+    clearLease();
+    return toStoredEntry();
+  }
+
   boolean hasSameSemanticContent(
       String expectedSessionId,
       WorkflowOutboxEventData candidate,
@@ -114,5 +172,30 @@ public class WorkflowOutboxEntity {
 
   long eventSequence() {
     return storedEventSequence;
+  }
+
+  private void requireLease(String owner, String token) {
+    String requiredOwner = requireNotBlank(owner, "owner");
+    String requiredToken = requireNotBlank(token, "token");
+    if (leaseOwner == null
+        || !leaseOwner.equals(requiredOwner)
+        || leaseToken == null
+        || !leaseToken.equals(requiredToken)) {
+      throw new WorkflowOutboxLeaseConflictException(storedEventId, requiredOwner, requiredToken);
+    }
+  }
+
+  private void clearLease() {
+    leaseOwner = null;
+    leaseToken = null;
+    leaseExpiresAt = null;
+  }
+
+  private static String requireNotBlank(String value, String name) {
+    Objects.requireNonNull(value, name);
+    if (value.isBlank()) {
+      throw new IllegalArgumentException(name + " must not be blank");
+    }
+    return value;
   }
 }
