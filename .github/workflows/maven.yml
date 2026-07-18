@@ -1,378 +1,139 @@
-# This workflow will build a Java project with Maven, and cache/restore any dependencies to improve the workflow execution time
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-java-with-maven
-
-# This workflow uses actions that are not certified by GitHub.
-# They are provided by a third-party and are governed by
-# separate terms of service, privacy policy, and support
-# documentation.
-
 name: Java CI with Maven
 
 on:
   push:
-    branches: [ "master" ]
+    branches:
+      - master
   pull_request:
-    branches: [ "master" ]
+    branches:
+      - master
+
+permissions:
+  contents: read
+  checks: write
+  packages: read
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      checks: write
-      packages: read
-
     env:
       JAVA_VERSION: '21'
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
-    - uses: actions/checkout@v7
+      - uses: actions/checkout@v7
 
-    - name: Set up JDK ${{ env.JAVA_VERSION }}
-      uses: actions/setup-java@v5
-      with:
-        java-version: ${{ env.JAVA_VERSION }}
-        distribution: 'temurin'
-        server-id: github
-        server-username: GITHUB_ACTOR
-        server-password: GITHUB_TOKEN
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v5
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: temurin
+          cache: maven
+          server-id: github
+          server-username: GITHUB_ACTOR
+          server-password: GITHUB_TOKEN
 
-    - name: Cache Maven packages
-      uses: actions/cache@v6
-      with:
-        path: ~/.m2/repository
-        key: ${{ runner.os }}-maven-${{ env.JAVA_VERSION }}-${{ hashFiles('**/pom.xml') }}
-        restore-keys: |
-          ${{ runner.os }}-maven-${{ env.JAVA_VERSION }}-
-          ${{ runner.os }}-maven-
+      - name: Build and verify with Maven
+        run: mvn -B clean verify --file pom.xml
 
-    - name: Build and verify with Maven (Java ${{ env.JAVA_VERSION }})
-      run: mvn -B clean verify --file pom.xml
-    
-    - name: Upload workbench screenshot failure artifacts
-      if: failure()
-      uses: actions/upload-artifact@v7
-      with:
-        name: workbench-screenshot-failures
-        path: workbench-screenshot-tests/target/screenshot-failures/
-        if-no-files-found: ignore
-        retention-days: 30
-    
-    - name: Upload JUnit XML reports
-      if: always()
-      uses: actions/upload-artifact@v7
-      with:
-        name: junit-xml
-        path: '**/target/surefire-reports/*.xml'
-        if-no-files-found: ignore
-        retention-days: 30
-    
-    - name: Upload Surefire raw reports
-      if: always()
-      uses: actions/upload-artifact@v7
-      with:
-        name: surefire-raw
-        path: |
-          **/target/surefire-reports/*.txt
-          **/target/surefire-reports/*.dump
-        if-no-files-found: ignore
-        retention-days: 30
-    
-    - name: Generate Surefire HTML report
-      if: always()
-      run: mvn -B surefire-report:report -Daggregate=true
-      continue-on-error: true
-    
-    - name: Upload Surefire HTML report
-      if: always()
-      uses: actions/upload-artifact@v7
-      with:
-        name: surefire-html
-        path: '**/target/site/'
-        if-no-files-found: ignore
-        retention-days: 30
+      - name: Upload workbench screenshot failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: workbench-screenshot-failures
+          path: workbench-screenshot-tests/target/screenshot-failures/
+          if-no-files-found: ignore
+          retention-days: 30
 
-    - name: Upload Surefire standalone HTML report
-      if: always()
-      uses: actions/upload-artifact@v7
-      with:
-        name: surefire-standalone-html
-        path: '**/target/reports/surefire.html'
-        if-no-files-found: ignore
-        retention-days: 30
-    
-    - name: Publish Test Report
-      if: always()
-      uses: dorny/test-reporter@v3.0.0
-      with:
-        name: JUnit Tests
-        path: '**/target/surefire-reports/*.xml'
-        reporter: java-junit
-        fail-on-error: false
-    
-    - name: Upload Jacoco coverage report
-      if: success()
-      uses: actions/upload-artifact@v7
-      with:
-        name: jacoco-report
-        path: '**/target/site/jacoco/'
-        retention-days: 30
-    
-    - name: Upload Checkstyle report
-      if: always()
-      uses: actions/upload-artifact@v7
-      with:
-        name: checkstyle-report
-        path: '**/target/checkstyle-result.xml'
-        if-no-files-found: ignore
-        retention-days: 30
-    
-    - name: Upload SpotBugs report
-      if: always()
-      uses: actions/upload-artifact@v7
-      with:
-        name: spotbugs-report
-        path: '**/target/spotbugsXml.xml'
-        if-no-files-found: ignore
-        retention-days: 30
-    
-    - name: Upload PMD report
-      if: always()
-      uses: actions/upload-artifact@v7
-      with:
-        name: pmd-report
-        path: '**/target/pmd.xml'
-        if-no-files-found: ignore
-        retention-days: 30
+      - name: Upload JUnit XML reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: junit-xml
+          path: |
+            **/target/surefire-reports/TEST-*.xml
+            **/target/failsafe-reports/TEST-*.xml
+          if-no-files-found: ignore
+          retention-days: 30
 
-    - name: Debug coverage path
-      if: always()
-      run: find . -maxdepth 5 -path '*/target/site/jacoco' -type d -print
-    
-    - name: Upload coverage reports to Codecov
-      if: always()
-      uses: codecov/codecov-action@v7
-      with:
-        files: '**/target/site/jacoco/jacoco.xml'
-        fail_ci_if_error: false
-        verbose: true
+      - name: Upload Surefire raw reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: surefire-raw
+          path: |
+            **/target/surefire-reports/*.txt
+            **/target/surefire-reports/*.dump
+            **/target/failsafe-reports/*.txt
+          if-no-files-found: ignore
+          retention-days: 30
 
-    - name: Prepare GitHub Pages reports and badges
-      if: always()
-      run: |
-        python3 - <<'PY'
-        import glob
-        import hashlib
-        import html
-        import json
-        import pathlib
-        import re
-        import shutil
-        import urllib.parse
-        import xml.etree.ElementTree as ET
+      - name: Generate Surefire HTML report
+        if: always()
+        run: mvn -B surefire-report:report -Daggregate=true
+        continue-on-error: true
 
-        tests_dir = pathlib.Path("target/gh-pages/tests")
-        coverage_dir = pathlib.Path("target/gh-pages/coverage")
-        tests_dir.mkdir(parents=True, exist_ok=True)
-        coverage_dir.mkdir(parents=True, exist_ok=True)
-        safe_name_pattern = r"[^A-Za-z0-9._-]"
-        module_suffix_segments = 3
-        collision_hash_bytes = 4
+      - name: Upload Surefire HTML reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: surefire-html
+          path: |
+            **/target/site/surefire-report.html
+            **/target/reports/surefire.html
+          if-no-files-found: ignore
+          retention-days: 30
 
-        surefire_candidates = [
-            pathlib.Path("target/reports/surefire.html"),
-            pathlib.Path("target/site/surefire-report.html"),
-        ]
-        surefire_candidates.extend(
-            pathlib.Path(path)
-            for path in sorted(glob.glob("**/target/reports/surefire.html", recursive=True))
-        )
-        surefire_candidates.extend(
-            pathlib.Path(path)
-            for path in sorted(glob.glob("**/target/site/surefire-report.html", recursive=True))
-        )
-        surefire_candidates = [path for path in surefire_candidates if path.exists()]
+      - name: Publish JUnit check summary
+        if: always()
+        continue-on-error: true
+        uses: dorny/test-reporter@v3.0.0
+        with:
+          name: JUnit Tests
+          path: |
+            **/target/surefire-reports/TEST-*.xml
+            **/target/failsafe-reports/TEST-*.xml
+          reporter: java-junit
+          fail-on-error: false
 
-        if surefire_candidates:
-          preferred_report = surefire_candidates[0]
-          if preferred_report.resolve() != (tests_dir / "surefire-report.html").resolve():
-            shutil.copy2(preferred_report, tests_dir / "surefire-report.html")
+      - name: Upload JaCoCo reports
+        if: success()
+        uses: actions/upload-artifact@v7
+        with:
+          name: jacoco-report
+          path: '**/target/site/jacoco/'
+          if-no-files-found: ignore
+          retention-days: 30
 
-          module_links = []
-          for report_path in surefire_candidates:
-            if report_path == preferred_report:
-              continue
-            # Strip '/target/{reports|site}/<report-file>' to get the owning module path.
-            report_parts = report_path.parts[:-module_suffix_segments]
-            report_dir_name = "/".join(report_parts) if report_parts else "root"
-            safe_report_dir = re.sub(safe_name_pattern, "_", report_dir_name or "root")
-            destination_dir = tests_dir / safe_report_dir
-            destination_dir.mkdir(parents=True, exist_ok=True)
-            destination_file = destination_dir / "surefire-report.html"
-            shutil.copy2(report_path, destination_file)
-            module_links.append((report_dir_name, safe_report_dir))
+      - name: Upload static-analysis reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: static-analysis-reports
+          path: |
+            **/target/checkstyle-result.xml
+            **/target/spotbugsXml.xml
+            **/target/pmd.xml
+          if-no-files-found: ignore
+          retention-days: 30
 
-          if module_links:
-            links = "\n".join(
-                f'<li><a href="{urllib.parse.quote(path)}/surefire-report.html">{html.escape(name)}</a></li>'
-                for name, path in sorted(module_links)
-            )
-            (tests_dir / "index.html").write_text(
-                "<!doctype html><html><head><meta charset=\"utf-8\"><title>Surefire reports</title></head>"
-                "<body><h1>Surefire reports</h1><ul>"
-                f'<li><a href="surefire-report.html">aggregate</a></li>{links}</ul></body></html>',
-                encoding="utf-8",
-            )
-        else:
-          (tests_dir / "surefire-report.html").write_text(
-              "<html><body><h1>Surefire report not available</h1></body></html>",
-              encoding="utf-8",
-          )
+      - name: Upload coverage to Codecov
+        if: always()
+        uses: codecov/codecov-action@v7
+        with:
+          files: '**/target/site/jacoco/jacoco.xml'
+          fail_ci_if_error: false
+          verbose: true
 
-        test_files = (
-            glob.glob("**/target/surefire-reports/TEST-*.xml", recursive=True)
-            + glob.glob("**/target/failsafe-reports/TEST-*.xml", recursive=True)
-        )
-        if test_files:
-          total_tests = total_failures = total_errors = total_skipped = 0
-          for path in test_files:
-            try:
-              root = ET.parse(path).getroot()
-            except ET.ParseError as exc:
-              print(f"Skipping malformed test report {path}: {exc}")
-              continue
-            total_tests += int(root.get("tests", 0))
-            total_failures += int(root.get("failures", 0))
-            total_errors += int(root.get("errors", 0))
-            total_skipped += int(root.get("skipped", 0))
-          failed = total_failures + total_errors
-          passed = max(total_tests - failed - total_skipped, 0)
-          if failed > 0:
-            tests_message = f"{failed}/{total_tests} failed"
-            tests_color = "red"
-          else:
-            tests_message = f"{passed} passed"
-            tests_color = "brightgreen"
-        else:
-          tests_message = "unknown"
-          tests_color = "lightgrey"
-        (tests_dir / "badge.json").write_text(
-            json.dumps(
-                {
-                    "schemaVersion": 1,
-                    "label": "tests",
-                    "message": tests_message,
-                    "color": tests_color,
-                }
-            ),
-            encoding="utf-8",
-        )
+      - name: Prepare static test and coverage reports
+        if: always()
+        run: python3 scripts/prepare_ci_reports.py
 
-        jacoco_xml_paths = glob.glob("**/target/site/jacoco/jacoco.xml", recursive=True)
-        covered = 0
-        missed = 0
-        if jacoco_xml_paths:
-          for jacoco_xml in jacoco_xml_paths:
-            root = ET.parse(jacoco_xml).getroot()
-            for counter in root.iter("counter"):
-              if counter.get("type") == "LINE":
-                covered += int(counter.get("covered", 0))
-                missed += int(counter.get("missed", 0))
-          total = covered + missed
-          if total > 0:
-            coverage_pct = round((covered / total) * 100)
-            if coverage_pct >= 80:
-              coverage_color = "brightgreen"
-            elif coverage_pct >= 60:
-              coverage_color = "yellow"
-            else:
-              coverage_color = "red"
-            coverage_message = f"{coverage_pct}%"
-          else:
-            coverage_message = "unknown"
-            coverage_color = "lightgrey"
-        else:
-          coverage_message = "unknown"
-          coverage_color = "lightgrey"
-        (coverage_dir / "badge.json").write_text(
-            json.dumps(
-                {
-                    "schemaVersion": 1,
-                    "label": "coverage",
-                    "message": coverage_message,
-                    "color": coverage_color,
-                }
-            ),
-            encoding="utf-8",
-        )
-
-        copied_modules = []
-        used_coverage_dirs = set()
-        for jacoco_dir in glob.glob("**/target/site/jacoco", recursive=True):
-          jacoco_path = pathlib.Path(jacoco_dir)
-          # Strip '/target/site/jacoco' to get the owning module path.
-          module_parts = jacoco_path.parts[:-module_suffix_segments]
-          module_name = "/".join(module_parts) if module_parts else "root"
-          # Keep names filesystem- and URL-safe for published coverage subdirectories.
-          safe_module_name = re.sub(safe_name_pattern, "_", module_name)
-          if safe_module_name in used_coverage_dirs:
-            hash_suffix = hashlib.blake2s(
-                module_name.encode("utf-8"),
-                digest_size=collision_hash_bytes,
-            ).hexdigest()
-            safe_module_name = f"{safe_module_name}-{hash_suffix}"
-          used_coverage_dirs.add(safe_module_name)
-          destination = coverage_dir / safe_module_name
-          if destination.exists():
-            shutil.rmtree(destination)
-          shutil.copytree(jacoco_dir, destination)
-          copied_modules.append((module_name, safe_module_name))
-
-        if copied_modules:
-          links = "\n".join(
-              f'<li><a href="{urllib.parse.quote(safe_name)}/index.html">{html.escape(name)}</a></li>'
-              for name, safe_name in sorted(copied_modules)
-          )
-          (coverage_dir / "index.html").write_text(
-              (
-                  "<!doctype html><html><head><meta charset=\"utf-8\">"
-                  "<title>JaCoCo Coverage Reports</title></head><body>"
-                  "<h1>JaCoCo Coverage Reports</h1><ul>"
-                  f"{links}</ul></body></html>"
-              ),
-              encoding="utf-8",
-          )
-        else:
-          (coverage_dir / "index.html").write_text(
-              "<!doctype html><html><head><meta charset=\"utf-8\"><title>No coverage report</title>"
-              "</head><body><h1>No coverage report generated</h1></body></html>",
-              encoding="utf-8",
-          )
-        PY
-
-    - name: Upload GitHub Pages reports bundle
-      if: always()
-      uses: actions/upload-artifact@v7
-      with:
-        name: github-pages-reports
-        path: target/gh-pages/
-        if-no-files-found: ignore
-        retention-days: 30
-
-    - name: Deploy reports to GitHub Pages
-      if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-      uses: peaceiris/actions-gh-pages@v4
-      with:
-        github_token: ${{ secrets.GITHUB_TOKEN }}
-        publish_dir: target/gh-pages
-        destination_dir: .
-        keep_files: true
-        user_name: 'github-actions[bot]'
-        user_email: 'github-actions[bot]@users.noreply.github.com'
-        commit_message: 'Deploy test and coverage reports ${{ github.sha }}'
-
-    # Optional: Uploads the full dependency graph to GitHub to improve the quality of Dependabot alerts this repository can receive
-#    - name: Update dependency graph
-#      uses: advanced-security/maven-dependency-submission-action@571e99aab1055c2e71a1e2309b9691de18d6b7d6
+      - name: Upload publishable reports bundle
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: github-pages-reports
+          path: target/gh-pages/
+          if-no-files-found: error
+          retention-days: 30
