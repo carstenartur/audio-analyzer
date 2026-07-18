@@ -35,30 +35,26 @@ jobs:
         shell: bash
         run: |
           python3 - <<'PY'
+          import re
           from pathlib import Path
 
           pom = Path('pom.xml')
           source = pom.read_text(encoding='utf-8')
-          old = '''          <markdown>
-            <includes>
-              <include>**/*.md</include>
-            </includes>
-            <flexmark/>
-          </markdown>'''
-          new = '''          <markdown>
-            <includes>
-              <include>**/*.md</include>
-            </includes>
-            <excludes>
-              <exclude>**/node_modules/**</exclude>
-              <exclude>**/target/**</exclude>
-            </excludes>
-            <flexmark/>
-          </markdown>'''
-          if new not in source:
-            if old not in source:
+          if '<exclude>**/node_modules/**</exclude>' not in source:
+            pattern = re.compile(
+                r'(<markdown>\s*<includes>\s*<include>\*\*/\*\.md</include>\s*</includes>)'
+                r'(\s*<flexmark\s*/>)'
+            )
+            replacement = (
+                r'\1\n            <excludes>\n'
+                r'              <exclude>**/node_modules/**</exclude>\n'
+                r'              <exclude>**/target/**</exclude>\n'
+                r'            </excludes>\2'
+            )
+            source, replacements = pattern.subn(replacement, source, count=1)
+            if replacements != 1:
               raise SystemExit('root Spotless Markdown configuration not found')
-            pom.write_text(source.replace(old, new, 1), encoding='utf-8')
+            pom.write_text(source, encoding='utf-8')
           PY
 
       - name: Format maintained screenshot sources and documentation
