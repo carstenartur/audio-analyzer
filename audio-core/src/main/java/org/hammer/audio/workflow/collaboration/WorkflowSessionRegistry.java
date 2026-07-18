@@ -19,6 +19,7 @@ import org.hammer.audio.workflow.collaboration.store.WorkflowOperationPersistenc
 import org.hammer.audio.workflow.collaboration.store.WorkflowOutboxEventData;
 import org.hammer.audio.workflow.collaboration.store.WorkflowSessionAppendCommand;
 import org.hammer.audio.workflow.collaboration.store.WorkflowSessionAppendResult;
+import org.hammer.audio.workflow.collaboration.store.WorkflowSessionRevisionConflictException;
 import org.hammer.audio.workflow.collaboration.store.WorkflowSessionStateStore;
 import org.hammer.audio.workflow.dsl.WorkflowDslParser;
 import org.hammer.audio.workflow.dsl.WorkflowDslSerializer;
@@ -143,10 +144,34 @@ public final class WorkflowSessionRegistry {
     return requireSession(sessionId).workflow();
   }
 
-  /** Applies an actor-authored semantic operation to an existing joined session. */
+  /** Applies an actor-authored semantic operation at the current server revision. */
   public Workflow applyOperation(
       String sessionId, CollaborationMode mode, OperationActor actor, WorkflowOperation operation) {
-    Objects.requireNonNull(mode, "mode");
+    assertOperationAuthor(sessionId, actor, operation);
+    return requireSession(sessionId).apply(mode, actor, operation);
+  }
+
+  /**
+   * Applies an actor-authored semantic operation against an explicit client-observed revision.
+   *
+   * <p>An identical command retry remains idempotent even when its expected revision precedes the
+   * current revision.
+   */
+  public Workflow applyOperation(
+      String sessionId,
+      CollaborationMode mode,
+      OperationActor actor,
+      long expectedRevision,
+      WorkflowOperation operation) {
+    if (expectedRevision < 0) {
+      throw new IllegalArgumentException("expectedRevision must be >= 0");
+    }
+    assertOperationAuthor(sessionId, actor, operation);
+    return requireSession(sessionId).apply(mode, actor, expectedRevision, operation);
+  }
+
+  private static void assertOperationAuthor(
+      String sessionId, OperationActor actor, WorkflowOperation operation) {
     Objects.requireNonNull(actor, "actor");
     Objects.requireNonNull(operation, "operation");
     if (!operation.author().equals(actor.actorId())) {
@@ -159,7 +184,6 @@ public final class WorkflowSessionRegistry {
               + actor.actorId()
               + "'");
     }
-    return requireSession(sessionId).apply(mode, actor, operation);
   }
 
   /** Updates non-semantic presence for a joined actor. */
@@ -503,49 +527,74 @@ public final class WorkflowSessionRegistry {
         CollaborationMode requestedMode, OperationActor actor, WorkflowOperation operation) {
       lock.lock();
       try {
-        requireOpen();
-        assertModeAndActor(requestedMode, actor);
-        AcceptedOperationIdentity candidate = AcceptedOperationIdentity.from(operation);
-        AcceptedOperationIdentity previous = operationsById.get(operation.operationId());
-        if (previous != null) {
-          if (previous.equals(candidate)) {
-            return operationLog.currentWorkflow();
-          }
-          throw duplicateOperation(operation.operationId());
-        }
-
-        Workflow updatedWorkflow = operation.apply(operationLog.currentWorkflow());
-        if (stateStore != null) {
-          WorkflowSessionAppendResult durableResult = persist(operation, updatedWorkflow);
-          acceptDurableResult(durableResult);
-          if (durableResult.duplicate()) {
-            Workflow durableWorkflow = parseDurableWorkflow(durableResult.session());
-            operationLog.reset(durableWorkflow);
-            operationsById.put(operation.operationId(), candidate);
-            operationCount = Math.toIntExact(durableResult.session().revision());
-            return durableWorkflow;
-          }
-        }
-
-        Workflow appliedWorkflow = operationLog.apply(operation);
-        if (!appliedWorkflow.equals(updatedWorkflow)) {
-          throw new IllegalStateException(
-              "Persisted workflow differs from applied workflow for operation "
-                  + operation.operationId());
-        }
-        operationsById.put(operation.operationId(), candidate);
-        operationCount++;
-        eventHub.operationAccepted(sessionId, actor, operation, appliedWorkflow);
-        if (stateStore == null) {
-          durableRevision = eventHub.currentRevision(sessionId);
-          durableSequence = eventHub.currentSequence(sessionId);
-        } else {
-          verifyEventHubState(durableSequence, durableRevision, "accepted operation");
-        }
-        return appliedWorkflow;
+        return applyLocked(requestedMode, actor, durableRevision, operation);
       } finally {
         lock.unlock();
       }
+    }
+
+    Workflow apply(
+        CollaborationMode requestedMode,
+        OperationActor actor,
+        long expectedRevision,
+        WorkflowOperation operation) {
+      lock.lock();
+      try {
+        return applyLocked(requestedMode, actor, expectedRevision, operation);
+      } finally {
+        lock.unlock();
+      }
+    }
+
+    private Workflow applyLocked(
+        CollaborationMode requestedMode,
+        OperationActor actor,
+        long expectedRevision,
+        WorkflowOperation operation) {
+      requireOpen();
+      assertModeAndActor(requestedMode, actor);
+      AcceptedOperationIdentity candidate = AcceptedOperationIdentity.from(operation);
+      AcceptedOperationIdentity previous = operationsById.get(operation.operationId());
+      if (previous != null) {
+        if (previous.equals(candidate)) {
+          return operationLog.currentWorkflow();
+        }
+        throw duplicateOperation(operation.operationId());
+      }
+      if (expectedRevision != durableRevision) {
+        throw new WorkflowSessionRevisionConflictException(
+            sessionId, expectedRevision, durableRevision);
+      }
+
+      Workflow updatedWorkflow = operation.apply(operationLog.currentWorkflow());
+      if (stateStore != null) {
+        WorkflowSessionAppendResult durableResult = persist(operation, updatedWorkflow);
+        acceptDurableResult(durableResult);
+        if (durableResult.duplicate()) {
+          Workflow durableWorkflow = parseDurableWorkflow(durableResult.session());
+          operationLog.reset(durableWorkflow);
+          operationsById.put(operation.operationId(), candidate);
+          operationCount = Math.toIntExact(durableResult.session().revision());
+          return durableWorkflow;
+        }
+      }
+
+      Workflow appliedWorkflow = operationLog.apply(operation);
+      if (!appliedWorkflow.equals(updatedWorkflow)) {
+        throw new IllegalStateException(
+            "Persisted workflow differs from applied workflow for operation "
+                + operation.operationId());
+      }
+      operationsById.put(operation.operationId(), candidate);
+      operationCount++;
+      eventHub.operationAccepted(sessionId, actor, operation, appliedWorkflow);
+      if (stateStore == null) {
+        durableRevision = eventHub.currentRevision(sessionId);
+        durableSequence = eventHub.currentSequence(sessionId);
+      } else {
+        verifyEventHubState(durableSequence, durableRevision, "accepted operation");
+      }
+      return appliedWorkflow;
     }
 
     PresenceState updatePresence(OperationActor actor, PresenceState presenceState) {
