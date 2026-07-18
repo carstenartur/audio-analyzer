@@ -230,7 +230,7 @@ final class WorkflowSessionEntry {
     OperationIdentity candidate = persistence.identity(operation);
     OperationIdentity previous = operationsById.get(operation.operationId());
     if (previous != null) {
-      if (previous.equals(candidate)) {
+      if (previous.matchesRetry(candidate)) {
         return currentWorkflow;
       }
       throw duplicateOperation(operation.operationId());
