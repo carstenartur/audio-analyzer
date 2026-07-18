@@ -2,6 +2,7 @@ package org.hammer.audio.infrastructure.workflow.collaboration.store;
 
 import static org.hammer.audio.infrastructure.workflow.collaboration.store.WorkflowOutboxStoreTestSupport.BASE_TIME;
 import static org.hammer.audio.infrastructure.workflow.collaboration.store.WorkflowOutboxStoreTestSupport.appendPendingEvent;
+import static org.hammer.audio.infrastructure.workflow.collaboration.store.WorkflowOutboxStoreTestSupport.fileProperties;
 import static org.hammer.audio.infrastructure.workflow.collaboration.store.WorkflowOutboxStoreTestSupport.inMemoryProperties;
 import static org.hammer.audio.infrastructure.workflow.collaboration.store.WorkflowOutboxStoreTestSupport.provider;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -9,6 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.github.carstenartur.jgit.storage.hibernate.config.HibernateSessionFactoryProvider;
+import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -20,6 +22,7 @@ import org.hammer.audio.workflow.collaboration.retention.WorkflowOutboxRetention
 import org.hammer.audio.workflow.collaboration.retention.WorkflowOutboxRetentionSettings;
 import org.hammer.audio.workflow.collaboration.store.LeasedWorkflowOutboxEntry;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class HibernateWorkflowOutboxRetentionStoreTest {
 
@@ -121,6 +124,51 @@ class HibernateWorkflowOutboxRetentionStoreTest {
       assertEquals(List.of(), first.skippedEventIds());
       assertEquals(List.of(), second.deletedEventIds());
       assertEquals(List.of("event.once"), second.skippedEventIds());
+    }
+  }
+
+  @Test
+  void cleanupPreservesPendingWorkAcrossCompleteRestart(@TempDir Path temporaryDirectory) {
+    Path databasePath = temporaryDirectory.resolve("retention-restart");
+    try (HibernateSessionFactoryProvider provider = provider(fileProperties(databasePath))) {
+      HibernateWorkflowSessionStateStore sessionStore =
+          new HibernateWorkflowSessionStateStore(provider.getSessionFactory());
+      HibernateWorkflowOutboxStore outboxStore =
+          new HibernateWorkflowOutboxStore(provider.getSessionFactory());
+      appendAndPublish(
+          sessionStore,
+          outboxStore,
+          "session.restart.old",
+          "event.restart.old",
+          BASE_TIME.plusSeconds(1),
+          CUTOFF.minusSeconds(1));
+      appendPendingEvent(
+          sessionStore,
+          "session.restart.pending",
+          "event.restart.pending",
+          BASE_TIME.plusSeconds(2));
+    }
+
+    try (HibernateSessionFactoryProvider provider = provider(fileProperties(databasePath))) {
+      HibernateWorkflowOutboxRetentionStore retentionStore =
+          new HibernateWorkflowOutboxRetentionStore(provider.getSessionFactory());
+      WorkflowOutboxRetentionService service =
+          new WorkflowOutboxRetentionService(
+              retentionStore,
+              Clock.fixed(PLANNED_AT, ZoneOffset.UTC),
+              new WorkflowOutboxRetentionSettings(Duration.ofDays(30), 10));
+
+      WorkflowOutboxRetentionPlan plan = service.plan();
+      WorkflowOutboxRetentionDeletionResult deleted = service.delete(plan);
+
+      assertEquals(List.of("event.restart.old"), deleted.deletedEventIds());
+    }
+
+    try (HibernateSessionFactoryProvider provider = provider(fileProperties(databasePath))) {
+      HibernateWorkflowOutboxStore outboxStore =
+          new HibernateWorkflowOutboxStore(provider.getSessionFactory());
+      assertTrue(outboxStore.find("event.restart.old").isEmpty());
+      assertTrue(outboxStore.find("event.restart.pending").orElseThrow().pending());
     }
   }
 
