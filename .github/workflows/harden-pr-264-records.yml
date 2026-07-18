@@ -34,30 +34,11 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import re
 
           path = Path('audio-core/src/main/java/org/hammer/audio/workflow/collaboration/WorkflowSessionRegistry.java')
           text = path.read_text()
-
-          old = '''  private record SessionDefinition(
-              String sessionId,
-              CollaborationMode mode,
-              OperationActor owner,
-              Instant createdAt,
-              Workflow workflow) {}
-
-            private record RecoveryState(
-              List<StoredWorkflowOperation> operations,
-              boolean ownerConnected,
-              long revision,
-              long sequence) {}
-
-            private record EntryServices(
-              WorkflowSessionEventHub eventHub,
-              WorkflowSessionStateStore stateStore,
-              WorkflowDslParser dslParser,
-              WorkflowDslSerializer dslSerializer) {}
-          '''
-          new = '''  private record SessionDefinition(
+          replacement = '''  private record SessionDefinition(
               String sessionId,
               CollaborationMode mode,
               OperationActor owner,
@@ -99,10 +80,16 @@ jobs:
               Objects.requireNonNull(dslSerializer, "dslSerializer");
             }
           }
-          '''
-          if old not in text:
-              raise SystemExit('Expected recovery record block was not found')
-          path.write_text(text.replace(old, new, 1))
+
+            private static final class SessionEntry {'''
+          pattern = re.compile(
+              r'  private record SessionDefinition\(.*?  private static final class SessionEntry \{',
+              re.DOTALL,
+          )
+          updated, count = pattern.subn(replacement, text, count=1)
+          if count != 1:
+              raise SystemExit(f'Expected one recovery record block, replaced {count}')
+          path.write_text(updated)
           PY
 
           mvn -B spotless:apply --file pom.xml
