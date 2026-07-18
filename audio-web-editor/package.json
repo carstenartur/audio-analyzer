@@ -1,0 +1,32 @@
+{
+  "name": "@audio-analyzer/web-editor",
+  "version": "0.0.4",
+  "private": true,
+  "type": "module",
+  "packageManager": "npm@10.9.2",
+  "engines": {
+    "node": "22.14.0",
+    "npm": "10.9.2"
+  },
+  "scripts": {
+    "dev": "vite",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test test/*.test.mjs",
+    "lint": "node scripts/lint-boundaries.mjs",
+    "build": "vite build",
+    "verify:reproducible": "node scripts/verify-reproducible-build.mjs",
+    "verify": "npm run typecheck && npm run test && npm run lint && npm run build && npm run verify:reproducible"
+  },
+  "dependencies": {
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "reactflow": "11.11.4"
+  },
+  "devDependencies": {
+    "@types/react": "18.3.3",
+    "@types/react-dom": "18.3.0",
+    "@vitejs/plugin-react": "4.3.4",
+    "typescript": "5.7.2",
+    "vite": "5.4.14"
+  }
+}

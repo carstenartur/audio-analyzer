@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>audioin</groupId>
+    <artifactId>audioin-parent</artifactId>
+    <version>0.0.4-SNAPSHOT</version>
+  </parent>
+
+  <artifactId>audio-web-editor</artifactId>
+  <packaging>jar</packaging>
+  <name>Audio Analyzer Web Editor</name>
+  <description>Reproducibly built React Flow frontend packaged as Spring Boot classpath resources.</description>
+
+  <properties>
+    <checkstyle.skip>true</checkstyle.skip>
+    <frontend-maven-plugin.version>1.15.1</frontend-maven-plugin.version>
+    <jacoco.skip>true</jacoco.skip>
+    <node.version>v22.14.0</node.version>
+    <npm.version>10.9.2</npm.version>
+    <pmd.skip>true</pmd.skip>
+    <spotbugs.skip>true</spotbugs.skip>
+  </properties>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>com.github.eirslett</groupId>
+        <artifactId>frontend-maven-plugin</artifactId>
+        <version>${frontend-maven-plugin.version}</version>
+        <configuration>
+          <installDirectory>${project.build.directory}/toolchain</installDirectory>
+          <workingDirectory>${project.basedir}</workingDirectory>
+        </configuration>
+        <executions>
+          <execution>
+            <id>install-node-and-npm</id>
+            <goals>
+              <goal>install-node-and-npm</goal>
+            </goals>
+            <phase>generate-resources</phase>
+            <configuration>
+              <nodeVersion>${node.version}</nodeVersion>
+              <npmVersion>${npm.version}</npmVersion>
+            </configuration>
+          </execution>
+          <execution>
+            <id>npm-ci</id>
+            <goals>
+              <goal>npm</goal>
+            </goals>
+            <phase>generate-resources</phase>
+            <configuration>
+              <arguments>ci --no-audit --no-fund</arguments>
+            </configuration>
+          </execution>
+          <execution>
+            <id>npm-verify</id>
+            <goals>
+              <goal>npm</goal>
+            </goals>
+            <phase>generate-resources</phase>
+            <configuration>
+              <arguments>run verify</arguments>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+
+      <plugin>
+        <artifactId>maven-resources-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>package-production-frontend</id>
+            <goals>
+              <goal>copy-resources</goal>
+            </goals>
+            <phase>process-resources</phase>
+            <configuration>
+              <outputDirectory>${project.build.outputDirectory}/workbench-ui</outputDirectory>
+              <resources>
+                <resource>
+                  <directory>${project.build.directory}/frontend-dist</directory>
+                  <filtering>false</filtering>
+                </resource>
+              </resources>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+
+      <plugin>
+        <artifactId>maven-jar-plugin</artifactId>
+      </plugin>
+
+      <plugin>
+        <groupId>com.diffplug.spotless</groupId>
+        <artifactId>spotless-maven-plugin</artifactId>
+        <configuration>
+          <markdown>
+            <excludes>
+              <exclude>node_modules/**/*.md</exclude>
+              <exclude>target/**/*.md</exclude>
+            </excludes>
+          </markdown>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+</project>

@@ -1,21 +1,15 @@
-# ADR-007: Editor Stack Selection for Experiment Modeling Workbench
+# ADR-007: React Flow as the production workflow editor adapter
 
-**Issue**: [#221](https://github.com/carstenartur/audio-analyzer/issues/221)  
-**Status**: Accepted — React Flow + Yjs  
-**Date**: 2026-07-07  
-**Accepted**: 2026-07-08  
-**Related spikes**: [#219 GLSP spike notes](glsp-spike-notes.md), [#220 React Flow/Yjs spike notes](react-flow-yjs-spike-notes.md)
-
----
+**Issue:** [#221](https://github.com/carstenartur/audio-analyzer/issues/221)  
+**Status:** Accepted  
+**Decision date:** 2026-07-08  
+**Production packaging:** issue #269
 
 ## Context
 
-The Experiment Modeling Workbench (issue #206) needs a graph editor. Two candidates must be evaluated with comparable spikes:
+The Experiment Modeling Workbench needs a browser graph editor while keeping the existing Java workflow model authoritative. Comparable GLSP and React Flow/Yjs spikes evaluated typed ports, semantic validation, collaboration readiness, replay/undo boundaries and maintainability.
 
-1. **GLSP** (Graphical Language Server Protocol) — Eclipse/EclipseSource model-driven editor
-2. **React Flow + Yjs** — lightweight React graph renderer with optional CRDT collaboration helpers
-
-The canonical workflow state must always remain in:
+The canonical workflow state remains:
 
 ```text
 audio-core Workflow
@@ -23,214 +17,94 @@ audio-core Workflow
   -> VersionedWorkflowStore
 ```
 
-The editor is an adapter layer only. It must translate user gestures into semantic `WorkflowOperation` values; it must not become the source of truth.
+The editor translates user gestures into semantic operations and renders the server projection. It is not a second workflow model.
 
-This ADR is **accepted**. The decision is based on the comparable spike evidence from
-[#219 GLSP spike notes](glsp-spike-notes.md) and [#220 React Flow/Yjs spike notes](react-flow-yjs-spike-notes.md).
+## Decision
 
----
+Use **React Flow** as the maintained production rendering/input adapter.
 
-## Evaluation criteria
-
-|              Criterion              | Weight |
-|-------------------------------------|--------|
-| Server-authoritative workflow model | High   |
-| Typed ports and semantic validation | High   |
-| Personal undo feasibility           | High   |
-| Deterministic replay/audit          | High   |
-| Adapter complexity / cognitive load | High   |
-| Future collaboration readiness      | Medium |
-| Maintainability                     | Medium |
-
----
-
-## Option A: GLSP
-
-### What GLSP owns
-
-- JSON-based diagram model (GModel) rendered in a VS Code / Eclipse Theia / browser panel
-- Node, edge and port rendering
-- Layout computation helpers
-- Client-server JSON-RPC protocol
-
-### What GLSP must not own
-
-- Canonical workflow state — GModel is a derived view of `audio-core Workflow`
-- Validation logic — `WorkflowValidator` owns type-compatibility checks
-- Persistence — `VersionedWorkflowStore` owns durable checkpoints
-
-### Integration pattern
-
-```text
-User gesture (GLSP client)
-  -> CreateNodeOperation / CreateEdgeOperation (GLSP action)
-  -> WorkflowOperationHandler (Audio Analyzer server)
-      translates GModel action -> WorkflowOperation
-      applies WorkflowOperation to WorkflowOperationLog
-      updates GModel projection from new Workflow state
-  -> GModel delta -> GLSP client
-```
-
-### Strengths
-
-- Purpose-built model-driven editor with typed diagrams
-- Rich port and connector model natively
-- Server-authoritative by design when the GLSP server is wired to the domain model
-- Eclipse ecosystem, mature tooling
-
-### Weaknesses
-
-- High setup complexity (Theia or VS Code extension host likely required)
-- Steep learning curve for developers unfamiliar with the GLSP ecosystem
-- Two-model overhead: GModel + audio-core Workflow require explicit synchronization
-- Large framework footprint for the first research-workbench MVP
-
----
-
-## Option B: React Flow + Yjs
-
-### What React Flow owns
-
-- Node and edge rendering in the browser
-- Layout drag-and-drop (client-side only)
-- Viewport and zoom state
-
-### What Yjs may own (optional, scoped)
-
-- Awareness state (user cursors, presence)
-- Optimistic client-side layout helpers
-- Local collaboration helpers that are later reconciled through semantic operations
-
-### What React Flow/Yjs must not own
-
-- Canonical workflow state — always held server-side in `audio-core Workflow`
-- Semantic validation — stays in `WorkflowValidator`
-- Durable history — stays in `VersionedWorkflowStore`
-- Conflict resolution for semantic operations — CRDT merges must never hide semantic conflicts
-
-### Integration pattern
-
-```text
-User gesture (React Flow UI)
-  -> HTTP/WebSocket call to Audio Analyzer application service
-      validates WorkflowOperation (WorkflowValidator)
-      applies WorkflowOperation to WorkflowOperationLog
-      optionally commits to VersionedWorkflowStore
-      returns updated Workflow projection
-  -> React Flow node/edge state updated from server response
-```
-
-### Strengths
-
-- Low barrier to entry (standard React + npm)
-- Flexible rendering: typed ports can be rendered as custom node handles
-- Yjs awareness is optional and additive; collaboration can be wired in later
-- Fewer framework layers between developer and browser
-
-### Weaknesses
-
-- No built-in model-driven constraint enforcement
-- Requires explicit discipline to keep the server authoritative
-- Optimistic updates risk state drift if adapters are careless
-- Yjs document state must never be used as durable canonical store
-
----
-
-## Decision: React Flow + Yjs
-
-**Accepted** based on spike evidence from
-[glsp-spike-notes.md](glsp-spike-notes.md) and
-[react-flow-yjs-spike-notes.md](react-flow-yjs-spike-notes.md).
-
-### Why React Flow + Yjs keeps cognitive load lower
-
-1. **Single model** — React Flow state is always a derived view of the server projection. There is
-   no second canonical model (GModel) that must be kept in sync with `audio-core Workflow`.
-2. **Narrow adapter surface** — a developer needs to understand one HTTP/WebSocket adapter and one
-   `WorkflowEditorService` class. No extension host, no JSON-RPC protocol, no GModel lifecycle.
-3. **Research-scale workbench** — the first workbench is a productivity tool for researchers, not
-   an enterprise IDE. React Flow's npm-based setup fits the scope.
-4. **Testable without a browser** — the `WorkflowEditorService` can be tested with plain Java unit
-   tests asserting on `WorkflowProjection` responses.
-5. **Yjs is optional and additive** — awareness/presence can be introduced later without changing
-   the server-authoritative design.
-
-### Why GLSP was not chosen
-
-GLSP is architecturally sound and correctly encourages server-authoritative operation flows.
-However, for this workbench:
-
-- Setup requires a GLSP server process plus a Theia/VS Code extension host before any graph is
-  visible.
-- Every mutation must be reflected in both GModel and `audio-core Workflow`; a GModel projection
-  bug diverges silently.
-- A developer unfamiliar with GLSP needs to learn the JSON-RPC protocol, `GModelState`,
-  `OperationHandler` lifecycle and the Sprotty/React client model before writing a test.
-- The setup and learning cost is disproportionate to the research-workbench scope.
-
-GLSP remains a valid fallback path (see Migration / fallback below).
-
-### What this decision does not change
-
-- `audio-core Workflow` remains the semantic domain model.
-- `WorkflowOperationLog` remains the replay/undo mechanism.
-- `VersionedWorkflowStore` remains the persistence facade.
+- `audio-web-editor` is the single maintained browser source module.
+- React Flow owns rendering, selection, viewport and local layout interaction.
+- Semantic changes are submitted to the server and accepted UI state is rebuilt from the returned `WorkflowProjection`.
 - `WorkflowValidator` remains the type-compatibility authority.
-- Layer boundaries enforced by `ArchitectureFitnessTest` remain unchanged.
+- `WorkflowOperationLog` remains the semantic replay/undo foundation.
+- `VersionedWorkflowStore` remains the checkpoint/history facade.
+- Yjs is optional for non-semantic awareness or UI helpers and is not a mandatory production dependency.
+- GLSP remains a fallback adapter, not a second production editor maintained in parallel.
 
----
+## Rationale
 
-## Boundaries that any final decision must enforce
+### Lower adapter complexity
 
-|          Layer           |                      Owns                       |                Must not own                 |
-|--------------------------|-------------------------------------------------|---------------------------------------------|
-| Graph editor UI          | Node/edge rendering, layout, viewport state     | Canonical workflow, validation, history     |
-| Yjs or equivalent helper | Awareness/presence, optional optimistic helpers | Durable state, semantic conflict resolution |
-| HTTP/WebSocket adapter   | `WorkflowOperation` translation                 | Persistence internals, DSL format details   |
-| Application service      | Validate, apply, checkpoint workflow operations | UI rendering, storage internals             |
-| `VersionedWorkflowStore` | Durable checkpoints and history                 | Editor state, collaboration sessions        |
-| `audio-core Workflow`    | Semantic graph, operations, execution snapshots | UI, persistence, JGit, React, Yjs           |
+React Flow needs one browser component and the existing HTTP/SSE application boundary. GLSP would add GModel lifecycle, action translation and a larger protocol/runtime surface while still requiring synchronization with `audio-core Workflow`.
 
----
+### Server authority remains explicit
 
-## Acceptance record
+The accepted flow is:
 
-This ADR was accepted on 2026-07-08 and the server-side slice was implemented on 2026-07-09:
+```text
+React Flow gesture
+  -> semantic HTTP command
+  -> WorkflowEditorService
+  -> validation and WorkflowOperationLog append
+  -> returned WorkflowProjection
+  -> React Flow state replacement
+```
 
-- [glsp-spike-notes.md](glsp-spike-notes.md) recorded the GLSP spike result (#219);
-- [react-flow-yjs-spike-notes.md](react-flow-yjs-spike-notes.md) recorded the React Flow/Yjs
-  spike result (#220);
-- `WorkflowEditorService` (`audio-core/src/main/java/org/hammer/audio/workflow/editor/`) is
-  implemented and validates operations before applying them to `WorkflowOperationLog`;
-- `WorkflowProjection` provides the React Flow–ready read model with typed-port handle
-  descriptors (`NodeProjection`, `HandleProjection`, `EdgeProjection`) and a `properties` map
-  that surfaces node metadata values (e.g. `UpdateProperty` results) in the projection;
-- `WorkflowEditorServiceTest` proves the vertical slice with plain Java unit tests (no browser):
-  - valid edge (`SyntheticSignalGenerator(AudioBlock) → Gain(AudioBlock)`) accepted and projected;
-  - `Dataset → AudioBlock` type-mismatch rejected with `WorkflowOperationRejectedException`; log unchanged;
-  - `UpdateProperty` on Gain node accepted; property value `"1.5"` asserted in the returned projection;
-  - `DisconnectPorts` removes an existing edge; returned projection has zero edges; operation
-    recorded only after validation passes;
-- `WorkflowEditorHttpAdapter` (`audio-app/src/main/java/org/hammer/audio/workflow/editor/http/`)
-  exposes `GET /workflow/projection` and `POST /workflow/operations` using the JDK built-in
-  `HttpServer`; rejected operations return HTTP 422 with a violations list;
-- `workflow-editor-spike/WorkflowEditorComponent.tsx` shows the matching React Flow component
-  that consumes the projection and posts operations to the service; edge deletions are
-  intercepted before local commit and sent as `DisconnectPorts` to the server;
-- `workflow-editor-spike/package.json`, `vite.config.ts`, `tsconfig.json`, `index.html` and
-  `src/main.tsx` make the spike buildable with `npm install && npm run dev` from
-  `workflow-editor-spike/` without any manual file copying;
-- the decision above explains why React Flow + Yjs keeps cognitive load lower than GLSP for this
-  workbench scope.
+Optimistic browser state must not become durable or hide a rejected semantic operation.
 
----
+### Appropriate workbench scope
 
-## Migration / fallback
+The project needs a modular research workbench rather than a complete IDE platform. A pinned Vite/React build provides the required typed-node UX with a smaller maintenance burden.
 
-If React Flow proves too difficult to keep server-authoritative, the fallback path is:
+## Ownership boundaries
 
-1. Extract all semantic operation translation into a clean `WorkflowEditorService` that accepts only `WorkflowOperation` inputs and returns `Workflow` projections.
-2. Replace React Flow with GLSP by pointing GLSP action handlers at `WorkflowEditorService`.
-3. Keep `audio-core` model, DSL serializer and `VersionedWorkflowStore` unchanged.
+|          Layer           |                          Owns                          |                  Must not own                   |
+|--------------------------|--------------------------------------------------------|-------------------------------------------------|
+| React Flow UI            | Node/edge rendering, selection, viewport, local layout | Canonical workflow, validation, durable history |
+| Optional Yjs helper      | Awareness and non-semantic UI state                    | Nodes, edges, semantic operations, checkpoints  |
+| HTTP/SSE adapter         | Command/response and event transport                   | Persistence implementation, UI rendering        |
+| Application service      | Validate, order and apply semantic operations          | Browser state, storage internals                |
+| `VersionedWorkflowStore` | Durable checkpoints and history                        | Live editor state, presence                     |
+| `audio-core Workflow`    | Semantic graph and execution snapshots                 | React, Yjs, persistence frameworks              |
 
-If GLSP proves too heavy for the first useful editor, keep React Flow as the UI layer and limit Yjs to awareness/layout helpers until semantic collaboration is implemented through `WorkflowOperation` events.
+## Production implementation
+
+Issue #269 promotes the spike into `audio-web-editor`:
+
+- Node and npm versions are downloaded and pinned by Maven.
+- `npm ci`, strict type checking, frontend tests and architecture lint run from `mvn clean verify`.
+- Two independent clean Vite builds must produce identical filenames and bytes.
+- Vite emits content-hashed assets below `target/` only.
+- Maven packages the assets under `/workbench-ui` in the `audio-web-editor` JAR.
+- `audio-app` consumes that JAR and the executable Spring Boot workbench serves the application without a Vite server.
+- `workflow-editor-spike/README.md` remains historical evidence; it is not a second executable source tree.
+
+## Evidence
+
+- [GLSP spike notes](glsp-spike-notes.md)
+- [React Flow/Yjs spike notes](react-flow-yjs-spike-notes.md)
+- `WorkflowEditorServiceTest` for accepted/rejected semantic operations
+- `ProductionFrontendPackagingTest` for classpath assets and cache-safe names
+- `WorkbenchSpaControllerTest` for client-route forwarding without API capture
+- `audio-web-editor/test/` for browser-projection utilities
+
+## Consequences
+
+### Positive
+
+- One clear production frontend location.
+- Reproducible clean builds without developer-global Node installations.
+- Static assets ship with the normal application artifact.
+- Browser code has no storage implementation knowledge.
+- Collaboration, undo and execution UI can build on the same adapter without moving domain authority into JavaScript.
+
+### Trade-offs
+
+- Typed semantic constraints must be represented explicitly by server projections and command responses.
+- Browser and Java contracts require compatibility tests.
+- Rich IDE-style features may require additional React Flow adapters or a future GLSP reassessment.
+
+## Fallback
+
+If React Flow cannot remain server-authoritative, keep `WorkflowEditorService`, the workflow DSL and `VersionedWorkflowStore` unchanged and replace only the browser adapter with GLSP action handlers. No persistence or domain migration is implied by that fallback.

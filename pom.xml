@@ -25,6 +25,7 @@
     <module>audio-dsp</module>
     <module>audio-plugin-api</module>
     <module>audio-experimental-acoustic</module>
+    <module>audio-web-editor</module>
     <module>audio-app</module>
   </modules>
 

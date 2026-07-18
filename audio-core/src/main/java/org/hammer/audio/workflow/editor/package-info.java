@@ -1,7 +1,8 @@
 /**
- * Application-service layer for the web workflow editor MVP (ADR-007 / issue #210).
+ * Application-service layer for the web workflow editor (ADR-007).
  *
- * <p>This package provides the server-side API surface that the React Flow editor adapter calls:
+ * <p>This package provides the server-side API surface that the maintained React Flow editor
+ * adapter calls:
  *
  * <ul>
  *   <li>{@link org.hammer.audio.workflow.editor.WorkflowEditorService} — accepts {@code
@@ -17,6 +18,7 @@
  *
  * <p><b>Dependency rules</b>: this package must not depend on Swing, JGit, React, Yjs, Selenium,
  * Playwright, Testcontainers or any web framework. It is a pure Java application-service boundary.
- * The web layer lives in {@code workflow-editor-spike/}; HTTP wiring lives in {@code audio-app}.
+ * The maintained browser adapter lives in the {@code audio-web-editor} Maven module; HTTP wiring
+ * lives in {@code audio-app}.
  */
 package org.hammer.audio.workflow.editor;
