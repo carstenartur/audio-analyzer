@@ -12,6 +12,7 @@ import org.hammer.audio.workflow.collaboration.store.WorkflowOperationPersistenc
 import org.hammer.audio.workflow.collaboration.store.WorkflowOutboxEventData;
 import org.hammer.audio.workflow.collaboration.store.WorkflowSessionAppendCommand;
 import org.hammer.audio.workflow.collaboration.store.WorkflowSessionAppendResult;
+import org.hammer.audio.workflow.collaboration.store.WorkflowSessionRevisionConflictException;
 import org.hammer.audio.workflow.collaboration.store.WorkflowSessionStateStore;
 import org.hammer.audio.workflow.dsl.WorkflowDslParser;
 import org.hammer.audio.workflow.dsl.WorkflowDslSerializer;
@@ -90,6 +91,13 @@ final class WorkflowSessionPersistenceCoordinator {
     return OperationIdentity.from(WorkflowOperationPersistenceCodec.encode(operation));
   }
 
+  void requireExpectedRevision(String sessionId, long expectedRevision, long actualRevision) {
+    if (expectedRevision != actualRevision) {
+      throw new WorkflowSessionRevisionConflictException(
+          sessionId, expectedRevision, actualRevision);
+    }
+  }
+
   AppendOutcome append(
       String sessionId,
       long expectedRevision,
@@ -128,25 +136,24 @@ final class WorkflowSessionPersistenceCoordinator {
         result.duplicate());
   }
 
-  LifecycleState advanceEventSequence(
-      String sessionId, long currentRevision, long currentSequence) {
+  long advanceEventSequence(String sessionId, long currentRevision, long currentSequence) {
     long nextSequence = Math.addExact(currentSequence, 1);
     if (!durable()) {
-      return new LifecycleState(currentRevision, nextSequence, false);
+      return nextSequence;
     }
     StoredWorkflowSession advanced = stateStore.advanceEventSequence(sessionId, currentSequence);
     validateLifecycleState(sessionId, advanced, currentRevision, nextSequence, false);
-    return LifecycleState.from(advanced);
+    return advanced.sequence();
   }
 
-  LifecycleState close(String sessionId, long currentRevision, long currentSequence) {
+  long close(String sessionId, long currentRevision, long currentSequence) {
     long nextSequence = Math.addExact(currentSequence, 1);
     if (!durable()) {
-      return new LifecycleState(currentRevision, nextSequence, true);
+      return nextSequence;
     }
     StoredWorkflowSession closed = stateStore.close(sessionId, currentRevision, currentSequence);
     validateLifecycleState(sessionId, closed, currentRevision, nextSequence, true);
-    return LifecycleState.from(closed);
+    return closed.sequence();
   }
 
   private RecoveredSession recover(StoredWorkflowSession storedSession) {
@@ -317,13 +324,6 @@ final class WorkflowSessionPersistenceCoordinator {
     AppendOutcome {
       Objects.requireNonNull(workflow, "workflow");
       Objects.requireNonNull(identity, "identity");
-    }
-  }
-
-  record LifecycleState(long revision, long sequence, boolean closed) {
-
-    static LifecycleState from(StoredWorkflowSession session) {
-      return new LifecycleState(session.revision(), session.sequence(), session.closed());
     }
   }
 }
