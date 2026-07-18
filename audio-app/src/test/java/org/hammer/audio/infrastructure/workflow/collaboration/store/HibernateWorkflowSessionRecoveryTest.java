@@ -26,6 +26,7 @@ import org.hammer.audio.workflow.collaboration.WorkflowSessionRecoveryException;
 import org.hammer.audio.workflow.collaboration.WorkflowSessionRegistry;
 import org.hammer.audio.workflow.collaboration.WorkflowSessionRegistry.SessionSnapshot;
 import org.hammer.audio.workflow.collaboration.store.StoredWorkflowSession;
+import org.hammer.audio.workflow.collaboration.store.WorkflowSessionRevisionConflictException;
 import org.junit.jupiter.api.Test;
 
 class HibernateWorkflowSessionRecoveryTest {
@@ -106,23 +107,39 @@ class HibernateWorkflowSessionRecoveryTest {
                 SESSION_ID,
                 CollaborationMode.SHARED_SESSION_PERSONAL_UNDO,
                 OWNER,
+                0,
                 createNode("operation.create", FIRST_OPERATION_TIME.plusSeconds(60)));
         assertEquals(canonicalBeforeRestart, retryResult);
         assertEquals(5, eventHub.currentSequence(SESSION_ID));
         assertEquals(1, store.operations(SESSION_ID).size());
         assertEquals(1, store.pendingOutbox(10).size());
 
+        WorkflowOperation.RenameNode staleRename =
+            renameNode("operation.stale", FIRST_OPERATION_TIME.plusSeconds(90), "Stale input");
+        WorkflowSessionRevisionConflictException conflict =
+            assertThrows(
+                WorkflowSessionRevisionConflictException.class,
+                () ->
+                    registry.applyOperation(
+                        SESSION_ID,
+                        CollaborationMode.SHARED_SESSION_PERSONAL_UNDO,
+                        OWNER,
+                        0,
+                        staleRename));
+        assertEquals(0, conflict.expectedRevision());
+        assertEquals(1, conflict.actualRevision());
+        assertEquals(canonicalBeforeRestart, registry.workflow(SESSION_ID));
+        assertEquals(1, store.operations(SESSION_ID).size());
+
         Workflow renamed =
             registry.applyOperation(
                 SESSION_ID,
                 CollaborationMode.SHARED_SESSION_PERSONAL_UNDO,
                 OWNER,
-                new WorkflowOperation.RenameNode(
+                1,
+                renameNode(
                     "operation.rename",
                     FIRST_OPERATION_TIME.plusSeconds(120),
-                    OWNER.actorId(),
-                    "node.input",
-                    "Input",
                     "Renamed input"));
         assertEquals("Renamed input", renamed.nodes().getFirst().label());
         assertEquals(2, registry.inspect(SESSION_ID).revision());
@@ -186,6 +203,17 @@ class HibernateWorkflowSessionRecoveryTest {
   private static WorkflowOperation.CreateNode createNode(String operationId, Instant timestamp) {
     Node node = new Node("node.input", "input", "Input", List.of(), List.of(), Metadata.empty());
     return new WorkflowOperation.CreateNode(operationId, timestamp, OWNER.actorId(), node);
+  }
+
+  private static WorkflowOperation.RenameNode renameNode(
+      String operationId, Instant timestamp, String newLabel) {
+    return new WorkflowOperation.RenameNode(
+        operationId,
+        timestamp,
+        OWNER.actorId(),
+        "node.input",
+        "Input",
+        newLabel);
   }
 
   private static Workflow emptyWorkflow() {
