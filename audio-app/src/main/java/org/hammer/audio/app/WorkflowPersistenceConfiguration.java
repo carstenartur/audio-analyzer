@@ -9,6 +9,7 @@ import java.util.Objects;
 import java.util.Properties;
 import java.util.Set;
 import javax.sql.DataSource;
+import org.hammer.audio.infrastructure.workflow.collaboration.schema.WorkflowSchemaMigrationResult;
 import org.hammer.audio.infrastructure.workflow.store.FileSystemJGitVersionedWorkflowStore;
 import org.hammer.audio.infrastructure.workflow.store.HibernateJGitVersionedWorkflowStore;
 import org.hammer.audio.workflow.store.VersionedWorkflowStore;
@@ -33,8 +34,10 @@ public class WorkflowPersistenceConfiguration {
       DataSource dataSource,
       Environment environment,
       List<WorkflowPersistenceEntityContributor> entityContributors,
+      WorkflowSchemaMigrationResult migrationResult,
       @Value("${workbench.persistence.schema-action:validate}") String schemaAction) {
     requireExplicitDataSource(environment);
+    migrationResult.requireValidateSchemaAction(schemaAction);
     Properties properties = new Properties();
     properties.put("hibernate.connection.datasource", dataSource);
     properties.setProperty("hibernate.hbm2ddl.auto", requireNotBlank(schemaAction, "schemaAction"));
