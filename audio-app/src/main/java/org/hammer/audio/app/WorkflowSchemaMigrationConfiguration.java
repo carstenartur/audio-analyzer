@@ -7,6 +7,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 
 /** Runs explicitly enabled versioned migrations before Hibernate validates the shared schema. */
 @Configuration
@@ -17,6 +18,7 @@ public class WorkflowSchemaMigrationConfiguration {
   @Bean
   public WorkflowSchemaMigrationResult workflowSchemaMigrationResult(
       DataSource dataSource,
+      Environment environment,
       @Value("${workbench.persistence.migrations.enabled:false}") boolean migrationsEnabled,
       @Value("${workbench.persistence.migrations.adopt-core-0.1.4:false}")
           boolean adoptLegacyCoreSchema,
@@ -25,7 +27,22 @@ public class WorkflowSchemaMigrationConfiguration {
     if (!migrationsEnabled) {
       return WorkflowSchemaMigrationResult.skipped();
     }
+    requireExplicitDataSource(environment);
     return new WorkflowSchemaMigrator(dataSource)
         .migrate(adoptLegacyCoreSchema, adoptPreLeaseCollaborationSchema);
+  }
+
+  private static void requireExplicitDataSource(Environment environment) {
+    String jdbcUrl = environment.getProperty("spring.datasource.url");
+    String jndiName = environment.getProperty("spring.datasource.jndi-name");
+    if (isBlank(jdbcUrl) && isBlank(jndiName)) {
+      throw new IllegalStateException(
+          "Versioned workflow migrations require spring.datasource.url "
+              + "or spring.datasource.jndi-name");
+    }
+  }
+
+  private static boolean isBlank(String value) {
+    return value == null || value.isBlank();
   }
 }
