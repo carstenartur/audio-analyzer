@@ -313,19 +313,43 @@ public final class WorkflowSessionRegistry {
       CollaborationMode mode,
       OperationActor owner,
       Instant createdAt,
-      Workflow workflow) {}
+      Workflow workflow) {
+
+    SessionDefinition {
+      sessionId = requireNotBlank(sessionId, "sessionId");
+      Objects.requireNonNull(mode, "mode");
+      Objects.requireNonNull(owner, "owner");
+      Objects.requireNonNull(createdAt, "createdAt");
+      Objects.requireNonNull(workflow, "workflow");
+    }
+  }
 
   private record RecoveryState(
       List<StoredWorkflowOperation> operations,
       boolean ownerConnected,
       long revision,
-      long sequence) {}
+      long sequence) {
+
+    RecoveryState {
+      operations = List.copyOf(Objects.requireNonNull(operations, "operations"));
+      if (revision < 0 || sequence < revision) {
+        throw new IllegalArgumentException("Invalid recovery revision/event sequence");
+      }
+    }
+  }
 
   private record EntryServices(
       WorkflowSessionEventHub eventHub,
       WorkflowSessionStateStore stateStore,
       WorkflowDslParser dslParser,
-      WorkflowDslSerializer dslSerializer) {}
+      WorkflowDslSerializer dslSerializer) {
+
+    EntryServices {
+      Objects.requireNonNull(eventHub, "eventHub");
+      Objects.requireNonNull(dslParser, "dslParser");
+      Objects.requireNonNull(dslSerializer, "dslSerializer");
+    }
+  }
 
   private static final class SessionEntry {
     private final String sessionId;
