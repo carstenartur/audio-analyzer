@@ -59,12 +59,12 @@ class CollaborationSchemaMigrationIntegrationTest {
 
     assertTrue(migration.applied());
     assertEquals(2, migration.coreMigrationsExecuted());
-    assertEquals(2, migration.collaborationMigrationsExecuted());
+    assertEquals(3, migration.collaborationMigrationsExecuted());
     assertEquals(
         List.of("0.1.4", "0.1.5"),
         migrationVersions(database, CoreSchemaMigrations.SCHEMA_HISTORY_TABLE));
     assertEquals(
-        List.of("1", "2"),
+        List.of("1", "2", "3"),
         migrationVersions(database, CollaborationSchemaMigrations.SCHEMA_HISTORY_TABLE));
 
     String sessionId = "migrated.session";
@@ -115,12 +115,12 @@ class CollaborationSchemaMigrationIntegrationTest {
     WorkflowSchemaMigrationResult migration = migrate(database, true);
     assertTrue(migration.applied());
     assertEquals(2, migration.coreMigrationsExecuted());
-    assertEquals(1, migration.collaborationMigrationsExecuted());
+    assertEquals(2, migration.collaborationMigrationsExecuted());
     assertEquals(
         List.of("0.1.4", "0.1.5"),
         migrationVersions(database, CoreSchemaMigrations.SCHEMA_HISTORY_TABLE));
     assertEquals(
-        List.of("1", "2"),
+        List.of("1", "2", "3"),
         migrationVersions(database, CollaborationSchemaMigrations.SCHEMA_HISTORY_TABLE));
 
     try (HibernateSessionFactoryProvider provider = provider(database)) {
@@ -138,6 +138,8 @@ class CollaborationSchemaMigrationIntegrationTest {
       assertEquals(1, operations.size());
       assertEquals("legacy.operation", operations.getFirst().operationId());
       assertEquals("legacy-operation-payload", operations.getFirst().payload());
+      assertFalse(operations.getFirst().hasOperationBody());
+      assertTrue(operations.getFirst().operation().isEmpty());
 
       StoredWorkflowOutboxEntry pending = outboxStore.find("legacy.event.pending").orElseThrow();
       assertTrue(pending.pending());
