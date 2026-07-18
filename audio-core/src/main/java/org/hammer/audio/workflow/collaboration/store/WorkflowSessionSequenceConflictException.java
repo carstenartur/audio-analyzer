@@ -12,13 +12,13 @@ public final class WorkflowSessionSequenceConflictException extends RuntimeExcep
   /** Creates an event-sequence conflict with stable machine-readable values. */
   public WorkflowSessionSequenceConflictException(
       String sessionId, long expectedSequence, long actualSequence) {
-    super(
-        "Expected workflow session event sequence "
-            + expectedSequence
-            + " but found "
-            + actualSequence
-            + " for session "
-            + sessionId);
+    this(sessionId, expectedSequence, actualSequence, null);
+  }
+
+  /** Creates an event-sequence conflict while preserving the persistence failure. */
+  public WorkflowSessionSequenceConflictException(
+      String sessionId, long expectedSequence, long actualSequence, Throwable cause) {
+    super(message(sessionId, expectedSequence, actualSequence), cause);
     this.affectedSessionId = Objects.requireNonNull(sessionId, "sessionId");
     this.requestedSequence = expectedSequence;
     this.currentSequence = actualSequence;
@@ -37,5 +37,14 @@ public final class WorkflowSessionSequenceConflictException extends RuntimeExcep
   /** Returns the event sequence currently stored in the database. */
   public long actualSequence() {
     return currentSequence;
+  }
+
+  private static String message(String sessionId, long expectedSequence, long actualSequence) {
+    return "Expected workflow session event sequence "
+        + expectedSequence
+        + " but found "
+        + actualSequence
+        + " for session "
+        + sessionId;
   }
 }
