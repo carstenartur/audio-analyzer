@@ -3,6 +3,7 @@ package org.hammer.audio.workflow.editor.http;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.PositiveOrZero;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -18,6 +19,18 @@ import tools.jackson.databind.JsonNode;
 
 /** Request and response models for the workflow-session REST API. */
 public final class WorkflowSessionApiModels {
+
+  private WorkflowSessionApiModels() {
+    // Utility class.
+  }
+
+  static String defaultWorkflowId(String sessionId) {
+    return "workflow." + sessionId;
+  }
+
+  static String defaultWorkflowName(String sessionId) {
+    return "Workflow " + sessionId;
+  }
 
   /**
    * Actor identity supplied by the transport/authentication boundary.
@@ -52,9 +65,11 @@ public final class WorkflowSessionApiModels {
 
     Workflow initialWorkflow() {
       String resolvedWorkflowId =
-          workflowId == null || workflowId.isBlank() ? "workflow." + sessionId : workflowId;
+          workflowId == null || workflowId.isBlank() ? defaultWorkflowId(sessionId) : workflowId;
       String resolvedWorkflowName =
-          workflowName == null || workflowName.isBlank() ? "Workflow " + sessionId : workflowName;
+          workflowName == null || workflowName.isBlank()
+              ? defaultWorkflowName(sessionId)
+              : workflowName;
       return new Workflow(resolvedWorkflowId, resolvedWorkflowName, List.of(), List.of());
     }
   }
@@ -90,11 +105,13 @@ public final class WorkflowSessionApiModels {
    *
    * @param mode collaboration mode expected by the session
    * @param actor authenticated actor applying the operation
+   * @param expectedRevision optional semantic revision observed by the client
    * @param operation semantic workflow operation payload
    */
   public record SessionOperationRequest(
       @NotNull CollaborationMode mode,
       @Valid @NotNull ActorRequest actor,
+      @PositiveOrZero Long expectedRevision,
       @NotNull JsonNode operation) {
     public SessionOperationRequest {
       Objects.requireNonNull(mode, "mode");
@@ -216,6 +233,8 @@ public final class WorkflowSessionApiModels {
    * @param participants currently joined participants
    * @param operationCount number of applied operations
    * @param workflowId canonical workflow identifier
+   * @param revision current semantic workflow revision
+   * @param sequence latest collaboration-event sequence
    */
   public record SessionResponse(
       String sessionId,
@@ -224,7 +243,9 @@ public final class WorkflowSessionApiModels {
       Instant createdAt,
       List<ActorResponse> participants,
       int operationCount,
-      String workflowId) {
+      String workflowId,
+      long revision,
+      long sequence) {
     public SessionResponse {
       participants = List.copyOf(Objects.requireNonNull(participants, "participants"));
     }
@@ -237,7 +258,9 @@ public final class WorkflowSessionApiModels {
           snapshot.createdAt(),
           snapshot.participants().stream().map(ActorResponse::from).toList(),
           snapshot.operationCount(),
-          snapshot.workflowId());
+          snapshot.workflowId(),
+          snapshot.revision(),
+          snapshot.sequence());
     }
   }
 }

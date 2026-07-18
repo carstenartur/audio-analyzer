@@ -5,6 +5,8 @@ import java.net.URI;
 import java.util.List;
 import java.util.Objects;
 import org.hammer.audio.workflow.collaboration.WorkflowSessionException;
+import org.hammer.audio.workflow.collaboration.store.WorkflowSessionRevisionConflictException;
+import org.hammer.audio.workflow.collaboration.store.WorkflowSessionSequenceConflictException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -29,6 +31,40 @@ public final class WorkflowApiExceptionHandler {
     if (exception.sessionId() != null) {
       problem.setProperty("sessionId", exception.sessionId());
     }
+    return problem;
+  }
+
+  /** Maps stale semantic commands to a machine-readable 409 response. */
+  @ExceptionHandler(WorkflowSessionRevisionConflictException.class)
+  public ProblemDetail handleRevisionConflict(
+      WorkflowSessionRevisionConflictException exception, HttpServletRequest request) {
+    ProblemDetail problem =
+        problem(
+            HttpStatus.CONFLICT,
+            "workflow-session-revision-conflict",
+            exception.getMessage(),
+            request);
+    problem.setProperty("code", "WORKFLOW_SESSION_REVISION_CONFLICT");
+    problem.setProperty("sessionId", exception.sessionId());
+    problem.setProperty("expectedRevision", exception.expectedRevision());
+    problem.setProperty("actualRevision", exception.actualRevision());
+    return problem;
+  }
+
+  /** Maps stale collaboration-event cursors to a machine-readable 409 response. */
+  @ExceptionHandler(WorkflowSessionSequenceConflictException.class)
+  public ProblemDetail handleSequenceConflict(
+      WorkflowSessionSequenceConflictException exception, HttpServletRequest request) {
+    ProblemDetail problem =
+        problem(
+            HttpStatus.CONFLICT,
+            "workflow-session-sequence-conflict",
+            exception.getMessage(),
+            request);
+    problem.setProperty("code", "WORKFLOW_SESSION_SEQUENCE_CONFLICT");
+    problem.setProperty("sessionId", exception.sessionId());
+    problem.setProperty("expectedSequence", exception.expectedSequence());
+    problem.setProperty("actualSequence", exception.actualSequence());
     return problem;
   }
 

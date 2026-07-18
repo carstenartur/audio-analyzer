@@ -1,31 +1,36 @@
 package org.hammer.audio.workflow.collaboration;
 
 import java.time.Instant;
-import java.util.ArrayList;
+import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.locks.ReentrantLock;
 import org.hammer.audio.workflow.Workflow;
 import org.hammer.audio.workflow.WorkflowOperation;
-import org.hammer.audio.workflow.WorkflowOperationLog;
 import org.hammer.audio.workflow.collaboration.WorkflowSessionException.Code;
+import org.hammer.audio.workflow.collaboration.WorkflowSessionPersistenceCoordinator.RecoveredSession;
+import org.hammer.audio.workflow.collaboration.store.WorkflowSessionStateStore;
 
 /**
  * Thread-safe application service for collaboration-session lifecycle and actor membership.
  *
- * <p>Sessions retain their canonical {@link WorkflowOperationLog} when the last participant leaves,
- * so actors can reconnect. A session is removed only by an explicit owner close operation. Session
- * mode is immutable for the complete lifetime of a session.
+ * <p>Sessions retain their canonical workflow when the last participant leaves, so actors can
+ * reconnect. A session is removed only by an explicit owner close operation. Session mode is
+ * immutable for the complete lifetime of a session.
+ *
+ * <p>When a durable store is supplied, open sessions are recovered without restoring transport
+ * connections or presence state and without replaying historical events as new events.
  */
 public final class WorkflowSessionRegistry {
 
   private static final String SESSION_ID_FIELD = "sessionId";
+  private static final long INITIAL_SESSION_EVENT_SEQUENCE = 2;
 
-  private final Map<String, SessionEntry> sessionEntries = new ConcurrentHashMap<>();
+  private final Map<String, WorkflowSessionEntry> sessionEntries = new ConcurrentHashMap<>();
   private final WorkflowSessionEventHub sessionEventHub;
+  private final WorkflowSessionPersistenceCoordinator persistence;
 
   /** Creates a registry with an in-memory bounded session-event hub. */
   public WorkflowSessionRegistry() {
@@ -35,6 +40,23 @@ public final class WorkflowSessionRegistry {
   /** Creates a registry publishing lifecycle and accepted-operation events to the supplied hub. */
   public WorkflowSessionRegistry(WorkflowSessionEventHub eventHub) {
     this.sessionEventHub = Objects.requireNonNull(eventHub, "eventHub");
+    this.persistence = WorkflowSessionPersistenceCoordinator.inMemory();
+  }
+
+  /**
+   * Creates a registry backed by durable collaboration state and recovers all open sessions.
+   *
+   * @param eventHub transport-neutral event hub
+   * @param stateStore durable collaboration state store, or {@code null} for in-memory operation
+   */
+  public WorkflowSessionRegistry(
+      WorkflowSessionEventHub eventHub, WorkflowSessionStateStore stateStore) {
+    this.sessionEventHub = Objects.requireNonNull(eventHub, "eventHub");
+    this.persistence =
+        stateStore == null
+            ? WorkflowSessionPersistenceCoordinator.inMemory()
+            : WorkflowSessionPersistenceCoordinator.durable(stateStore);
+    recoverDurableSessions();
   }
 
   /** Returns the transport-neutral event hub used by this registry. */
@@ -49,17 +71,46 @@ public final class WorkflowSessionRegistry {
     Objects.requireNonNull(mode, "mode");
     Objects.requireNonNull(owner, "owner");
     Objects.requireNonNull(initialWorkflow, "initialWorkflow");
-    SessionEntry created =
-        new SessionEntry(requiredSessionId, mode, owner, initialWorkflow, sessionEventHub);
-    SessionEntry previous = sessionEntries.putIfAbsent(requiredSessionId, created);
+    Instant createdAt = Instant.now().truncatedTo(ChronoUnit.MICROS);
+    WorkflowSessionEntry created =
+        WorkflowSessionEntry.created(
+            requiredSessionId,
+            mode,
+            owner,
+            createdAt,
+            initialWorkflow,
+            sessionEventHub,
+            persistence);
+    WorkflowSessionEntry previous = sessionEntries.putIfAbsent(requiredSessionId, created);
     if (previous != null) {
       throw error(
           Code.SESSION_ALREADY_EXISTS,
           requiredSessionId,
           "Session already exists: " + requiredSessionId);
     }
-    sessionEventHub.openSession(requiredSessionId, owner, initialWorkflow);
-    return created.snapshot();
+
+    boolean persisted = false;
+    try {
+      persistence.create(
+          requiredSessionId,
+          mode,
+          owner,
+          createdAt,
+          initialWorkflow,
+          INITIAL_SESSION_EVENT_SEQUENCE);
+      persisted = persistence.durable();
+      sessionEventHub.openSession(requiredSessionId, owner, initialWorkflow);
+      created.verifyInitialEventStream(INITIAL_SESSION_EVENT_SEQUENCE);
+      return created.snapshot();
+    } catch (RuntimeException failure) {
+      sessionEntries.remove(requiredSessionId, created);
+      if (persisted) {
+        persistence.compensateFailedCreate(
+            requiredSessionId, 0, INITIAL_SESSION_EVENT_SEQUENCE, failure);
+      }
+      throw new IllegalStateException(
+          "Failed to create collaboration session " + requiredSessionId, failure);
+    }
   }
 
   /** Joins an existing session. Duplicate joins with identical actor metadata are idempotent. */
@@ -82,23 +133,30 @@ public final class WorkflowSessionRegistry {
     return requireSession(sessionId).workflow();
   }
 
-  /** Applies an actor-authored semantic operation to an existing joined session. */
+  /** Applies an actor-authored semantic operation at the current server revision. */
   public Workflow applyOperation(
       String sessionId, CollaborationMode mode, OperationActor actor, WorkflowOperation operation) {
-    Objects.requireNonNull(mode, "mode");
-    Objects.requireNonNull(actor, "actor");
-    Objects.requireNonNull(operation, "operation");
-    if (!operation.author().equals(actor.actorId())) {
-      throw error(
-          Code.INVALID_OPERATION_AUTHOR,
-          sessionId,
-          "Operation author '"
-              + operation.author()
-              + "' does not match actor '"
-              + actor.actorId()
-              + "'");
-    }
+    assertOperationAuthor(sessionId, actor, operation);
     return requireSession(sessionId).apply(mode, actor, operation);
+  }
+
+  /**
+   * Applies an actor-authored semantic operation against an explicit client-observed revision.
+   *
+   * <p>An identical command retry remains idempotent even when its expected revision precedes the
+   * current revision.
+   */
+  public Workflow applyOperation(
+      String sessionId,
+      CollaborationMode mode,
+      OperationActor actor,
+      long expectedRevision,
+      WorkflowOperation operation) {
+    if (expectedRevision < 0) {
+      throw new IllegalArgumentException("expectedRevision must be >= 0");
+    }
+    assertOperationAuthor(sessionId, actor, operation);
+    return requireSession(sessionId).apply(mode, actor, expectedRevision, operation);
   }
 
   /** Updates non-semantic presence for a joined actor. */
@@ -123,34 +181,85 @@ public final class WorkflowSessionRegistry {
   public void close(String sessionId, String requestedByActorId) {
     String requiredSessionId = requireNotBlank(sessionId, SESSION_ID_FIELD);
     String actorId = requireNotBlank(requestedByActorId, "requestedByActorId");
-    SessionEntry entry = requireSession(requiredSessionId);
-    entry.assertOwner(actorId);
+    WorkflowSessionEntry entry = requireSession(requiredSessionId);
+    long finalSequence = entry.close(actorId);
     if (!sessionEntries.remove(requiredSessionId, entry)) {
       throw error(
           Code.SESSION_NOT_FOUND,
           requiredSessionId,
           "Session changed while closing: " + requiredSessionId);
     }
-    entry.close();
-    sessionEventHub.closeSession(requiredSessionId, entry.sessionOwner());
+    sessionEventHub.closeSession(requiredSessionId, entry.owner());
+    entry.verifyClosedEvent(finalSequence);
   }
 
   /** Returns all current sessions in stable identifier order. */
   public List<SessionSnapshot> sessions() {
     return sessionEntries.values().stream()
-        .map(SessionEntry::snapshot)
+        .map(WorkflowSessionEntry::snapshot)
         .sorted(Comparator.comparing(SessionSnapshot::sessionId))
         .toList();
   }
 
-  private SessionEntry requireSession(String sessionId) {
+  private void recoverDurableSessions() {
+    for (RecoveredSession recovered : persistence.recoverOpenSessions()) {
+      WorkflowSessionEntry.SessionDefinition definition =
+          new WorkflowSessionEntry.SessionDefinition(
+              recovered.sessionId(),
+              recovered.mode(),
+              recovered.owner(),
+              recovered.createdAt(),
+              recovered.workflow());
+      WorkflowSessionEntry.RecoveryState recoveryState =
+          new WorkflowSessionEntry.RecoveryState(
+              recovered.operations(), false, recovered.revision(), recovered.sequence());
+      WorkflowSessionEntry entry =
+          WorkflowSessionEntry.recovered(definition, recoveryState, sessionEventHub, persistence);
+      if (sessionEntries.putIfAbsent(recovered.sessionId(), entry) != null) {
+        throw new WorkflowSessionRecoveryException(
+            recovered.sessionId(),
+            "Duplicate durable collaboration session: " + recovered.sessionId());
+      }
+      try {
+        sessionEventHub.restoreSession(
+            recovered.sessionId(),
+            recovered.workflow(),
+            recovered.sequence(),
+            recovered.revision());
+      } catch (RuntimeException failure) {
+        sessionEntries.remove(recovered.sessionId(), entry);
+        throw new WorkflowSessionRecoveryException(
+            recovered.sessionId(),
+            "Failed to restore collaboration event stream for session " + recovered.sessionId(),
+            failure);
+      }
+    }
+  }
+
+  private WorkflowSessionEntry requireSession(String sessionId) {
     String requiredSessionId = requireNotBlank(sessionId, SESSION_ID_FIELD);
-    SessionEntry entry = sessionEntries.get(requiredSessionId);
+    WorkflowSessionEntry entry = sessionEntries.get(requiredSessionId);
     if (entry == null) {
       throw error(
           Code.SESSION_NOT_FOUND, requiredSessionId, "Unknown session: " + requiredSessionId);
     }
     return entry;
+  }
+
+  private static void assertOperationAuthor(
+      String sessionId, OperationActor actor, WorkflowOperation operation) {
+    Objects.requireNonNull(actor, "actor");
+    Objects.requireNonNull(operation, "operation");
+    if (!operation.author().equals(actor.actorId())) {
+      throw error(
+          Code.INVALID_OPERATION_AUTHOR,
+          sessionId,
+          "Operation author '"
+              + operation.author()
+              + "' does not match actor '"
+              + actor.actorId()
+              + "'");
+    }
   }
 
   private static WorkflowSessionException error(Code code, String sessionId, String message) {
@@ -165,226 +274,6 @@ public final class WorkflowSessionRegistry {
     return value;
   }
 
-  private static final class SessionEntry {
-    private final String sessionId;
-    private final CollaborationMode mode;
-    private final OperationActor owner;
-    private final Instant createdAt;
-    private final WorkflowOperationLog operationLog;
-    private final CollaborativeWorkflowSessionService sessionService;
-    private final WorkflowSessionEventHub eventHub;
-    private final Map<String, OperationActor> participants = new ConcurrentHashMap<>();
-    private final Map<String, WorkflowOperation> operationsById = new ConcurrentHashMap<>();
-    private final ReentrantLock lock = new ReentrantLock();
-    private volatile boolean closed;
-
-    SessionEntry(
-        String sessionId,
-        CollaborationMode mode,
-        OperationActor owner,
-        Workflow initialWorkflow,
-        WorkflowSessionEventHub eventHub) {
-      this.sessionId = sessionId;
-      this.mode = mode;
-      this.owner = owner;
-      this.eventHub = Objects.requireNonNull(eventHub, "eventHub");
-      this.createdAt = Instant.now();
-      this.operationLog = new WorkflowOperationLog(initialWorkflow);
-      this.sessionService =
-          new CollaborativeWorkflowSessionService(
-              sessionId,
-              mode,
-              operationLog,
-              new InMemoryWorkflowEventOutbox(),
-              ignored -> ignoreEvent());
-      participants.put(owner.actorId(), owner);
-    }
-
-    private static void ignoreEvent() {
-      // no-op
-    }
-
-    SessionSnapshot join(OperationActor actor) {
-      lock.lock();
-      try {
-        requireOpen();
-        if (mode == CollaborationMode.PRIVATE_WORKSPACE
-            && !owner.actorId().equals(actor.actorId())) {
-          throw error(
-              Code.PRIVATE_WORKSPACE_ACCESS_DENIED,
-              sessionId,
-              "Private workspace can only be joined by its owner: " + owner.actorId());
-        }
-        OperationActor existing = participants.get(actor.actorId());
-        if (existing != null && !existing.equals(actor)) {
-          throw error(
-              Code.ACTOR_METADATA_MISMATCH,
-              sessionId,
-              "Actor metadata mismatch for already joined actor: " + actor.actorId());
-        }
-        if (participants.putIfAbsent(actor.actorId(), actor) == null) {
-          eventHub.actorJoined(sessionId, actor);
-        }
-        return snapshotLocked();
-      } finally {
-        lock.unlock();
-      }
-    }
-
-    SessionSnapshot leave(String actorId) {
-      lock.lock();
-      try {
-        requireOpen();
-        if (!participants.containsKey(actorId)) {
-          throw error(Code.ACTOR_NOT_JOINED, sessionId, "Actor is not joined: " + actorId);
-        }
-        OperationActor actor = participants.remove(actorId);
-        sessionService.clearPresence(actorId);
-        eventHub.actorLeft(sessionId, actor);
-        return snapshotLocked();
-      } finally {
-        lock.unlock();
-      }
-    }
-
-    Workflow apply(
-        CollaborationMode requestedMode, OperationActor actor, WorkflowOperation operation) {
-      lock.lock();
-      try {
-        requireOpen();
-        if (mode != requestedMode) {
-          throw error(
-              Code.SESSION_MODE_MISMATCH,
-              sessionId,
-              "Requested mode '" + requestedMode + "' does not match session mode '" + mode + "'");
-        }
-        OperationActor joinedActor = participants.get(actor.actorId());
-        if (joinedActor == null) {
-          throw error(Code.ACTOR_NOT_JOINED, sessionId, "Actor is not joined: " + actor.actorId());
-        }
-        if (!joinedActor.equals(actor)) {
-          throw error(
-              Code.ACTOR_METADATA_MISMATCH,
-              sessionId,
-              "Actor metadata mismatch: " + actor.actorId());
-        }
-        WorkflowOperation previous = operationsById.get(operation.operationId());
-        if (previous != null) {
-          if (sameSemanticOperation(previous, operation)) {
-            return operationLog.currentWorkflow();
-          }
-          throw error(
-              Code.DUPLICATE_OPERATION_ID,
-              sessionId,
-              "Operation id is already associated with different content: "
-                  + operation.operationId());
-        }
-        WorkflowOperationEnvelope envelope =
-            new WorkflowOperationEnvelope(sessionId, mode, actor, operation, Instant.now());
-        Workflow updatedWorkflow = sessionService.applyOperation(envelope);
-        operationsById.put(operation.operationId(), operation);
-        eventHub.operationAccepted(sessionId, actor, operation, updatedWorkflow);
-        return updatedWorkflow;
-      } finally {
-        lock.unlock();
-      }
-    }
-
-    PresenceState updatePresence(OperationActor actor, PresenceState presenceState) {
-      lock.lock();
-      try {
-        requireOpen();
-        OperationActor joinedActor = participants.get(actor.actorId());
-        if (joinedActor == null) {
-          throw error(Code.ACTOR_NOT_JOINED, sessionId, "Actor is not joined: " + actor.actorId());
-        }
-        if (!joinedActor.equals(actor)) {
-          throw error(
-              Code.ACTOR_METADATA_MISMATCH,
-              sessionId,
-              "Actor metadata mismatch: " + actor.actorId());
-        }
-        sessionService.updatePresence(presenceState);
-        eventHub.presenceUpdated(sessionId, actor, presenceState);
-        return presenceState;
-      } finally {
-        lock.unlock();
-      }
-    }
-
-    Workflow workflow() {
-      lock.lock();
-      try {
-        requireOpen();
-        return operationLog.currentWorkflow();
-      } finally {
-        lock.unlock();
-      }
-    }
-
-    SessionSnapshot snapshot() {
-      lock.lock();
-      try {
-        requireOpen();
-        return snapshotLocked();
-      } finally {
-        lock.unlock();
-      }
-    }
-
-    void assertOwner(String actorId) {
-      lock.lock();
-      try {
-        requireOpen();
-        if (!owner.actorId().equals(actorId)) {
-          throw error(
-              Code.SESSION_CLOSE_FORBIDDEN,
-              sessionId,
-              "Only the session owner may close it: " + owner.actorId());
-        }
-      } finally {
-        lock.unlock();
-      }
-    }
-
-    OperationActor sessionOwner() {
-      return owner;
-    }
-
-    void close() {
-      closed = true;
-    }
-
-    private static boolean sameSemanticOperation(
-        WorkflowOperation existing, WorkflowOperation candidate) {
-      return existing.getClass().equals(candidate.getClass())
-          && existing.operationId().equals(candidate.operationId())
-          && existing.author().equals(candidate.author())
-          && existing.affectedObjectIds().equals(candidate.affectedObjectIds())
-          && existing.payload().equals(candidate.payload());
-    }
-
-    private void requireOpen() {
-      if (closed) {
-        throw error(Code.SESSION_NOT_FOUND, sessionId, "Unknown session: " + sessionId);
-      }
-    }
-
-    private SessionSnapshot snapshotLocked() {
-      requireOpen();
-      List<OperationActor> actors = new ArrayList<>(participants.values());
-      actors.sort(Comparator.comparing(OperationActor::actorId));
-      return new SessionSnapshot(
-          sessionId,
-          mode,
-          owner,
-          createdAt,
-          actors,
-          operationLog.operations().size(),
-          operationLog.currentWorkflow().id());
-    }
-  }
-
   /**
    * Immutable transport-neutral session metadata.
    *
@@ -395,6 +284,8 @@ public final class WorkflowSessionRegistry {
    * @param participants currently joined participants
    * @param operationCount number of applied operations
    * @param workflowId identifier of the canonical workflow
+   * @param revision current semantic workflow revision
+   * @param sequence latest collaboration-event sequence
    */
   public record SessionSnapshot(
       String sessionId,
@@ -403,7 +294,9 @@ public final class WorkflowSessionRegistry {
       Instant createdAt,
       List<OperationActor> participants,
       int operationCount,
-      String workflowId) {
+      String workflowId,
+      long revision,
+      long sequence) {
 
     public SessionSnapshot {
       requireNotBlank(sessionId, "sessionId");
@@ -415,6 +308,9 @@ public final class WorkflowSessionRegistry {
         throw new IllegalArgumentException("operationCount must be >= 0");
       }
       requireNotBlank(workflowId, "workflowId");
+      if (revision < 0 || sequence < revision) {
+        throw new IllegalArgumentException("Invalid session revision/event sequence");
+      }
     }
   }
 }

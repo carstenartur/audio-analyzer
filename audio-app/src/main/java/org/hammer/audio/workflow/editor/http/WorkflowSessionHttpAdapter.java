@@ -4,6 +4,7 @@ import jakarta.validation.Valid;
 import java.net.URI;
 import java.util.List;
 import java.util.Objects;
+import org.hammer.audio.workflow.Workflow;
 import org.hammer.audio.workflow.WorkflowOperation;
 import org.hammer.audio.workflow.collaboration.OperationActor;
 import org.hammer.audio.workflow.collaboration.WorkflowSessionRegistry;
@@ -86,8 +87,12 @@ public final class WorkflowSessionHttpAdapter {
     OperationActor actor = request.actor().toDomain();
     WorkflowOperation operation =
         WorkflowOperationHttpParser.parse(request.operation(), actor.actorId());
-    return WorkflowProjection.fromWorkflow(
-        registry.applyOperation(sessionId, request.mode(), actor, operation));
+    Workflow workflow =
+        request.expectedRevision() == null
+            ? registry.applyOperation(sessionId, request.mode(), actor, operation)
+            : registry.applyOperation(
+                sessionId, request.mode(), actor, request.expectedRevision(), operation);
+    return WorkflowProjection.fromWorkflow(workflow);
   }
 
   /** Updates non-semantic presence and broadcasts it separately from workflow history. */

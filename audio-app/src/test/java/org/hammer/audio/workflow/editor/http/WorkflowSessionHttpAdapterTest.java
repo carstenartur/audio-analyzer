@@ -66,18 +66,24 @@ class WorkflowSessionHttpAdapterTest {
                         .formatted(OWNER_JSON)))
         .andExpect(status().isCreated())
         .andExpect(header().string("Location", "/workflow/sessions/session.shared"))
-        .andExpect(jsonPath("$.workflowId").value("workflow.shared"));
+        .andExpect(jsonPath("$.workflowId").value("workflow.shared"))
+        .andExpect(jsonPath("$.revision").value(0))
+        .andExpect(jsonPath("$.sequence").value(2));
 
     mvc.perform(
             post("/workflow/sessions/session.shared/join")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(GUEST_JSON))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.participants.length()").value(2));
+        .andExpect(jsonPath("$.participants.length()").value(2))
+        .andExpect(jsonPath("$.revision").value(0))
+        .andExpect(jsonPath("$.sequence").value(3));
 
     mvc.perform(get("/workflow/sessions/session.shared"))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.workflowId").value("workflow.shared"));
+        .andExpect(jsonPath("$.workflowId").value("workflow.shared"))
+        .andExpect(jsonPath("$.revision").value(0))
+        .andExpect(jsonPath("$.sequence").value(3));
 
     mvc.perform(get("/workflow/sessions/session.shared/projection"))
         .andExpect(status().isOk())
@@ -88,7 +94,8 @@ class WorkflowSessionHttpAdapterTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"actorId\":\"actor.guest\"}"))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.participants.length()").value(1));
+        .andExpect(jsonPath("$.participants.length()").value(1))
+        .andExpect(jsonPath("$.sequence").value(4));
 
     mvc.perform(
             delete("/workflow/sessions/session.shared")
@@ -180,20 +187,7 @@ class WorkflowSessionHttpAdapterTest {
     createSharedSession();
     long cursor = eventHub.currentSequence("session.shared");
 
-    String operationRequest =
-        """
-        {
-          "mode":"SHARED_SESSION_PERSONAL_UNDO",
-          "actor":%s,
-          "operation":{
-            "type":"CreateNode",
-            "operationId":"operation.input",
-            "catalogType":"recording-input",
-            "nodeId":"node.input"
-          }
-        }
-        """
-            .formatted(OWNER_JSON);
+    String operationRequest = createNodeRequest(null, "operation.input");
     mvc.perform(
             post("/workflow/sessions/session.shared/operations")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -225,12 +219,41 @@ class WorkflowSessionHttpAdapterTest {
 
     mvc.perform(get("/workflow/sessions/session.shared"))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.operationCount").value(1));
+        .andExpect(jsonPath("$.operationCount").value(1))
+        .andExpect(jsonPath("$.revision").value(1))
+        .andExpect(jsonPath("$.sequence").value(4));
     long acceptedEvents =
         eventHub.replay("session.shared", cursor).stream()
             .filter(event -> event.operationId() != null)
             .count();
     assertEquals(1, acceptedEvents);
+  }
+
+  @Test
+  void staleExpectedRevisionReturnsConflictWithoutPublishingState() throws Exception {
+    createSharedSession();
+    long cursor = eventHub.currentSequence("session.shared");
+
+    mvc.perform(
+            post("/workflow/sessions/session.shared/operations")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(createNodeRequest(1L, "operation.stale")))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.code").value("WORKFLOW_SESSION_REVISION_CONFLICT"))
+        .andExpect(jsonPath("$.sessionId").value("session.shared"))
+        .andExpect(jsonPath("$.expectedRevision").value(1))
+        .andExpect(jsonPath("$.actualRevision").value(0));
+
+    assertEquals(0, registry.inspect("session.shared").operationCount());
+    assertEquals(0, registry.inspect("session.shared").revision());
+    assertTrue(eventHub.replay("session.shared", cursor).isEmpty());
+
+    mvc.perform(
+            post("/workflow/sessions/session.shared/operations")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(createNodeRequest(0L, "operation.accepted")))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.nodes.length()").value(1));
   }
 
   @Test
@@ -263,6 +286,25 @@ class WorkflowSessionHttpAdapterTest {
         .andExpect(status().isBadRequest());
 
     assertTrue(eventHub.replay("session.shared", cursor).isEmpty());
+  }
+
+  private static String createNodeRequest(Long expectedRevision, String operationId) {
+    String revisionField =
+        expectedRevision == null ? "" : "\"expectedRevision\":" + expectedRevision + ",";
+    return """
+        {
+          "mode":"SHARED_SESSION_PERSONAL_UNDO",
+          "actor":%s,
+          %s
+          "operation":{
+            "type":"CreateNode",
+            "operationId":"%s",
+            "catalogType":"recording-input",
+            "nodeId":"node.input"
+          }
+        }
+        """
+        .formatted(OWNER_JSON, revisionField, operationId);
   }
 
   private void createSharedSession() throws Exception {

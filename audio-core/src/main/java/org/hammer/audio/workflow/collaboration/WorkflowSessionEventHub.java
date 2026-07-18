@@ -60,13 +60,7 @@ public final class WorkflowSessionEventHub {
     Objects.requireNonNull(workflow, "workflow");
     SessionBuffer created =
         new SessionBuffer(requiredSessionId, workflow, replayCapacity, subscriberQueueCapacity);
-    SessionBuffer previous = sessions.putIfAbsent(requiredSessionId, created);
-    if (previous != null) {
-      if (!previous.isClosed() || !sessions.replace(requiredSessionId, previous, created)) {
-        throw new IllegalStateException("Event stream already exists: " + requiredSessionId);
-      }
-      previous.stopSubscribers();
-    }
+    installSession(requiredSessionId, created);
     created.publish(
         WorkflowSessionEvent.Type.SESSION_CREATED,
         owner,
@@ -83,6 +77,32 @@ public final class WorkflowSessionEventHub {
         Map.of(),
         false,
         Instant.now());
+  }
+
+  /**
+   * Restores an event stream at a durable sequence/revision without publishing historical events.
+   *
+   * <p>The first reconnect cursor at or before the recovery boundary receives a canonical snapshot
+   * rather than fabricated creation, presence or operation events.
+   */
+  public void restoreSession(String sessionId, Workflow workflow, long sequence, long revision) {
+    String requiredSessionId = requireNotBlank(sessionId, "sessionId");
+    Objects.requireNonNull(workflow, "workflow");
+    if (sequence < 0) {
+      throw new IllegalArgumentException("sequence must be >= 0");
+    }
+    if (revision < 0 || revision > sequence) {
+      throw new IllegalArgumentException("revision must be between 0 and sequence");
+    }
+    SessionBuffer restored =
+        SessionBuffer.restored(
+            requiredSessionId,
+            workflow,
+            replayCapacity,
+            subscriberQueueCapacity,
+            sequence,
+            revision);
+    installSession(requiredSessionId, restored);
   }
 
   /** Publishes a newly joined actor without changing the semantic revision. */
@@ -200,6 +220,16 @@ public final class WorkflowSessionEventHub {
     return requireSession(sessionId).subscriberCount();
   }
 
+  private void installSession(String sessionId, SessionBuffer created) {
+    SessionBuffer previous = sessions.putIfAbsent(sessionId, created);
+    if (previous != null) {
+      if (!previous.isClosed() || !sessions.replace(sessionId, previous, created)) {
+        throw new IllegalStateException("Event stream already exists: " + sessionId);
+      }
+      previous.stopSubscribers();
+    }
+  }
+
   private SessionBuffer requireSession(String sessionId) {
     String requiredSessionId = requireNotBlank(sessionId, "sessionId");
     SessionBuffer buffer = sessions.get(requiredSessionId);
@@ -225,9 +255,12 @@ public final class WorkflowSessionEventHub {
   }
 
   private static final class SessionBuffer {
+    private static final long NO_RECOVERY_BOUNDARY = -1;
+
     private final String sessionId;
     private final int replayCapacity;
     private final int subscriberQueueCapacity;
+    private final long recoveryBoundary;
     private final ReentrantLock lock = new ReentrantLock();
     private final Deque<WorkflowSessionEvent> retainedEvents = new ArrayDeque<>();
     private final Set<Subscriber> subscribers = new LinkedHashSet<>();
@@ -238,10 +271,42 @@ public final class WorkflowSessionEventHub {
 
     SessionBuffer(
         String sessionId, Workflow workflow, int replayCapacity, int subscriberQueueCapacity) {
+      this(
+          sessionId, workflow, replayCapacity, subscriberQueueCapacity, 0, 0, NO_RECOVERY_BOUNDARY);
+    }
+
+    private SessionBuffer(
+        String sessionId,
+        Workflow workflow,
+        int replayCapacity,
+        int subscriberQueueCapacity,
+        long sequence,
+        long revision,
+        long recoveryBoundary) {
       this.sessionId = sessionId;
       this.currentWorkflow = workflow;
       this.replayCapacity = replayCapacity;
       this.subscriberQueueCapacity = subscriberQueueCapacity;
+      this.sequence = sequence;
+      this.revision = revision;
+      this.recoveryBoundary = recoveryBoundary;
+    }
+
+    static SessionBuffer restored(
+        String sessionId,
+        Workflow workflow,
+        int replayCapacity,
+        int subscriberQueueCapacity,
+        long sequence,
+        long revision) {
+      return new SessionBuffer(
+          sessionId,
+          workflow,
+          replayCapacity,
+          subscriberQueueCapacity,
+          sequence,
+          revision,
+          sequence);
     }
 
     WorkflowSessionEvent publish(
@@ -337,6 +402,9 @@ public final class WorkflowSessionEventHub {
     }
 
     private List<WorkflowSessionEvent> replayLocked(long afterSequence) {
+      if (recoveryBoundary >= 0 && afterSequence <= recoveryBoundary) {
+        return List.of(snapshotEvent());
+      }
       if (afterSequence > sequence || replayGap(afterSequence)) {
         return List.of(snapshotEvent());
       }

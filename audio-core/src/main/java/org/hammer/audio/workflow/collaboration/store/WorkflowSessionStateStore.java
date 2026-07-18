@@ -12,10 +12,24 @@ public interface WorkflowSessionStateStore {
   /** Finds a durable session by its stable identifier. */
   Optional<StoredWorkflowSession> find(String sessionId);
 
+  /** Returns all open durable sessions in stable identifier order. */
+  List<StoredWorkflowSession> openSessions();
+
   /** Atomically appends one accepted operation, aggregate update and outbox event. */
   WorkflowSessionAppendResult append(WorkflowSessionAppendCommand command);
 
-  /** Returns accepted operations in stable session sequence order. */
+  /**
+   * Reserves the next durable collaboration-event sequence without changing semantic revision.
+   *
+   * <p>Lifecycle and presence payloads remain transient, but advancing their sequence prevents SSE
+   * identifiers from moving backwards after a process restart.
+   */
+  StoredWorkflowSession advanceEventSequence(String sessionId, long expectedSequence);
+
+  /** Atomically closes a session and reserves its final lifecycle-event sequence. */
+  StoredWorkflowSession close(String sessionId, long expectedRevision, long expectedSequence);
+
+  /** Returns accepted operations in stable session event-sequence order. */
   List<StoredWorkflowOperation> operations(String sessionId);
 
   /** Returns unpublished outbox entries in stable event order. */
