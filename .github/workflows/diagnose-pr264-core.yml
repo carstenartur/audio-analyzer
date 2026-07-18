@@ -29,7 +29,7 @@ jobs:
           server-username: GITHUB_ACTOR
           server-password: GITHUB_TOKEN
 
-      - name: Align maps, format and commit
+      - name: Apply session index refactor, format and commit
         if: github.actor != 'github-actions[bot]'
         shell: bash
         run: |
@@ -38,19 +38,15 @@ jobs:
 
           path = Path('audio-core/src/main/java/org/hammer/audio/workflow/collaboration/WorkflowSessionEntry.java')
           text = path.read_text()
+          text = text.replace('import java.util.HashMap;\n', '', 1)
           text = text.replace(
-              'import java.util.concurrent.ConcurrentHashMap;\n',
-              'import java.util.HashMap;\n',
-              1,
-          )
-          text = text.replace(
-              'private final ConcurrentHashMap<String, OperationActor> participants = new ConcurrentHashMap<>();',
               'private final HashMap<String, OperationActor> participants = new HashMap<>();',
+              'private final WorkflowSessionIndex<String, OperationActor> participants =\n      new WorkflowSessionIndex<>();',
               1,
           )
           text = text.replace(
-              'private final ConcurrentHashMap<String, OperationIdentity> operationsById =\n      new ConcurrentHashMap<>();',
               'private final HashMap<String, OperationIdentity> operationsById = new HashMap<>();',
+              'private final WorkflowSessionIndex<String, OperationIdentity> operationsById =\n      new WorkflowSessionIndex<>();',
               1,
           )
           path.write_text(text)
@@ -62,7 +58,7 @@ jobs:
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add -A
-          git commit -m 'Use lock-owned maps for collaboration session state'
+          git commit -m 'Encapsulate lock-owned collaboration session indexes'
           git push origin HEAD:feature/263-collaboration-recovery
 
       - name: Run audio-core gate
