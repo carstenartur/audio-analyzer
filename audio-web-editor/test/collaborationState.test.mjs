@@ -75,6 +75,22 @@ test('snapshot fallback safely crosses a replay gap', () => {
   assert.deepEqual(result.state.projection, oneNodeProjection);
 });
 
+test('snapshot fallback also recovers a client cursor ahead of a restarted server', () => {
+  const aheadState = collaborationState(
+    { sequence: 12, revision: 8, participants: [actorAlice] },
+    oneNodeProjection,
+  );
+  const result = reduceSessionEvent(
+    aheadState,
+    event({ sequence: 3, revision: 1, type: 'SNAPSHOT', projection: emptyProjection }),
+  );
+
+  assert.equal(result.kind, 'applied');
+  assert.equal(result.state.sequence, 3);
+  assert.equal(result.state.revision, 1);
+  assert.deepEqual(result.state.projection, emptyProjection);
+});
+
 test('presence is separate, actor-scoped and removable', () => {
   const joined = reduceSessionEvent(
     initialState(),
@@ -106,12 +122,19 @@ test('presence is separate, actor-scoped and removable', () => {
   assert.equal(left.presence['actor-bob'], undefined);
 });
 
-test('synchronous command acceptance advances expected revision but not SSE sequence', () => {
-  const accepted = acceptCommandProjection(initialState(), oneNodeProjection);
+test('synchronous command acceptance uses reported revision but not SSE sequence', () => {
+  const accepted = acceptCommandProjection(initialState(), oneNodeProjection, 3);
 
   assert.equal(accepted.revision, 3);
   assert.equal(accepted.sequence, 4);
   assert.deepEqual(accepted.projection, oneNodeProjection);
+});
+
+test('idempotent command retry does not invent a revision', () => {
+  const accepted = acceptCommandProjection(initialState(), oneNodeProjection, 2);
+
+  assert.equal(accepted.revision, 2);
+  assert.equal(accepted.sequence, 4);
 });
 
 test('stale presence expires without changing semantic state', () => {
