@@ -47,15 +47,17 @@ export function collaborationState(session, projection) {
 }
 
 /**
- * Reduces one ordered SSE event. Duplicates are ignored. A non-snapshot gap is never guessed across;
- * callers must reload metadata and the canonical projection instead.
+ * Reduces one ordered SSE event. Ordinary duplicates are ignored. A non-snapshot gap is never guessed
+ * across; callers must reload metadata and the canonical projection instead. SNAPSHOT is special: the
+ * server may deliberately return a lower sequence when the client cursor is ahead after server restart,
+ * so a canonical snapshot always replaces the client's sequence/revision pair.
  *
  * @param {CollaborationState} current current accepted state
  * @param {SessionEvent} event server event
  * @returns {{kind: 'applied' | 'duplicate' | 'reconcile', state: CollaborationState}}
  */
 export function reduceSessionEvent(current, event) {
-  if (event.sequence <= current.sequence) {
+  if (event.type !== 'SNAPSHOT' && event.sequence <= current.sequence) {
     return { kind: 'duplicate', state: current };
   }
   if (event.type !== 'SNAPSHOT' && event.sequence !== current.sequence + 1) {
@@ -63,7 +65,7 @@ export function reduceSessionEvent(current, event) {
   }
 
   const participants = [...current.participants];
-  const presence = { ...current.presence };
+  const presence = event.type === 'SNAPSHOT' ? {} : { ...current.presence };
   let closed = current.closed;
 
   if (event.actor !== null && event.type === 'PRESENCE_JOINED') {
@@ -102,17 +104,19 @@ export function reduceSessionEvent(current, event) {
 }
 
 /**
- * Advances the expected semantic revision after a synchronous accepted command while the matching SSE
- * event is still in flight. Sequence remains unchanged and is advanced only by ordered SSE.
+ * Applies the synchronous server response while ordered SSE is still in flight. The accepted revision
+ * comes from current session metadata, so an idempotent retry does not invent an extra revision.
+ * Sequence remains SSE-owned.
  *
  * @param {CollaborationState} current current state
  * @param {Projection} projection accepted server projection
+ * @param {number} acceptedRevision revision reported by current session metadata
  * @returns {CollaborationState} state ready for the next expected-revision command
  */
-export function acceptCommandProjection(current, projection) {
+export function acceptCommandProjection(current, projection, acceptedRevision) {
   return {
     ...current,
-    revision: current.revision + 1,
+    revision: Math.max(current.revision, acceptedRevision),
     projection,
   };
 }
