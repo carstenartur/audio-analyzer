@@ -482,7 +482,9 @@ public final class WorkflowOperationBodyCodec {
       throw new IllegalArgumentException(
           "Invalid workflow operation body string length: " + length);
     }
-    return new String(input.readNBytes(length), StandardCharsets.UTF_8);
+    byte[] bytes = new byte[length];
+    input.readFully(bytes);
+    return new String(bytes, StandardCharsets.UTF_8);
   }
 
   private static void writeSize(DataOutputStream output, int size) throws IOException {

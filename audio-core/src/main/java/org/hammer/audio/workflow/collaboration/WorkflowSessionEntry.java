@@ -213,12 +213,8 @@ final class WorkflowSessionEntry {
         }
       }
       if (!preview.safe()) {
-        throw error(
-            Code.UNDO_CONFLICT,
-            "Undo is blocked by later operations: "
-                + preview.blockingOperations().stream()
-                    .map(WorkflowUndoPreview.BlockingOperation::operationId)
-                    .toList());
+        throw new WorkflowUndoConflictException(
+            sessionId, preview.targetOperationId(), preview.blockingOperations());
       }
       OperationIdentity target = requireOperation(preview.targetOperationId(), Code.UNDO_TARGET_NOT_FOUND);
       WorkflowOperation targetOperation = requireUndoableOperation(target);
@@ -281,12 +277,8 @@ final class WorkflowSessionEntry {
       List<WorkflowUndoPreview.BlockingOperation> blockers =
           blockingOperations(targetUndo, targetOperation.affectedObjectIds());
       if (!blockers.isEmpty()) {
-        throw error(
-            Code.UNDO_CONFLICT,
-            "Redo is blocked by later operations: "
-                + blockers.stream()
-                    .map(WorkflowUndoPreview.BlockingOperation::operationId)
-                    .toList());
+        throw new WorkflowUndoConflictException(
+            sessionId, targetUndo.operationId(), blockers);
       }
       WorkflowOperation inverse =
           targetOperation
@@ -425,7 +417,7 @@ final class WorkflowSessionEntry {
     operationsById.put(operation.operationId(), outcome.identity());
     operationHistory.add(outcome.identity());
     operationCount++;
-    eventHub.operationAccepted(sessionId, actor, operation, currentWorkflow);
+    eventHub.operationAccepted(sessionId, actor, operation, currentWorkflow, command);
     verifyEventHubState(sequence, revision, "accepted operation");
     return outcome;
   }
