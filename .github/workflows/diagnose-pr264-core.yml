@@ -1,9 +1,9 @@
 name: Diagnose PR 264 core gate
 
 on:
-  push:
+  pull_request:
     branches:
-      - feature/263-collaboration-recovery
+      - master
 
 permissions:
   contents: read
@@ -11,6 +11,7 @@ permissions:
 
 jobs:
   diagnose:
+    if: github.head_ref == 'feature/263-collaboration-recovery'
     runs-on: ubuntu-latest
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
