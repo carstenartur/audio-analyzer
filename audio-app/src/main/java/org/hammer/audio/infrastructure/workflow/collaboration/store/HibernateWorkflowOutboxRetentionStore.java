@@ -93,7 +93,7 @@ public final class HibernateWorkflowOutboxRetentionStore implements WorkflowOutb
     return entity != null
         && entity.retentionEligibleAt(publishedCutoff)
         && entity.sessionId().equals(candidate.sessionId())
-        && entity.publishedAt().equals(candidate.publishedAt())
+        && entity.publicationTime().equals(candidate.publishedAt())
         && candidate.reason() == WorkflowOutboxRetentionReason.PUBLISHED_AT_OR_BEFORE_CUTOFF;
   }
 
@@ -101,7 +101,7 @@ public final class HibernateWorkflowOutboxRetentionStore implements WorkflowOutb
     return new WorkflowOutboxRetentionCandidate(
         entity.eventId(),
         entity.sessionId(),
-        entity.publishedAt(),
+        entity.publicationTime(),
         WorkflowOutboxRetentionReason.PUBLISHED_AT_OR_BEFORE_CUTOFF);
   }
 
