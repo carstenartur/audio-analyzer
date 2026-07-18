@@ -13,6 +13,7 @@ import java.time.Instant;
 import org.hammer.audio.workflow.WorkflowOperation;
 import org.hammer.audio.workflow.collaboration.store.StoredWorkflowOperation;
 import org.hammer.audio.workflow.collaboration.store.WorkflowOperationBodyCodec;
+import org.hammer.audio.workflow.collaboration.store.WorkflowOperationCommandMetadata;
 import org.hammer.audio.workflow.collaboration.store.WorkflowOperationPersistenceData;
 
 /** Hibernate-owned durable accepted semantic operation. */
@@ -67,6 +68,15 @@ public class WorkflowOperationEntity {
   @Column(name = "operation_body")
   private String operationBody;
 
+  @Column(name = "command_kind", length = 32)
+  private String commandKind;
+
+  @Column(name = "command_id", length = 255)
+  private String commandId;
+
+  @Column(name = "target_operation_id", length = 255)
+  private String targetOperationId;
+
   protected WorkflowOperationEntity() {
     // Required by Jakarta Persistence.
   }
@@ -84,10 +94,20 @@ public class WorkflowOperationEntity {
     entity.payload = operation.payload();
     entity.bodyVersion = operation.hasOperationBody() ? operation.bodyVersion() : null;
     entity.operationBody = operation.operationBody();
+    entity.commandKind = operation.command().kind().name();
+    entity.commandId = operation.command().commandId();
+    entity.targetOperationId = operation.command().targetOperationId();
     return entity;
   }
 
   StoredWorkflowOperation toStoredOperation() {
+    WorkflowOperationCommandMetadata command =
+        commandKind == null || commandId == null
+            ? WorkflowOperationCommandMetadata.normal(storedOperationId)
+            : new WorkflowOperationCommandMetadata(
+                WorkflowOperationCommandMetadata.Kind.valueOf(commandKind),
+                commandId,
+                targetOperationId);
     return new StoredWorkflowOperation(
         storedSessionId,
         storedOperationId,
@@ -98,7 +118,8 @@ public class WorkflowOperationEntity {
         storedSemanticRevision,
         payload,
         bodyVersion == null ? 0 : bodyVersion,
-        operationBody);
+        operationBody,
+        command);
   }
 
   boolean hasSameSemanticContent(
@@ -107,7 +128,8 @@ public class WorkflowOperationEntity {
         storedSessionId.equals(expectedSessionId)
             && actorId.equals(candidate.actorId())
             && operationType.equals(candidate.operationType())
-            && payload.equals(candidate.payload());
+            && payload.equals(candidate.payload())
+            && command().equals(candidate.command());
     if (!identityMatches || bodyVersion == null) {
       return identityMatches;
     }
@@ -120,6 +142,15 @@ public class WorkflowOperationEntity {
         WorkflowOperationBodyCodec.reidentify(
             candidateOperation, candidate.operationId(), occurredAt, candidate.actorId());
     return operationBody.equals(WorkflowOperationBodyCodec.encode(normalizedCandidate).body());
+  }
+
+  private WorkflowOperationCommandMetadata command() {
+    return commandKind == null || commandId == null
+        ? WorkflowOperationCommandMetadata.normal(storedOperationId)
+        : new WorkflowOperationCommandMetadata(
+            WorkflowOperationCommandMetadata.Kind.valueOf(commandKind),
+            commandId,
+            targetOperationId);
   }
 
   String sessionId() {
