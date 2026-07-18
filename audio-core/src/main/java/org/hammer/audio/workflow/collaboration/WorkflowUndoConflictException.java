@@ -3,12 +3,9 @@ package org.hammer.audio.workflow.collaboration;
 import java.util.List;
 import java.util.Objects;
 
-/**
- * Machine-readable semantic conflict raised when a later operation blocks undo or redo.
- */
-public final class WorkflowUndoConflictException extends RuntimeException {
+/** Machine-readable semantic conflict raised when a later operation blocks undo or redo. */
+public final class WorkflowUndoConflictException extends WorkflowSessionException {
 
-  private final String sessionId;
   private final String targetOperationId;
   private final List<WorkflowUndoPreview.BlockingOperation> blockingOperations;
 
@@ -17,19 +14,17 @@ public final class WorkflowUndoConflictException extends RuntimeException {
       String sessionId,
       String targetOperationId,
       List<WorkflowUndoPreview.BlockingOperation> blockingOperations) {
-    super("Semantic history command is blocked by later operations for target " + targetOperationId);
-    this.sessionId = requireNotBlank(sessionId, "sessionId");
+    super(
+        Code.UNDO_CONFLICT,
+        requireNotBlank(sessionId, "sessionId"),
+        "Semantic history command is blocked by later operations for target "
+            + targetOperationId);
     this.targetOperationId = requireNotBlank(targetOperationId, "targetOperationId");
     this.blockingOperations =
         List.copyOf(Objects.requireNonNull(blockingOperations, "blockingOperations"));
     if (this.blockingOperations.isEmpty()) {
       throw new IllegalArgumentException("blockingOperations must not be empty");
     }
-  }
-
-  /** Owning collaboration-session identifier. */
-  public String sessionId() {
-    return sessionId;
   }
 
   /** Operation whose semantic inverse was requested. */
