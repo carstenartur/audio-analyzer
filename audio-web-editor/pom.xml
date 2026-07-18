@@ -1,7 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project xmlns="http://maven.apache.org/POM/4.0.0"
-    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-    xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
 
   <parent>
@@ -34,10 +32,10 @@
         <executions>
           <execution>
             <id>install-node-and-npm</id>
-            <phase>generate-resources</phase>
             <goals>
               <goal>install-node-and-npm</goal>
             </goals>
+            <phase>generate-resources</phase>
             <configuration>
               <nodeVersion>${node.version}</nodeVersion>
               <npmVersion>${npm.version}</npmVersion>
@@ -45,20 +43,20 @@
           </execution>
           <execution>
             <id>npm-ci</id>
-            <phase>generate-resources</phase>
             <goals>
               <goal>npm</goal>
             </goals>
+            <phase>generate-resources</phase>
             <configuration>
               <arguments>ci --no-audit --no-fund</arguments>
             </configuration>
           </execution>
           <execution>
             <id>npm-verify</id>
-            <phase>generate-resources</phase>
             <goals>
               <goal>npm</goal>
             </goals>
+            <phase>generate-resources</phase>
             <configuration>
               <arguments>run verify</arguments>
             </configuration>
@@ -71,10 +69,10 @@
         <executions>
           <execution>
             <id>package-production-frontend</id>
-            <phase>process-resources</phase>
             <goals>
               <goal>copy-resources</goal>
             </goals>
+            <phase>process-resources</phase>
             <configuration>
               <outputDirectory>${project.build.outputDirectory}/workbench-ui</outputDirectory>
               <resources>

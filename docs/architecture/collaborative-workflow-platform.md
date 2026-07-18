@@ -44,16 +44,16 @@ audio-web-editor (React Flow)
 
 ## Sources of truth
 
-| Concern | Source of truth | Notes |
-|---|---|---|
-| Semantic graph | `audio-core Workflow` | Framework-independent and server-validated. |
-| Accepted edit order | Durable semantic operation history | Used for replay, audit and collaboration recovery. |
-| Current collaboration revision | Durable session aggregate | Browser projections are disposable. |
-| Durable version | JGit commit from deterministic DSL | Checkpoints, not every pointer movement. |
-| Event delivery state | Transactional outbox | At-least-once delivery with stable event IDs. |
-| Presence | Server session presence state | Cursor and connection state are not workflow data. |
-| Rendering/layout | React Flow adapter state | Local layout may be replaced at any time. |
-| Execution input | Immutable `ExecutionSnapshot` | A running job is isolated from later edits. |
+|            Concern             |          Source of truth           |                       Notes                        |
+|--------------------------------|------------------------------------|----------------------------------------------------|
+| Semantic graph                 | `audio-core Workflow`              | Framework-independent and server-validated.        |
+| Accepted edit order            | Durable semantic operation history | Used for replay, audit and collaboration recovery. |
+| Current collaboration revision | Durable session aggregate          | Browser projections are disposable.                |
+| Durable version                | JGit commit from deterministic DSL | Checkpoints, not every pointer movement.           |
+| Event delivery state           | Transactional outbox               | At-least-once delivery with stable event IDs.      |
+| Presence                       | Server session presence state      | Cursor and connection state are not workflow data. |
+| Rendering/layout               | React Flow adapter state           | Local layout may be replaced at any time.          |
+| Execution input                | Immutable `ExecutionSnapshot`      | A running job is isolated from later edits.        |
 
 ## Editor boundary
 
@@ -222,3 +222,4 @@ Active and next:
 - [`adr-007-editor-stack.md`](adr-007-editor-stack.md) — production React Flow adapter decision.
 - [`session-event-streaming.md`](session-event-streaming.md) — ordered SSE and replay contract.
 - [`../../audio-web-editor/README.md`](../../audio-web-editor/README.md) — maintained frontend build and packaging.
+

@@ -59,14 +59,14 @@ The project needs a modular research workbench rather than a complete IDE platfo
 
 ## Ownership boundaries
 
-| Layer | Owns | Must not own |
-|---|---|---|
-| React Flow UI | Node/edge rendering, selection, viewport, local layout | Canonical workflow, validation, durable history |
-| Optional Yjs helper | Awareness and non-semantic UI state | Nodes, edges, semantic operations, checkpoints |
-| HTTP/SSE adapter | Command/response and event transport | Persistence implementation, UI rendering |
-| Application service | Validate, order and apply semantic operations | Browser state, storage internals |
-| `VersionedWorkflowStore` | Durable checkpoints and history | Live editor state, presence |
-| `audio-core Workflow` | Semantic graph and execution snapshots | React, Yjs, persistence frameworks |
+|          Layer           |                          Owns                          |                  Must not own                   |
+|--------------------------|--------------------------------------------------------|-------------------------------------------------|
+| React Flow UI            | Node/edge rendering, selection, viewport, local layout | Canonical workflow, validation, durable history |
+| Optional Yjs helper      | Awareness and non-semantic UI state                    | Nodes, edges, semantic operations, checkpoints  |
+| HTTP/SSE adapter         | Command/response and event transport                   | Persistence implementation, UI rendering        |
+| Application service      | Validate, order and apply semantic operations          | Browser state, storage internals                |
+| `VersionedWorkflowStore` | Durable checkpoints and history                        | Live editor state, presence                     |
+| `audio-core Workflow`    | Semantic graph and execution snapshots                 | React, Yjs, persistence frameworks              |
 
 ## Production implementation
 

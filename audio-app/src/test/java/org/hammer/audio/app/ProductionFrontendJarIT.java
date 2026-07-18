@@ -40,7 +40,8 @@ class ProductionFrontendJarIT {
               .filter(entry -> entry.getName().startsWith(EDITOR_JAR_PREFIX))
               .filter(entry -> entry.getName().endsWith(".jar"))
               .toList();
-      assertEquals(1, frontendJars.size(), "Executable JAR must contain exactly one web editor JAR");
+      assertEquals(
+          1, frontendJars.size(), "Executable JAR must contain exactly one web editor JAR");
 
       FrontendJarContents frontend = readFrontendJar(bootJar, frontendJars.getFirst());
       assertTrue(frontend.entryNames().contains(INDEX_ENTRY));

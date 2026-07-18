@@ -1,8 +1,8 @@
 /**
  * Application-service layer for the web workflow editor (ADR-007).
  *
- * <p>This package provides the server-side API surface that the maintained React Flow editor adapter
- * calls:
+ * <p>This package provides the server-side API surface that the maintained React Flow editor
+ * adapter calls:
  *
  * <ul>
  *   <li>{@link org.hammer.audio.workflow.editor.WorkflowEditorService} — accepts {@code

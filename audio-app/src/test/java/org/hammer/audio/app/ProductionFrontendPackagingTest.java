@@ -39,7 +39,6 @@ class ProductionFrontendPackagingTest {
   }
 
   private static boolean hasHashedName(Resource resource) {
-    return resource.getFilename() != null
-        && resource.getFilename().matches(HASHED_ASSET_PATTERN);
+    return resource.getFilename() != null && resource.getFilename().matches(HASHED_ASSET_PATTERN);
   }
 }

@@ -69,3 +69,4 @@ Vite writes generated files only below `target/`. Maven copies the verified prod
 - Remove `audio-web-editor/node_modules` and `audio-web-editor/target` when diagnosing a local npm cache problem.
 - A reproducibility failure means the two clean Vite builds produced different filenames or bytes; do not bypass the check by committing generated output.
 - API failures shown by the UI originate from the `/workflow` application-service contract; do not add browser-side persistence fallbacks.
+
