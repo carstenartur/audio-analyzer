@@ -1,0 +1,48 @@
+name: Diagnose retention Maven failure
+
+on:
+  push:
+    branches: [ feature/268-safe-outbox-retention ]
+  pull_request:
+    branches: [ master ]
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  diagnose:
+    if: github.head_ref == 'feature/268-safe-outbox-retention' || github.ref_name == 'feature/268-safe-outbox-retention'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          server-id: github
+          server-username: GITHUB_ACTOR
+          server-password: GITHUB_TOKEN
+
+      - name: Run complete Maven verification
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set +e
+          mvn -B clean verify --file pom.xml > retention-build.log 2>&1
+          status=$?
+          tail -n 200 retention-build.log
+          exit $status
+
+      - name: Upload complete Maven log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: retention-maven-log
+          path: retention-build.log
+          if-no-files-found: error
+          retention-days: 1
