@@ -3,6 +3,8 @@ name: Retention branch formatting
 on:
   push:
     branches: [ feature/268-safe-outbox-retention ]
+  pull_request:
+    branches: [ master ]
 
 permissions:
   contents: read
@@ -10,6 +12,7 @@ permissions:
 
 jobs:
   format:
+    if: github.head_ref == 'feature/268-safe-outbox-retention' || github.ref_name == 'feature/268-safe-outbox-retention'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
