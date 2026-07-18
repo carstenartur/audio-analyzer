@@ -118,9 +118,14 @@ public final class WorkflowSessionRegistry {
     } catch (RuntimeException failure) {
       sessionEntries.remove(requiredSessionId, created);
       if (persisted) {
-        stateStore.close(requiredSessionId, 0, INITIAL_SESSION_EVENT_SEQUENCE);
+        try {
+          stateStore.close(requiredSessionId, 0, INITIAL_SESSION_EVENT_SEQUENCE);
+        } catch (RuntimeException cleanupFailure) {
+          failure.addSuppressed(cleanupFailure);
+        }
       }
-      throw failure;
+      throw new IllegalStateException(
+          "Failed to create collaboration session " + requiredSessionId, failure);
     }
   }
 
@@ -260,7 +265,10 @@ public final class WorkflowSessionRegistry {
             sessionId, workflow, storedSession.sequence(), storedSession.revision());
       } catch (RuntimeException failure) {
         sessionEntries.remove(sessionId, recovered);
-        throw failure;
+        throw new WorkflowSessionRecoveryException(
+            sessionId,
+            "Failed to restore collaboration event stream for session " + sessionId,
+            failure);
       }
     } catch (WorkflowSessionRecoveryException failure) {
       throw failure;
