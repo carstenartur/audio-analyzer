@@ -1,43 +1,133 @@
 # Hibernate-backed workflow persistence
 
-The normal workbench starts in `memory` mode. Checkpoint, history and load endpoints require an
-explicit persistence mode.
+The normal workbench starts in `memory` mode. Checkpoint, history, collaboration recovery and durable
+outbox delivery require an explicit persistence mode.
 
-## Production/development Hibernate mode
+## Shared persistence runtime
 
-Audio Analyzer consumes:
+Audio Analyzer consumes the migration-bearing 0.1.5 line of the shared storage library:
 
 ```text
-io.github.carstenartur:jgit-storage-hibernate-core:0.1.4
+io.github.carstenartur:jgit-storage-hibernate-core:0.1.5
 Hibernate ORM 7.4.5.Final
+Flyway 12.8.1
 ```
 
-The application creates one Spring-managed `DataSource` and one application-owned Hibernate
-`SessionFactory`. The shared JGit storage entities and future Audio Analyzer collaboration/outbox
-entities use that same persistence context.
+Until the upstream 0.1.5 release is published, development branches use
+`0.1.5-SNAPSHOT`. A production merge must pin the immutable 0.1.5 release.
 
-Example local startup:
+The application creates one Spring-managed `DataSource` and one application-owned Hibernate
+`SessionFactory`. Shared JGit storage entities and Audio Analyzer collaboration/session/operation/
+outbox entities use that same persistence context.
+
+Starting `hibernate` mode without an explicit `spring.datasource.url` or
+`spring.datasource.jndi-name` fails immediately. Versioned migrations never run against an implicit
+embedded database.
+
+## Schema ownership
+
+The schema is split by owner and migration history:
+
+| Owner | Tables | Flyway history table |
+| --- | --- | --- |
+| `jgit-storage-hibernate-core` | packs, refs/reftables and reflogs | `jgit_storage_hibernate_core_schema_history` |
+| Audio Analyzer | collaboration session, accepted operations and transactional outbox | `audio_analyzer_collaboration_schema_history` |
+
+Audio Analyzer does not copy generic JGit DDL. `WorkflowSchemaMigrator` loads migration resources
+from the shared Core artifact and then applies the application-owned resources.
+
+The deterministic startup order is:
+
+```text
+1. jgit-storage-hibernate Core migrations
+2. Audio Analyzer collaboration migrations
+3. Hibernate schema validation
+4. Session recovery and outbox dispatch startup
+```
+
+Spring Boot's single default Flyway instance is disabled with `spring.flyway.enabled=false` because
+combining both owners in one history table would destroy this boundary.
+
+## Clean production provisioning
+
+A clean H2 or PostgreSQL database can be provisioned at application startup by enabling the ordered
+migration phase and keeping Hibernate in validation mode:
+
+```properties
+workbench.persistence.mode=hibernate
+workbench.persistence.repository-name=audio-analyzer-workflows
+workbench.persistence.migrations.enabled=true
+workbench.persistence.schema-action=validate
+spring.datasource.url=jdbc:postgresql://database.example/audio_analyzer
+spring.datasource.driver-class-name=org.postgresql.Driver
+spring.datasource.username=audio_analyzer
+spring.datasource.password=${AUDIO_ANALYZER_DATABASE_PASSWORD}
+```
+
+Equivalent local H2 startup:
 
 ```bash
 java -jar audio-app/target/audio-app-0.0.4-SNAPSHOT-workbench.jar \
   --workbench.persistence.mode=hibernate \
   --workbench.persistence.repository-name=audio-analyzer-workflows \
-  --workbench.persistence.schema-action=update \
+  --workbench.persistence.migrations.enabled=true \
+  --workbench.persistence.schema-action=validate \
   --spring.datasource.url='jdbc:h2:file:./data/audio-analyzer;AUTO_SERVER=TRUE' \
   --spring.datasource.driver-class-name=org.h2.Driver \
   --spring.datasource.username=sa \
   --spring.datasource.password=
 ```
 
-`update` is intended only for disposable development data. Production deployments should provision
-schema changes externally and use:
+Migration execution is opt-in. With `workbench.persistence.migrations.enabled=false`, the deployment
+must run the packaged Flyway resources externally before starting the application with `validate`.
+
+`update`, `create` and `create-drop` are restricted to disposable development/test data. When the
+versioned migration phase is enabled, startup rejects every schema action except `validate`.
+
+## Adopting schemas created before versioned migrations
+
+Two one-time flags exist for verified legacy schemas:
 
 ```properties
-workbench.persistence.schema-action=validate
+workbench.persistence.migrations.adopt-core-0.1.4=true
+workbench.persistence.migrations.adopt-collaboration-pre-lease=true
 ```
 
-Starting `hibernate` mode without an explicit `spring.datasource.url` or
-`spring.datasource.jndi-name` fails immediately with an actionable configuration error.
+The Core flag baselines a schema that exactly matches `jgit-storage-hibernate-core` 0.1.4. The
+collaboration flag baselines the application schema at version 1, which represents the session,
+operation and pre-lease outbox mappings from before issue #265. Flyway then applies version 2, adding:
+
+- optimistic `entity_version`;
+- `lease_owner` and `lease_token`;
+- `lease_expires_at`;
+- the lease-aware pending-event index.
+
+Version 2 is additive apart from replacing the old pending-event index. Pending, failed and published
+outbox rows are retained unchanged; new version values start at zero.
+
+Use the adoption flags only with this procedure:
+
+1. stop all writers and outbox dispatchers;
+2. take and verify a restorable database backup;
+3. compare the existing tables, columns, constraints and indexes with the immutable legacy fixtures
+   under `audio-app/src/test/resources/db/legacy/`;
+4. start exactly one migration instance with the required adoption flag(s) and `schema-action=validate`;
+5. verify both Flyway history tables and application recovery;
+6. remove the adoption flags before normal multi-instance startup.
+
+Do not use baselining to make an unknown or partially modified schema appear current. Flyway records a
+baseline instead of reconstructing missing historical changes.
+
+## Upgrade and rollback expectations
+
+Run migrations before rolling out application instances that require the new mappings. During a
+multi-instance deployment, keep old writers stopped until the migration has completed and validation
+has succeeded.
+
+Database migrations are forward-moving. Application rollback must not assume that Flyway reverses
+DDL. Keep the pre-upgrade backup until the new version has completed recovery and outbox dispatch
+checks. If rollback requires the old physical schema, restore that backup rather than editing Flyway
+history or manually dropping lease columns.
 
 ## Application-specific entity registration
 
@@ -47,21 +137,18 @@ Audio Analyzer modules register only their own ORM mappings through a
 ```java
 @Bean
 WorkflowPersistenceEntityContributor collaborationPersistenceEntities() {
-  return () -> List.of(
-      WorkflowSessionEntity.class,
-      WorkflowOperationEntity.class,
-      WorkflowOutboxEntity.class);
+  return CollaborationPersistenceEntities::annotatedClasses;
 }
 ```
 
-The resulting classes are added to the same application-managed `SessionFactory` as the generic
-JGit storage entities. This is the extension point used by #245; it does not copy or replace any
-mapping from `jgit-storage-hibernate-core`.
+The resulting classes are added to the same application-managed `SessionFactory` as the generic JGit
+storage entities. This extension point does not copy or replace any mapping from
+`jgit-storage-hibernate-core`.
 
 ## GitHub Packages access
 
-The artifact is currently published through GitHub Packages. Maven uses repository id `github`.
-Local users need a settings entry with a token that has `read:packages`:
+The shared artifact is published through GitHub Packages. Maven uses repository id `github`. Local
+users need a settings entry with a token that has `read:packages`:
 
 ```xml
 <settings>
@@ -75,7 +162,7 @@ Local users need a settings entry with a token that has `read:packages`:
 </settings>
 ```
 
-The repository CI configures this server from its `GITHUB_TOKEN` and requests `packages: read`.
+Repository CI configures this server from `GITHUB_TOKEN` and requests `packages: read`.
 
 ## Explicit filesystem fallback
 
@@ -91,12 +178,12 @@ java -jar audio-app/target/audio-app-0.0.4-SNAPSHOT-workbench.jar \
 This mode is for tests and local demonstrations. It is never selected by the production persistent
 profile.
 
-## Ownership and transaction boundary
+## Transaction boundary
 
-`jgit-storage-hibernate-core` owns only generic JGit storage. Audio Analyzer owns the workflow tree
-layout and, in #245, its collaboration-session, operation, revision and outbox entities.
+`jgit-storage-hibernate-core` owns generic JGit storage. Audio Analyzer owns collaboration session,
+operation, revision and outbox state.
 
-A live semantic operation and outbox record will share one Hibernate transaction. A Git checkpoint
-is a separate application command based on an expected semantic revision. Cross-component atomicity
-must not be claimed unless the shared storage library exposes and verifies a matching generic
-transaction participation contract.
+One accepted live semantic operation and its outbox record share one Hibernate transaction. A Git
+checkpoint is a separate application command based on an expected semantic revision. Cross-component
+atomicity must not be claimed unless the shared storage library exposes and verifies a matching
+generic transaction participation contract.
