@@ -132,8 +132,7 @@ public class WorkflowOutboxEntity {
     return new LeasedWorkflowOutboxEntry(toStoredEntry(), leaseOwner, leaseToken, leaseExpiresAt);
   }
 
-  StoredWorkflowOutboxEntry markPublished(
-      String owner, String token, Instant publicationTime) {
+  StoredWorkflowOutboxEntry markPublished(String owner, String token, Instant publicationTime) {
     requireLease(owner, token);
     attemptCount = Math.addExact(attemptCount, 1);
     publishedAt = Objects.requireNonNull(publicationTime, "publicationTime");
@@ -182,8 +181,7 @@ public class WorkflowOutboxEntity {
         || !leaseOwner.equals(requiredOwner)
         || leaseToken == null
         || !leaseToken.equals(requiredToken)) {
-      throw new WorkflowOutboxLeaseConflictException(
-          storedEventId, requiredOwner, requiredToken);
+      throw new WorkflowOutboxLeaseConflictException(storedEventId, requiredOwner, requiredToken);
     }
   }
 
