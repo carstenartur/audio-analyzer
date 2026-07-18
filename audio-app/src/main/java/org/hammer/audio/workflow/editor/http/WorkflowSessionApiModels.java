@@ -24,11 +24,11 @@ public final class WorkflowSessionApiModels {
     // Utility class.
   }
 
-  private static String defaultWorkflowId(String sessionId) {
+  static String defaultWorkflowId(String sessionId) {
     return "workflow." + sessionId;
   }
 
-  private static String defaultWorkflowName(String sessionId) {
+  static String defaultWorkflowName(String sessionId) {
     return "Workflow " + sessionId;
   }
 
