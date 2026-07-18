@@ -4,16 +4,14 @@ package org.hammer.audio.infrastructure.workflow.collaboration.schema;
 public final class CollaborationSchemaMigrations {
 
   /** Flyway location for H2 migrations. */
-  public static final String H2_LOCATION =
-      "classpath:db/migration/audio-analyzer/collaboration/h2";
+  public static final String H2_LOCATION = "classpath:db/migration/audio-analyzer/collaboration/h2";
 
   /** Flyway location for PostgreSQL migrations. */
   public static final String POSTGRESQL_LOCATION =
       "classpath:db/migration/audio-analyzer/collaboration/postgresql";
 
   /** Dedicated Flyway history table for application-owned collaboration state. */
-  public static final String SCHEMA_HISTORY_TABLE =
-      "audio_analyzer_collaboration_schema_history";
+  public static final String SCHEMA_HISTORY_TABLE = "audio_analyzer_collaboration_schema_history";
 
   /** Baseline used when installing collaboration storage into a new or shared schema. */
   public static final String PRE_MIGRATION_BASELINE_VERSION = "0";

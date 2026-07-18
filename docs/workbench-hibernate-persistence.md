@@ -28,10 +28,10 @@ embedded database.
 
 The schema is split by owner and migration history:
 
-| Owner | Tables | Flyway history table |
-| --- | --- | --- |
-| `jgit-storage-hibernate-core` | packs, refs/reftables and reflogs | `jgit_storage_hibernate_core_schema_history` |
-| Audio Analyzer | collaboration session, accepted operations and transactional outbox | `audio_analyzer_collaboration_schema_history` |
+|             Owner             |                               Tables                                |             Flyway history table              |
+|-------------------------------|---------------------------------------------------------------------|-----------------------------------------------|
+| `jgit-storage-hibernate-core` | packs, refs/reftables and reflogs                                   | `jgit_storage_hibernate_core_schema_history`  |
+| Audio Analyzer                | collaboration session, accepted operations and transactional outbox | `audio_analyzer_collaboration_schema_history` |
 
 Audio Analyzer does not copy generic JGit DDL. `WorkflowSchemaMigrator` loads migration resources
 from the shared Core artifact and then applies the application-owned resources.

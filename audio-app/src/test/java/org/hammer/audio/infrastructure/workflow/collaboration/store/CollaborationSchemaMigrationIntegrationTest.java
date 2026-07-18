@@ -139,8 +139,7 @@ class CollaborationSchemaMigrationIntegrationTest {
       assertEquals("legacy.operation", operations.getFirst().operationId());
       assertEquals("legacy-operation-payload", operations.getFirst().payload());
 
-      StoredWorkflowOutboxEntry pending =
-          outboxStore.find("legacy.event.pending").orElseThrow();
+      StoredWorkflowOutboxEntry pending = outboxStore.find("legacy.event.pending").orElseThrow();
       assertTrue(pending.pending());
       assertEquals(2, pending.attemptCount());
       assertEquals("legacy-pending-event-payload", pending.payload());
@@ -152,8 +151,7 @@ class CollaborationSchemaMigrationIntegrationTest {
       assertEquals(1, alreadyPublished.attemptCount());
 
       List<LeasedWorkflowOutboxEntry> claimed =
-          outboxStore.claimDue(
-              "migration.upgrade", CLAIMED_AT, CLAIMED_AT.plusSeconds(30), 10);
+          outboxStore.claimDue("migration.upgrade", CLAIMED_AT, CLAIMED_AT.plusSeconds(30), 10);
       assertEquals(1, claimed.size());
       assertEquals("legacy.event.pending", claimed.getFirst().entry().eventId());
       StoredWorkflowOutboxEntry published =
@@ -173,8 +171,7 @@ class CollaborationSchemaMigrationIntegrationTest {
         .migrate(false, adoptPreLeaseCollaborationSchema);
   }
 
-  private static void installLegacySchema(TestDatabase database)
-      throws IOException, SQLException {
+  private static void installLegacySchema(TestDatabase database) throws IOException, SQLException {
     String script = readResource(database.legacySchemaResource());
     try (Connection connection = database.openConnection();
         Statement statement = connection.createStatement()) {
