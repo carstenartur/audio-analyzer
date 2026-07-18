@@ -1,16 +1,26 @@
 package org.hammer.audio.workflow.collaboration;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.locks.ReentrantLock;
 import org.hammer.audio.workflow.Workflow;
 import org.hammer.audio.workflow.WorkflowOperation;
 import org.hammer.audio.workflow.collaboration.WorkflowSessionException.Code;
 import org.hammer.audio.workflow.collaboration.WorkflowSessionPersistenceCoordinator.AppendOutcome;
 import org.hammer.audio.workflow.collaboration.WorkflowSessionPersistenceCoordinator.OperationIdentity;
+import org.hammer.audio.workflow.collaboration.store.WorkflowOperationBodyCodec;
+import org.hammer.audio.workflow.collaboration.store.WorkflowOperationCommandMetadata;
+import org.hammer.audio.workflow.collaboration.store.WorkflowOperationCommandMetadata.Kind;
 
 /** Owns the synchronized runtime state for one collaboration session. */
 final class WorkflowSessionEntry {
@@ -25,6 +35,7 @@ final class WorkflowSessionEntry {
       new WorkflowSessionIndex<>();
   private final WorkflowSessionIndex<String, OperationIdentity> operationsById =
       new WorkflowSessionIndex<>();
+  private final List<OperationIdentity> operationHistory = new ArrayList<>();
   private final ReentrantLock lock = new ReentrantLock();
   private Workflow currentWorkflow;
   private int operationCount;
@@ -49,6 +60,7 @@ final class WorkflowSessionEntry {
         throw new WorkflowSessionRecoveryException(
             sessionId, "Duplicate durable operation id: " + operation.operationId());
       }
+      operationHistory.add(operation);
     }
     this.operationCount = recovery.operations().size();
     if (recovery.ownerConnected()) {
@@ -137,7 +149,13 @@ final class WorkflowSessionEntry {
       CollaborationMode requestedMode, OperationActor actor, WorkflowOperation operation) {
     lock.lock();
     try {
-      return applyLocked(requestedMode, actor, revision, operation);
+      return applyLocked(
+              requestedMode,
+              actor,
+              revision,
+              operation,
+              WorkflowOperationCommandMetadata.normal(operation.operationId()))
+          .workflow();
     } finally {
       lock.unlock();
     }
@@ -150,7 +168,151 @@ final class WorkflowSessionEntry {
       WorkflowOperation operation) {
     lock.lock();
     try {
-      return applyLocked(requestedMode, actor, expectedRevision, operation);
+      return applyLocked(
+              requestedMode,
+              actor,
+              expectedRevision,
+              operation,
+              WorkflowOperationCommandMetadata.normal(operation.operationId()))
+          .workflow();
+    } finally {
+      lock.unlock();
+    }
+  }
+
+  WorkflowUndoPreview previewUndo(OperationActor actor, String targetOperationId) {
+    lock.lock();
+    try {
+      requireOpen();
+      assertJoinedActor(actor);
+      return previewUndoLocked(actor, targetOperationId);
+    } finally {
+      lock.unlock();
+    }
+  }
+
+  WorkflowHistoryCommandResult undo(UndoWorkflowCommand command) {
+    lock.lock();
+    try {
+      requireOpen();
+      assertJoinedActor(command.actor());
+      WorkflowHistoryCommandResult retry =
+          historyCommandRetry(command.commandId(), Kind.UNDO, command.targetOperationId());
+      if (retry != null) {
+        return retry;
+      }
+      persistence.requireExpectedRevision(sessionId, command.expectedRevision(), revision);
+      WorkflowUndoPreview preview =
+          previewUndoLocked(command.actor(), command.targetOperationId());
+      if (mode == CollaborationMode.SHARED_SESSION_SHARED_UNDO) {
+        if (command.previewId() == null) {
+          throw error(Code.UNDO_PREVIEW_REQUIRED, "Shared undo requires a preview id");
+        }
+        if (!preview.previewId().equals(command.previewId())) {
+          throw error(Code.UNDO_PREVIEW_STALE, "Undo preview no longer matches current history");
+        }
+      }
+      if (!preview.safe()) {
+        throw error(
+            Code.UNDO_CONFLICT,
+            "Undo is blocked by later operations: "
+                + preview.blockingOperations().stream()
+                    .map(WorkflowUndoPreview.BlockingOperation::operationId)
+                    .toList());
+      }
+      OperationIdentity target = requireOperation(preview.targetOperationId(), Code.UNDO_TARGET_NOT_FOUND);
+      WorkflowOperation targetOperation = requireUndoableOperation(target);
+      WorkflowOperation inverse =
+          targetOperation
+              .inverseOperation()
+              .orElseThrow(
+                  () ->
+                      error(
+                          Code.OPERATION_NOT_UNDOABLE,
+                          "Operation has no semantic inverse: " + target.operationId()));
+      String operationId = command.commandId() + ":operation";
+      WorkflowOperation undoOperation =
+          WorkflowOperationBodyCodec.reidentify(
+              inverse,
+              operationId,
+              Instant.now().truncatedTo(ChronoUnit.MICROS),
+              command.actor().actorId());
+      WorkflowOperationCommandMetadata metadata =
+          WorkflowOperationCommandMetadata.undo(command.commandId(), target.operationId());
+      AppendOutcome outcome =
+          applyLocked(
+              mode,
+              command.actor(),
+              command.expectedRevision(),
+              undoOperation,
+              metadata);
+      return result(outcome, metadata, operationId);
+    } finally {
+      lock.unlock();
+    }
+  }
+
+  WorkflowHistoryCommandResult redo(RedoWorkflowCommand command) {
+    lock.lock();
+    try {
+      requireOpen();
+      assertJoinedActor(command.actor());
+      WorkflowHistoryCommandResult retry =
+          historyCommandRetry(command.commandId(), Kind.REDO, command.targetUndoOperationId());
+      if (retry != null) {
+        return retry;
+      }
+      persistence.requireExpectedRevision(sessionId, command.expectedRevision(), revision);
+      OperationIdentity targetUndo =
+          requireOperation(command.targetUndoOperationId(), Code.REDO_TARGET_NOT_FOUND);
+      if (targetUndo.command().kind() != Kind.UNDO
+          || !targetUndo.actorId().equals(command.actor().actorId())) {
+        throw error(
+            Code.REDO_TARGET_INVALID,
+            "Redo target is not an undo command owned by the requesting actor: "
+                + command.targetUndoOperationId());
+      }
+      if (isTargeted(targetUndo.operationId(), Kind.REDO)) {
+        throw error(
+            Code.REDO_ALREADY_APPLIED,
+            "Undo operation has already been redone: " + targetUndo.operationId());
+      }
+      WorkflowOperation targetOperation = requireUndoableOperation(targetUndo);
+      List<WorkflowUndoPreview.BlockingOperation> blockers =
+          blockingOperations(targetUndo, targetOperation.affectedObjectIds());
+      if (!blockers.isEmpty()) {
+        throw error(
+            Code.UNDO_CONFLICT,
+            "Redo is blocked by later operations: "
+                + blockers.stream()
+                    .map(WorkflowUndoPreview.BlockingOperation::operationId)
+                    .toList());
+      }
+      WorkflowOperation inverse =
+          targetOperation
+              .inverseOperation()
+              .orElseThrow(
+                  () ->
+                      error(
+                          Code.REDO_TARGET_INVALID,
+                          "Undo operation has no semantic inverse: " + targetUndo.operationId()));
+      String operationId = command.commandId() + ":operation";
+      WorkflowOperation redoOperation =
+          WorkflowOperationBodyCodec.reidentify(
+              inverse,
+              operationId,
+              Instant.now().truncatedTo(ChronoUnit.MICROS),
+              command.actor().actorId());
+      WorkflowOperationCommandMetadata metadata =
+          WorkflowOperationCommandMetadata.redo(command.commandId(), targetUndo.operationId());
+      AppendOutcome outcome =
+          applyLocked(
+              mode,
+              command.actor(),
+              command.expectedRevision(),
+              redoOperation,
+              metadata);
+      return result(outcome, metadata, operationId);
     } finally {
       lock.unlock();
     }
@@ -220,18 +382,19 @@ final class WorkflowSessionEntry {
     return sessionOwner;
   }
 
-  private Workflow applyLocked(
+  private AppendOutcome applyLocked(
       CollaborationMode requestedMode,
       OperationActor actor,
       long expectedRevision,
-      WorkflowOperation operation) {
+      WorkflowOperation operation,
+      WorkflowOperationCommandMetadata command) {
     requireOpen();
     assertModeAndActor(requestedMode, actor);
-    OperationIdentity candidate = persistence.identity(operation);
+    OperationIdentity candidate = persistence.identity(operation, command);
     OperationIdentity previous = operationsById.get(operation.operationId());
     if (previous != null) {
       if (previous.matchesRetry(candidate)) {
-        return currentWorkflow;
+        return new AppendOutcome(currentWorkflow, previous, revision, sequence, true);
       }
       throw duplicateOperation(operation.operationId());
     }
@@ -239,14 +402,19 @@ final class WorkflowSessionEntry {
 
     Workflow updatedWorkflow = operation.apply(currentWorkflow);
     AppendOutcome outcome =
-        persistence.append(sessionId, revision, sequence, operation, updatedWorkflow);
+        persistence.append(
+            sessionId, revision, sequence, operation, updatedWorkflow, command);
     revision = outcome.revision();
     sequence = outcome.sequence();
     currentWorkflow = outcome.workflow();
     if (outcome.duplicate()) {
       operationsById.put(operation.operationId(), outcome.identity());
+      if (operationHistory.stream()
+          .noneMatch(identity -> identity.operationId().equals(operation.operationId()))) {
+        operationHistory.add(outcome.identity());
+      }
       operationCount = Math.toIntExact(revision);
-      return currentWorkflow;
+      return outcome;
     }
 
     if (!updatedWorkflow.equals(currentWorkflow)) {
@@ -255,10 +423,166 @@ final class WorkflowSessionEntry {
               + operation.operationId());
     }
     operationsById.put(operation.operationId(), outcome.identity());
+    operationHistory.add(outcome.identity());
     operationCount++;
     eventHub.operationAccepted(sessionId, actor, operation, currentWorkflow);
     verifyEventHubState(sequence, revision, "accepted operation");
-    return currentWorkflow;
+    return outcome;
+  }
+
+  private WorkflowUndoPreview previewUndoLocked(OperationActor actor, String requestedTargetId) {
+    OperationIdentity target = selectUndoTarget(actor, requestedTargetId);
+    WorkflowOperation targetOperation = requireUndoableOperation(target);
+    List<String> affectedObjectIds =
+        targetOperation.affectedObjectIds().stream().distinct().sorted().toList();
+    List<WorkflowUndoPreview.BlockingOperation> blockers =
+        blockingOperations(target, affectedObjectIds);
+    return new WorkflowUndoPreview(
+        previewId(target.operationId(), blockers),
+        target.operationId(),
+        target.actorId(),
+        target.operationType(),
+        affectedObjectIds,
+        revision,
+        blockers);
+  }
+
+  private OperationIdentity selectUndoTarget(OperationActor actor, String requestedTargetId) {
+    if (mode == CollaborationMode.SHARED_SESSION_SHARED_UNDO) {
+      if (requestedTargetId == null) {
+        throw error(Code.UNDO_TARGET_REQUIRED, "Shared undo requires an explicit target operation");
+      }
+      return validateForwardUndoTarget(
+          requireOperation(requestedTargetId, Code.UNDO_TARGET_NOT_FOUND), null);
+    }
+    if (requestedTargetId != null) {
+      return validateForwardUndoTarget(
+          requireOperation(requestedTargetId, Code.UNDO_TARGET_NOT_FOUND), actor.actorId());
+    }
+    for (int index = operationHistory.size() - 1; index >= 0; index--) {
+      OperationIdentity candidate = operationHistory.get(index);
+      if (candidate.actorId().equals(actor.actorId())
+          && candidate.command().kind() != Kind.UNDO
+          && !isTargeted(candidate.operationId(), Kind.UNDO)) {
+        return candidate;
+      }
+    }
+    throw error(Code.UNDO_TARGET_NOT_FOUND, "No active operation is available for personal undo");
+  }
+
+  private OperationIdentity validateForwardUndoTarget(
+      OperationIdentity target, String requiredActorId) {
+    if (target.command().kind() == Kind.UNDO
+        || isTargeted(target.operationId(), Kind.UNDO)
+        || (requiredActorId != null && !requiredActorId.equals(target.actorId()))) {
+      throw error(
+          Code.UNDO_TARGET_NOT_FOUND,
+          "Operation is not an active undo target: " + target.operationId());
+    }
+    return target;
+  }
+
+  private OperationIdentity requireOperation(String operationId, Code missingCode) {
+    OperationIdentity operation = operationsById.get(operationId);
+    if (operation == null) {
+      throw error(missingCode, "Unknown operation: " + operationId);
+    }
+    return operation;
+  }
+
+  private WorkflowOperation requireUndoableOperation(OperationIdentity identity) {
+    return identity
+        .operation()
+        .orElseThrow(
+            () ->
+                error(
+                    Code.OPERATION_NOT_UNDOABLE,
+                    "Operation predates reconstructible history: " + identity.operationId()));
+  }
+
+  private boolean isTargeted(String operationId, Kind commandKind) {
+    return operationHistory.stream()
+        .anyMatch(
+            operation ->
+                operation.command().kind() == commandKind
+                    && operationId.equals(operation.command().targetOperationId()));
+  }
+
+  private List<WorkflowUndoPreview.BlockingOperation> blockingOperations(
+      OperationIdentity target, List<String> affectedObjectIds) {
+    int targetIndex = operationHistory.indexOf(target);
+    Set<String> affected = new LinkedHashSet<>(affectedObjectIds);
+    List<WorkflowUndoPreview.BlockingOperation> blockers = new ArrayList<>();
+    for (int index = targetIndex + 1; index < operationHistory.size(); index++) {
+      OperationIdentity later = operationHistory.get(index);
+      if (later.actorId().equals(target.actorId())) {
+        continue;
+      }
+      List<String> intersection = conflictingObjectIds(later, affected);
+      if (!intersection.isEmpty()) {
+        blockers.add(
+            new WorkflowUndoPreview.BlockingOperation(
+                later.operationId(), later.actorId(), intersection));
+      }
+    }
+    return List.copyOf(blockers);
+  }
+
+  private static List<String> conflictingObjectIds(
+      OperationIdentity operation, Set<String> affectedObjectIds) {
+    if (!operation.hasOperationBody()) {
+      return affectedObjectIds.stream().sorted().toList();
+    }
+    return operation.operation().orElseThrow().affectedObjectIds().stream()
+        .filter(affectedObjectIds::contains)
+        .distinct()
+        .sorted()
+        .toList();
+  }
+
+  private String previewId(
+      String targetOperationId, List<WorkflowUndoPreview.BlockingOperation> blockers) {
+    StringBuilder source =
+        new StringBuilder(sessionId)
+            .append('\0')
+            .append(revision)
+            .append('\0')
+            .append(targetOperationId);
+    for (WorkflowUndoPreview.BlockingOperation blocker : blockers) {
+      source.append('\0').append(blocker.operationId());
+      blocker.conflictingObjectIds().forEach(value -> source.append('\0').append(value));
+    }
+    try {
+      byte[] digest =
+          MessageDigest.getInstance("SHA-256")
+              .digest(source.toString().getBytes(StandardCharsets.UTF_8));
+      return Base64.getUrlEncoder().withoutPadding().encodeToString(digest);
+    } catch (NoSuchAlgorithmException exception) {
+      throw new IllegalStateException("SHA-256 is unavailable", exception);
+    }
+  }
+
+  private WorkflowHistoryCommandResult historyCommandRetry(
+      String commandId, Kind kind, String requestedTargetOperationId) {
+    for (OperationIdentity operation : operationHistory) {
+      WorkflowOperationCommandMetadata metadata = operation.command();
+      if (metadata.commandId().equals(commandId)) {
+        if (metadata.kind() != kind
+            || (requestedTargetOperationId != null
+                && !requestedTargetOperationId.equals(metadata.targetOperationId()))) {
+          throw duplicateOperation(commandId);
+        }
+        return new WorkflowHistoryCommandResult(
+            currentWorkflow, metadata, operation.operationId(), revision, sequence);
+      }
+    }
+    return null;
+  }
+
+  private WorkflowHistoryCommandResult result(
+      AppendOutcome outcome, WorkflowOperationCommandMetadata command, String operationId) {
+    return new WorkflowHistoryCommandResult(
+        outcome.workflow(), command, operationId, outcome.revision(), outcome.sequence());
   }
 
   private long reserveNonSemanticEvent() {
@@ -313,7 +637,7 @@ final class WorkflowSessionEntry {
   private WorkflowSessionException duplicateOperation(String operationId) {
     return error(
         Code.DUPLICATE_OPERATION_ID,
-        "Operation id is already associated with different content: " + operationId);
+        "Operation or command id is already associated with different content: " + operationId);
   }
 
   private WorkflowSessionException error(Code code, String message) {
