@@ -3,7 +3,12 @@ package org.hammer.audio.workflow.collaboration.outbox;
 import java.time.Duration;
 import java.util.Objects;
 
-/** Deterministic capped exponential retry policy for failed outbox publication. */
+/**
+ * Deterministic capped exponential retry policy for failed outbox publication.
+ *
+ * @param initialDelay retry delay after the first failed publication
+ * @param maximumDelay inclusive upper bound for all retry delays
+ */
 public record WorkflowOutboxBackoffPolicy(Duration initialDelay, Duration maximumDelay) {
 
   public WorkflowOutboxBackoffPolicy {
