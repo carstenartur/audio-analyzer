@@ -3,7 +3,7 @@ package org.hammer.audio.workflow.collaboration;
 import java.util.Objects;
 
 /** Typed application error for workflow-session lifecycle and command failures. */
-public final class WorkflowSessionException extends RuntimeException {
+public class WorkflowSessionException extends RuntimeException {
 
   /** Stable error codes independent of HTTP or any other transport. */
   public enum Code {
