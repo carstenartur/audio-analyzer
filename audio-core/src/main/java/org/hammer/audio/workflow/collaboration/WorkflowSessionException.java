@@ -2,7 +2,7 @@ package org.hammer.audio.workflow.collaboration;
 
 import java.util.Objects;
 
-/** Typed application error for workflow-session lifecycle and membership failures. */
+/** Typed application error for workflow-session lifecycle and command failures. */
 public final class WorkflowSessionException extends RuntimeException {
 
   /** Stable error codes independent of HTTP or any other transport. */
@@ -15,7 +15,16 @@ public final class WorkflowSessionException extends RuntimeException {
     SESSION_MODE_MISMATCH,
     SESSION_CLOSE_FORBIDDEN,
     DUPLICATE_OPERATION_ID,
-    INVALID_OPERATION_AUTHOR
+    INVALID_OPERATION_AUTHOR,
+    UNDO_TARGET_REQUIRED,
+    UNDO_TARGET_NOT_FOUND,
+    OPERATION_NOT_UNDOABLE,
+    UNDO_PREVIEW_REQUIRED,
+    UNDO_PREVIEW_STALE,
+    UNDO_CONFLICT,
+    REDO_TARGET_NOT_FOUND,
+    REDO_TARGET_INVALID,
+    REDO_ALREADY_APPLIED
   }
 
   private final Code errorCode;
