@@ -74,7 +74,13 @@ public final class WorkflowOutboxDispatcher {
     }
   }
 
-  /** Immutable summary of one bounded dispatch pass. */
+  /**
+   * Immutable summary of one bounded dispatch pass.
+   *
+   * @param claimedCount number of entries leased for this pass
+   * @param publishedEventIds stable identifiers acknowledged as published
+   * @param failedEventIds stable identifiers scheduled for retry
+   */
   public record DispatchBatchResult(
       int claimedCount, List<String> publishedEventIds, List<String> failedEventIds) {
 
