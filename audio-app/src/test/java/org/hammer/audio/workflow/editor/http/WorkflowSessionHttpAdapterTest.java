@@ -239,8 +239,7 @@ class WorkflowSessionHttpAdapterTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(createNodeRequest(1L, "operation.stale")))
         .andExpect(status().isConflict())
-        .andExpect(
-            jsonPath("$.code").value("WORKFLOW_SESSION_REVISION_CONFLICT"))
+        .andExpect(jsonPath("$.code").value("WORKFLOW_SESSION_REVISION_CONFLICT"))
         .andExpect(jsonPath("$.sessionId").value("session.shared"))
         .andExpect(jsonPath("$.expectedRevision").value(1))
         .andExpect(jsonPath("$.actualRevision").value(0));

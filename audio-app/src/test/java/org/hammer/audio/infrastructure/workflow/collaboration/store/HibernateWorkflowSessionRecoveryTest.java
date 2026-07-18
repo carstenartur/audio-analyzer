@@ -138,9 +138,7 @@ class HibernateWorkflowSessionRecoveryTest {
                 OWNER,
                 1,
                 renameNode(
-                    "operation.rename",
-                    FIRST_OPERATION_TIME.plusSeconds(120),
-                    "Renamed input"));
+                    "operation.rename", FIRST_OPERATION_TIME.plusSeconds(120), "Renamed input"));
         assertEquals("Renamed input", renamed.nodes().getFirst().label());
         assertEquals(2, registry.inspect(SESSION_ID).revision());
         assertEquals(6, registry.inspect(SESSION_ID).sequence());
@@ -208,12 +206,7 @@ class HibernateWorkflowSessionRecoveryTest {
   private static WorkflowOperation.RenameNode renameNode(
       String operationId, Instant timestamp, String newLabel) {
     return new WorkflowOperation.RenameNode(
-        operationId,
-        timestamp,
-        OWNER.actorId(),
-        "node.input",
-        "Input",
-        newLabel);
+        operationId, timestamp, OWNER.actorId(), "node.input", "Input", newLabel);
   }
 
   private static Workflow emptyWorkflow() {
