@@ -15,8 +15,7 @@ class WorkflowSchemaMigrationConfigurationTest {
   @Test
   void disabledMigrationDoesNotRequireDatasourceOrValidateMode() {
     DataSource dataSource = mock(DataSource.class);
-    WorkflowSchemaMigrationConfiguration configuration =
-        new WorkflowSchemaMigrationConfiguration();
+    WorkflowSchemaMigrationConfiguration configuration = new WorkflowSchemaMigrationConfiguration();
 
     WorkflowSchemaMigrationResult result =
         configuration.workflowSchemaMigrationResult(
@@ -31,8 +30,7 @@ class WorkflowSchemaMigrationConfigurationTest {
     DataSource dataSource = mock(DataSource.class);
     MockEnvironment environment =
         new MockEnvironment().withProperty("spring.datasource.url", "jdbc:h2:mem:migration");
-    WorkflowSchemaMigrationConfiguration configuration =
-        new WorkflowSchemaMigrationConfiguration();
+    WorkflowSchemaMigrationConfiguration configuration = new WorkflowSchemaMigrationConfiguration();
 
     assertThrows(
         IllegalStateException.class,
