@@ -28,7 +28,7 @@ public final class WorkflowSessionRegistry {
   private static final long INITIAL_SESSION_EVENT_SEQUENCE = 2;
 
   private final Map<String, WorkflowSessionEntry> sessionEntries = new ConcurrentHashMap<>();
-  private final WorkflowSessionEventHub eventHub;
+  private final WorkflowSessionEventHub sessionEventHub;
   private final WorkflowSessionPersistenceCoordinator persistence;
 
   /** Creates a registry with an in-memory bounded session-event hub. */
@@ -38,7 +38,7 @@ public final class WorkflowSessionRegistry {
 
   /** Creates a registry publishing lifecycle and accepted-operation events to the supplied hub. */
   public WorkflowSessionRegistry(WorkflowSessionEventHub eventHub) {
-    this.eventHub = Objects.requireNonNull(eventHub, "eventHub");
+    this.sessionEventHub = Objects.requireNonNull(eventHub, "eventHub");
     this.persistence = WorkflowSessionPersistenceCoordinator.inMemory();
   }
 
@@ -50,7 +50,7 @@ public final class WorkflowSessionRegistry {
    */
   public WorkflowSessionRegistry(
       WorkflowSessionEventHub eventHub, WorkflowSessionStateStore stateStore) {
-    this.eventHub = Objects.requireNonNull(eventHub, "eventHub");
+    this.sessionEventHub = Objects.requireNonNull(eventHub, "eventHub");
     this.persistence =
         stateStore == null
             ? WorkflowSessionPersistenceCoordinator.inMemory()
@@ -60,7 +60,7 @@ public final class WorkflowSessionRegistry {
 
   /** Returns the transport-neutral event hub used by this registry. */
   public WorkflowSessionEventHub eventHub() {
-    return eventHub;
+    return sessionEventHub;
   }
 
   /** Creates a new session and joins its owner. */
@@ -73,7 +73,13 @@ public final class WorkflowSessionRegistry {
     Instant createdAt = Instant.now();
     WorkflowSessionEntry created =
         WorkflowSessionEntry.created(
-            requiredSessionId, mode, owner, createdAt, initialWorkflow, eventHub, persistence);
+            requiredSessionId,
+            mode,
+            owner,
+            createdAt,
+            initialWorkflow,
+            sessionEventHub,
+            persistence);
     WorkflowSessionEntry previous = sessionEntries.putIfAbsent(requiredSessionId, created);
     if (previous != null) {
       throw error(
@@ -92,7 +98,7 @@ public final class WorkflowSessionRegistry {
           initialWorkflow,
           INITIAL_SESSION_EVENT_SEQUENCE);
       persisted = persistence.durable();
-      eventHub.openSession(requiredSessionId, owner, initialWorkflow);
+      sessionEventHub.openSession(requiredSessionId, owner, initialWorkflow);
       created.verifyInitialEventStream(INITIAL_SESSION_EVENT_SEQUENCE);
       return created.snapshot();
     } catch (RuntimeException failure) {
@@ -182,7 +188,7 @@ public final class WorkflowSessionRegistry {
           requiredSessionId,
           "Session changed while closing: " + requiredSessionId);
     }
-    eventHub.closeSession(requiredSessionId, entry.owner());
+    sessionEventHub.closeSession(requiredSessionId, entry.owner());
     entry.verifyClosedEvent(finalSequence);
   }
 
@@ -196,14 +202,26 @@ public final class WorkflowSessionRegistry {
 
   private void recoverDurableSessions() {
     for (RecoveredSession recovered : persistence.recoverOpenSessions()) {
-      WorkflowSessionEntry entry = WorkflowSessionEntry.recovered(recovered, eventHub, persistence);
+      WorkflowSessionEntry.SessionDefinition definition =
+          new WorkflowSessionEntry.SessionDefinition(
+              recovered.sessionId(),
+              recovered.mode(),
+              recovered.owner(),
+              recovered.createdAt(),
+              recovered.workflow());
+      WorkflowSessionEntry.RecoveryState recoveryState =
+          new WorkflowSessionEntry.RecoveryState(
+              recovered.operations(), false, recovered.revision(), recovered.sequence());
+      WorkflowSessionEntry entry =
+          WorkflowSessionEntry.recovered(
+              definition, recoveryState, sessionEventHub, persistence);
       if (sessionEntries.putIfAbsent(recovered.sessionId(), entry) != null) {
         throw new WorkflowSessionRecoveryException(
             recovered.sessionId(),
             "Duplicate durable collaboration session: " + recovered.sessionId());
       }
       try {
-        eventHub.restoreSession(
+        sessionEventHub.restoreSession(
             recovered.sessionId(),
             recovered.workflow(),
             recovered.sequence(),
