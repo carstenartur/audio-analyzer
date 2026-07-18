@@ -9,6 +9,7 @@ import org.hammer.audio.workflow.WorkflowOperation;
 import org.hammer.audio.workflow.collaboration.store.StoredWorkflowOperation;
 import org.hammer.audio.workflow.collaboration.store.StoredWorkflowSession;
 import org.hammer.audio.workflow.collaboration.store.WorkflowOperationBodyCodec;
+import org.hammer.audio.workflow.collaboration.store.WorkflowOperationCommandMetadata;
 import org.hammer.audio.workflow.collaboration.store.WorkflowOperationPersistenceCodec;
 import org.hammer.audio.workflow.collaboration.store.WorkflowOperationPersistenceData;
 import org.hammer.audio.workflow.collaboration.store.WorkflowOutboxEventData;
@@ -19,9 +20,7 @@ import org.hammer.audio.workflow.collaboration.store.WorkflowSessionStateStore;
 import org.hammer.audio.workflow.dsl.WorkflowDslParser;
 import org.hammer.audio.workflow.dsl.WorkflowDslSerializer;
 
-/**
- * Coordinates optional durable persistence without leaking storage details into session runtime.
- */
+/** Coordinates optional durable persistence without leaking storage details into session runtime. */
 final class WorkflowSessionPersistenceCoordinator {
 
   private static final String OPERATION_EVENT_TYPE = "WORKFLOW_OPERATION_ACCEPTED";
@@ -90,7 +89,13 @@ final class WorkflowSessionPersistenceCoordinator {
   }
 
   OperationIdentity identity(WorkflowOperation operation) {
-    return OperationIdentity.from(WorkflowOperationPersistenceCodec.encode(operation));
+    return identity(
+        operation, WorkflowOperationCommandMetadata.normal(operation.operationId()));
+  }
+
+  OperationIdentity identity(
+      WorkflowOperation operation, WorkflowOperationCommandMetadata command) {
+    return OperationIdentity.from(WorkflowOperationPersistenceCodec.encode(operation, command));
   }
 
   void requireExpectedRevision(String sessionId, long expectedRevision, long actualRevision) {
@@ -106,8 +111,24 @@ final class WorkflowSessionPersistenceCoordinator {
       long expectedSequence,
       WorkflowOperation operation,
       Workflow updatedWorkflow) {
+    return append(
+        sessionId,
+        expectedRevision,
+        expectedSequence,
+        operation,
+        updatedWorkflow,
+        WorkflowOperationCommandMetadata.normal(operation.operationId()));
+  }
+
+  AppendOutcome append(
+      String sessionId,
+      long expectedRevision,
+      long expectedSequence,
+      WorkflowOperation operation,
+      Workflow updatedWorkflow,
+      WorkflowOperationCommandMetadata command) {
     WorkflowOperationPersistenceData persistenceData =
-        WorkflowOperationPersistenceCodec.encode(operation);
+        WorkflowOperationPersistenceCodec.encode(operation, command);
     OperationIdentity candidate = OperationIdentity.from(persistenceData);
     long nextRevision = Math.addExact(expectedRevision, 1);
     long nextSequence = Math.addExact(expectedSequence, 1);
@@ -276,13 +297,15 @@ final class WorkflowSessionPersistenceCoordinator {
       String actorId,
       String payload,
       int bodyVersion,
-      String operationBody) {
+      String operationBody,
+      WorkflowOperationCommandMetadata command) {
 
     OperationIdentity {
       Objects.requireNonNull(operationId, "operationId");
       Objects.requireNonNull(operationType, "operationType");
       Objects.requireNonNull(actorId, "actorId");
       Objects.requireNonNull(payload, "payload");
+      Objects.requireNonNull(command, "command");
       if (bodyVersion < 0) {
         throw new IllegalArgumentException("bodyVersion must be >= 0");
       }
@@ -301,7 +324,8 @@ final class WorkflowSessionPersistenceCoordinator {
           operation.actorId(),
           operation.payload(),
           operation.bodyVersion(),
-          operation.operationBody());
+          operation.operationBody(),
+          operation.command());
     }
 
     static OperationIdentity from(StoredWorkflowOperation operation) {
@@ -311,7 +335,8 @@ final class WorkflowSessionPersistenceCoordinator {
           operation.actorId(),
           operation.payload(),
           operation.bodyVersion(),
-          operation.operationBody());
+          operation.operationBody(),
+          operation.command());
     }
 
     boolean hasOperationBody() {
@@ -329,7 +354,8 @@ final class WorkflowSessionPersistenceCoordinator {
       if (!operationId.equals(candidate.operationId)
           || !operationType.equals(candidate.operationType)
           || !actorId.equals(candidate.actorId)
-          || !payload.equals(candidate.payload)) {
+          || !payload.equals(candidate.payload)
+          || !command.equals(candidate.command)) {
         return false;
       }
       if (!hasOperationBody() || !candidate.hasOperationBody()) {
