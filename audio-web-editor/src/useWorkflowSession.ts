@@ -489,7 +489,7 @@ export function useWorkflowSession(callbacks: WorkflowSessionCallbacks): Workflo
           void reconcile('command metadata unavailable').catch(() => undefined);
         }
         setCommandState('accepted');
-        onStatus(`Loaded: server accepted ${operationId}`);
+        onStatus(`Loaded: server accepted operation at revision ${metadata?.revision ?? expectedRevision + 1}`);
         return projection;
       } catch (failure) {
         setCommandState('rejected');

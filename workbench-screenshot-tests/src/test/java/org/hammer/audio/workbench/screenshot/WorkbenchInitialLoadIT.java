@@ -60,6 +60,10 @@ class WorkbenchInitialLoadIT {
   private static final int VIEWPORT_HEIGHT = 720;
   private static final int PAGE_LOAD_TIMEOUT_MS = 15_000;
   private static final String EXPECTED_STATUS_PREFIX = "Loaded:";
+  private static final String ACTOR_INIT_SCRIPT =
+      "window.sessionStorage.setItem('audio-analyzer.workflow.actor',"
+          + " JSON.stringify({actorId:'actor-docs',userId:'user-docs',"
+          + "displayName:'Documentation User'}));";
 
   private GenericContainer<?> container;
   private Playwright playwright;
@@ -110,6 +114,7 @@ class WorkbenchInitialLoadIT {
 
     try (Page page = browser.newPage()) {
       page.setViewportSize(VIEWPORT_WIDTH, VIEWPORT_HEIGHT);
+      page.addInitScript(ACTOR_INIT_SCRIPT);
 
       // Navigate to the workbench
       page.navigate(baseUrl + "/");
@@ -186,6 +191,7 @@ class WorkbenchInitialLoadIT {
 
     try (Page page = browser.newPage()) {
       page.setViewportSize(VIEWPORT_WIDTH, VIEWPORT_HEIGHT);
+      page.addInitScript(ACTOR_INIT_SCRIPT);
       page.navigate(baseUrl + "/");
       page.waitForLoadState();
 
