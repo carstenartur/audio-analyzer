@@ -17,8 +17,7 @@ public final class WorkflowUndoConflictException extends WorkflowSessionExceptio
     super(
         Code.UNDO_CONFLICT,
         requireNotBlank(sessionId, "sessionId"),
-        "Semantic history command is blocked by later operations for target "
-            + targetOperationId);
+        "Semantic history command is blocked by later operations for target " + targetOperationId);
     this.targetOperationId = requireNotBlank(targetOperationId, "targetOperationId");
     this.blockingOperations =
         List.copyOf(Objects.requireNonNull(blockingOperations, "blockingOperations"));

@@ -66,8 +66,7 @@ class WorkflowSessionUndoConcurrencyTest {
 
       List<Object> results = futures.stream().map(WorkflowSessionUndoConcurrencyTest::get).toList();
       assertEquals(
-          1,
-          results.stream().filter(WorkflowHistoryCommandResult.class::isInstance).count());
+          1, results.stream().filter(WorkflowHistoryCommandResult.class::isInstance).count());
       Object rejected =
           results.stream()
               .filter(WorkflowSessionRevisionConflictException.class::isInstance)

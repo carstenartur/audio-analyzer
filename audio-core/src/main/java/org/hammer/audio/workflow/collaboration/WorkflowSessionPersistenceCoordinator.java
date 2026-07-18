@@ -20,7 +20,9 @@ import org.hammer.audio.workflow.collaboration.store.WorkflowSessionStateStore;
 import org.hammer.audio.workflow.dsl.WorkflowDslParser;
 import org.hammer.audio.workflow.dsl.WorkflowDslSerializer;
 
-/** Coordinates optional durable persistence without leaking storage details into session runtime. */
+/**
+ * Coordinates optional durable persistence without leaking storage details into session runtime.
+ */
 final class WorkflowSessionPersistenceCoordinator {
 
   private static final String OPERATION_EVENT_TYPE = "WORKFLOW_OPERATION_ACCEPTED";
@@ -89,8 +91,7 @@ final class WorkflowSessionPersistenceCoordinator {
   }
 
   OperationIdentity identity(WorkflowOperation operation) {
-    return identity(
-        operation, WorkflowOperationCommandMetadata.normal(operation.operationId()));
+    return identity(operation, WorkflowOperationCommandMetadata.normal(operation.operationId()));
   }
 
   OperationIdentity identity(

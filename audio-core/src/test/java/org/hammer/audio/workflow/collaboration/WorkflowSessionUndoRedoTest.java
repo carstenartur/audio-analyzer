@@ -56,7 +56,8 @@ class WorkflowSessionUndoRedoTest {
 
     WorkflowHistoryCommandResult redone =
         registry.redo(
-            "session.undo", new RedoWorkflowCommand("redo.owner.1", OWNER, 4, undone.operationId()));
+            "session.undo",
+            new RedoWorkflowCommand("redo.owner.1", OWNER, 4, undone.operationId()));
     assertEquals(Kind.REDO, redone.command().kind());
     assertEquals("Renamed owner node", node(registry, "node.owner").label());
     assertEquals(5, redone.revision());
@@ -67,13 +68,7 @@ class WorkflowSessionUndoRedoTest {
     WorkflowSessionRegistry registry = registry(CollaborationMode.SHARED_SESSION_PERSONAL_UNDO);
     createNode(registry, OWNER, "operation.owner.create", "node.shared", "Shared", 0);
     renameNode(
-        registry,
-        GUEST,
-        "operation.guest.rename",
-        "node.shared",
-        "Shared",
-        "Guest rename",
-        1);
+        registry, GUEST, "operation.guest.rename", "node.shared", "Shared", "Guest rename", 1);
 
     WorkflowUndoPreview preview =
         registry.previewUndo("session.undo", OWNER, "operation.owner.create");
@@ -95,9 +90,7 @@ class WorkflowSessionUndoRedoTest {
     WorkflowSessionRegistry registry = registry(CollaborationMode.SHARED_SESSION_SHARED_UNDO);
     createNode(registry, OWNER, "operation.owner.create", "node.owner", "Owner", 0);
 
-    assertCode(
-        Code.UNDO_TARGET_REQUIRED,
-        () -> registry.previewUndo("session.undo", OWNER, null));
+    assertCode(Code.UNDO_TARGET_REQUIRED, () -> registry.previewUndo("session.undo", OWNER, null));
 
     WorkflowUndoPreview preview =
         registry.previewUndo("session.undo", OWNER, "operation.owner.create");
@@ -108,11 +101,7 @@ class WorkflowSessionUndoRedoTest {
             registry.undo(
                 "session.undo",
                 new UndoWorkflowCommand(
-                    "undo.shared.missing-preview",
-                    OWNER,
-                    1,
-                    "operation.owner.create",
-                    null)));
+                    "undo.shared.missing-preview", OWNER, 1, "operation.owner.create", null)));
 
     createNode(registry, GUEST, "operation.guest.create", "node.guest", "Guest", 1);
     assertCode(
@@ -121,11 +110,7 @@ class WorkflowSessionUndoRedoTest {
             registry.undo(
                 "session.undo",
                 new UndoWorkflowCommand(
-                    "undo.shared.stale",
-                    OWNER,
-                    2,
-                    "operation.owner.create",
-                    preview.previewId())));
+                    "undo.shared.stale", OWNER, 2, "operation.owner.create", preview.previewId())));
 
     WorkflowUndoPreview current =
         registry.previewUndo("session.undo", OWNER, "operation.owner.create");
@@ -133,14 +118,11 @@ class WorkflowSessionUndoRedoTest {
         registry.undo(
             "session.undo",
             new UndoWorkflowCommand(
-                "undo.shared.accepted",
-                OWNER,
-                2,
-                "operation.owner.create",
-                current.previewId()));
+                "undo.shared.accepted", OWNER, 2, "operation.owner.create", current.previewId()));
     assertEquals(Kind.UNDO, result.command().kind());
-    assertFalse(registry.workflow("session.undo").nodes().stream()
-        .anyMatch(candidate -> candidate.id().equals("node.owner")));
+    assertFalse(
+        registry.workflow("session.undo").nodes().stream()
+            .anyMatch(candidate -> candidate.id().equals("node.owner")));
   }
 
   @Test
@@ -148,8 +130,7 @@ class WorkflowSessionUndoRedoTest {
     WorkflowSessionRegistry registry = registry(CollaborationMode.PRIVATE_WORKSPACE);
     createNode(registry, OWNER, "operation.create", "node.one", "One", 0);
     WorkflowHistoryCommandResult undone =
-        registry.undo(
-            "session.undo", new UndoWorkflowCommand("undo.once", OWNER, 1, null, null));
+        registry.undo("session.undo", new UndoWorkflowCommand("undo.once", OWNER, 1, null, null));
     registry.redo(
         "session.undo", new RedoWorkflowCommand("redo.once", OWNER, 2, undone.operationId()));
 

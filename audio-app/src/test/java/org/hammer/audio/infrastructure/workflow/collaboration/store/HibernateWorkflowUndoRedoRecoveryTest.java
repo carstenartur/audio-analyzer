@@ -63,8 +63,7 @@ class HibernateWorkflowUndoRedoRecoveryTest {
 
         WorkflowHistoryCommandResult undone =
             registry.undo(
-                SESSION_ID,
-                new UndoWorkflowCommand("command.undo", OWNER, 2, null, null));
+                SESSION_ID, new UndoWorkflowCommand("command.undo", OWNER, 2, null, null));
         undoOperationId = undone.operationId();
         assertEquals("Original", nodeLabel(registry));
         assertEquals(3, undone.revision());
@@ -83,16 +82,14 @@ class HibernateWorkflowUndoRedoRecoveryTest {
 
         WorkflowHistoryCommandResult retry =
             registry.undo(
-                SESSION_ID,
-                new UndoWorkflowCommand("command.undo", OWNER, 2, null, null));
+                SESSION_ID, new UndoWorkflowCommand("command.undo", OWNER, 2, null, null));
         assertEquals(undoOperationId, retry.operationId());
         assertEquals(3, retry.revision());
         assertEquals(3, store.operations(SESSION_ID).size());
 
         WorkflowHistoryCommandResult redone =
             registry.redo(
-                SESSION_ID,
-                new RedoWorkflowCommand("command.redo", OWNER, 3, undoOperationId));
+                SESSION_ID, new RedoWorkflowCommand("command.redo", OWNER, 3, undoOperationId));
         assertEquals("Renamed", nodeLabel(registry));
         assertEquals(4, redone.revision());
         List<StoredWorkflowOperation> operations = store.operations(SESSION_ID);
@@ -172,7 +169,8 @@ class HibernateWorkflowUndoRedoRecoveryTest {
       return;
     }
     try (var paths = Files.walk(directory)) {
-      paths.sorted(Comparator.reverseOrder())
+      paths
+          .sorted(Comparator.reverseOrder())
           .forEach(HibernateWorkflowUndoRedoRecoveryTest::delete);
     }
   }

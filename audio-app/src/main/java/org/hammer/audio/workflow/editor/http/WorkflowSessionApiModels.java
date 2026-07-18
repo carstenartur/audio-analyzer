@@ -92,8 +92,7 @@ public final class WorkflowSessionApiModels {
   }
 
   /** Request for a revision-bound undo preview. */
-  public record UndoPreviewRequest(
-      @Valid @NotNull ActorRequest actor, String targetOperationId) {
+  public record UndoPreviewRequest(@Valid @NotNull ActorRequest actor, String targetOperationId) {
     public UndoPreviewRequest {
       Objects.requireNonNull(actor, "actor");
     }

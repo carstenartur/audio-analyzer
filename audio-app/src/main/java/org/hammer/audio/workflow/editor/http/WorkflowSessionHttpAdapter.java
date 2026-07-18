@@ -103,8 +103,7 @@ public final class WorkflowSessionHttpAdapter {
   /** Computes an immutable undo preview at the current semantic revision. */
   @PostMapping("/{sessionId}/undo/preview")
   public UndoPreviewResponse previewUndo(
-      @PathVariable(SESSION_ID) String sessionId,
-      @Valid @RequestBody UndoPreviewRequest request) {
+      @PathVariable(SESSION_ID) String sessionId, @Valid @RequestBody UndoPreviewRequest request) {
     return UndoPreviewResponse.from(
         registry.previewUndo(sessionId, request.actor().toDomain(), request.targetOperationId()));
   }
@@ -112,16 +111,14 @@ public final class WorkflowSessionHttpAdapter {
   /** Applies one idempotent revision-aware semantic undo command. */
   @PostMapping("/{sessionId}/undo")
   public HistoryCommandResponse undo(
-      @PathVariable(SESSION_ID) String sessionId,
-      @Valid @RequestBody UndoCommandRequest request) {
+      @PathVariable(SESSION_ID) String sessionId, @Valid @RequestBody UndoCommandRequest request) {
     return HistoryCommandResponse.from(registry.undo(sessionId, request.toDomain()));
   }
 
   /** Applies one idempotent revision-aware semantic redo command. */
   @PostMapping("/{sessionId}/redo")
   public HistoryCommandResponse redo(
-      @PathVariable(SESSION_ID) String sessionId,
-      @Valid @RequestBody RedoCommandRequest request) {
+      @PathVariable(SESSION_ID) String sessionId, @Valid @RequestBody RedoCommandRequest request) {
     return HistoryCommandResponse.from(registry.redo(sessionId, request.toDomain()));
   }
 

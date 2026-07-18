@@ -41,11 +41,7 @@ public final class WorkflowApiExceptionHandler {
   public ProblemDetail handleUndoConflict(
       WorkflowUndoConflictException exception, HttpServletRequest request) {
     ProblemDetail problem =
-        problem(
-            HttpStatus.CONFLICT,
-            "undo-conflict",
-            exception.getMessage(),
-            request);
+        problem(HttpStatus.CONFLICT, "undo-conflict", exception.getMessage(), request);
     problem.setProperty("code", "UNDO_CONFLICT");
     problem.setProperty("sessionId", exception.sessionId());
     problem.setProperty("targetOperationId", exception.targetOperationId());

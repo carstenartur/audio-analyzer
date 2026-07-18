@@ -202,8 +202,7 @@ final class WorkflowSessionEntry {
         return retry;
       }
       persistence.requireExpectedRevision(sessionId, command.expectedRevision(), revision);
-      WorkflowUndoPreview preview =
-          previewUndoLocked(command.actor(), command.targetOperationId());
+      WorkflowUndoPreview preview = previewUndoLocked(command.actor(), command.targetOperationId());
       if (mode == CollaborationMode.SHARED_SESSION_SHARED_UNDO) {
         if (command.previewId() == null) {
           throw error(Code.UNDO_PREVIEW_REQUIRED, "Shared undo requires a preview id");
@@ -216,7 +215,8 @@ final class WorkflowSessionEntry {
         throw new WorkflowUndoConflictException(
             sessionId, preview.targetOperationId(), preview.blockingOperations());
       }
-      OperationIdentity target = requireOperation(preview.targetOperationId(), Code.UNDO_TARGET_NOT_FOUND);
+      OperationIdentity target =
+          requireOperation(preview.targetOperationId(), Code.UNDO_TARGET_NOT_FOUND);
       WorkflowOperation targetOperation = requireUndoableOperation(target);
       WorkflowOperation inverse =
           targetOperation
@@ -236,12 +236,7 @@ final class WorkflowSessionEntry {
       WorkflowOperationCommandMetadata metadata =
           WorkflowOperationCommandMetadata.undo(command.commandId(), target.operationId());
       AppendOutcome outcome =
-          applyLocked(
-              mode,
-              command.actor(),
-              command.expectedRevision(),
-              undoOperation,
-              metadata);
+          applyLocked(mode, command.actor(), command.expectedRevision(), undoOperation, metadata);
       return result(outcome, metadata, operationId);
     } finally {
       lock.unlock();
@@ -277,8 +272,7 @@ final class WorkflowSessionEntry {
       List<WorkflowUndoPreview.BlockingOperation> blockers =
           blockingOperations(targetUndo, targetOperation.affectedObjectIds());
       if (!blockers.isEmpty()) {
-        throw new WorkflowUndoConflictException(
-            sessionId, targetUndo.operationId(), blockers);
+        throw new WorkflowUndoConflictException(sessionId, targetUndo.operationId(), blockers);
       }
       WorkflowOperation inverse =
           targetOperation
@@ -298,12 +292,7 @@ final class WorkflowSessionEntry {
       WorkflowOperationCommandMetadata metadata =
           WorkflowOperationCommandMetadata.redo(command.commandId(), targetUndo.operationId());
       AppendOutcome outcome =
-          applyLocked(
-              mode,
-              command.actor(),
-              command.expectedRevision(),
-              redoOperation,
-              metadata);
+          applyLocked(mode, command.actor(), command.expectedRevision(), redoOperation, metadata);
       return result(outcome, metadata, operationId);
     } finally {
       lock.unlock();
@@ -394,8 +383,7 @@ final class WorkflowSessionEntry {
 
     Workflow updatedWorkflow = operation.apply(currentWorkflow);
     AppendOutcome outcome =
-        persistence.append(
-            sessionId, revision, sequence, operation, updatedWorkflow, command);
+        persistence.append(sessionId, revision, sequence, operation, updatedWorkflow, command);
     revision = outcome.revision();
     sequence = outcome.sequence();
     currentWorkflow = outcome.workflow();

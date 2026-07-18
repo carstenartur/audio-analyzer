@@ -43,7 +43,8 @@ public record WorkflowOperationCommandMetadata(
   }
 
   /** Metadata for a redo command and its target undo operation. */
-  public static WorkflowOperationCommandMetadata redo(String commandId, String targetUndoOperationId) {
+  public static WorkflowOperationCommandMetadata redo(
+      String commandId, String targetUndoOperationId) {
     return new WorkflowOperationCommandMetadata(Kind.REDO, commandId, targetUndoOperationId);
   }
 

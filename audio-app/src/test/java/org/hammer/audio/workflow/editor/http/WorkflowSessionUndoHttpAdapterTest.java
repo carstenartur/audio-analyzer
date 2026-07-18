@@ -128,7 +128,8 @@ class WorkflowSessionUndoHttpAdapterTest {
         .andExpect(jsonPath("$.revision").value(3))
         .andExpect(jsonPath("$.sequence").value(5));
 
-    assertEquals("REDO", eventHub.replay("session.undo", 4).getFirst().attributes().get("commandKind"));
+    assertEquals(
+        "REDO", eventHub.replay("session.undo", 4).getFirst().attributes().get("commandKind"));
   }
 
   @Test
@@ -174,11 +175,10 @@ class WorkflowSessionUndoHttpAdapterTest {
         .andExpect(status().isConflict())
         .andExpect(jsonPath("$.code").value("UNDO_CONFLICT"))
         .andExpect(jsonPath("$.targetOperationId").value("operation.create"))
-        .andExpect(jsonPath("$.blockingOperations[0].operationId")
-            .value("operation.guest.property"))
+        .andExpect(
+            jsonPath("$.blockingOperations[0].operationId").value("operation.guest.property"))
         .andExpect(jsonPath("$.blockingOperations[0].actorId").value("actor.guest"))
-        .andExpect(jsonPath("$.blockingOperations[0].conflictingObjectIds[0]")
-            .value("node.input"));
+        .andExpect(jsonPath("$.blockingOperations[0].conflictingObjectIds[0]").value("node.input"));
   }
 
   private void createSession() throws Exception {

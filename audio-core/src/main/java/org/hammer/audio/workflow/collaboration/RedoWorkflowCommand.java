@@ -11,10 +11,7 @@ import java.util.Objects;
  * @param targetUndoOperationId accepted undo operation to invert
  */
 public record RedoWorkflowCommand(
-    String commandId,
-    OperationActor actor,
-    long expectedRevision,
-    String targetUndoOperationId) {
+    String commandId, OperationActor actor, long expectedRevision, String targetUndoOperationId) {
 
   public RedoWorkflowCommand {
     commandId = requireNotBlank(commandId, "commandId");

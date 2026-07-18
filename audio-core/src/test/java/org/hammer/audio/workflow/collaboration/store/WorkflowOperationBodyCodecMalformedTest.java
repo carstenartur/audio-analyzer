@@ -21,8 +21,7 @@ class WorkflowOperationBodyCodecMalformedTest {
                 "operation.truncated",
                 Instant.parse("2026-07-18T22:15:00Z"),
                 "actor.one",
-                new Node(
-                    "node.one", "test", "One", List.of(), List.of(), Metadata.empty())));
+                new Node("node.one", "test", "One", List.of(), List.of(), Metadata.empty())));
     byte[] complete = Base64.getUrlDecoder().decode(encoded.body());
     String truncated =
         Base64.getUrlEncoder()
