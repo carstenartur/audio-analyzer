@@ -112,10 +112,7 @@ class HibernateWorkflowOutboxStoreTest {
                   .getFirst();
           StoredWorkflowOutboxEntry published =
               outboxStore.markPublished(
-                  "event.retry",
-                  "dispatcher.success",
-                  second.leaseToken(),
-                  retryAt.plusSeconds(1));
+                  "event.retry", "dispatcher.success", second.leaseToken(), retryAt.plusSeconds(1));
 
           assertEquals(2, published.attemptCount());
           assertFalse(published.pending());
