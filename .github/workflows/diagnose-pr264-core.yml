@@ -6,7 +6,7 @@ on:
       - master
 
 permissions:
-  contents: read
+  contents: write
   packages: read
 
 jobs:
@@ -17,6 +17,8 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: feature/263-collaboration-recovery
 
       - uses: actions/setup-java@v5
         with:
@@ -26,6 +28,20 @@ jobs:
           server-id: github
           server-username: GITHUB_ACTOR
           server-password: GITHUB_TOKEN
+
+      - name: Apply and commit repository formatting
+        if: github.actor != 'github-actions[bot]'
+        shell: bash
+        run: |
+          mvn -B spotless:apply --file pom.xml
+          if git diff --quiet; then
+            exit 0
+          fi
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m 'Format extracted collaboration recovery components'
+          git push origin HEAD:feature/263-collaboration-recovery
 
       - name: Run audio-core gate
         id: verify
