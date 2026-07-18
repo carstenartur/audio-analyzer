@@ -14,7 +14,6 @@ import java.util.Objects;
 public record WorkflowOutboxRetentionCandidate(
     String eventId, String sessionId, Instant publishedAt, WorkflowOutboxRetentionReason reason) {
 
-  /** Validates the immutable candidate identity and eligibility evidence. */
   public WorkflowOutboxRetentionCandidate {
     eventId = requireNotBlank(eventId, "eventId");
     sessionId = requireNotBlank(sessionId, "sessionId");
