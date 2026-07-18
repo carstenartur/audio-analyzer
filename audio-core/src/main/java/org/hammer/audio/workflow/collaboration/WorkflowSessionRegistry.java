@@ -213,8 +213,7 @@ public final class WorkflowSessionRegistry {
           new WorkflowSessionEntry.RecoveryState(
               recovered.operations(), false, recovered.revision(), recovered.sequence());
       WorkflowSessionEntry entry =
-          WorkflowSessionEntry.recovered(
-              definition, recoveryState, sessionEventHub, persistence);
+          WorkflowSessionEntry.recovered(definition, recoveryState, sessionEventHub, persistence);
       if (sessionEntries.putIfAbsent(recovered.sessionId(), entry) != null) {
         throw new WorkflowSessionRecoveryException(
             recovered.sessionId(),
