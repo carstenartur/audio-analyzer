@@ -89,6 +89,29 @@ class WorkflowSessionEventHubTest {
   }
 
   @Test
+  void restoredStreamStartsAtDurableBoundaryWithoutFabricatingHistoricalEvents() {
+    WorkflowSessionEventHub hub = new WorkflowSessionEventHub(8, 4);
+    Workflow workflow = initialWorkflow();
+
+    hub.restoreSession(SESSION_ID, workflow, 9, 3);
+
+    assertEquals(9, hub.currentSequence(SESSION_ID));
+    assertEquals(3, hub.currentRevision(SESSION_ID));
+    List<WorkflowSessionEvent> recovery = hub.replay(SESSION_ID, 9);
+    assertEquals(1, recovery.size());
+    assertEquals(WorkflowSessionEvent.Type.SNAPSHOT, recovery.getFirst().type());
+    assertEquals(9, recovery.getFirst().sequence());
+    assertEquals(3, recovery.getFirst().revision());
+    assertEquals(workflow, recovery.getFirst().workflow());
+
+    hub.actorJoined(SESSION_ID, BOB);
+
+    assertEquals(10, hub.currentSequence(SESSION_ID));
+    assertEquals(3, hub.currentRevision(SESSION_ID));
+    assertTrue(hub.replay(SESSION_ID, 10).isEmpty());
+  }
+
+  @Test
   void failedAndSlowSubscribersAreRemovedWithoutBlockingPublication() throws Exception {
     WorkflowSessionEventHub hub = new WorkflowSessionEventHub(8, 1);
     hub.openSession(SESSION_ID, ALICE, initialWorkflow());
