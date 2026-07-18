@@ -14,6 +14,7 @@ import org.hammer.audio.workflow.collaboration.store.WorkflowOperationPersistenc
 import org.hammer.audio.workflow.collaboration.store.WorkflowSessionAppendCommand;
 import org.hammer.audio.workflow.collaboration.store.WorkflowSessionAppendResult;
 import org.hammer.audio.workflow.collaboration.store.WorkflowSessionRevisionConflictException;
+import org.hammer.audio.workflow.collaboration.store.WorkflowSessionSequenceConflictException;
 import org.hammer.audio.workflow.collaboration.store.WorkflowSessionStateStore;
 import org.hibernate.Session;
 import org.hibernate.SessionFactory;
@@ -36,9 +37,8 @@ public final class HibernateWorkflowSessionStateStore implements WorkflowSession
   @Override
   public StoredWorkflowSession create(StoredWorkflowSession storedSession) {
     Objects.requireNonNull(storedSession, "storedSession");
-    if (storedSession.revision() != 0 || storedSession.sequence() != 0) {
-      throw new IllegalArgumentException(
-          "A new workflow session must start at revision/sequence 0");
+    if (storedSession.revision() != 0) {
+      throw new IllegalArgumentException("A new workflow session must start at semantic revision 0");
     }
     if (storedSession.closed()) {
       throw new IllegalArgumentException("A new workflow session must be open");
@@ -88,16 +88,36 @@ public final class HibernateWorkflowSessionStateStore implements WorkflowSession
   }
 
   @Override
-  public StoredWorkflowSession close(String sessionId, long expectedRevision) {
+  public StoredWorkflowSession advanceEventSequence(String sessionId, long expectedSequence) {
     String requiredSessionId = requireNotBlank(sessionId, SESSION_ID_PARAMETER);
-    if (expectedRevision < 0) {
-      throw new IllegalArgumentException("expectedRevision must be >= 0");
-    }
+    requireNonNegative(expectedSequence, "expectedSequence");
     try {
       return inTransaction(
-          session -> closeWithinTransaction(session, requiredSessionId, expectedRevision));
+          session -> advanceEventSequenceWithinTransaction(session, requiredSessionId, expectedSequence));
     } catch (OptimisticLockException | StaleStateException failure) {
-      return recoverConcurrentClose(requiredSessionId, expectedRevision, failure);
+      throw sequenceConflict(requiredSessionId, expectedSequence);
+    }
+  }
+
+  @Override
+  public StoredWorkflowSession close(
+      String sessionId, long expectedRevision, long expectedSequence) {
+    String requiredSessionId = requireNotBlank(sessionId, SESSION_ID_PARAMETER);
+    requireNonNegative(expectedRevision, "expectedRevision");
+    requireNonNegative(expectedSequence, "expectedSequence");
+    try {
+      return inTransaction(
+          session ->
+              closeWithinTransaction(
+                  session, requiredSessionId, expectedRevision, expectedSequence));
+    } catch (OptimisticLockException | StaleStateException failure) {
+      StoredWorkflowSession current = requireStoredSession(requiredSessionId);
+      if (current.revision() != expectedRevision) {
+        throw new WorkflowSessionRevisionConflictException(
+            requiredSessionId, expectedRevision, current.revision());
+      }
+      throw new WorkflowSessionSequenceConflictException(
+          requiredSessionId, expectedSequence, current.sequence());
     }
   }
 
@@ -147,14 +167,7 @@ public final class HibernateWorkflowSessionStateStore implements WorkflowSession
       return duplicateResult(session, duplicate, command);
     }
 
-    WorkflowSessionEntity aggregate =
-        session.find(WorkflowSessionEntity.class, command.sessionId());
-    if (aggregate == null) {
-      throw new NoSuchElementException("Unknown workflow session: " + command.sessionId());
-    }
-    if (aggregate.closed()) {
-      throw new IllegalStateException("Workflow session is closed: " + command.sessionId());
-    }
+    WorkflowSessionEntity aggregate = requireOpenAggregate(session, command.sessionId());
     if (!aggregate.workflowId().equals(command.workflowId())) {
       throw new IllegalArgumentException(
           "Workflow id does not match durable session: " + command.workflowId());
@@ -183,20 +196,37 @@ public final class HibernateWorkflowSessionStateStore implements WorkflowSession
         aggregate.toStoredSession(), operation.toStoredOperation(), outbox.toStoredEntry(), false);
   }
 
-  private static StoredWorkflowSession closeWithinTransaction(
-      Session session, String sessionId, long expectedRevision) {
-    WorkflowSessionEntity aggregate = session.find(WorkflowSessionEntity.class, sessionId);
-    if (aggregate == null) {
-      throw new NoSuchElementException("Unknown workflow session: " + sessionId);
+  private StoredWorkflowSession advanceEventSequenceWithinTransaction(
+      Session session, String sessionId, long expectedSequence) {
+    WorkflowSessionEntity aggregate = requireOpenAggregate(session, sessionId);
+    if (aggregate.eventSequence() != expectedSequence) {
+      throw new WorkflowSessionSequenceConflictException(
+          sessionId, expectedSequence, aggregate.eventSequence());
     }
+    aggregate.advanceEventSequence(Math.addExact(expectedSequence, 1));
+    session.flush();
+    return aggregate.toStoredSession();
+  }
+
+  private StoredWorkflowSession closeWithinTransaction(
+      Session session, String sessionId, long expectedRevision, long expectedSequence) {
+    WorkflowSessionEntity aggregate = requireAggregate(session, sessionId);
     if (aggregate.closed()) {
-      return aggregate.toStoredSession();
+      if (aggregate.semanticRevision() == expectedRevision
+          && aggregate.eventSequence() == Math.addExact(expectedSequence, 1)) {
+        return aggregate.toStoredSession();
+      }
+      throw new IllegalStateException("Workflow session is already closed: " + sessionId);
     }
     if (aggregate.semanticRevision() != expectedRevision) {
       throw new WorkflowSessionRevisionConflictException(
           sessionId, expectedRevision, aggregate.semanticRevision());
     }
-    aggregate.markClosed();
+    if (aggregate.eventSequence() != expectedSequence) {
+      throw new WorkflowSessionSequenceConflictException(
+          sessionId, expectedSequence, aggregate.eventSequence());
+    }
+    aggregate.markClosed(Math.addExact(expectedSequence, 1));
     session.flush();
     return aggregate.toStoredSession();
   }
@@ -257,22 +287,6 @@ public final class HibernateWorkflowSessionStateStore implements WorkflowSession
         failure);
   }
 
-  private StoredWorkflowSession recoverConcurrentClose(
-      String sessionId, long expectedRevision, RuntimeException failure) {
-    StoredWorkflowSession current =
-        find(sessionId)
-            .orElseThrow(() -> new NoSuchElementException("Unknown workflow session: " + sessionId));
-    if (current.closed() && current.revision() == expectedRevision) {
-      return current;
-    }
-    if (current.revision() != expectedRevision) {
-      throw new WorkflowSessionRevisionConflictException(
-          sessionId, expectedRevision, current.revision());
-    }
-    throw new IllegalStateException(
-        "Durable close failed without advancing session " + sessionId, failure);
-  }
-
   private WorkflowSessionAppendResult duplicateAfterConcurrentFailure(
       WorkflowSessionAppendCommand command) {
     return inTransaction(
@@ -281,6 +295,22 @@ public final class HibernateWorkflowSessionStateStore implements WorkflowSession
               findOperation(session, command.operation().operationId());
           return existing == null ? null : duplicateResult(session, existing, command);
         });
+  }
+
+  private static WorkflowSessionEntity requireOpenAggregate(Session session, String sessionId) {
+    WorkflowSessionEntity aggregate = requireAggregate(session, sessionId);
+    if (aggregate.closed()) {
+      throw new IllegalStateException("Workflow session is closed: " + sessionId);
+    }
+    return aggregate;
+  }
+
+  private static WorkflowSessionEntity requireAggregate(Session session, String sessionId) {
+    WorkflowSessionEntity aggregate = session.find(WorkflowSessionEntity.class, sessionId);
+    if (aggregate == null) {
+      throw new NoSuchElementException("Unknown workflow session: " + sessionId);
+    }
+    return aggregate;
   }
 
   private static WorkflowOperationEntity findOperation(Session session, String operationId) {
@@ -299,8 +329,19 @@ public final class HibernateWorkflowSessionStateStore implements WorkflowSession
         command.sessionId(), command.operation().operationId());
   }
 
+  private WorkflowSessionSequenceConflictException sequenceConflict(
+      String sessionId, long expectedSequence) {
+    return new WorkflowSessionSequenceConflictException(
+        sessionId, expectedSequence, requireStoredSession(sessionId).sequence());
+  }
+
+  private StoredWorkflowSession requireStoredSession(String sessionId) {
+    return find(sessionId)
+        .orElseThrow(() -> new NoSuchElementException("Unknown workflow session: " + sessionId));
+  }
+
   private long currentRevision(String sessionId) {
-    return find(sessionId).map(StoredWorkflowSession::revision).orElse(-1L);
+    return requireStoredSession(sessionId).revision();
   }
 
   private <T> T inTransaction(Function<Session, T> work) {
@@ -324,5 +365,11 @@ public final class HibernateWorkflowSessionStateStore implements WorkflowSession
       throw new IllegalArgumentException(name + " must not be blank");
     }
     return value;
+  }
+
+  private static void requireNonNegative(long value, String name) {
+    if (value < 0) {
+      throw new IllegalArgumentException(name + " must be >= 0");
+    }
   }
 }
