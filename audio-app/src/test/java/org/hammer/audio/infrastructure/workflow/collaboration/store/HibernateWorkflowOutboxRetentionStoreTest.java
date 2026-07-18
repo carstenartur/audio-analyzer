@@ -125,8 +125,7 @@ class HibernateWorkflowOutboxRetentionStoreTest {
         assertTrue(ready.await(10, TimeUnit.SECONDS), "Retention stores did not become ready");
         start.countDown();
 
-        List<WorkflowOutboxRetentionDeletionResult> results =
-            List.of(get(first), get(second));
+        List<WorkflowOutboxRetentionDeletionResult> results = List.of(get(first), get(second));
         assertEquals(1, results.stream().mapToInt(result -> result.deletedCount()).sum());
         assertEquals(1, results.stream().mapToInt(result -> result.skippedCount()).sum());
         assertTrue(outboxStore.find("event.once").isEmpty());
