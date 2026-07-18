@@ -18,6 +18,7 @@ import {
   collaborationState,
   expirePresence,
   reconnectDelay,
+  recoveryForProblemCode,
   reduceSessionEvent,
 } from './collaborationState.mjs';
 
@@ -98,7 +99,7 @@ function validActor(value: unknown): value is ActorIdentity {
 
 function initialActor(): ActorIdentity {
   try {
-    const stored = localStorage.getItem(ACTOR_STORAGE_KEY);
+    const stored = sessionStorage.getItem(ACTOR_STORAGE_KEY);
     if (stored !== null) {
       const parsed: unknown = JSON.parse(stored);
       if (validActor(parsed)) {
@@ -106,8 +107,7 @@ function initialActor(): ActorIdentity {
       }
     }
   } catch {
-    // A private browsing policy may make localStorage unavailable; generated identity is still stable
-    // for the lifetime of this page.
+    // A browser policy may make storage unavailable; generated identity is still stable for the page.
   }
   return generatedActor();
 }
@@ -227,6 +227,13 @@ export function useWorkflowSession(callbacks: WorkflowSessionCallbacks): Workflo
         onStatus(`Loaded: reconciled ${activeSessionId} after ${reason}`);
       })()
         .catch((failure: unknown) => {
+          if (
+            failure instanceof ApiError &&
+            recoveryForProblemCode(failure.code) === 'reset'
+          ) {
+            reset(`Session ${activeSessionId} no longer exists`);
+            return;
+          }
           onError(errorMessage(failure));
           throw failure;
         })
@@ -236,7 +243,7 @@ export function useWorkflowSession(callbacks: WorkflowSessionCallbacks): Workflo
       reconciliation.current = task;
       return task;
     },
-    [commitAcceptedState, onError, onStatus],
+    [commitAcceptedState, onError, onStatus, reset],
   );
 
   useEffect(() => {
@@ -295,10 +302,8 @@ export function useWorkflowSession(callbacks: WorkflowSessionCallbacks): Workflo
         onStatus(`Loaded: canonical snapshot at sequence ${event.sequence}`);
       }
       if (reduced.state.closed) {
-        clearPresenceBuffer();
         source?.close();
-        setConnectionState('closed');
-        onStatus(`Session ${activeSessionId} was closed`);
+        reset(`Session ${activeSessionId} was closed`);
       }
     };
 
@@ -321,7 +326,11 @@ export function useWorkflowSession(callbacks: WorkflowSessionCallbacks): Workflo
       }
       source.onerror = () => {
         source?.close();
-        if (cancelled || acceptedState.current?.closed === true) {
+        if (
+          cancelled ||
+          acceptedState.current?.closed === true ||
+          retryTimer !== null
+        ) {
           return;
         }
         attempt += 1;
@@ -329,7 +338,10 @@ export function useWorkflowSession(callbacks: WorkflowSessionCallbacks): Workflo
         setConnectionState('reconnecting');
         const delay = reconnectDelay(attempt);
         onStatus(`Reconnecting: attempt ${attempt}`);
-        retryTimer = setTimeout(connect, delay);
+        retryTimer = setTimeout(() => {
+          retryTimer = null;
+          connect();
+        }, delay);
       };
     };
 
@@ -341,7 +353,7 @@ export function useWorkflowSession(callbacks: WorkflowSessionCallbacks): Workflo
         clearTimeout(retryTimer);
       }
     };
-  }, [clearPresenceBuffer, commitAcceptedState, onError, onStatus, reconcile, session?.sessionId]);
+  }, [commitAcceptedState, onError, onStatus, reconcile, reset, session?.sessionId]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -372,7 +384,7 @@ export function useWorkflowSession(callbacks: WorkflowSessionCallbacks): Workflo
     };
     setActor(normalized);
     try {
-      localStorage.setItem(ACTOR_STORAGE_KEY, JSON.stringify(normalized));
+      sessionStorage.setItem(ACTOR_STORAGE_KEY, JSON.stringify(normalized));
     } catch {
       // Identity remains valid for the current page even when storage is unavailable.
     }
@@ -482,19 +494,19 @@ export function useWorkflowSession(callbacks: WorkflowSessionCallbacks): Workflo
       } catch (failure) {
         setCommandState('rejected');
         onError(errorMessage(failure));
-        if (
-          failure instanceof ApiError &&
-          (failure.code === 'WORKFLOW_SESSION_REVISION_CONFLICT' ||
-            failure.code === 'WORKFLOW_SESSION_SEQUENCE_CONFLICT')
-        ) {
-          await reconcile(failure.code);
+        const recovery =
+          failure instanceof ApiError ? recoveryForProblemCode(failure.code) : 'reject';
+        if (recovery === 'reconcile') {
+          await reconcile(failure instanceof ApiError ? failure.code ?? 'conflict' : 'conflict');
+        } else if (recovery === 'reset') {
+          reset(`Session ${activeSession.sessionId} no longer exists`);
         }
         throw failure;
       } finally {
         setPendingOperationId(null);
       }
     },
-    [actor, commitAcceptedState, onError, onStatus, reconcile, session],
+    [actor, commitAcceptedState, onError, onStatus, reconcile, reset, session],
   );
 
   const publishPresence = useCallback(
