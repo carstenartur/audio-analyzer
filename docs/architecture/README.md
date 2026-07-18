@@ -73,3 +73,4 @@ If planning documents conflict with ADR-006, ADR-007 or the bounded-context rule
 - Preserve older proposals as explicitly evaluated options when they remain useful evidence.
 - Link new workflow-drawing documents from this README.
 - When an ADR changes the direction, update `collaborative-workflow-platform.md` in the same PR.
+

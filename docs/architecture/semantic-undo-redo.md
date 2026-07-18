@@ -135,3 +135,4 @@ The session lock serializes in-process commands. The durable store independently
 - HTTP tests cover accepted command responses and machine-readable conflict problems.
 - Hibernate tests cover operation-body round trips, migration compatibility and complete restart recovery.
 - PostgreSQL Testcontainers migration coverage validates the same V3 schema used in production.
+
