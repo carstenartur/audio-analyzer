@@ -23,55 +23,60 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
 
+          def replace_between(source: str, start_marker: str, end_marker: str, replacement: str) -> str:
+              start = source.index(start_marker)
+              end = source.index(end_marker, start)
+              return source[:start] + replacement + source[end:]
+
           entry = Path('audio-core/src/main/java/org/hammer/audio/workflow/collaboration/WorkflowSessionEntry.java')
           source = entry.read_text(encoding='utf-8')
-          old = '''      if (!preview.safe()) {
-                throw error(
-                    Code.UNDO_CONFLICT,
-                    "Undo is blocked by later operations: "
-                        + preview.blockingOperations().stream()
-                            .map(WorkflowUndoPreview.BlockingOperation::operationId)
-                            .toList());
-              }'''.replace('              ', '      ')
-          new = '''      if (!preview.safe()) {
+          source = replace_between(
+              source,
+              '      if (!preview.safe()) {',
+              '      OperationIdentity target =',
+              '''      if (!preview.safe()) {
                 throw new WorkflowUndoConflictException(
                     sessionId, preview.targetOperationId(), preview.blockingOperations());
-              }'''.replace('              ', '      ')
-          if old not in source:
-              raise SystemExit('undo conflict block not found')
-          source = source.replace(old, new, 1)
-
-          old = '''      if (!blockers.isEmpty()) {
-                throw error(
-                    Code.UNDO_CONFLICT,
-                    "Redo is blocked by later operations: "
-                        + blockers.stream()
-                            .map(WorkflowUndoPreview.BlockingOperation::operationId)
-                            .toList());
-              }'''.replace('              ', '      ')
-          new = '''      if (!blockers.isEmpty()) {
+              }
+'''.replace('              ', '      '),
+          )
+          source = replace_between(
+              source,
+              '      if (!blockers.isEmpty()) {',
+              '      WorkflowOperation inverse =',
+              '''      if (!blockers.isEmpty()) {
                 throw new WorkflowUndoConflictException(
                     sessionId, targetUndo.operationId(), blockers);
-              }'''.replace('              ', '      ')
-          if old not in source:
-              raise SystemExit('redo conflict block not found')
-          source = source.replace(old, new, 1)
-
-          old = '    eventHub.operationAccepted(sessionId, actor, operation, currentWorkflow);'
-          new = '    eventHub.operationAccepted(sessionId, actor, operation, currentWorkflow, command);'
-          if old not in source:
+              }
+'''.replace('              ', '      '),
+          )
+          old_call = '    eventHub.operationAccepted(sessionId, actor, operation, currentWorkflow);'
+          if old_call not in source:
               raise SystemExit('event hub call not found')
-          entry.write_text(source.replace(old, new, 1), encoding='utf-8')
+          entry.write_text(
+              source.replace(
+                  old_call,
+                  '    eventHub.operationAccepted(sessionId, actor, operation, currentWorkflow, command);',
+                  1,
+              ),
+              encoding='utf-8',
+          )
 
           codec = Path('audio-core/src/main/java/org/hammer/audio/workflow/collaboration/store/WorkflowOperationBodyCodec.java')
           source = codec.read_text(encoding='utf-8')
           old = '    return new String(input.readNBytes(length), StandardCharsets.UTF_8);'
-          new = '''    byte[] bytes = new byte[length];
-              input.readFully(bytes);
-              return new String(bytes, StandardCharsets.UTF_8);'''.replace('              ', '    ')
           if old not in source:
               raise SystemExit('codec readString block not found')
-          codec.write_text(source.replace(old, new, 1), encoding='utf-8')
+          codec.write_text(
+              source.replace(
+                  old,
+                  '    byte[] bytes = new byte[length];\n'
+                  '    input.readFully(bytes);\n'
+                  '    return new String(bytes, StandardCharsets.UTF_8);',
+                  1,
+              ),
+              encoding='utf-8',
+          )
 
           hub = Path('audio-core/src/main/java/org/hammer/audio/workflow/collaboration/WorkflowSessionEventHub.java')
           source = hub.read_text(encoding='utf-8')
@@ -84,75 +89,60 @@ jobs:
           if 'import org.hammer.audio.workflow.collaboration.store.WorkflowOperationCommandMetadata;' not in source:
               source = source.replace(
                   'import org.hammer.audio.workflow.WorkflowOperation;\n',
-                  'import org.hammer.audio.workflow.WorkflowOperation;\nimport org.hammer.audio.workflow.collaboration.store.WorkflowOperationCommandMetadata;\n',
+                  'import org.hammer.audio.workflow.WorkflowOperation;\n'
+                  'import org.hammer.audio.workflow.collaboration.store.WorkflowOperationCommandMetadata;\n',
                   1,
               )
-          old = '''  /** Publishes one server-accepted semantic operation and advances the semantic revision. */
-            public WorkflowSessionEvent operationAccepted(
-                String sessionId,
-                OperationActor actor,
-                WorkflowOperation operation,
-                Workflow resultingWorkflow) {
-              Objects.requireNonNull(operation, "operation");
-              Map<String, String> attributes =
-                  Map.of(
-                      "operationType", operation.getClass().getSimpleName(),
-                      "operationAuthor", operation.author());
-              return requireSession(sessionId)
-                  .publish(
-                      WorkflowSessionEvent.Type.OPERATION_ACCEPTED,
-                      Objects.requireNonNull(actor, ACTOR_FIELD),
-                      operation.operationId(),
-                      Objects.requireNonNull(resultingWorkflow, "resultingWorkflow"),
-                      attributes,
-                      true,
-                      Instant.now());
-            }'''.replace('            ', '  ')
-          new = '''  /** Publishes one ordinary server-accepted semantic operation. */
-            public WorkflowSessionEvent operationAccepted(
-                String sessionId,
-                OperationActor actor,
-                WorkflowOperation operation,
-                Workflow resultingWorkflow) {
-              Objects.requireNonNull(operation, "operation");
-              return operationAccepted(
-                  sessionId,
-                  actor,
-                  operation,
-                  resultingWorkflow,
-                  WorkflowOperationCommandMetadata.normal(operation.operationId()));
-            }
-
-            /** Publishes one accepted normal, undo or redo operation and advances semantic revision. */
-            public WorkflowSessionEvent operationAccepted(
-                String sessionId,
-                OperationActor actor,
-                WorkflowOperation operation,
-                Workflow resultingWorkflow,
-                WorkflowOperationCommandMetadata command) {
-              Objects.requireNonNull(operation, "operation");
-              Objects.requireNonNull(command, "command");
-              Map<String, String> attributes = new LinkedHashMap<>();
-              attributes.put("operationType", operation.getClass().getSimpleName());
-              attributes.put("operationAuthor", operation.author());
-              attributes.put("commandKind", command.kind().name());
-              attributes.put("commandId", command.commandId());
-              if (command.targetOperationId() != null) {
-                attributes.put("targetOperationId", command.targetOperationId());
+          source = replace_between(
+              source,
+              '  /** Publishes one server-accepted semantic operation and advances the semantic revision. */',
+              '  /** Publishes closure and terminates all active transport subscriptions. */',
+              '''  /** Publishes one ordinary server-accepted semantic operation. */
+              public WorkflowSessionEvent operationAccepted(
+                  String sessionId,
+                  OperationActor actor,
+                  WorkflowOperation operation,
+                  Workflow resultingWorkflow) {
+                Objects.requireNonNull(operation, "operation");
+                return operationAccepted(
+                    sessionId,
+                    actor,
+                    operation,
+                    resultingWorkflow,
+                    WorkflowOperationCommandMetadata.normal(operation.operationId()));
               }
-              return requireSession(sessionId)
-                  .publish(
-                      WorkflowSessionEvent.Type.OPERATION_ACCEPTED,
-                      Objects.requireNonNull(actor, ACTOR_FIELD),
-                      operation.operationId(),
-                      Objects.requireNonNull(resultingWorkflow, "resultingWorkflow"),
-                      Map.copyOf(attributes),
-                      true,
-                      Instant.now());
-            }'''.replace('            ', '  ')
-          if old not in source:
-              raise SystemExit('event hub method block not found')
-          hub.write_text(source.replace(old, new, 1), encoding='utf-8')
+
+              /** Publishes one accepted normal, undo or redo operation and advances semantic revision. */
+              public WorkflowSessionEvent operationAccepted(
+                  String sessionId,
+                  OperationActor actor,
+                  WorkflowOperation operation,
+                  Workflow resultingWorkflow,
+                  WorkflowOperationCommandMetadata command) {
+                Objects.requireNonNull(operation, "operation");
+                Objects.requireNonNull(command, "command");
+                Map<String, String> attributes = new LinkedHashMap<>();
+                attributes.put("operationType", operation.getClass().getSimpleName());
+                attributes.put("operationAuthor", operation.author());
+                attributes.put("commandKind", command.kind().name());
+                attributes.put("commandId", command.commandId());
+                if (command.targetOperationId() != null) {
+                  attributes.put("targetOperationId", command.targetOperationId());
+                }
+                return requireSession(sessionId)
+                    .publish(
+                        WorkflowSessionEvent.Type.OPERATION_ACCEPTED,
+                        Objects.requireNonNull(actor, ACTOR_FIELD),
+                        operation.operationId(),
+                        Objects.requireNonNull(resultingWorkflow, "resultingWorkflow"),
+                        Map.copyOf(attributes),
+                        true,
+                        Instant.now());
+              }
+
+'''.replace('              ', '  '),
+          )
+          hub.write_text(source, encoding='utf-8')
           PY
 
           rm .github/workflows/pr283-targeted-hardening.yml
