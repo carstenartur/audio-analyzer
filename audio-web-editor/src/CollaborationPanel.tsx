@@ -78,7 +78,11 @@ export function CollaborationPanel({ controller }: CollaborationPanelProps) {
           </label>
           <label className="field">
             Mode
-            <select value={mode} onChange={(event) => setMode(event.target.value as CollaborationMode)}>
+            <select
+              data-testid="session-mode-select"
+              value={mode}
+              onChange={(event) => setMode(event.target.value as CollaborationMode)}
+            >
               {MODES.map((candidate) => (
                 <option key={candidate} value={candidate}>
                   {candidate}
@@ -88,7 +92,11 @@ export function CollaborationPanel({ controller }: CollaborationPanelProps) {
           </label>
           <label className="field">
             Workflow name
-            <input value={workflowName} onChange={(event) => setWorkflowName(event.target.value)} />
+            <input
+              data-testid="workflow-name-input"
+              value={workflowName}
+              onChange={(event) => setWorkflowName(event.target.value)}
+            />
           </label>
           <label className="field">
             Actor id
@@ -101,6 +109,7 @@ export function CollaborationPanel({ controller }: CollaborationPanelProps) {
           <label className="field">
             User id
             <input
+              data-testid="user-id-input"
               value={actorDraft.userId}
               onChange={(event) => setActorDraft({ ...actorDraft, userId: event.target.value })}
             />
@@ -108,12 +117,14 @@ export function CollaborationPanel({ controller }: CollaborationPanelProps) {
           <label className="field">
             Display name
             <input
+              data-testid="display-name-input"
               value={actorDraft.displayName}
               onChange={(event) => setActorDraft({ ...actorDraft, displayName: event.target.value })}
             />
           </label>
           <button
             className="action-button"
+            data-testid="save-actor-button"
             disabled={!identityDirty || actionPending}
             onClick={saveIdentity}
             type="button"
@@ -161,7 +172,7 @@ export function CollaborationPanel({ controller }: CollaborationPanelProps) {
             </div>
             <div>
               <dt>Mode</dt>
-              <dd>{session.mode}</dd>
+              <dd data-testid="active-session-mode">{session.mode}</dd>
             </div>
             <div>
               <dt>Connection</dt>
