@@ -105,15 +105,19 @@ export function reduceSessionEvent(current, event) {
 
 /**
  * Applies the synchronous server response while ordered SSE is still in flight. The accepted revision
- * comes from current session metadata, so an idempotent retry does not invent an extra revision.
+ * may come from current session metadata, so an idempotent retry need not invent an extra revision.
  * Sequence remains SSE-owned.
  *
  * @param {CollaborationState} current current state
  * @param {Projection} projection accepted server projection
- * @param {number} acceptedRevision revision reported by current session metadata
+ * @param {number} [acceptedRevision=current.revision + 1] revision reported by session metadata
  * @returns {CollaborationState} state ready for the next expected-revision command
  */
-export function acceptCommandProjection(current, projection, acceptedRevision) {
+export function acceptCommandProjection(
+  current,
+  projection,
+  acceptedRevision = current.revision + 1,
+) {
   return {
     ...current,
     revision: Math.max(current.revision, acceptedRevision),
