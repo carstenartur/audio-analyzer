@@ -109,12 +109,16 @@ jobs:
           git add \
             pom.xml \
             README.md \
+            audio-app/src/main/java/org/hammer/audio/workflow/editor/http/WorkflowSessionEventHttpAdapter.java \
+            audio-app/src/test/java/org/hammer/audio/workflow/editor/http/WorkflowSessionEventHttpAdapterTest.java \
             audio-web-editor/README.md \
             audio-web-editor/src/CollaborationPanel.tsx \
             docs/architecture/README.md \
             docs/architecture/react-flow-session-client.md \
+            docs/architecture/session-event-streaming.md \
             docs/workbench-screenshot-pipeline.md \
             workbench-screenshot-tests/src/test/java/org/hammer/audio/workbench/screenshot/WorkbenchCollaborationScreenshotIT.java \
+            workbench-screenshot-tests/src/test/java/org/hammer/audio/workbench/screenshot/WorkbenchInitialLoadIT.java \
             docs/assets/screenshots/workbench \
             .github/workflows/pr281-update-workbench-screenshots.yml
           if git diff --cached --quiet; then
