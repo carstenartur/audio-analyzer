@@ -4,7 +4,6 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
@@ -23,9 +22,9 @@ final class WorkflowSessionEntry {
   private final Instant createdAt;
   private final WorkflowSessionEventHub eventHub;
   private final WorkflowSessionPersistenceCoordinator persistence;
-  private final Map<String, OperationActor> participants = new ConcurrentHashMap<>();
-  private final Map<String, PresenceState> presenceByActor = new ConcurrentHashMap<>();
-  private final Map<String, OperationIdentity> operationsById = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<String, OperationActor> participants = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<String, OperationIdentity> operationsById =
+      new ConcurrentHashMap<>();
   private final ReentrantLock lock = new ReentrantLock();
   private Workflow currentWorkflow;
   private int operationCount;
@@ -126,7 +125,6 @@ final class WorkflowSessionEntry {
       }
       long nextSequence = reserveNonSemanticEvent();
       participants.remove(actorId);
-      presenceByActor.remove(actorId);
       eventHub.actorLeft(sessionId, actor);
       confirmNonSemanticEvent(nextSequence, "actor leave");
       return snapshotLocked();
@@ -164,7 +162,6 @@ final class WorkflowSessionEntry {
       requireOpen();
       assertJoinedActor(actor);
       long nextSequence = reserveNonSemanticEvent();
-      presenceByActor.put(actor.actorId(), presenceState);
       eventHub.presenceUpdated(sessionId, actor, presenceState);
       confirmNonSemanticEvent(nextSequence, "presence update");
       return presenceState;
@@ -362,7 +359,10 @@ final class WorkflowSessionEntry {
   }
 
   record RecoveryState(
-      List<OperationIdentity> operations, boolean ownerConnected, long revision, long sequence) {
+      List<OperationIdentity> operations,
+      boolean ownerConnected,
+      long revision,
+      long sequence) {
 
     RecoveryState {
       operations = List.copyOf(Objects.requireNonNull(operations, "operations"));
