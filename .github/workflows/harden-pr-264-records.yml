@@ -1,0 +1,117 @@
+name: Harden PR 264 recovery records
+
+on:
+  push:
+    branches:
+      - feature/263-collaboration-recovery
+
+permissions:
+  contents: write
+  packages: read
+
+jobs:
+  harden:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feature/263-collaboration-recovery
+
+      - uses: actions/setup-java@v5
+        with:
+          java-version: '21'
+          distribution: temurin
+          cache: maven
+          server-id: github
+          server-username: GITHUB_ACTOR
+          server-password: GITHUB_TOKEN
+
+      - name: Add recovery record invariants
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('audio-core/src/main/java/org/hammer/audio/workflow/collaboration/WorkflowSessionRegistry.java')
+          text = path.read_text()
+
+          old = '''  private record SessionDefinition(
+              String sessionId,
+              CollaborationMode mode,
+              OperationActor owner,
+              Instant createdAt,
+              Workflow workflow) {}
+
+            private record RecoveryState(
+              List<StoredWorkflowOperation> operations,
+              boolean ownerConnected,
+              long revision,
+              long sequence) {}
+
+            private record EntryServices(
+              WorkflowSessionEventHub eventHub,
+              WorkflowSessionStateStore stateStore,
+              WorkflowDslParser dslParser,
+              WorkflowDslSerializer dslSerializer) {}
+          '''
+          new = '''  private record SessionDefinition(
+              String sessionId,
+              CollaborationMode mode,
+              OperationActor owner,
+              Instant createdAt,
+              Workflow workflow) {
+
+            SessionDefinition {
+              sessionId = requireNotBlank(sessionId, "sessionId");
+              Objects.requireNonNull(mode, "mode");
+              Objects.requireNonNull(owner, "owner");
+              Objects.requireNonNull(createdAt, "createdAt");
+              Objects.requireNonNull(workflow, "workflow");
+            }
+          }
+
+            private record RecoveryState(
+              List<StoredWorkflowOperation> operations,
+              boolean ownerConnected,
+              long revision,
+              long sequence) {
+
+            RecoveryState {
+              operations = List.copyOf(Objects.requireNonNull(operations, "operations"));
+              if (revision < 0 || sequence < revision) {
+                throw new IllegalArgumentException("Invalid recovery revision/event sequence");
+              }
+            }
+          }
+
+            private record EntryServices(
+              WorkflowSessionEventHub eventHub,
+              WorkflowSessionStateStore stateStore,
+              WorkflowDslParser dslParser,
+              WorkflowDslSerializer dslSerializer) {
+
+            EntryServices {
+              Objects.requireNonNull(eventHub, "eventHub");
+              Objects.requireNonNull(dslParser, "dslParser");
+              Objects.requireNonNull(dslSerializer, "dslSerializer");
+            }
+          }
+          '''
+          if old not in text:
+              raise SystemExit('Expected recovery record block was not found')
+          path.write_text(text.replace(old, new, 1))
+          PY
+
+          mvn -B spotless:apply --file pom.xml
+
+      - name: Commit hardened records
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m 'Enforce collaboration recovery state invariants'
+          git push origin HEAD:feature/263-collaboration-recovery
