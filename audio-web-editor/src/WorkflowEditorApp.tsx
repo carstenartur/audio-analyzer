@@ -56,17 +56,59 @@ function handleColor(dataType: string): string {
 function AudioNode({ data }: NodeProps<NodeProjection>) {
   return (
     <div className="audio-node" data-testid={`node-${data.id}`}>
-      {data.inputHandles.map((handle) => (
-        <Handle
-          key={handle.id}
-          type="target"
-          position={Position.Left}
-          id={handle.id}
-          title={`${handle.name} (${handle.dataType})`}
-          style={{ background: handleColor(handle.dataType), width: 10, height: 10 }}
-        />
-      ))}
       <div className="audio-node__label">{data.label}</div>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: 12,
+          marginTop: 8,
+          minHeight: 18,
+        }}
+      >
+        <div
+          data-testid={`input-ports-${data.id}`}
+          style={{ display: 'grid', gap: 4, fontSize: 10, textAlign: 'left' }}
+        >
+          {data.inputHandles.map((handle, index) => (
+            <div key={handle.id} title={`${handle.name} (${handle.dataType})`}>
+              <Handle
+                type="target"
+                position={Position.Left}
+                id={handle.id}
+                style={{
+                  background: handleColor(handle.dataType),
+                  height: 10,
+                  top: 34 + index * 18,
+                  width: 10,
+                }}
+              />
+              {handle.name}
+            </div>
+          ))}
+        </div>
+        <div
+          data-testid={`output-ports-${data.id}`}
+          style={{ display: 'grid', gap: 4, fontSize: 10, textAlign: 'right' }}
+        >
+          {data.outputHandles.map((handle, index) => (
+            <div key={handle.id} title={`${handle.name} (${handle.dataType})`}>
+              {handle.name}
+              <Handle
+                type="source"
+                position={Position.Right}
+                id={handle.id}
+                style={{
+                  background: handleColor(handle.dataType),
+                  height: 10,
+                  top: 34 + index * 18,
+                  width: 10,
+                }}
+              />
+            </div>
+          ))}
+        </div>
+      </div>
       {Object.keys(data.properties).length > 0 ? (
         <div className="audio-node__properties">
           {Object.entries(data.properties).map(([key, value]) => (
@@ -76,16 +118,6 @@ function AudioNode({ data }: NodeProps<NodeProjection>) {
           ))}
         </div>
       ) : null}
-      {data.outputHandles.map((handle) => (
-        <Handle
-          key={handle.id}
-          type="source"
-          position={Position.Right}
-          id={handle.id}
-          title={`${handle.name} (${handle.dataType})`}
-          style={{ background: handleColor(handle.dataType), width: 10, height: 10 }}
-        />
-      ))}
     </div>
   );
 }
@@ -143,7 +175,7 @@ export default function WorkflowEditorApp() {
       setEdges(toEdges(nextProjection.edges));
       setError(null);
       setStatus(
-        `Loaded ${nextProjection.workflowName}: ${nextProjection.nodes.length} nodes, ${nextProjection.edges.length} edges`,
+        `Loaded: ${nextProjection.workflowName} (${nextProjection.nodes.length} nodes, ${nextProjection.edges.length} edges)`,
       );
     },
     [setEdges, setNodes],
