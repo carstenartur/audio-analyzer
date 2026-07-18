@@ -29,10 +29,32 @@ jobs:
           server-username: GITHUB_ACTOR
           server-password: GITHUB_TOKEN
 
-      - name: Apply and commit repository formatting
+      - name: Align maps, format and commit
         if: github.actor != 'github-actions[bot]'
         shell: bash
         run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('audio-core/src/main/java/org/hammer/audio/workflow/collaboration/WorkflowSessionEntry.java')
+          text = path.read_text()
+          text = text.replace(
+              'import java.util.concurrent.ConcurrentHashMap;\n',
+              'import java.util.HashMap;\n',
+              1,
+          )
+          text = text.replace(
+              'private final ConcurrentHashMap<String, OperationActor> participants = new ConcurrentHashMap<>();',
+              'private final HashMap<String, OperationActor> participants = new HashMap<>();',
+              1,
+          )
+          text = text.replace(
+              'private final ConcurrentHashMap<String, OperationIdentity> operationsById =\n      new ConcurrentHashMap<>();',
+              'private final HashMap<String, OperationIdentity> operationsById = new HashMap<>();',
+              1,
+          )
+          path.write_text(text)
+          PY
           mvn -B spotless:apply --file pom.xml
           if git diff --quiet; then
             exit 0
@@ -40,7 +62,7 @@ jobs:
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add -A
-          git commit -m 'Format extracted collaboration recovery components'
+          git commit -m 'Use lock-owned maps for collaboration session state'
           git push origin HEAD:feature/263-collaboration-recovery
 
       - name: Run audio-core gate
