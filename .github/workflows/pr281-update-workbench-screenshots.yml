@@ -12,7 +12,7 @@ jobs:
   update-screenshots:
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v7
         with:
@@ -25,34 +25,18 @@ jobs:
           distribution: temurin
           cache: maven
 
+      - name: Install screenshot-test reactor artifacts
+        run: >-
+          mvn -B -Pscreenshot-tests -DskipTests install
+          -pl workbench-screenshot-tests -am --file pom.xml
+
       - name: Install Playwright Chromium and system dependencies
-        id: playwright-install
-        continue-on-error: true
-        shell: bash
-        run: |
-          set -o pipefail
-          mvn -B -Pscreenshot-tests -pl workbench-screenshot-tests \
-            org.codehaus.mojo:exec-maven-plugin:3.5.0:java \
-            -Dexec.mainClass=com.microsoft.playwright.CLI \
-            -Dexec.classpathScope=test \
-            -Dexec.args="install --with-deps chromium" 2>&1 | tee playwright-install.log
-
-      - name: Show Playwright install diagnostics
-        if: always()
-        run: tail -n 200 playwright-install.log || true
-
-      - name: Upload Playwright install diagnostics
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: pr281-playwright-install-log
-          path: playwright-install.log
-          if-no-files-found: error
-          retention-days: 1
-
-      - name: Stop after a failed Playwright installation
-        if: steps.playwright-install.outcome != 'success'
-        run: exit 1
+        run: >-
+          mvn -B -Pscreenshot-tests -pl workbench-screenshot-tests
+          org.codehaus.mojo:exec-maven-plugin:3.5.0:java
+          -Dexec.mainClass=com.microsoft.playwright.CLI
+          -Dexec.classpathScope=test
+          -Dexec.args="install --with-deps chromium"
 
       - name: Generate screenshots through integration tests
         run: mvn -B -Pscreenshot-tests verify -DupdateScreenshots=true --file pom.xml
