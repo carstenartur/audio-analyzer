@@ -27,7 +27,9 @@ jobs:
 
       - name: Install screenshot-test reactor artifacts
         run: >-
-          mvn -B -Pscreenshot-tests -DskipTests install
+          mvn -B -Pscreenshot-tests -Dmaven.test.skip=true
+          -Dspotless.check.skip=true -Dcheckstyle.skip=true -Dpmd.skip=true
+          -Dspotbugs.skip=true -Djacoco.skip=true install
           -pl workbench-screenshot-tests -am --file pom.xml
 
       - name: Install Playwright Chromium and system dependencies
