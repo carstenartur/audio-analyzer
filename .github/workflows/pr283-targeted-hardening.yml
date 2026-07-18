@@ -1,0 +1,159 @@
+name: PR 283 targeted hardening
+
+on:
+  pull_request:
+    branches:
+      - master
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.head_ref == 'feature/271-durable-semantic-undo-redo'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.head_ref }}
+
+      - name: Apply targeted history-command hardening
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          entry = Path('audio-core/src/main/java/org/hammer/audio/workflow/collaboration/WorkflowSessionEntry.java')
+          source = entry.read_text(encoding='utf-8')
+          old = '''      if (!preview.safe()) {
+                throw error(
+                    Code.UNDO_CONFLICT,
+                    "Undo is blocked by later operations: "
+                        + preview.blockingOperations().stream()
+                            .map(WorkflowUndoPreview.BlockingOperation::operationId)
+                            .toList());
+              }'''
+          new = '''      if (!preview.safe()) {
+                throw new WorkflowUndoConflictException(
+                    sessionId, preview.targetOperationId(), preview.blockingOperations());
+              }'''
+          if old not in source:
+              raise SystemExit('undo conflict block not found')
+          source = source.replace(old, new, 1)
+          old = '''      if (!blockers.isEmpty()) {
+                throw error(
+                    Code.UNDO_CONFLICT,
+                    "Redo is blocked by later operations: "
+                        + blockers.stream()
+                            .map(WorkflowUndoPreview.BlockingOperation::operationId)
+                            .toList());
+              }'''
+          new = '''      if (!blockers.isEmpty()) {
+                throw new WorkflowUndoConflictException(
+                    sessionId, targetUndo.operationId(), blockers);
+              }'''
+          if old not in source:
+              raise SystemExit('redo conflict block not found')
+          source = source.replace(old, new, 1)
+          old = '    eventHub.operationAccepted(sessionId, actor, operation, currentWorkflow);'
+          new = '    eventHub.operationAccepted(sessionId, actor, operation, currentWorkflow, command);'
+          if old not in source:
+              raise SystemExit('event hub call not found')
+          entry.write_text(source.replace(old, new, 1), encoding='utf-8')
+
+          codec = Path('audio-core/src/main/java/org/hammer/audio/workflow/collaboration/store/WorkflowOperationBodyCodec.java')
+          source = codec.read_text(encoding='utf-8')
+          old = '''    return new String(input.readNBytes(length), StandardCharsets.UTF_8);'''
+          new = '''    byte[] bytes = new byte[length];
+              input.readFully(bytes);
+              return new String(bytes, StandardCharsets.UTF_8);'''
+          if old not in source:
+              raise SystemExit('codec readString block not found')
+          codec.write_text(source.replace(old, new, 1), encoding='utf-8')
+
+          hub = Path('audio-core/src/main/java/org/hammer/audio/workflow/collaboration/WorkflowSessionEventHub.java')
+          source = hub.read_text(encoding='utf-8')
+          source = source.replace('import java.util.List;\n', 'import java.util.LinkedHashMap;\nimport java.util.List;\n', 1)
+          source = source.replace(
+              'import org.hammer.audio.workflow.WorkflowOperation;\n',
+              'import org.hammer.audio.workflow.WorkflowOperation;\nimport org.hammer.audio.workflow.collaboration.store.WorkflowOperationCommandMetadata;\n',
+              1,
+          )
+          old = '''  /** Publishes one server-accepted semantic operation and advances the semantic revision. */
+            public WorkflowSessionEvent operationAccepted(
+                String sessionId,
+                OperationActor actor,
+                WorkflowOperation operation,
+                Workflow resultingWorkflow) {
+              Objects.requireNonNull(operation, "operation");
+              Map<String, String> attributes =
+                  Map.of(
+                      "operationType", operation.getClass().getSimpleName(),
+                      "operationAuthor", operation.author());
+              return requireSession(sessionId)
+                  .publish(
+                      WorkflowSessionEvent.Type.OPERATION_ACCEPTED,
+                      Objects.requireNonNull(actor, ACTOR_FIELD),
+                      operation.operationId(),
+                      Objects.requireNonNull(resultingWorkflow, "resultingWorkflow"),
+                      attributes,
+                      true,
+                      Instant.now());
+            }'''
+          new = '''  /** Publishes one ordinary server-accepted semantic operation. */
+            public WorkflowSessionEvent operationAccepted(
+                String sessionId,
+                OperationActor actor,
+                WorkflowOperation operation,
+                Workflow resultingWorkflow) {
+              Objects.requireNonNull(operation, "operation");
+              return operationAccepted(
+                  sessionId,
+                  actor,
+                  operation,
+                  resultingWorkflow,
+                  WorkflowOperationCommandMetadata.normal(operation.operationId()));
+            }
+
+            /** Publishes one accepted normal, undo or redo operation and advances semantic revision. */
+            public WorkflowSessionEvent operationAccepted(
+                String sessionId,
+                OperationActor actor,
+                WorkflowOperation operation,
+                Workflow resultingWorkflow,
+                WorkflowOperationCommandMetadata command) {
+              Objects.requireNonNull(operation, "operation");
+              Objects.requireNonNull(command, "command");
+              Map<String, String> attributes = new LinkedHashMap<>();
+              attributes.put("operationType", operation.getClass().getSimpleName());
+              attributes.put("operationAuthor", operation.author());
+              attributes.put("commandKind", command.kind().name());
+              attributes.put("commandId", command.commandId());
+              if (command.targetOperationId() != null) {
+                attributes.put("targetOperationId", command.targetOperationId());
+              }
+              return requireSession(sessionId)
+                  .publish(
+                      WorkflowSessionEvent.Type.OPERATION_ACCEPTED,
+                      Objects.requireNonNull(actor, ACTOR_FIELD),
+                      operation.operationId(),
+                      Objects.requireNonNull(resultingWorkflow, "resultingWorkflow"),
+                      Map.copyOf(attributes),
+                      true,
+                      Instant.now());
+            }'''
+          if old not in source:
+              raise SystemExit('event hub method block not found')
+          hub.write_text(source.replace(old, new, 1), encoding='utf-8')
+          PY
+
+          rm .github/workflows/pr283-targeted-hardening.yml
+
+      - name: Commit targeted changes
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "fix(undo): harden conflicts SSE metadata and body decoding"
+          git push origin HEAD:${{ github.head_ref }}
