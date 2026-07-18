@@ -202,4 +202,5 @@
     <Class name="org.hammer.audio.experimental.acoustic.dataset.DatasetAnalytics$DistributionStats"/>
     <Bug pattern="NM_CONFUSING"/>
   </Match>
+
 </FindBugsFilter>
