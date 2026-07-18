@@ -3,7 +3,6 @@ package org.hammer.audio.workflow.collaboration.store;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.TreeMap;
 import org.hammer.audio.workflow.WorkflowOperation;
 
 /** Converts semantic workflow operations into deterministic durable identity data. */
@@ -55,12 +54,15 @@ public final class WorkflowOperationPersistenceCodec {
    * @return deterministic encoded payload
    */
   public static String encodePayload(Map<String, String> payload) {
-    Map<String, String> sorted = new TreeMap<>(Objects.requireNonNull(payload, "payload"));
+    Map<String, String> requiredPayload = Objects.requireNonNull(payload, "payload");
     StringBuilder encoded = new StringBuilder();
-    for (Map.Entry<String, String> entry : sorted.entrySet()) {
-      appendValue(encoded, entry.getKey());
-      appendValue(encoded, entry.getValue());
-    }
+    requiredPayload.entrySet().stream()
+        .sorted(Map.Entry.comparingByKey())
+        .forEach(
+            entry -> {
+              appendValue(encoded, entry.getKey());
+              appendValue(encoded, entry.getValue());
+            });
     return encoded.toString();
   }
 
