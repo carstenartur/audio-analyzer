@@ -25,6 +25,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import org.hammer.audio.workflow.collaboration.outbox.WorkflowOutboxBackoffPolicy;
+import org.hammer.audio.workflow.collaboration.outbox.WorkflowOutboxDispatchException;
 import org.hammer.audio.workflow.collaboration.outbox.WorkflowOutboxDispatcher;
 import org.hammer.audio.workflow.collaboration.outbox.WorkflowOutboxDispatcher.DispatchBatchResult;
 import org.hammer.audio.workflow.collaboration.outbox.WorkflowOutboxDispatcherSettings;
@@ -122,15 +123,19 @@ class HibernateWorkflowOutboxDispatcherTest {
           List<WorkflowOutboxMessage> messages = new ArrayList<>();
           WorkflowOutboxStore failingAcknowledgement = new FailingAcknowledgementStore(outboxStore);
 
-          assertThrows(
-              IllegalStateException.class,
-              () ->
-                  dispatcher(
-                          failingAcknowledgement,
-                          messages::add,
-                          BASE_TIME.plusSeconds(10),
-                          "dispatcher.crashed")
-                      .dispatchBatch());
+          WorkflowOutboxDispatchException failure =
+              assertThrows(
+                  WorkflowOutboxDispatchException.class,
+                  () ->
+                      dispatcher(
+                              failingAcknowledgement,
+                              messages::add,
+                              BASE_TIME.plusSeconds(10),
+                              "dispatcher.crashed")
+                          .dispatchBatch());
+          assertEquals("event.crash", failure.eventId());
+          assertEquals(
+              "simulated crash before outbox acknowledgement", failure.getCause().getMessage());
           assertEquals(1, messages.size());
           assertEquals(0, outboxStore.find("event.crash").orElseThrow().attemptCount());
 
