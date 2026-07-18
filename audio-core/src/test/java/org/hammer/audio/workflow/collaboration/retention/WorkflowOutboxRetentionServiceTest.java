@@ -8,6 +8,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class WorkflowOutboxRetentionServiceTest {
@@ -40,6 +41,9 @@ class WorkflowOutboxRetentionServiceTest {
     assertEquals(25, plan.batchSize());
     assertEquals(3, plan.scannedCount());
     assertEquals(List.of("event.old"), plan.candidateEventIds());
+    assertEquals(
+        Map.of(WorkflowOutboxRetentionReason.PUBLISHED_AT_OR_BEFORE_CUTOFF, 1L),
+        plan.reasonCounts());
     assertEquals(plan.publishedCutoff(), store.cutoff);
     assertEquals(25, store.limit);
   }
