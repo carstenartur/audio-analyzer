@@ -14,9 +14,13 @@
   <description>Reproducibly built React Flow frontend packaged as Spring Boot classpath resources.</description>
 
   <properties>
+    <checkstyle.skip>true</checkstyle.skip>
     <frontend-maven-plugin.version>1.15.1</frontend-maven-plugin.version>
+    <jacoco.skip>true</jacoco.skip>
     <node.version>v22.14.0</node.version>
     <npm.version>10.9.2</npm.version>
+    <pmd.skip>true</pmd.skip>
+    <spotbugs.skip>true</spotbugs.skip>
   </properties>
 
   <build>
