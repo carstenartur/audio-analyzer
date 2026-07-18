@@ -1,0 +1,79 @@
+:root {
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #cdd6f4;
+  background: #11111b;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 960px; min-height: 100vh; overflow: hidden; }
+button, input { font: inherit; }
+button { cursor: pointer; }
+button:disabled { cursor: progress; opacity: 0.55; }
+
+.workbench-shell {
+  display: grid;
+  grid-template-columns: 250px minmax(520px, 1fr) 310px;
+  grid-template-rows: 58px 1fr;
+  width: 100vw;
+  height: 100vh;
+  background: #11111b;
+}
+
+.workbench-toolbar {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  padding: 8px 16px;
+  border-bottom: 1px solid #313244;
+  background: #181825;
+}
+.workbench-toolbar p, .workbench-toolbar h1 { margin: 0; }
+.workbench-toolbar p { color: #89b4fa; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; }
+.workbench-toolbar h1 { font-size: 16px; }
+.status { color: #a6e3a1; font-size: 11px; }
+.authority-badge { margin-left: auto; padding: 4px 8px; border: 1px solid #45475a; border-radius: 999px; color: #94e2d5; font-size: 10px; }
+.error-banner { position: fixed; z-index: 20; top: 58px; left: 250px; right: 310px; padding: 8px 12px; background: #3b1f2b; color: #f38ba8; font-size: 11px; }
+
+.palette, .inspector { overflow: auto; padding: 14px; background: #1e1e2e; }
+.palette { border-right: 1px solid #313244; }
+.inspector { border-left: 1px solid #313244; }
+.palette h2, .inspector h2 { margin: 0 0 7px; font-size: 13px; }
+.palette p, .inspector p { color: #9399b2; font-size: 10px; line-height: 1.5; }
+.palette-entry { display: grid; width: 100%; gap: 2px; margin-bottom: 7px; padding: 9px 10px; text-align: left; border: 1px solid #45475a; border-radius: 6px; background: #181825; color: #cdd6f4; }
+.palette-entry:hover { border-color: #89b4fa; }
+.palette-entry span, .palette-entry small { color: #9399b2; font-size: 10px; }
+
+.graph-panel { min-width: 0; min-height: 0; background: #11111b; }
+.graph-canvas { width: 100%; height: 100%; }
+.react-flow__background { background: #11111b; }
+.react-flow__controls, .react-flow__minimap { background: #1e1e2e; border: 1px solid #45475a; }
+.react-flow__controls-button { background: #1e1e2e; color: #cdd6f4; border-bottom-color: #45475a; }
+
+.audio-node { width: 190px; min-height: 86px; padding: 11px 14px; border: 1px solid #45475a; border-radius: 9px; background: #1e1e2e; color: #cdd6f4; box-shadow: 0 6px 18px rgb(0 0 0 / 30%); }
+.audio-node--selected { border-color: #89b4fa; box-shadow: 0 0 0 2px rgb(137 180 250 / 18%); }
+.audio-node header { display: grid; text-align: center; }
+.audio-node header strong { font-size: 12px; }
+.audio-node header span { margin-top: 2px; color: #9399b2; font-size: 9px; }
+.audio-node dl { margin: 8px 0 0; font-size: 9px; }
+.audio-node dl div { display: flex; justify-content: space-between; gap: 8px; }
+.audio-node dt { color: #9399b2; }
+.audio-node dd { margin: 0; }
+
+.inspector section { padding-bottom: 16px; margin-bottom: 16px; border-bottom: 1px solid #313244; }
+.inspector label { display: grid; gap: 4px; margin: 9px 0; color: #bac2de; font-size: 11px; }
+.inspector input { width: 100%; padding: 7px 8px; border: 1px solid #45475a; border-radius: 5px; background: #11111b; color: #cdd6f4; }
+.inspector button { padding: 7px 9px; border: 1px solid #45475a; border-radius: 5px; background: #313244; color: #cdd6f4; font-size: 11px; }
+.button-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.valid { color: #a6e3a1 !important; }
+.violations { padding-left: 18px; color: #f38ba8; font-size: 11px; }
+.history-list { margin: 10px 0 0; padding: 0; list-style: none; }
+.history-list button { display: grid; width: 100%; margin-bottom: 5px; text-align: left; }
+.history-list span { margin-top: 2px; color: #9399b2; font-size: 9px; }
+.inspector pre { max-height: 220px; overflow: auto; padding: 8px; background: #11111b; border: 1px solid #313244; white-space: pre-wrap; font-size: 9px; }
+
+@media (max-width: 1180px) {
+  .workbench-shell { grid-template-columns: 220px minmax(420px, 1fr) 280px; }
+}
