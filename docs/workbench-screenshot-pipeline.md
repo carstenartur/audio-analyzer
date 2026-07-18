@@ -77,14 +77,14 @@ See `ScreenshotPipeline.java` for the implementation notes.
 
 ## Configuration
 
-| System Property            | Default                                     | Description                                    |
-|:---------------------------|:--------------------------------------------|:-----------------------------------------------|
-| `updateScreenshots`        | `false`                                     | Set `true` to regenerate committed screenshots |
-| `screenshot.tolerance.pct` | `2`                                         | Allowed pixel-difference ratio (0–100)         |
-| `docs.screenshots.dir`     | `docs/assets/screenshots/workbench`         | Committed baseline screenshot directory        |
-| `workbench.jar.path`       | `audio-app/target/audio-app-*.jar`          | Path to the built application JAR              |
-| `workbench.lib.dir`        | `audio-app/target/lib`                      | Path to the runtime library directory          |
-| `workbench.static.dir`     | `audio-web-editor/target/frontend-dist`     | Verified Vite production assets                |
+| System Property            | Default                                 | Description                                    |
+|:---------------------------|:----------------------------------------|:-----------------------------------------------|
+| `updateScreenshots`        | `false`                                 | Set `true` to regenerate committed screenshots |
+| `screenshot.tolerance.pct` | `2`                                     | Allowed pixel-difference ratio (0–100)         |
+| `docs.screenshots.dir`     | `docs/assets/screenshots/workbench`     | Committed baseline screenshot directory        |
+| `workbench.jar.path`       | `audio-app/target/audio-app-*.jar`      | Path to the built application JAR              |
+| `workbench.lib.dir`        | `audio-app/target/lib`                  | Path to the runtime library directory          |
+| `workbench.static.dir`     | `audio-web-editor/target/frontend-dist` | Verified Vite production assets                |
 
 ## Documented Scenarios
 
@@ -169,11 +169,12 @@ screenshots silently.
 
 ## Layer Boundaries
 
-| Allowed                                      | Forbidden                                               |
-|:---------------------------------------------|:--------------------------------------------------------|
-| Testcontainers test harness                  | Making screenshots require manual clicking              |
-| Playwright browser automation test code      | Committing screenshots that cannot be regenerated       |
-| Docs screenshot assets                       | Coupling workflow-domain code to Playwright             |
-| Test-only deterministic identities/data      | Putting test-only APIs into the production domain       |
-| Documentation pages embedding screenshots    | Using screenshot tests as canonical workflow validation |
-| `WorkbenchApplication` launch wiring         | Silently rewriting screenshots during normal CI verify  |
+| Allowed                                   | Forbidden                                               |
+|:------------------------------------------|:--------------------------------------------------------|
+| Testcontainers test harness               | Making screenshots require manual clicking              |
+| Playwright browser automation test code   | Committing screenshots that cannot be regenerated       |
+| Docs screenshot assets                    | Coupling workflow-domain code to Playwright             |
+| Test-only deterministic identities/data   | Putting test-only APIs into the production domain       |
+| Documentation pages embedding screenshots | Using screenshot tests as canonical workflow validation |
+| `WorkbenchApplication` launch wiring      | Silently rewriting screenshots during normal CI verify  |
+

@@ -39,9 +39,10 @@ public final class WorkflowSessionEventHttpAdapter {
    * Streams retained and future events after a reconnect cursor.
    *
    * <p>The explicit {@code afterSequence} query parameter takes precedence over {@code
-   * Last-Event-ID}. A replay gap is represented by one canonical {@code SNAPSHOT} event. A transport
-   * comment is written after subscription so an empty replay still flushes the HTTP response and
-   * allows the browser's {@code EventSource} to become open without inventing a domain event.
+   * Last-Event-ID}. A replay gap is represented by one canonical {@code SNAPSHOT} event. A
+   * transport comment is written after subscription so an empty replay still flushes the HTTP
+   * response and allows the browser's {@code EventSource} to become open without inventing a domain
+   * event.
    */
   @SuppressWarnings("PMD.CloseResource")
   @GetMapping(path = "/{sessionId}/events", produces = MediaType.TEXT_EVENT_STREAM_VALUE)

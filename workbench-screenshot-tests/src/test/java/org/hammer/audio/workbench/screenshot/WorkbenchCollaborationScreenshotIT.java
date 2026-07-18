@@ -127,7 +127,9 @@ class WorkbenchCollaborationScreenshotIT {
   }
 
   private static String visibleText(Locator locator) {
-    return locator.count() > 0 && locator.isVisible() ? locator.innerText() : "no visible error detail";
+    return locator.count() > 0 && locator.isVisible()
+        ? locator.innerText()
+        : "no visible error detail";
   }
 
   private static void disableAnimations(Page page) {
