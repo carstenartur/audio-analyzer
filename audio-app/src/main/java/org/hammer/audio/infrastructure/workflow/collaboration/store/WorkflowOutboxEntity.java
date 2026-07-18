@@ -183,6 +183,7 @@ public class WorkflowOutboxEntity {
     return storedEventSequence;
   }
 
+  /** Returns the durable publication timestamp without changing the mapped HQL field name. */
   Instant publicationTime() {
     return publishedAt;
   }
