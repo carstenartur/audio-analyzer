@@ -125,3 +125,4 @@ This client does not implement:
 - browser-side DSL parsing;
 - JGit, Hibernate or database access;
 - cross-process test orchestration duplicated from #249.
+
