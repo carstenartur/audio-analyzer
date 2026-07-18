@@ -13,6 +13,7 @@ import java.util.Objects;
  * @param payload deterministic serialized identity payload
  * @param bodyVersion version of the reconstructible operation body, or zero for legacy data
  * @param operationBody complete deterministic operation body, or {@code null} for legacy data
+ * @param command durable normal/undo/redo command relation
  */
 public record WorkflowOperationPersistenceData(
     String operationId,
@@ -21,7 +22,8 @@ public record WorkflowOperationPersistenceData(
     Instant occurredAt,
     String payload,
     int bodyVersion,
-    String operationBody) {
+    String operationBody,
+    WorkflowOperationCommandMetadata command) {
 
   public WorkflowOperationPersistenceData {
     operationId = requireNotBlank(operationId, "operationId");
@@ -40,16 +42,25 @@ public record WorkflowOperationPersistenceData(
     } else {
       operationBody = requireNotBlank(operationBody, "operationBody");
     }
+    command = Objects.requireNonNull(command, "command");
   }
 
-  /** Creates legacy identity-only persistence data. */
+  /** Creates legacy identity-only persistence data for an ordinary operation. */
   public WorkflowOperationPersistenceData(
       String operationId,
       String actorId,
       String operationType,
       Instant occurredAt,
       String payload) {
-    this(operationId, actorId, operationType, occurredAt, payload, 0, null);
+    this(
+        operationId,
+        actorId,
+        operationType,
+        occurredAt,
+        payload,
+        0,
+        null,
+        WorkflowOperationCommandMetadata.normal(operationId));
   }
 
   /** Returns whether this persistence value contains a reconstructible body. */
