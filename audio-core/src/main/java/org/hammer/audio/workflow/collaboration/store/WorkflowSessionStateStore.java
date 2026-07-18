@@ -18,10 +18,19 @@ public interface WorkflowSessionStateStore {
   /** Atomically appends one accepted operation, aggregate update and outbox event. */
   WorkflowSessionAppendResult append(WorkflowSessionAppendCommand command);
 
-  /** Atomically closes a session at the expected semantic revision. */
-  StoredWorkflowSession close(String sessionId, long expectedRevision);
+  /**
+   * Reserves the next durable collaboration-event sequence without changing semantic revision.
+   *
+   * <p>Lifecycle and presence payloads remain transient, but advancing their sequence prevents SSE
+   * identifiers from moving backwards after a process restart.
+   */
+  StoredWorkflowSession advanceEventSequence(String sessionId, long expectedSequence);
 
-  /** Returns accepted operations in stable session sequence order. */
+  /** Atomically closes a session and reserves its final lifecycle-event sequence. */
+  StoredWorkflowSession close(
+      String sessionId, long expectedRevision, long expectedSequence);
+
+  /** Returns accepted operations in stable session event-sequence order. */
   List<StoredWorkflowOperation> operations(String sessionId);
 
   /** Returns unpublished outbox entries in stable event order. */
