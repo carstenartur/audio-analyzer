@@ -14,8 +14,8 @@ import org.hammer.audio.workflow.collaboration.OperationActor;
  * @param createdAt session creation timestamp
  * @param workflowId identifier of the canonical workflow
  * @param workflowDsl deterministic serialized canonical workflow
- * @param revision current semantic revision
- * @param sequence current durable event sequence
+ * @param revision current semantic workflow revision
+ * @param sequence latest allocated collaboration-event sequence, including lifecycle and presence
  * @param closed whether the session has been explicitly closed
  */
 public record StoredWorkflowSession(
@@ -38,6 +38,9 @@ public record StoredWorkflowSession(
     workflowDsl = requireNotBlank(workflowDsl, "workflowDsl");
     requireNonNegative(revision, "revision");
     requireNonNegative(sequence, "sequence");
+    if (revision > sequence) {
+      throw new IllegalArgumentException("revision must not exceed event sequence");
+    }
   }
 
   private static String requireNotBlank(String value, String name) {
