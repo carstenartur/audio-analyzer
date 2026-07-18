@@ -1,0 +1,195 @@
+name: Add PR 264 expected revision contract
+
+on:
+  push:
+    branches:
+      - feature/263-collaboration-recovery
+
+permissions:
+  contents: write
+  packages: read
+
+jobs:
+  revise:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feature/263-collaboration-recovery
+
+      - uses: actions/setup-java@v5
+        with:
+          java-version: '21'
+          distribution: temurin
+          cache: maven
+          server-id: github
+          server-username: GITHUB_ACTOR
+          server-password: GITHUB_TOKEN
+
+      - name: Add expected revision contract
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path('audio-core/src/main/java/org/hammer/audio/workflow/collaboration/WorkflowSessionRegistry.java')
+          text = path.read_text()
+          text = text.replace(
+              'import org.hammer.audio.workflow.collaboration.store.WorkflowSessionAppendResult;\n',
+              'import org.hammer.audio.workflow.collaboration.store.WorkflowSessionAppendResult;\n'
+              'import org.hammer.audio.workflow.collaboration.store.WorkflowSessionRevisionConflictException;\n',
+              1,
+          )
+
+          public_pattern = re.compile(
+              r'  /\*\* Applies an actor-authored semantic operation to an existing joined session\. \*/\n'
+              r'  public Workflow applyOperation\(.*?\n  \}\n\n  /\*\* Updates non-semantic presence',
+              re.DOTALL,
+          )
+          public_replacement = '''  /** Applies an actor-authored semantic operation at the current server revision. */
+            public Workflow applyOperation(
+              String sessionId, CollaborationMode mode, OperationActor actor, WorkflowOperation operation) {
+            assertOperationAuthor(sessionId, actor, operation);
+            return requireSession(sessionId).apply(mode, actor, operation);
+          }
+
+            /**
+             * Applies an actor-authored semantic operation against an explicit client-observed revision.
+             *
+             * <p>An identical command retry remains idempotent even when its expected revision precedes
+             * the current revision.
+             */
+            public Workflow applyOperation(
+              String sessionId,
+              CollaborationMode mode,
+              OperationActor actor,
+              long expectedRevision,
+              WorkflowOperation operation) {
+            if (expectedRevision < 0) {
+              throw new IllegalArgumentException("expectedRevision must be >= 0");
+            }
+            assertOperationAuthor(sessionId, actor, operation);
+            return requireSession(sessionId).apply(mode, actor, expectedRevision, operation);
+          }
+
+            private static void assertOperationAuthor(
+              String sessionId, OperationActor actor, WorkflowOperation operation) {
+            Objects.requireNonNull(actor, "actor");
+            Objects.requireNonNull(operation, "operation");
+            if (!operation.author().equals(actor.actorId())) {
+              throw error(
+                  Code.INVALID_OPERATION_AUTHOR,
+                  sessionId,
+                  "Operation author '"
+                      + operation.author()
+                      + "' does not match actor '"
+                      + actor.actorId()
+                      + "'");
+            }
+          }
+
+            /** Updates non-semantic presence'''
+          text, count = public_pattern.subn(public_replacement, text, count=1)
+          if count != 1:
+              raise SystemExit(f'Expected one public applyOperation block, replaced {count}')
+
+          entry_pattern = re.compile(
+              r'    Workflow apply\(\n        CollaborationMode requestedMode, OperationActor actor, WorkflowOperation operation\) \{.*?\n    \}\n\n    PresenceState updatePresence',
+              re.DOTALL,
+          )
+          entry_replacement = '''    Workflow apply(
+                CollaborationMode requestedMode, OperationActor actor, WorkflowOperation operation) {
+              lock.lock();
+              try {
+                return applyLocked(requestedMode, actor, durableRevision, operation);
+              } finally {
+                lock.unlock();
+              }
+            }
+
+            Workflow apply(
+                CollaborationMode requestedMode,
+                OperationActor actor,
+                long expectedRevision,
+                WorkflowOperation operation) {
+              lock.lock();
+              try {
+                return applyLocked(requestedMode, actor, expectedRevision, operation);
+              } finally {
+                lock.unlock();
+              }
+            }
+
+            private Workflow applyLocked(
+                CollaborationMode requestedMode,
+                OperationActor actor,
+                long expectedRevision,
+                WorkflowOperation operation) {
+              requireOpen();
+              assertModeAndActor(requestedMode, actor);
+              AcceptedOperationIdentity candidate = AcceptedOperationIdentity.from(operation);
+              AcceptedOperationIdentity previous = operationsById.get(operation.operationId());
+              if (previous != null) {
+                if (previous.equals(candidate)) {
+                  return operationLog.currentWorkflow();
+                }
+                throw duplicateOperation(operation.operationId());
+              }
+              if (expectedRevision != durableRevision) {
+                throw new WorkflowSessionRevisionConflictException(
+                    sessionId, expectedRevision, durableRevision);
+              }
+
+              Workflow updatedWorkflow = operation.apply(operationLog.currentWorkflow());
+              if (stateStore != null) {
+                WorkflowSessionAppendResult durableResult = persist(operation, updatedWorkflow);
+                acceptDurableResult(durableResult);
+                if (durableResult.duplicate()) {
+                  Workflow durableWorkflow = parseDurableWorkflow(durableResult.session());
+                  operationLog.reset(durableWorkflow);
+                  operationsById.put(operation.operationId(), candidate);
+                  operationCount = Math.toIntExact(durableResult.session().revision());
+                  return durableWorkflow;
+                }
+              }
+
+              Workflow appliedWorkflow = operationLog.apply(operation);
+              if (!appliedWorkflow.equals(updatedWorkflow)) {
+                throw new IllegalStateException(
+                    "Persisted workflow differs from applied workflow for operation "
+                        + operation.operationId());
+              }
+              operationsById.put(operation.operationId(), candidate);
+              operationCount++;
+              eventHub.operationAccepted(sessionId, actor, operation, appliedWorkflow);
+              if (stateStore == null) {
+                durableRevision = eventHub.currentRevision(sessionId);
+                durableSequence = eventHub.currentSequence(sessionId);
+              } else {
+                verifyEventHubState(durableSequence, durableRevision, "accepted operation");
+              }
+              return appliedWorkflow;
+            }
+
+            PresenceState updatePresence'''
+          text, count = entry_pattern.subn(entry_replacement, text, count=1)
+          if count != 1:
+              raise SystemExit(f'Expected one session-entry apply block, replaced {count}')
+
+          path.write_text(text)
+          PY
+
+          mvn -B spotless:apply --file pom.xml
+
+      - name: Commit expected revision contract
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m 'Expose expected semantic revision for collaboration commands'
+          git push origin HEAD:feature/263-collaboration-recovery
