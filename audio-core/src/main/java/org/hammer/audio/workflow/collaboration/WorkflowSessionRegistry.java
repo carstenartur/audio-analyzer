@@ -30,13 +30,15 @@ import org.hammer.audio.workflow.dsl.WorkflowDslSerializer;
  * so actors can reconnect. A session is removed only by an explicit owner close operation. Session
  * mode is immutable for the complete lifetime of a session.
  *
- * <p>When a durable store is supplied, the registry recovers open canonical snapshots and accepted
- * operation identities. Connection membership and presence intentionally start empty after restart.
+ * <p>When a durable store is supplied, the registry recovers open canonical snapshots, accepted
+ * operation identities, semantic revision and collaboration-event sequence. Connection membership
+ * and presence intentionally start empty after restart.
  */
 public final class WorkflowSessionRegistry {
 
   private static final String SESSION_ID_FIELD = "sessionId";
   private static final String OPERATION_EVENT_TYPE = "WORKFLOW_OPERATION_ACCEPTED";
+  private static final long INITIAL_SESSION_EVENT_SEQUENCE = 2;
 
   private final Map<String, SessionEntry> sessionEntries = new ConcurrentHashMap<>();
   private final WorkflowSessionEventHub sessionEventHub;
@@ -113,16 +115,17 @@ public final class WorkflowSessionRegistry {
                 initialWorkflow.id(),
                 dslSerializer.serialize(initialWorkflow),
                 0,
-                0,
+                INITIAL_SESSION_EVENT_SEQUENCE,
                 false));
         persisted = true;
       }
       sessionEventHub.openSession(requiredSessionId, owner, initialWorkflow);
+      created.verifyInitialEventStream();
       return created.snapshot();
     } catch (RuntimeException failure) {
       sessionEntries.remove(requiredSessionId, created);
       if (persisted) {
-        stateStore.close(requiredSessionId, 0);
+        stateStore.close(requiredSessionId, 0, INITIAL_SESSION_EVENT_SEQUENCE);
       }
       throw failure;
     }
@@ -190,7 +193,7 @@ public final class WorkflowSessionRegistry {
     String requiredSessionId = requireNotBlank(sessionId, SESSION_ID_FIELD);
     String actorId = requireNotBlank(requestedByActorId, "requestedByActorId");
     SessionEntry entry = requireSession(requiredSessionId);
-    entry.close(actorId);
+    long finalSequence = entry.close(actorId);
     if (!sessionEntries.remove(requiredSessionId, entry)) {
       throw error(
           Code.SESSION_NOT_FOUND,
@@ -198,6 +201,7 @@ public final class WorkflowSessionRegistry {
           "Session changed while closing: " + requiredSessionId);
     }
     sessionEventHub.closeSession(requiredSessionId, entry.sessionOwner());
+    entry.verifyClosedEvent(finalSequence);
   }
 
   /** Returns all current sessions in stable identifier order. */
@@ -259,27 +263,40 @@ public final class WorkflowSessionRegistry {
 
   private static void validateRecoveredHistory(
       StoredWorkflowSession session, List<StoredWorkflowOperation> operations) {
-    long expectedPosition = 1;
+    long expectedRevision = 1;
+    long previousSequence = 0;
     for (StoredWorkflowOperation operation : operations) {
       if (!operation.sessionId().equals(session.sessionId())) {
-        throw new WorkflowSessionRecoveryException(
-            session.sessionId(),
-            "Durable operation belongs to a different session: " + operation.operationId());
+        throw recoveryFailure(
+            session, "Durable operation belongs to a different session: " + operation.operationId());
       }
-      if (operation.sequence() != expectedPosition || operation.revision() != expectedPosition) {
-        throw new WorkflowSessionRecoveryException(
-            session.sessionId(),
-            "Durable operation history is not contiguous at operation " + operation.operationId());
+      if (operation.revision() != expectedRevision) {
+        throw recoveryFailure(
+            session,
+            "Durable semantic revisions are not contiguous at operation "
+                + operation.operationId());
       }
-      expectedPosition++;
+      if (operation.sequence() <= previousSequence || operation.sequence() > session.sequence()) {
+        throw recoveryFailure(
+            session,
+            "Durable event sequence is invalid at operation " + operation.operationId());
+      }
+      expectedRevision++;
+      previousSequence = operation.sequence();
     }
-    long historySize = operations.size();
-    if (session.revision() != historySize || session.sequence() != historySize) {
-      throw new WorkflowSessionRecoveryException(
-          session.sessionId(),
-          "Durable aggregate revision/sequence does not match operation history for session "
-              + session.sessionId());
+    if (session.revision() != operations.size()) {
+      throw recoveryFailure(
+          session, "Durable aggregate revision does not match operation history");
     }
+    if (session.sequence() < previousSequence || session.sequence() < session.revision()) {
+      throw recoveryFailure(
+          session, "Durable aggregate event sequence precedes recovered history");
+    }
+  }
+
+  private static WorkflowSessionRecoveryException recoveryFailure(
+      StoredWorkflowSession session, String message) {
+    return new WorkflowSessionRecoveryException(session.sessionId(), message);
   }
 
   private SessionEntry requireSession(String sessionId) {
@@ -389,7 +406,7 @@ public final class WorkflowSessionRegistry {
           List.of(),
           true,
           0,
-          0,
+          INITIAL_SESSION_EVENT_SEQUENCE,
           eventHub,
           stateStore,
           dslParser,
@@ -424,6 +441,15 @@ public final class WorkflowSessionRegistry {
       // no-op
     }
 
+    void verifyInitialEventStream() {
+      lock.lock();
+      try {
+        verifyEventHubState(INITIAL_SESSION_EVENT_SEQUENCE, 0, "session creation");
+      } finally {
+        lock.unlock();
+      }
+    }
+
     SessionSnapshot join(OperationActor actor) {
       lock.lock();
       try {
@@ -442,8 +468,11 @@ public final class WorkflowSessionRegistry {
               sessionId,
               "Actor metadata mismatch for already joined actor: " + actor.actorId());
         }
-        if (participants.putIfAbsent(actor.actorId(), actor) == null) {
+        if (existing == null) {
+          long nextSequence = reserveNonSemanticEventSequence();
+          participants.put(actor.actorId(), actor);
           eventHub.actorJoined(sessionId, actor);
+          confirmNonSemanticEvent(nextSequence, "actor join");
         }
         return snapshotLocked();
       } finally {
@@ -455,12 +484,15 @@ public final class WorkflowSessionRegistry {
       lock.lock();
       try {
         requireOpen();
-        if (!participants.containsKey(actorId)) {
+        OperationActor actor = participants.get(actorId);
+        if (actor == null) {
           throw error(Code.ACTOR_NOT_JOINED, sessionId, "Actor is not joined: " + actorId);
         }
-        OperationActor actor = participants.remove(actorId);
+        long nextSequence = reserveNonSemanticEventSequence();
+        participants.remove(actorId);
         sessionService.clearPresence(actorId);
         eventHub.actorLeft(sessionId, actor);
+        confirmNonSemanticEvent(nextSequence, "actor leave");
         return snapshotLocked();
       } finally {
         lock.unlock();
@@ -485,17 +517,14 @@ public final class WorkflowSessionRegistry {
         Workflow updatedWorkflow = operation.apply(operationLog.currentWorkflow());
         if (stateStore != null) {
           WorkflowSessionAppendResult durableResult = persist(operation, updatedWorkflow);
+          acceptDurableResult(durableResult);
           if (durableResult.duplicate()) {
-            Workflow durableWorkflow = dslParser.parse(durableResult.session().workflowDsl());
+            Workflow durableWorkflow = parseDurableWorkflow(durableResult.session());
             operationLog.reset(durableWorkflow);
             operationsById.put(operation.operationId(), candidate);
-            operationCount++;
-            durableRevision = durableResult.session().revision();
-            durableSequence = durableResult.session().sequence();
+            operationCount = Math.toIntExact(durableResult.session().revision());
             return durableWorkflow;
           }
-          durableRevision = durableResult.session().revision();
-          durableSequence = durableResult.session().sequence();
         }
 
         Workflow appliedWorkflow = operationLog.apply(operation);
@@ -506,14 +535,12 @@ public final class WorkflowSessionRegistry {
         }
         operationsById.put(operation.operationId(), candidate);
         operationCount++;
-        WorkflowSessionEvent accepted =
-            eventHub.operationAccepted(sessionId, actor, operation, appliedWorkflow);
+        eventHub.operationAccepted(sessionId, actor, operation, appliedWorkflow);
         if (stateStore == null) {
-          durableRevision = accepted.revision();
-          durableSequence = accepted.sequence();
-        } else if (accepted.revision() != durableRevision) {
-          throw new IllegalStateException(
-              "Event revision differs from durable revision for session " + sessionId);
+          durableRevision = eventHub.currentRevision(sessionId);
+          durableSequence = eventHub.currentSequence(sessionId);
+        } else {
+          verifyEventHubState(durableSequence, durableRevision, "accepted operation");
         }
         return appliedWorkflow;
       } finally {
@@ -525,18 +552,11 @@ public final class WorkflowSessionRegistry {
       lock.lock();
       try {
         requireOpen();
-        OperationActor joinedActor = participants.get(actor.actorId());
-        if (joinedActor == null) {
-          throw error(Code.ACTOR_NOT_JOINED, sessionId, "Actor is not joined: " + actor.actorId());
-        }
-        if (!joinedActor.equals(actor)) {
-          throw error(
-              Code.ACTOR_METADATA_MISMATCH,
-              sessionId,
-              "Actor metadata mismatch: " + actor.actorId());
-        }
+        assertJoinedActor(actor);
+        long nextSequence = reserveNonSemanticEventSequence();
         sessionService.updatePresence(presenceState);
         eventHub.presenceUpdated(sessionId, actor, presenceState);
+        confirmNonSemanticEvent(nextSequence, "presence update");
         return presenceState;
       } finally {
         lock.unlock();
@@ -563,7 +583,7 @@ public final class WorkflowSessionRegistry {
       }
     }
 
-    void close(String actorId) {
+    long close(String actorId) {
       lock.lock();
       try {
         requireOpen();
@@ -573,10 +593,29 @@ public final class WorkflowSessionRegistry {
               sessionId,
               "Only the session owner may close it: " + owner.actorId());
         }
+        long finalSequence = Math.addExact(durableSequence, 1);
         if (stateStore != null) {
-          stateStore.close(sessionId, durableRevision);
+          StoredWorkflowSession closedSession =
+              stateStore.close(sessionId, durableRevision, durableSequence);
+          if (!closedSession.closed()
+              || closedSession.revision() != durableRevision
+              || closedSession.sequence() != finalSequence) {
+            throw new IllegalStateException(
+                "Durable close result is inconsistent for session " + sessionId);
+          }
         }
+        durableSequence = finalSequence;
         closed = true;
+        return finalSequence;
+      } finally {
+        lock.unlock();
+      }
+    }
+
+    void verifyClosedEvent(long finalSequence) {
+      lock.lock();
+      try {
+        verifyEventHubState(finalSequence, durableRevision, "session close");
       } finally {
         lock.unlock();
       }
@@ -607,6 +646,71 @@ public final class WorkflowSessionRegistry {
               outboxEvent));
     }
 
+    private void acceptDurableResult(WorkflowSessionAppendResult result) {
+      StoredWorkflowSession durableSession = result.session();
+      if (!durableSession.sessionId().equals(sessionId)
+          || durableSession.revision() != result.operation().revision()
+          || durableSession.sequence() < result.operation().sequence()
+          || !result.outboxEntry().sessionId().equals(sessionId)
+          || result.outboxEntry().sequence() != result.operation().sequence()) {
+        throw new IllegalStateException(
+            "Durable append result is inconsistent for session " + sessionId);
+      }
+      durableRevision = durableSession.revision();
+      durableSequence = durableSession.sequence();
+    }
+
+    private Workflow parseDurableWorkflow(StoredWorkflowSession durableSession) {
+      Workflow durableWorkflow = dslParser.parse(durableSession.workflowDsl());
+      if (!durableWorkflow.id().equals(durableSession.workflowId())) {
+        throw new IllegalStateException(
+            "Durable workflow id mismatch after duplicate operation for session " + sessionId);
+      }
+      return durableWorkflow;
+    }
+
+    private long reserveNonSemanticEventSequence() {
+      long expectedSequence = durableSequence;
+      long nextSequence = Math.addExact(expectedSequence, 1);
+      if (stateStore != null) {
+        StoredWorkflowSession advanced =
+            stateStore.advanceEventSequence(sessionId, expectedSequence);
+        if (advanced.closed()
+            || advanced.revision() != durableRevision
+            || advanced.sequence() != nextSequence) {
+          throw new IllegalStateException(
+              "Durable event sequence result is inconsistent for session " + sessionId);
+        }
+      }
+      return nextSequence;
+    }
+
+    private void confirmNonSemanticEvent(long expectedSequence, String eventDescription) {
+      verifyEventHubState(expectedSequence, durableRevision, eventDescription);
+      durableSequence = expectedSequence;
+    }
+
+    private void verifyEventHubState(
+        long expectedSequence, long expectedRevision, String eventDescription) {
+      long actualSequence = eventHub.currentSequence(sessionId);
+      long actualRevision = eventHub.currentRevision(sessionId);
+      if (actualSequence != expectedSequence || actualRevision != expectedRevision) {
+        throw new IllegalStateException(
+            "Event hub state differs from durable state after "
+                + eventDescription
+                + " for session "
+                + sessionId
+                + ": expected sequence/revision "
+                + expectedSequence
+                + "/"
+                + expectedRevision
+                + " but found "
+                + actualSequence
+                + "/"
+                + actualRevision);
+      }
+    }
+
     private void assertModeAndActor(CollaborationMode requestedMode, OperationActor actor) {
       if (mode != requestedMode) {
         throw error(
@@ -614,6 +718,10 @@ public final class WorkflowSessionRegistry {
             sessionId,
             "Requested mode '" + requestedMode + "' does not match session mode '" + mode + "'");
       }
+      assertJoinedActor(actor);
+    }
+
+    private void assertJoinedActor(OperationActor actor) {
       OperationActor joinedActor = participants.get(actor.actorId());
       if (joinedActor == null) {
         throw error(Code.ACTOR_NOT_JOINED, sessionId, "Actor is not joined: " + actor.actorId());
@@ -650,7 +758,9 @@ public final class WorkflowSessionRegistry {
           createdAt,
           actors,
           operationCount,
-          operationLog.currentWorkflow().id());
+          operationLog.currentWorkflow().id(),
+          durableRevision,
+          durableSequence);
     }
   }
 
@@ -678,6 +788,8 @@ public final class WorkflowSessionRegistry {
    * @param participants currently joined participants
    * @param operationCount number of applied operations
    * @param workflowId identifier of the canonical workflow
+   * @param revision current semantic workflow revision
+   * @param sequence latest collaboration-event sequence
    */
   public record SessionSnapshot(
       String sessionId,
@@ -686,7 +798,9 @@ public final class WorkflowSessionRegistry {
       Instant createdAt,
       List<OperationActor> participants,
       int operationCount,
-      String workflowId) {
+      String workflowId,
+      long revision,
+      long sequence) {
 
     public SessionSnapshot {
       requireNotBlank(sessionId, "sessionId");
@@ -698,6 +812,9 @@ public final class WorkflowSessionRegistry {
         throw new IllegalArgumentException("operationCount must be >= 0");
       }
       requireNotBlank(workflowId, "workflowId");
+      if (revision < 0 || sequence < revision) {
+        throw new IllegalArgumentException("Invalid session revision/event sequence");
+      }
     }
   }
 }
