@@ -1,9 +1,9 @@
 name: PR 281 diagnostic
 
 on:
-  push:
+  pull_request:
     branches:
-      - feature/270-react-flow-session-integration
+      - master
 
 permissions:
   contents: read
