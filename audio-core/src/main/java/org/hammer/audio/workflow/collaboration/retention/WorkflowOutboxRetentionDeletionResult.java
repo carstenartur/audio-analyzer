@@ -15,7 +15,6 @@ public record WorkflowOutboxRetentionDeletionResult(
     List<String> deletedEventIds, List<String> skippedEventIds) {
 
   public WorkflowOutboxRetentionDeletionResult {
-    // Keep the result immutable and prevent contradictory audit output.
     deletedEventIds = validatedIds(deletedEventIds, "deletedEventIds");
     skippedEventIds = validatedIds(skippedEventIds, "skippedEventIds");
     Set<String> overlap = new HashSet<>(deletedEventIds);
@@ -23,6 +22,18 @@ public record WorkflowOutboxRetentionDeletionResult(
     if (!overlap.isEmpty()) {
       throw new IllegalArgumentException("deleted and skipped event ids overlap: " + overlap);
     }
+  }
+
+  /** Returns an immutable defensive copy of the deleted event identifiers. */
+  @Override
+  public List<String> deletedEventIds() {
+    return List.copyOf(deletedEventIds);
+  }
+
+  /** Returns an immutable defensive copy of the skipped event identifiers. */
+  @Override
+  public List<String> skippedEventIds() {
+    return List.copyOf(skippedEventIds);
   }
 
   /** Number of rows deleted by the transaction. */
