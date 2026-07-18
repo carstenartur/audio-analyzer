@@ -86,15 +86,7 @@ public final class WorkflowSessionRegistry {
     Instant createdAt = Instant.now();
     SessionEntry created =
         SessionEntry.created(
-            requiredSessionId,
-            mode,
-            owner,
-            createdAt,
-            initialWorkflow,
-            sessionEventHub,
-            stateStore,
-            dslParser,
-            dslSerializer);
+            requiredSessionId, mode, owner, createdAt, initialWorkflow, entryServices());
     SessionEntry previous = sessionEntries.putIfAbsent(requiredSessionId, created);
     if (previous != null) {
       throw error(
@@ -234,14 +226,7 @@ public final class WorkflowSessionRegistry {
       List<StoredWorkflowOperation> operations = stateStore.operations(sessionId);
       validateRecoveredHistory(storedSession, operations);
       SessionEntry recovered =
-          SessionEntry.recovered(
-              storedSession,
-              workflow,
-              operations,
-              sessionEventHub,
-              stateStore,
-              dslParser,
-              dslSerializer);
+          SessionEntry.recovered(storedSession, workflow, operations, entryServices());
       if (sessionEntries.putIfAbsent(sessionId, recovered) != null) {
         throw new WorkflowSessionRecoveryException(
             sessionId, "Duplicate durable collaboration session: " + sessionId);
@@ -297,6 +282,10 @@ public final class WorkflowSessionRegistry {
     return new WorkflowSessionRecoveryException(session.sessionId(), message);
   }
 
+  private EntryServices entryServices() {
+    return new EntryServices(sessionEventHub, stateStore, dslParser, dslSerializer);
+  }
+
   private SessionEntry requireSession(String sessionId) {
     String requiredSessionId = requireNotBlank(sessionId, SESSION_ID_FIELD);
     SessionEntry entry = sessionEntries.get(requiredSessionId);
@@ -319,6 +308,25 @@ public final class WorkflowSessionRegistry {
     return value;
   }
 
+  private record SessionDefinition(
+      String sessionId,
+      CollaborationMode mode,
+      OperationActor owner,
+      Instant createdAt,
+      Workflow workflow) {}
+
+  private record RecoveryState(
+      List<StoredWorkflowOperation> operations,
+      boolean ownerConnected,
+      long revision,
+      long sequence) {}
+
+  private record EntryServices(
+      WorkflowSessionEventHub eventHub,
+      WorkflowSessionStateStore stateStore,
+      WorkflowDslParser dslParser,
+      WorkflowDslSerializer dslSerializer) {}
+
   private static final class SessionEntry {
     private final String sessionId;
     private final CollaborationMode mode;
@@ -339,49 +347,37 @@ public final class WorkflowSessionRegistry {
     private volatile boolean closed;
 
     private SessionEntry(
-        String sessionId,
-        CollaborationMode mode,
-        OperationActor owner,
-        Instant createdAt,
-        Workflow workflow,
-        List<StoredWorkflowOperation> recoveredOperations,
-        boolean ownerConnected,
-        long durableRevision,
-        long durableSequence,
-        WorkflowSessionEventHub eventHub,
-        WorkflowSessionStateStore stateStore,
-        WorkflowDslParser dslParser,
-        WorkflowDslSerializer dslSerializer) {
-      this.sessionId = sessionId;
-      this.mode = mode;
-      this.owner = owner;
-      this.createdAt = createdAt;
-      this.eventHub = Objects.requireNonNull(eventHub, "eventHub");
-      this.stateStore = stateStore;
-      this.dslParser = Objects.requireNonNull(dslParser, "dslParser");
-      this.dslSerializer = Objects.requireNonNull(dslSerializer, "dslSerializer");
-      this.operationLog = new WorkflowOperationLog(workflow);
+        SessionDefinition definition, RecoveryState recovery, EntryServices services) {
+      this.sessionId = definition.sessionId();
+      this.mode = definition.mode();
+      this.owner = definition.owner();
+      this.createdAt = definition.createdAt();
+      this.eventHub = Objects.requireNonNull(services.eventHub(), "eventHub");
+      this.stateStore = services.stateStore();
+      this.dslParser = Objects.requireNonNull(services.dslParser(), "dslParser");
+      this.dslSerializer = Objects.requireNonNull(services.dslSerializer(), "dslSerializer");
+      this.operationLog = new WorkflowOperationLog(definition.workflow());
       this.sessionService =
           new CollaborativeWorkflowSessionService(
-              sessionId,
-              mode,
+              definition.sessionId(),
+              definition.mode(),
               operationLog,
               new InMemoryWorkflowEventOutbox(),
               ignored -> ignoreEvent());
-      this.durableRevision = durableRevision;
-      this.durableSequence = durableSequence;
-      for (StoredWorkflowOperation operation : recoveredOperations) {
+      this.durableRevision = recovery.revision();
+      this.durableSequence = recovery.sequence();
+      for (StoredWorkflowOperation operation : recovery.operations()) {
         AcceptedOperationIdentity previous =
             operationsById.putIfAbsent(
                 operation.operationId(), AcceptedOperationIdentity.from(operation));
         if (previous != null) {
           throw new WorkflowSessionRecoveryException(
-              sessionId, "Duplicate durable operation id: " + operation.operationId());
+              definition.sessionId(), "Duplicate durable operation id: " + operation.operationId());
         }
       }
-      this.operationCount = recoveredOperations.size();
-      if (ownerConnected) {
-        participants.put(owner.actorId(), owner);
+      this.operationCount = recovery.operations().size();
+      if (recovery.ownerConnected()) {
+        participants.put(definition.owner().actorId(), definition.owner());
       }
     }
 
@@ -391,48 +387,30 @@ public final class WorkflowSessionRegistry {
         OperationActor owner,
         Instant createdAt,
         Workflow workflow,
-        WorkflowSessionEventHub eventHub,
-        WorkflowSessionStateStore stateStore,
-        WorkflowDslParser dslParser,
-        WorkflowDslSerializer dslSerializer) {
-      return new SessionEntry(
-          sessionId,
-          mode,
-          owner,
-          createdAt,
-          workflow,
-          List.of(),
-          true,
-          0,
-          INITIAL_SESSION_EVENT_SEQUENCE,
-          eventHub,
-          stateStore,
-          dslParser,
-          dslSerializer);
+        EntryServices services) {
+      SessionDefinition definition =
+          new SessionDefinition(sessionId, mode, owner, createdAt, workflow);
+      RecoveryState recovery =
+          new RecoveryState(List.of(), true, 0, INITIAL_SESSION_EVENT_SEQUENCE);
+      return new SessionEntry(definition, recovery, services);
     }
 
     static SessionEntry recovered(
         StoredWorkflowSession storedSession,
         Workflow workflow,
         List<StoredWorkflowOperation> recoveredOperations,
-        WorkflowSessionEventHub eventHub,
-        WorkflowSessionStateStore stateStore,
-        WorkflowDslParser dslParser,
-        WorkflowDslSerializer dslSerializer) {
-      return new SessionEntry(
-          storedSession.sessionId(),
-          storedSession.mode(),
-          storedSession.owner(),
-          storedSession.createdAt(),
-          workflow,
-          recoveredOperations,
-          false,
-          storedSession.revision(),
-          storedSession.sequence(),
-          eventHub,
-          stateStore,
-          dslParser,
-          dslSerializer);
+        EntryServices services) {
+      SessionDefinition definition =
+          new SessionDefinition(
+              storedSession.sessionId(),
+              storedSession.mode(),
+              storedSession.owner(),
+              storedSession.createdAt(),
+              workflow);
+      RecoveryState recovery =
+          new RecoveryState(
+              recoveredOperations, false, storedSession.revision(), storedSession.sequence());
+      return new SessionEntry(definition, recovery, services);
     }
 
     private static void ignoreEvent() {
