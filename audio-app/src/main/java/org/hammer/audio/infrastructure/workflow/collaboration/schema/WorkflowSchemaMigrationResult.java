@@ -12,8 +12,8 @@ import java.util.Objects;
 public record WorkflowSchemaMigrationResult(
     boolean applied, int coreMigrationsExecuted, int collaborationMigrationsExecuted) {
 
-  /** Validates migration execution counters. */
   public WorkflowSchemaMigrationResult {
+    // Validate counters at the boundary before the result participates in startup ordering.
     if (coreMigrationsExecuted < 0) {
       throw new IllegalArgumentException("coreMigrationsExecuted must be >= 0");
     }
