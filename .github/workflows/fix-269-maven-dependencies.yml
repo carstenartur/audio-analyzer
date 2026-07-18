@@ -1,0 +1,67 @@
+name: Complete issue 269 Maven wiring
+
+on:
+  push:
+    branches: [ feature/269-production-react-flow-frontend ]
+
+permissions:
+  contents: write
+
+jobs:
+  wire:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v7
+        with:
+          ref: feature/269-production-react-flow-frontend
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Add managed and application dependencies
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          root = Path('pom.xml')
+          text = root.read_text(encoding='utf-8')
+          marker = '''      <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>audio-experimental-acoustic</artifactId>
+            <version>${project.version}</version>
+          </dependency>'''.replace('            ', '        ')
+          dependency = '''      <dependency>
+        <groupId>${project.groupId}</groupId>
+        <artifactId>audio-web-editor</artifactId>
+        <version>${project.version}</version>
+      </dependency>'''
+          if '<artifactId>audio-web-editor</artifactId>' not in text:
+              if marker not in text:
+                  raise SystemExit('root dependency marker not found')
+              text = text.replace(marker, marker + '\n' + dependency, 1)
+          root.write_text(text, encoding='utf-8')
+
+          app = Path('audio-app/pom.xml')
+          text = app.read_text(encoding='utf-8')
+          marker = '''    <dependency>
+      <groupId>${project.groupId}</groupId>
+      <artifactId>audio-plugin-api</artifactId>
+    </dependency>'''
+          dependency = '''    <dependency>
+      <groupId>${project.groupId}</groupId>
+      <artifactId>audio-web-editor</artifactId>
+    </dependency>'''
+          if '<artifactId>audio-web-editor</artifactId>' not in text:
+              if marker not in text:
+                  raise SystemExit('application dependency marker not found')
+              text = text.replace(marker, marker + '\n' + dependency, 1)
+          app.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Commit and remove workflow
+        run: |
+          git rm .github/workflows/fix-269-maven-dependencies.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add pom.xml audio-app/pom.xml
+          git commit -m 'Add web editor dependency to application packaging'
+          git push origin HEAD:feature/269-production-react-flow-frontend
