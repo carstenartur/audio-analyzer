@@ -16,6 +16,13 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import org.hammer.audio.workflow.collaboration.retention.WorkflowOutboxRetentionDeletionResult;
 import org.hammer.audio.workflow.collaboration.retention.WorkflowOutboxRetentionPlan;
 import org.hammer.audio.workflow.collaboration.retention.WorkflowOutboxRetentionService;
@@ -83,7 +90,7 @@ class HibernateWorkflowOutboxRetentionStoreTest {
   }
 
   @Test
-  void repeatedOrCompetingDeletionIsIdempotent() {
+  void twoStoresDeletingTheSamePlanConvergeWithoutFailure() {
     try (HibernateSessionFactoryProvider provider = provider(inMemoryProperties())) {
       HibernateWorkflowSessionStateStore sessionStore =
           new HibernateWorkflowSessionStateStore(provider.getSessionFactory());
@@ -107,14 +114,29 @@ class HibernateWorkflowOutboxRetentionStoreTest {
                   Clock.fixed(PLANNED_AT, ZoneOffset.UTC),
                   new WorkflowOutboxRetentionSettings(Duration.ofDays(30), 10))
               .plan();
+      CountDownLatch ready = new CountDownLatch(2);
+      CountDownLatch start = new CountDownLatch(1);
+      ExecutorService executor = Executors.newFixedThreadPool(2);
+      try {
+        Future<WorkflowOutboxRetentionDeletionResult> first =
+            executor.submit(() -> deleteTogether(firstStore, plan, ready, start));
+        Future<WorkflowOutboxRetentionDeletionResult> second =
+            executor.submit(() -> deleteTogether(secondStore, plan, ready, start));
+        assertTrue(ready.await(10, TimeUnit.SECONDS), "Retention stores did not become ready");
+        start.countDown();
 
-      WorkflowOutboxRetentionDeletionResult first = firstStore.deletePublished(plan);
-      WorkflowOutboxRetentionDeletionResult second = secondStore.deletePublished(plan);
-
-      assertEquals(List.of("event.once"), first.deletedEventIds());
-      assertEquals(List.of(), first.skippedEventIds());
-      assertEquals(List.of(), second.deletedEventIds());
-      assertEquals(List.of("event.once"), second.skippedEventIds());
+        List<WorkflowOutboxRetentionDeletionResult> results =
+            List.of(get(first), get(second));
+        assertEquals(1, results.stream().mapToInt(result -> result.deletedCount()).sum());
+        assertEquals(1, results.stream().mapToInt(result -> result.skippedCount()).sum());
+        assertTrue(outboxStore.find("event.once").isEmpty());
+      } catch (InterruptedException exception) {
+        Thread.currentThread().interrupt();
+        throw new AssertionError("Interrupted while coordinating retention stores", exception);
+      } finally {
+        start.countDown();
+        executor.shutdownNow();
+      }
     }
   }
 
@@ -160,6 +182,37 @@ class HibernateWorkflowOutboxRetentionStoreTest {
           new HibernateWorkflowOutboxStore(provider.getSessionFactory());
       assertTrue(outboxStore.find("event.restart.old").isEmpty());
       assertTrue(outboxStore.find("event.restart.pending").orElseThrow().pending());
+    }
+  }
+
+  private static WorkflowOutboxRetentionDeletionResult deleteTogether(
+      HibernateWorkflowOutboxRetentionStore store,
+      WorkflowOutboxRetentionPlan plan,
+      CountDownLatch ready,
+      CountDownLatch start) {
+    ready.countDown();
+    await(start);
+    return store.deletePublished(plan);
+  }
+
+  private static void await(CountDownLatch latch) {
+    try {
+      assertTrue(latch.await(10, TimeUnit.SECONDS), "Retention coordination timed out");
+    } catch (InterruptedException exception) {
+      Thread.currentThread().interrupt();
+      throw new AssertionError("Interrupted while coordinating retention cleanup", exception);
+    }
+  }
+
+  private static WorkflowOutboxRetentionDeletionResult get(
+      Future<WorkflowOutboxRetentionDeletionResult> future) {
+    try {
+      return future.get(20, TimeUnit.SECONDS);
+    } catch (InterruptedException exception) {
+      Thread.currentThread().interrupt();
+      throw new AssertionError("Interrupted while waiting for retention cleanup", exception);
+    } catch (ExecutionException | TimeoutException exception) {
+      throw new AssertionError("Retention cleanup did not complete successfully", exception);
     }
   }
 
