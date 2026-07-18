@@ -324,23 +324,19 @@ final class WorkflowSessionPersistenceCoordinator {
           : Optional.empty();
     }
 
-    @Override
-    public boolean equals(Object candidate) {
-      if (this == candidate) {
-        return true;
-      }
-      if (!(candidate instanceof OperationIdentity other)
-          || !operationId.equals(other.operationId)
-          || !operationType.equals(other.operationType)
-          || !actorId.equals(other.actorId)
-          || !payload.equals(other.payload)) {
+    boolean matchesRetry(OperationIdentity candidate) {
+      Objects.requireNonNull(candidate, "candidate");
+      if (!operationId.equals(candidate.operationId)
+          || !operationType.equals(candidate.operationType)
+          || !actorId.equals(candidate.actorId)
+          || !payload.equals(candidate.payload)) {
         return false;
       }
-      if (!hasOperationBody() || !other.hasOperationBody()) {
+      if (!hasOperationBody() || !candidate.hasOperationBody()) {
         return true;
       }
       WorkflowOperation storedOperation = operation().orElseThrow();
-      WorkflowOperation candidateOperation = other.operation().orElseThrow();
+      WorkflowOperation candidateOperation = candidate.operation().orElseThrow();
       WorkflowOperation normalizedCandidate =
           WorkflowOperationBodyCodec.reidentify(
               candidateOperation,
@@ -350,11 +346,6 @@ final class WorkflowSessionPersistenceCoordinator {
       WorkflowOperationBodyCodec.EncodedBody normalizedBody =
           WorkflowOperationBodyCodec.encode(normalizedCandidate);
       return bodyVersion == normalizedBody.version() && operationBody.equals(normalizedBody.body());
-    }
-
-    @Override
-    public int hashCode() {
-      return Objects.hash(operationId, operationType, actorId, payload);
     }
   }
 
