@@ -90,7 +90,9 @@ These images are produced by Playwright integration scenarios running the packag
 application in Testcontainers. `WorkbenchInitialLoadIT` verifies the seed workflow and
 `WorkbenchCollaborationScreenshotIT` creates a deterministic live session, waits for SSE, applies
 semantic commands and verifies the server projection before capture. The screenshots are updated only
-through the explicit screenshot-test update mode and remain reviewable generated artifacts.
+through the explicit screenshot-test update mode and remain reviewable generated artifacts. A UI change
+that intentionally changes either documented state must update the relevant integration scenario and its
+committed baseline in the same pull request.
 
 ## Main workflows
 
