@@ -31,6 +31,36 @@ jobs:
           server-username: GITHUB_ACTOR
           server-password: GITHUB_TOKEN
 
+      - name: Exclude generated frontend trees from root Markdown formatting
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          pom = Path('pom.xml')
+          source = pom.read_text(encoding='utf-8')
+          old = '''          <markdown>
+            <includes>
+              <include>**/*.md</include>
+            </includes>
+            <flexmark/>
+          </markdown>'''
+          new = '''          <markdown>
+            <includes>
+              <include>**/*.md</include>
+            </includes>
+            <excludes>
+              <exclude>**/node_modules/**</exclude>
+              <exclude>**/target/**</exclude>
+            </excludes>
+            <flexmark/>
+          </markdown>'''
+          if new not in source:
+            if old not in source:
+              raise SystemExit('root Spotless Markdown configuration not found')
+            pom.write_text(source.replace(old, new, 1), encoding='utf-8')
+          PY
+
       - name: Format maintained screenshot sources and documentation
         run: mvn -B -Pscreenshot-tests spotless:apply --file pom.xml
 
@@ -81,6 +111,7 @@ jobs:
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add \
+            pom.xml \
             README.md \
             audio-web-editor/README.md \
             audio-web-editor/src/CollaborationPanel.tsx \
