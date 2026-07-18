@@ -3,9 +3,9 @@ package org.hammer.audio.workflow.collaboration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Objects;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 import org.hammer.audio.workflow.Workflow;
 import org.hammer.audio.workflow.WorkflowOperation;
@@ -22,9 +22,8 @@ final class WorkflowSessionEntry {
   private final Instant createdAt;
   private final WorkflowSessionEventHub eventHub;
   private final WorkflowSessionPersistenceCoordinator persistence;
-  private final ConcurrentHashMap<String, OperationActor> participants = new ConcurrentHashMap<>();
-  private final ConcurrentHashMap<String, OperationIdentity> operationsById =
-      new ConcurrentHashMap<>();
+  private final HashMap<String, OperationActor> participants = new HashMap<>();
+  private final HashMap<String, OperationIdentity> operationsById = new HashMap<>();
   private final ReentrantLock lock = new ReentrantLock();
   private Workflow currentWorkflow;
   private int operationCount;
