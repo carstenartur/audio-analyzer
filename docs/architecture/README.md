@@ -25,23 +25,23 @@ This directory contains architecture documents with different levels of authorit
 
 ## Authority levels
 
-|                      Document                       |  Authority   |                                    Purpose                                     |
-|-----------------------------------------------------|--------------|--------------------------------------------------------------------------------|
-| `ARCHITECTURE.md`                                   | High         | Stable module overview and architectural goals.                                |
-| `bounded-contexts.md`                               | High         | Enforced context and dependency boundaries.                                    |
-| `adr-006-versioned-collaborative-workflow-store.md` | Decision     | Accepted direction with spike gates.                                           |
-| `collaborative-workflow-platform.md`                | Planning     | Explains the end-to-end workflow editor platform.                              |
-| `adr-007-editor-stack.md`                           | Accepted ADR | React Flow production adapter decision and GLSP fallback.                      |
-| `react-flow-session-client.md`                      | Implemented  | Browser session lifecycle, command, SSE recovery and presence boundary.         |
-| `session-event-streaming.md`                        | Implemented  | Server SSE event contract, bounded replay, snapshot fallback and cleanup.       |
-| `jgit-storage-hibernate-spike.md`                   | Implemented  | Records the external store release and enforced downstream boundary.           |
-| `workbench-hibernate-persistence.md`                | Operations   | Documents persistence modes, package access and startup configuration.         |
-| `experiment-workflow-model-mapping.md`              | Spike        | Maps existing workflow classes to experiment configs.                          |
-| `experiment-node-catalog.md`                        | Catalog      | First experiment node catalog with typed ports.                                |
-| `glsp-spike-notes.md`                               | Spike        | GLSP rendering, operation and integration-cost evidence.                       |
-| `react-flow-yjs-spike-notes.md`                     | Spike        | React Flow/Yjs rendering and boundary evidence.                                |
-| `audio-web-editor/`                                 | Implemented  | Maintained React Flow source, verification and packaged resource JAR.           |
-| `workflow-editor-spike/`                            | Historical   | Read-only evidence from the editor comparison.                                 |
+|                      Document                       |  Authority   |                                  Purpose                                  |
+|-----------------------------------------------------|--------------|---------------------------------------------------------------------------|
+| `ARCHITECTURE.md`                                   | High         | Stable module overview and architectural goals.                           |
+| `bounded-contexts.md`                               | High         | Enforced context and dependency boundaries.                               |
+| `adr-006-versioned-collaborative-workflow-store.md` | Decision     | Accepted direction with spike gates.                                      |
+| `collaborative-workflow-platform.md`                | Planning     | Explains the end-to-end workflow editor platform.                         |
+| `adr-007-editor-stack.md`                           | Accepted ADR | React Flow production adapter decision and GLSP fallback.                 |
+| `react-flow-session-client.md`                      | Implemented  | Browser session lifecycle, command, SSE recovery and presence boundary.   |
+| `session-event-streaming.md`                        | Implemented  | Server SSE event contract, bounded replay, snapshot fallback and cleanup. |
+| `jgit-storage-hibernate-spike.md`                   | Implemented  | Records the external store release and enforced downstream boundary.      |
+| `workbench-hibernate-persistence.md`                | Operations   | Documents persistence modes, package access and startup configuration.    |
+| `experiment-workflow-model-mapping.md`              | Spike        | Maps existing workflow classes to experiment configs.                     |
+| `experiment-node-catalog.md`                        | Catalog      | First experiment node catalog with typed ports.                           |
+| `glsp-spike-notes.md`                               | Spike        | GLSP rendering, operation and integration-cost evidence.                  |
+| `react-flow-yjs-spike-notes.md`                     | Spike        | React Flow/Yjs rendering and boundary evidence.                           |
+| `audio-web-editor/`                                 | Implemented  | Maintained React Flow source, verification and packaged resource JAR.     |
+| `workflow-editor-spike/`                            | Historical   | Read-only evidence from the editor comparison.                            |
 
 If planning documents conflict with ADR-006, ADR-007 or the bounded-context rules, the accepted ADRs and bounded-context rules win.
 
@@ -69,3 +69,4 @@ If planning documents conflict with ADR-006, ADR-007 or the bounded-context rule
 - Preserve older proposals as explicitly evaluated options when they remain useful evidence.
 - Link new workflow-drawing documents from this README.
 - When an ADR changes the direction, update `collaborative-workflow-platform.md` in the same PR.
+
