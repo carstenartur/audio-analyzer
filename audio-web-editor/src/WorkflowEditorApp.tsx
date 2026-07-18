@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactFlow, {
   Background,
   Controls,
@@ -12,9 +12,11 @@ import ReactFlow, {
   type Node,
   type NodeProps,
   type NodeTypes,
+  type Viewport,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 
+import { CollaborationPanel } from './CollaborationPanel';
 import {
   getJson,
   postJson,
@@ -24,6 +26,7 @@ import {
   type ValidationResponse,
   type WorkflowProjection,
 } from './api';
+import { useWorkflowSession } from './useWorkflowSession';
 import { layoutNodePositions, operationId } from './workflowProjection.mjs';
 
 interface HistoryEntry {
@@ -148,6 +151,10 @@ function newOperationId(kind: string): string {
   return operationId(kind, Date.now(), crypto.randomUUID());
 }
 
+function failureMessage(failure: unknown): string {
+  return failure instanceof Error ? failure.message : String(failure);
+}
+
 export default function WorkflowEditorApp() {
   const [projection, setProjection] = useState<WorkflowProjection | null>(null);
   const [catalog, setCatalog] = useState<CatalogEntry[]>([]);
@@ -162,6 +169,7 @@ export default function WorkflowEditorApp() {
   const [violations, setViolations] = useState<string[]>([]);
   const [status, setStatus] = useState('Loading server projection…');
   const [error, setError] = useState<string | null>(null);
+  const previouslyActive = useRef(false);
 
   const selectedNode = useMemo(
     () => projection?.nodes.find((node) => node.id === selectedNodeId) ?? null,
@@ -173,6 +181,9 @@ export default function WorkflowEditorApp() {
       setProjection(nextProjection);
       setNodes(toNodes(nextProjection));
       setEdges(toEdges(nextProjection.edges));
+      setSelectedNodeId((current) =>
+        current !== null && nextProjection.nodes.some((node) => node.id === current) ? current : null,
+      );
       setError(null);
       setStatus(
         `Loaded: ${nextProjection.workflowName} (${nextProjection.nodes.length} nodes, ${nextProjection.edges.length} edges)`,
@@ -181,20 +192,35 @@ export default function WorkflowEditorApp() {
     [setEdges, setNodes],
   );
 
+  const collaboration = useWorkflowSession({
+    onProjection: applyProjection,
+    onError: setError,
+    onStatus: setStatus,
+  });
+
+  const canEdit =
+    collaboration.active &&
+    collaboration.connectionState === 'live' &&
+    collaboration.pendingOperationId === null;
+
   const refreshValidation = useCallback(async () => {
+    if (collaboration.active) {
+      setViolations([]);
+      return;
+    }
     try {
       const response = await getJson<ValidationResponse>('/workflow/validation');
       setViolations(response.violations);
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : String(failure));
+      setError(failureMessage(failure));
     }
-  }, []);
+  }, [collaboration.active]);
 
   const refreshProjection = useCallback(async () => {
     try {
       applyProjection(await getJson<WorkflowProjection>('/workflow/projection'));
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : String(failure));
+      setError(failureMessage(failure));
     }
   }, [applyProjection]);
 
@@ -206,7 +232,7 @@ export default function WorkflowEditorApp() {
         ),
       );
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : String(failure));
+      setError(failureMessage(failure));
     }
   }, [branch]);
 
@@ -216,9 +242,16 @@ export default function WorkflowEditorApp() {
       refreshValidation(),
       getJson<CatalogEntry[]>('/workflow/catalog').then(setCatalog),
     ]).catch((failure: unknown) => {
-      setError(failure instanceof Error ? failure.message : String(failure));
+      setError(failureMessage(failure));
     });
   }, [refreshProjection, refreshValidation]);
+
+  useEffect(() => {
+    if (previouslyActive.current && !collaboration.active) {
+      void Promise.all([refreshProjection(), refreshValidation()]);
+    }
+    previouslyActive.current = collaboration.active;
+  }, [collaboration.active, refreshProjection, refreshValidation]);
 
   useEffect(() => {
     if (selectedNode !== null) {
@@ -227,17 +260,23 @@ export default function WorkflowEditorApp() {
   }, [propertyKey, selectedNode]);
 
   const postOperation = useCallback(
-    async (operation: unknown) => {
+    async (operation: Record<string, unknown>) => {
+      if (!canEdit) {
+        const message =
+          collaboration.active && collaboration.connectionState !== 'live'
+            ? 'Semantic editing is paused until the collaboration stream is live'
+            : 'Create or join a collaboration session before editing';
+        setError(message);
+        throw new Error(message);
+      }
       try {
-        applyProjection(await postJson<WorkflowProjection>('/workflow/operations', operation));
-        await refreshValidation();
-        setStatus('Server accepted the semantic operation');
+        await collaboration.submitOperation(operation);
+        setViolations([]);
       } catch (failure) {
-        setError(failure instanceof Error ? failure.message : String(failure));
-        await refreshValidation();
+        setError(failureMessage(failure));
       }
     },
-    [applyProjection, refreshValidation],
+    [canEdit, collaboration],
   );
 
   const addCatalogNode = useCallback(
@@ -246,7 +285,6 @@ export default function WorkflowEditorApp() {
       void postOperation({
         type: 'CreateNode',
         operationId: newOperationId('create'),
-        author: 'web-editor',
         nodeId,
         catalogType: entry.type,
       });
@@ -269,7 +307,6 @@ export default function WorkflowEditorApp() {
       void postOperation({
         type: 'ConnectPorts',
         operationId: newOperationId('connect'),
-        author: 'web-editor',
         edge: {
           id: edgeId,
           sourceNodeId: connection.source,
@@ -296,7 +333,6 @@ export default function WorkflowEditorApp() {
         void postOperation({
           type: 'DisconnectPorts',
           operationId: newOperationId('disconnect'),
-          author: 'web-editor',
           edgeId: edge.id,
           disconnectedEdge: {
             id: edge.id,
@@ -318,7 +354,6 @@ export default function WorkflowEditorApp() {
     void postOperation({
       type: 'UpdateProperty',
       operationId: newOperationId('property'),
-      author: 'web-editor',
       target: 'NODE',
       targetId: selectedNode.id,
       propertyKey,
@@ -328,29 +363,56 @@ export default function WorkflowEditorApp() {
   }, [postOperation, propertyKey, propertyValue, selectedNode]);
 
   const saveCheckpoint = useCallback(async () => {
+    if (collaboration.active) {
+      setError('Session checkpoint integration is intentionally separated from semantic live editing');
+      return;
+    }
     try {
       const response = await postJson<CheckpointResponse>('/workflow/checkpoints', {
         branch,
-        author: 'web-editor',
+        author: collaboration.actor.actorId,
         message: checkpointMessage,
       });
       setStatus(`Checkpoint saved: ${response.commitId}`);
       await refreshHistory();
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : String(failure));
+      setError(failureMessage(failure));
     }
-  }, [branch, checkpointMessage, refreshHistory]);
+  }, [branch, checkpointMessage, collaboration.active, collaboration.actor.actorId, refreshHistory]);
 
   const loadCommit = useCallback(
     async (commitId: string) => {
+      if (collaboration.active) {
+        setError('Leave the collaboration session before loading legacy checkpoint history');
+        return;
+      }
       try {
         applyProjection(await postJson<WorkflowProjection>('/workflow/load', { commitId }));
         await refreshValidation();
       } catch (failure) {
-        setError(failure instanceof Error ? failure.message : String(failure));
+        setError(failureMessage(failure));
       }
     },
-    [applyProjection, refreshValidation],
+    [applyProjection, collaboration.active, refreshValidation],
+  );
+
+  const selectNode = useCallback(
+    (nodeId: string | null) => {
+      setSelectedNodeId(nodeId);
+      collaboration.publishPresence({ selection: nodeId ?? '' });
+    },
+    [collaboration],
+  );
+
+  const publishViewport = useCallback(
+    (_event: MouseEvent | TouchEvent | null, viewport: Viewport) => {
+      collaboration.publishPresence({
+        viewportX: viewport.x.toFixed(1),
+        viewportY: viewport.y.toFixed(1),
+        viewportZoom: viewport.zoom.toFixed(3),
+      });
+    },
+    [collaboration],
   );
 
   return (
@@ -370,13 +432,19 @@ export default function WorkflowEditorApp() {
       </header>
 
       <aside className="workbench__panel workbench__panel--left" data-testid="node-palette">
+        <CollaborationPanel controller={collaboration} />
         <h2>Node palette</h2>
-        <p className="help-text">Semantic changes are accepted and projected by the server.</p>
+        <p className="help-text">
+          {canEdit
+            ? 'Semantic changes are pending until accepted and projected by the server.'
+            : 'The seed graph is read-only. Join a live collaboration session to edit.'}
+        </p>
         <div data-testid="catalog-list">
           {catalog.map((entry) => (
             <button
               className="palette-entry"
               data-testid={`palette-node-${entry.type}`}
+              disabled={!canEdit}
               key={entry.type}
               onClick={() => addCatalogNode(entry)}
               type="button"
@@ -388,7 +456,16 @@ export default function WorkflowEditorApp() {
         </div>
       </aside>
 
-      <main className="workbench__canvas" data-testid="graph-area">
+      <main
+        className="workbench__canvas"
+        data-testid="graph-area"
+        onPointerMove={(event) =>
+          collaboration.publishPresence({
+            cursorX: Math.round(event.clientX).toString(),
+            cursorY: Math.round(event.clientY).toString(),
+          })
+        }
+      >
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -396,7 +473,11 @@ export default function WorkflowEditorApp() {
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
-          onNodeClick={(_, node) => setSelectedNodeId(node.id)}
+          onMoveEnd={publishViewport}
+          onNodeClick={(_, node) => selectNode(node.id)}
+          onPaneClick={() => selectNode(null)}
+          nodesConnectable={canEdit}
+          edgesUpdatable={false}
           fitView
           data-testid="graph-canvas"
         >
@@ -423,7 +504,12 @@ export default function WorkflowEditorApp() {
                 onChange={(event) => setPropertyValue(event.target.value)}
               />
             </label>
-            <button className="action-button" onClick={updateProperty} type="button">
+            <button
+              className="action-button"
+              disabled={!canEdit}
+              onClick={updateProperty}
+              type="button"
+            >
               Apply property
             </button>
           </>
@@ -431,7 +517,11 @@ export default function WorkflowEditorApp() {
 
         <h3>Validation</h3>
         {violations.length === 0 ? (
-          <p className="help-text">No current violations.</p>
+          <p className="help-text">
+            {collaboration.active
+              ? 'Session operations are validated before server acceptance.'
+              : 'No current violations.'}
+          </p>
         ) : (
           <ul className="validation-list">
             {violations.map((violation) => (
@@ -441,6 +531,11 @@ export default function WorkflowEditorApp() {
         )}
 
         <h3>Checkpoint</h3>
+        {collaboration.active ? (
+          <p className="help-text">
+            Live-session checkpoint and undo UX are handled by their dedicated follow-up slices.
+          </p>
+        ) : null}
         <label className="field">
           Branch
           <input value={branch} onChange={(event) => setBranch(event.target.value)} />
@@ -452,16 +547,30 @@ export default function WorkflowEditorApp() {
             onChange={(event) => setCheckpointMessage(event.target.value)}
           />
         </label>
-        <button className="action-button" onClick={() => void saveCheckpoint()} type="button">
+        <button
+          className="action-button"
+          disabled={collaboration.active}
+          onClick={() => void saveCheckpoint()}
+          type="button"
+        >
           Save checkpoint
         </button>
-        <button className="action-button" onClick={() => void refreshHistory()} type="button">
+        <button
+          className="action-button"
+          disabled={collaboration.active}
+          onClick={() => void refreshHistory()}
+          type="button"
+        >
           Refresh history
         </button>
         <ul className="history-list">
           {history.map((entry) => (
             <li className="history-entry" key={entry.commitId}>
-              <button onClick={() => void loadCommit(entry.commitId)} type="button">
+              <button
+                disabled={collaboration.active}
+                onClick={() => void loadCommit(entry.commitId)}
+                type="button"
+              >
                 {entry.message || entry.commitId.slice(0, 10)}
               </button>
             </li>
