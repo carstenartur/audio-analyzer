@@ -126,6 +126,25 @@ export function acceptCommandProjection(
 }
 
 /**
+ * Classifies structured REST failures without parsing human-readable messages.
+ *
+ * @param {string | null | undefined} code RFC 9457 problem code
+ * @returns {'reconcile' | 'reset' | 'reject'} client recovery action
+ */
+export function recoveryForProblemCode(code) {
+  if (
+    code === 'WORKFLOW_SESSION_REVISION_CONFLICT' ||
+    code === 'WORKFLOW_SESSION_SEQUENCE_CONFLICT'
+  ) {
+    return 'reconcile';
+  }
+  if (code === 'SESSION_NOT_FOUND') {
+    return 'reset';
+  }
+  return 'reject';
+}
+
+/**
  * Removes stale remote presence samples without touching participant membership or workflow state.
  *
  * @param {CollaborationState} current current state
