@@ -183,7 +183,7 @@ public class WorkflowOutboxEntity {
     return storedEventSequence;
   }
 
-  Instant publishedAt() {
+  Instant publicationTime() {
     return publishedAt;
   }
 
