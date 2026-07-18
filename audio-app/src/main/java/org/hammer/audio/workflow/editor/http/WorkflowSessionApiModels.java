@@ -24,6 +24,14 @@ public final class WorkflowSessionApiModels {
     // Utility class.
   }
 
+  private static String defaultWorkflowId(String sessionId) {
+    return "workflow." + sessionId;
+  }
+
+  private static String defaultWorkflowName(String sessionId) {
+    return "Workflow " + sessionId;
+  }
+
   /**
    * Actor identity supplied by the transport/authentication boundary.
    *
@@ -57,9 +65,11 @@ public final class WorkflowSessionApiModels {
 
     Workflow initialWorkflow() {
       String resolvedWorkflowId =
-          workflowId == null || workflowId.isBlank() ? "workflow." + sessionId : workflowId;
+          workflowId == null || workflowId.isBlank() ? defaultWorkflowId(sessionId) : workflowId;
       String resolvedWorkflowName =
-          workflowName == null || workflowName.isBlank() ? "Workflow " + sessionId : workflowName;
+          workflowName == null || workflowName.isBlank()
+              ? defaultWorkflowName(sessionId)
+              : workflowName;
       return new Workflow(resolvedWorkflowId, resolvedWorkflowName, List.of(), List.of());
     }
   }
