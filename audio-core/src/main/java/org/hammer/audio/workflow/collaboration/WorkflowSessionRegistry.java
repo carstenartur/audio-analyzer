@@ -268,7 +268,8 @@ public final class WorkflowSessionRegistry {
     for (StoredWorkflowOperation operation : operations) {
       if (!operation.sessionId().equals(session.sessionId())) {
         throw recoveryFailure(
-            session, "Durable operation belongs to a different session: " + operation.operationId());
+            session,
+            "Durable operation belongs to a different session: " + operation.operationId());
       }
       if (operation.revision() != expectedRevision) {
         throw recoveryFailure(
@@ -278,19 +279,16 @@ public final class WorkflowSessionRegistry {
       }
       if (operation.sequence() <= previousSequence || operation.sequence() > session.sequence()) {
         throw recoveryFailure(
-            session,
-            "Durable event sequence is invalid at operation " + operation.operationId());
+            session, "Durable event sequence is invalid at operation " + operation.operationId());
       }
       expectedRevision++;
       previousSequence = operation.sequence();
     }
     if (session.revision() != operations.size()) {
-      throw recoveryFailure(
-          session, "Durable aggregate revision does not match operation history");
+      throw recoveryFailure(session, "Durable aggregate revision does not match operation history");
     }
     if (session.sequence() < previousSequence || session.sequence() < session.revision()) {
-      throw recoveryFailure(
-          session, "Durable aggregate event sequence precedes recovered history");
+      throw recoveryFailure(session, "Durable aggregate event sequence precedes recovered history");
     }
   }
 
@@ -728,9 +726,7 @@ public final class WorkflowSessionRegistry {
       }
       if (!joinedActor.equals(actor)) {
         throw error(
-            Code.ACTOR_METADATA_MISMATCH,
-            sessionId,
-            "Actor metadata mismatch: " + actor.actorId());
+            Code.ACTOR_METADATA_MISMATCH, sessionId, "Actor metadata mismatch: " + actor.actorId());
       }
     }
 
@@ -767,7 +763,8 @@ public final class WorkflowSessionRegistry {
   private record AcceptedOperationIdentity(String operationType, String actorId, String payload) {
 
     static AcceptedOperationIdentity from(WorkflowOperation operation) {
-      WorkflowOperationPersistenceData encoded = WorkflowOperationPersistenceCodec.encode(operation);
+      WorkflowOperationPersistenceData encoded =
+          WorkflowOperationPersistenceCodec.encode(operation);
       return new AcceptedOperationIdentity(
           encoded.operationType(), encoded.actorId(), encoded.payload());
     }

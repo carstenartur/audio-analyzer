@@ -85,8 +85,7 @@ public final class WorkflowSessionEventHub {
    * <p>The first reconnect cursor at or before the recovery boundary receives a canonical snapshot
    * rather than fabricated creation, presence or operation events.
    */
-  public void restoreSession(
-      String sessionId, Workflow workflow, long sequence, long revision) {
+  public void restoreSession(String sessionId, Workflow workflow, long sequence, long revision) {
     String requiredSessionId = requireNotBlank(sessionId, "sessionId");
     Objects.requireNonNull(workflow, "workflow");
     if (sequence < 0) {
@@ -273,13 +272,7 @@ public final class WorkflowSessionEventHub {
     SessionBuffer(
         String sessionId, Workflow workflow, int replayCapacity, int subscriberQueueCapacity) {
       this(
-          sessionId,
-          workflow,
-          replayCapacity,
-          subscriberQueueCapacity,
-          0,
-          0,
-          NO_RECOVERY_BOUNDARY);
+          sessionId, workflow, replayCapacity, subscriberQueueCapacity, 0, 0, NO_RECOVERY_BOUNDARY);
     }
 
     private SessionBuffer(

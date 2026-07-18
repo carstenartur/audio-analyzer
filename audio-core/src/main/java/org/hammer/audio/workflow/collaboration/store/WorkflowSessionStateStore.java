@@ -27,8 +27,7 @@ public interface WorkflowSessionStateStore {
   StoredWorkflowSession advanceEventSequence(String sessionId, long expectedSequence);
 
   /** Atomically closes a session and reserves its final lifecycle-event sequence. */
-  StoredWorkflowSession close(
-      String sessionId, long expectedRevision, long expectedSequence);
+  StoredWorkflowSession close(String sessionId, long expectedRevision, long expectedSequence);
 
   /** Returns accepted operations in stable session event-sequence order. */
   List<StoredWorkflowOperation> operations(String sessionId);

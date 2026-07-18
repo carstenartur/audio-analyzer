@@ -24,8 +24,7 @@ class WorkbenchConfigurationCollaborationTest {
     when(provider.getIfAvailable()).thenReturn(stateStore);
     when(stateStore.openSessions()).thenReturn(List.of());
 
-    WorkflowSessionRegistry registry =
-        configuration.workflowSessionRegistry(eventHub, provider);
+    WorkflowSessionRegistry registry = configuration.workflowSessionRegistry(eventHub, provider);
 
     assertSame(eventHub, registry.eventHub());
     verify(stateStore).openSessions();
@@ -39,8 +38,7 @@ class WorkbenchConfigurationCollaborationTest {
     ObjectProvider<WorkflowSessionStateStore> provider = mock(ObjectProvider.class);
     when(provider.getIfAvailable()).thenReturn(null);
 
-    WorkflowSessionRegistry registry =
-        configuration.workflowSessionRegistry(eventHub, provider);
+    WorkflowSessionRegistry registry = configuration.workflowSessionRegistry(eventHub, provider);
 
     assertSame(eventHub, registry.eventHub());
   }

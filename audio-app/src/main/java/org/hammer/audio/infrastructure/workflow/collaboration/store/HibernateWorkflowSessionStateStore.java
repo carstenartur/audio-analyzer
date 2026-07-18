@@ -38,7 +38,8 @@ public final class HibernateWorkflowSessionStateStore implements WorkflowSession
   public StoredWorkflowSession create(StoredWorkflowSession storedSession) {
     Objects.requireNonNull(storedSession, "storedSession");
     if (storedSession.revision() != 0) {
-      throw new IllegalArgumentException("A new workflow session must start at semantic revision 0");
+      throw new IllegalArgumentException(
+          "A new workflow session must start at semantic revision 0");
     }
     if (storedSession.closed()) {
       throw new IllegalArgumentException("A new workflow session must be open");
@@ -93,7 +94,8 @@ public final class HibernateWorkflowSessionStateStore implements WorkflowSession
     requireNonNegative(expectedSequence, "expectedSequence");
     try {
       return inTransaction(
-          session -> advanceEventSequenceWithinTransaction(session, requiredSessionId, expectedSequence));
+          session ->
+              advanceEventSequenceWithinTransaction(session, requiredSessionId, expectedSequence));
     } catch (OptimisticLockException | StaleStateException failure) {
       throw sequenceConflict(requiredSessionId, expectedSequence);
     }

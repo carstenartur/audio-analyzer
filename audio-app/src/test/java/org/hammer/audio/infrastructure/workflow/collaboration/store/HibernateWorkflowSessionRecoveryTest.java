@@ -49,10 +49,7 @@ class HibernateWorkflowSessionRecoveryTest {
         WorkflowSessionEventHub eventHub = new WorkflowSessionEventHub(16, 8);
         WorkflowSessionRegistry registry = new WorkflowSessionRegistry(eventHub, store);
         registry.create(
-            SESSION_ID,
-            CollaborationMode.SHARED_SESSION_PERSONAL_UNDO,
-            OWNER,
-            emptyWorkflow());
+            SESSION_ID, CollaborationMode.SHARED_SESSION_PERSONAL_UNDO, OWNER, emptyWorkflow());
         registry.updatePresence(
             SESSION_ID,
             OWNER,
@@ -142,8 +139,7 @@ class HibernateWorkflowSessionRecoveryTest {
         HibernateWorkflowSessionStateStore store =
             new HibernateWorkflowSessionStateStore(provider.getSessionFactory());
         WorkflowSessionRegistry registry =
-            new WorkflowSessionRegistry(
-                new WorkflowSessionEventHub(16, 8), store);
+            new WorkflowSessionRegistry(new WorkflowSessionEventHub(16, 8), store);
         assertTrue(registry.sessions().isEmpty());
         assertTrue(store.openSessions().isEmpty());
       }
@@ -156,8 +152,7 @@ class HibernateWorkflowSessionRecoveryTest {
   void corruptWorkflowDslFailsRecoveryWithSessionSpecificDiagnostic() {
     Properties properties = new Properties();
     properties.put(
-        "hibernate.connection.url",
-        "jdbc:h2:mem:" + UUID.randomUUID() + ";DB_CLOSE_DELAY=-1");
+        "hibernate.connection.url", "jdbc:h2:mem:" + UUID.randomUUID() + ";DB_CLOSE_DELAY=-1");
     properties.put("hibernate.connection.driver_class", "org.h2.Driver");
     properties.put("hibernate.dialect", "org.hibernate.dialect.H2Dialect");
     properties.put("hibernate.hbm2ddl.auto", "create-drop");
@@ -189,9 +184,7 @@ class HibernateWorkflowSessionRecoveryTest {
   }
 
   private static WorkflowOperation.CreateNode createNode(String operationId, Instant timestamp) {
-    Node node =
-        new Node(
-            "node.input", "input", "Input", List.of(), List.of(), Metadata.empty());
+    Node node = new Node("node.input", "input", "Input", List.of(), List.of(), Metadata.empty());
     return new WorkflowOperation.CreateNode(operationId, timestamp, OWNER.actorId(), node);
   }
 
