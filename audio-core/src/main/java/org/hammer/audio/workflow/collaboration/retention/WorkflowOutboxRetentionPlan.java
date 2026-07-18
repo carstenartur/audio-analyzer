@@ -13,27 +13,36 @@ import java.util.Set;
  * @param plannedAt logical time used to compute eligibility
  * @param publishedCutoff inclusive publication cutoff
  * @param batchSize configured maximum batch size
+ * @param scannedCount number of published rows considered when the plan was created
  * @param candidates stable ordered candidates captured for preview and deletion
  */
 public record WorkflowOutboxRetentionPlan(
     Instant plannedAt,
     Instant publishedCutoff,
     int batchSize,
+    long scannedCount,
     List<WorkflowOutboxRetentionCandidate> candidates) {
 
   public WorkflowOutboxRetentionPlan {
-    // Freeze and validate the candidate set before it can be previewed or executed.
     Objects.requireNonNull(plannedAt, "plannedAt");
     Objects.requireNonNull(publishedCutoff, "publishedCutoff");
     if (publishedCutoff.isAfter(plannedAt)) {
       throw new IllegalArgumentException("publishedCutoff must not be after plannedAt");
     }
-    if (batchSize <= 0) {
-      throw new IllegalArgumentException("batchSize must be > 0");
+    if (batchSize <= 0 || batchSize > WorkflowOutboxRetentionSettings.MAXIMUM_BATCH_SIZE) {
+      throw new IllegalArgumentException(
+          "batchSize must be between 1 and "
+              + WorkflowOutboxRetentionSettings.MAXIMUM_BATCH_SIZE);
+    }
+    if (scannedCount < 0) {
+      throw new IllegalArgumentException("scannedCount must be >= 0");
     }
     candidates = List.copyOf(Objects.requireNonNull(candidates, "candidates"));
     if (candidates.size() > batchSize) {
       throw new IllegalArgumentException("candidate count exceeds batchSize");
+    }
+    if (scannedCount < candidates.size()) {
+      throw new IllegalArgumentException("scannedCount must be >= candidate count");
     }
     Set<String> eventIds = new HashSet<>();
     Instant previousPublication = null;
@@ -63,6 +72,11 @@ public record WorkflowOutboxRetentionPlan(
   /** Number of entries evaluated as eligible when this plan was created. */
   public int eligibleCount() {
     return candidates.size();
+  }
+
+  /** Number of published rows that were not selected into this bounded plan. */
+  public long ineligibleOrDeferredCount() {
+    return scannedCount - candidates.size();
   }
 
   /** Oldest candidate publication time, when the plan is non-empty. */
