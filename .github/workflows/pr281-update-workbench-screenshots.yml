@@ -27,7 +27,7 @@ jobs:
 
       - name: Install Playwright Chromium and system dependencies
         run: >-
-          mvn -B -pl workbench-screenshot-tests
+          mvn -B -Pscreenshot-tests -pl workbench-screenshot-tests
           org.codehaus.mojo:exec-maven-plugin:3.5.0:java
           -Dexec.mainClass=com.microsoft.playwright.CLI
           -Dexec.classpathScope=test
