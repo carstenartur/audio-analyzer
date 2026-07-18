@@ -18,6 +18,7 @@ import org.hammer.audio.workflow.WorkflowOperation;
  * @param payload deterministic serialized identity payload
  * @param bodyVersion version of the reconstructible operation body, or zero for a legacy row
  * @param operationBody complete operation body, or {@code null} for a legacy row
+ * @param command durable normal/undo/redo command relation
  */
 public record StoredWorkflowOperation(
     String sessionId,
@@ -29,7 +30,8 @@ public record StoredWorkflowOperation(
     long revision,
     String payload,
     int bodyVersion,
-    String operationBody) {
+    String operationBody,
+    WorkflowOperationCommandMetadata command) {
 
   public StoredWorkflowOperation {
     sessionId = requireNotBlank(sessionId, "sessionId");
@@ -51,6 +53,7 @@ public record StoredWorkflowOperation(
     } else {
       operationBody = requireNotBlank(operationBody, "operationBody");
     }
+    command = Objects.requireNonNull(command, "command");
   }
 
   /** Creates a legacy stored operation without a reconstructible body. */
@@ -73,7 +76,8 @@ public record StoredWorkflowOperation(
         revision,
         payload,
         0,
-        null);
+        null,
+        WorkflowOperationCommandMetadata.normal(operationId));
   }
 
   /** Returns whether this operation can be reconstructed for semantic undo/redo. */
