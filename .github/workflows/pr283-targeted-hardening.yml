@@ -32,14 +32,15 @@ jobs:
                         + preview.blockingOperations().stream()
                             .map(WorkflowUndoPreview.BlockingOperation::operationId)
                             .toList());
-              }'''
+              }'''.replace('              ', '      ')
           new = '''      if (!preview.safe()) {
                 throw new WorkflowUndoConflictException(
                     sessionId, preview.targetOperationId(), preview.blockingOperations());
-              }'''
+              }'''.replace('              ', '      ')
           if old not in source:
               raise SystemExit('undo conflict block not found')
           source = source.replace(old, new, 1)
+
           old = '''      if (!blockers.isEmpty()) {
                 throw error(
                     Code.UNDO_CONFLICT,
@@ -47,14 +48,15 @@ jobs:
                         + blockers.stream()
                             .map(WorkflowUndoPreview.BlockingOperation::operationId)
                             .toList());
-              }'''
+              }'''.replace('              ', '      ')
           new = '''      if (!blockers.isEmpty()) {
                 throw new WorkflowUndoConflictException(
                     sessionId, targetUndo.operationId(), blockers);
-              }'''
+              }'''.replace('              ', '      ')
           if old not in source:
               raise SystemExit('redo conflict block not found')
           source = source.replace(old, new, 1)
+
           old = '    eventHub.operationAccepted(sessionId, actor, operation, currentWorkflow);'
           new = '    eventHub.operationAccepted(sessionId, actor, operation, currentWorkflow, command);'
           if old not in source:
@@ -63,22 +65,28 @@ jobs:
 
           codec = Path('audio-core/src/main/java/org/hammer/audio/workflow/collaboration/store/WorkflowOperationBodyCodec.java')
           source = codec.read_text(encoding='utf-8')
-          old = '''    return new String(input.readNBytes(length), StandardCharsets.UTF_8);'''
+          old = '    return new String(input.readNBytes(length), StandardCharsets.UTF_8);'
           new = '''    byte[] bytes = new byte[length];
               input.readFully(bytes);
-              return new String(bytes, StandardCharsets.UTF_8);'''
+              return new String(bytes, StandardCharsets.UTF_8);'''.replace('              ', '    ')
           if old not in source:
               raise SystemExit('codec readString block not found')
           codec.write_text(source.replace(old, new, 1), encoding='utf-8')
 
           hub = Path('audio-core/src/main/java/org/hammer/audio/workflow/collaboration/WorkflowSessionEventHub.java')
           source = hub.read_text(encoding='utf-8')
-          source = source.replace('import java.util.List;\n', 'import java.util.LinkedHashMap;\nimport java.util.List;\n', 1)
-          source = source.replace(
-              'import org.hammer.audio.workflow.WorkflowOperation;\n',
-              'import org.hammer.audio.workflow.WorkflowOperation;\nimport org.hammer.audio.workflow.collaboration.store.WorkflowOperationCommandMetadata;\n',
-              1,
-          )
+          if 'import java.util.LinkedHashMap;' not in source:
+              source = source.replace(
+                  'import java.util.LinkedHashSet;\n',
+                  'import java.util.LinkedHashMap;\nimport java.util.LinkedHashSet;\n',
+                  1,
+              )
+          if 'import org.hammer.audio.workflow.collaboration.store.WorkflowOperationCommandMetadata;' not in source:
+              source = source.replace(
+                  'import org.hammer.audio.workflow.WorkflowOperation;\n',
+                  'import org.hammer.audio.workflow.WorkflowOperation;\nimport org.hammer.audio.workflow.collaboration.store.WorkflowOperationCommandMetadata;\n',
+                  1,
+              )
           old = '''  /** Publishes one server-accepted semantic operation and advances the semantic revision. */
             public WorkflowSessionEvent operationAccepted(
                 String sessionId,
@@ -99,7 +107,7 @@ jobs:
                       attributes,
                       true,
                       Instant.now());
-            }'''
+            }'''.replace('            ', '  ')
           new = '''  /** Publishes one ordinary server-accepted semantic operation. */
             public WorkflowSessionEvent operationAccepted(
                 String sessionId,
@@ -141,7 +149,7 @@ jobs:
                       Map.copyOf(attributes),
                       true,
                       Instant.now());
-            }'''
+            }'''.replace('            ', '  ')
           if old not in source:
               raise SystemExit('event hub method block not found')
           hub.write_text(source.replace(old, new, 1), encoding='utf-8')
