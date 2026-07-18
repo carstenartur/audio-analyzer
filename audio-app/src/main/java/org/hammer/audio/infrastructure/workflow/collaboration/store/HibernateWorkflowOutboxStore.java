@@ -68,8 +68,7 @@ public final class HibernateWorkflowOutboxStore implements WorkflowOutboxStore {
           session -> {
             WorkflowOutboxEntity event = requireOutboxForUpdate(session, requiredEventId);
             StoredWorkflowOutboxEntry stored =
-                event.markPublished(
-                    requiredLeaseOwner, requiredLeaseToken, requiredPublishedAt);
+                event.markPublished(requiredLeaseOwner, requiredLeaseToken, requiredPublishedAt);
             session.flush();
             return stored;
           });
@@ -91,8 +90,7 @@ public final class HibernateWorkflowOutboxStore implements WorkflowOutboxStore {
           session -> {
             WorkflowOutboxEntity event = requireOutboxForUpdate(session, requiredEventId);
             StoredWorkflowOutboxEntry stored =
-                event.markFailed(
-                    requiredLeaseOwner, requiredLeaseToken, requiredNextAttemptAt);
+                event.markFailed(requiredLeaseOwner, requiredLeaseToken, requiredNextAttemptAt);
             session.flush();
             return stored;
           });
