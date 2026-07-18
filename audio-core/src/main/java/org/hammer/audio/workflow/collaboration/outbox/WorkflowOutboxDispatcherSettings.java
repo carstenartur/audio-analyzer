@@ -3,7 +3,14 @@ package org.hammer.audio.workflow.collaboration.outbox;
 import java.time.Duration;
 import java.util.Objects;
 
-/** Immutable operational settings for one durable workflow outbox dispatcher instance. */
+/**
+ * Immutable operational settings for one durable workflow outbox dispatcher instance.
+ *
+ * @param dispatcherId stable identifier recorded as lease owner
+ * @param batchSize maximum number of events claimed per dispatch pass
+ * @param leaseDuration time during which one claimed event remains exclusively owned
+ * @param backoffPolicy deterministic retry-delay policy after publication failure
+ */
 public record WorkflowOutboxDispatcherSettings(
     String dispatcherId,
     int batchSize,
