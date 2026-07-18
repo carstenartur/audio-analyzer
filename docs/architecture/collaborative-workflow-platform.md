@@ -1,222 +1,158 @@
 # Collaborative Workflow Platform Architecture
 
-Status: Planning document  
-Primary decision record: [`adr-006-versioned-collaborative-workflow-store.md`](adr-006-versioned-collaborative-workflow-store.md)  
-First verification step: [`jgit-storage-hibernate-spike.md`](jgit-storage-hibernate-spike.md)
+Status: Active architecture and delivery map  
+Primary decisions: [`adr-006-versioned-collaborative-workflow-store.md`](adr-006-versioned-collaborative-workflow-store.md) and [`adr-007-editor-stack.md`](adr-007-editor-stack.md)
 
 ## Purpose
 
-This document describes the target platform for drawing, editing, versioning and executing workflow graphs. It is the scenario-level architecture that explains how the future graphical editor should work.
+This document describes how workflow graphs are drawn, edited, versioned, shared and executed. It connects the accepted domain, persistence and editor decisions into one scenario-level architecture.
 
-The normative architectural decision is ADR-006. If this document and ADR-006 disagree, ADR-006 wins.
+The accepted ADRs and bounded-context rules are normative if this document becomes stale.
 
-## Relationship to existing architecture
+## Existing foundation
 
-Audio Analyzer already has the stable workflow foundation in `audio-core`:
+Audio Analyzer already provides:
 
-- immutable design-time workflow model;
+- immutable design-time workflows in `audio-core`;
 - semantic `WorkflowOperation` edits;
-- `WorkflowOperationLog` for deterministic replay and undo;
-- execution snapshots and execution plans isolated from editing state.
+- `WorkflowOperationLog` for deterministic replay and inverse-operation primitives;
+- typed validation through `WorkflowValidator`;
+- deterministic workflow DSL serialization;
+- `VersionedWorkflowStore` backed by released `jgit-storage-hibernate` infrastructure;
+- durable collaboration sessions, restart recovery, transactional outbox dispatch, versioned migrations and safe retention;
+- ordered SSE event transport with bounded replay;
+- React Flow selected by ADR-007 as the production browser adapter.
 
-The collaborative editor must extend that foundation instead of introducing a second workflow model.
-
-```text
-audio-core workflow model
-    -> semantic workflow operations
-    -> workflow operation log
-    -> deterministic workflow DSL
-    -> versioned workflow persistence facade
-    -> DB-backed JGit storage
-    -> collaboration/event layer
-    -> web graph editor
-```
-
-## Goals
-
-- browser-based graph editor for workflow nodes and typed ports;
-- reusable non-UI workflow domain model;
-- private and shared editing sessions;
-- personal and explicitly shared undo modes;
-- deterministic replay and audit through semantic operations;
-- durable version history through JGit-backed checkpoints;
-- searchable workflow history through future Hibernate Search projections;
-- reproducible execution from stable `ExecutionSnapshot` values;
-- no dependency from `audio-core` workflow model to Swing, JGit, persistence or web frameworks.
-
-## Non-goals
-
-- no immediate rewrite of the Swing application;
-- no large `workflow.json` as the canonical long-term format;
-- no direct dependency from Audio Analyzer public APIs to `org.eclipse.jgit.internal.*`;
-- no assumption that Git alone solves live collaboration;
-- no assumption that a browser CRDT document is the permanent source of truth.
+The collaborative editor extends this foundation and must not introduce a second workflow model.
 
 ## Target architecture
 
 ```text
-Browser graph editor / desktop WebView
-    -> workflow collaboration API
-    -> workflow application service
+audio-web-editor (React Flow)
+    -> workflow HTTP command API
+    -> ordered SSE projection/events
+    -> workflow application services
     -> WorkflowOperationLog
-    -> audio-core Workflow model
-    -> WorkflowValidator
+    -> audio-core Workflow + WorkflowValidator
     -> deterministic workflow DSL
-    -> VersionedWorkflowStore facade
-    -> jgit-storage-hibernate / hibernate-jgit-store
-    -> database-backed JGit objects, refs and reflog
-    -> Hibernate Search projections
+    -> VersionedWorkflowStore
+    -> jgit-storage-hibernate 0.1.5+
+    -> shared Hibernate SessionFactory / database
     -> transactional outbox
-    -> event broker / WebSocket clients
+    -> optional broker adapters and connected clients
 ```
 
-## Source of truth
+## Sources of truth
 
-|     Concern     |               Source of truth                |                          Notes                           |
-|-----------------|----------------------------------------------|----------------------------------------------------------|
-| Workflow graph  | `audio-core` workflow model                  | Immutable, framework-independent, validated server-side. |
-| Workflow edit   | `WorkflowOperation` / `WorkflowOperationLog` | Used for replay, audit and undo.                         |
-| Durable version | JGit commit produced from deterministic DSL  | Git stores checkpoints, not every UI gesture.            |
-| Live event      | Operation event from transactional outbox    | Broker/WebSocket transports committed facts only.        |
-| Presence        | Collaboration session state                  | Cursors, selection and viewport are not workflow state.  |
-| Rendering       | Web editor state                             | UI state is derived and disposable.                      |
+| Concern | Source of truth | Notes |
+|---|---|---|
+| Semantic graph | `audio-core Workflow` | Framework-independent and server-validated. |
+| Accepted edit order | Durable semantic operation history | Used for replay, audit and collaboration recovery. |
+| Current collaboration revision | Durable session aggregate | Browser projections are disposable. |
+| Durable version | JGit commit from deterministic DSL | Checkpoints, not every pointer movement. |
+| Event delivery state | Transactional outbox | At-least-once delivery with stable event IDs. |
+| Presence | Server session presence state | Cursor and connection state are not workflow data. |
+| Rendering/layout | React Flow adapter state | Local layout may be replaced at any time. |
+| Execution input | Immutable `ExecutionSnapshot` | A running job is isolated from later edits. |
+
+## Editor boundary
+
+`audio-web-editor` is the single maintained production frontend.
+
+React Flow owns:
+
+- node, edge and typed-handle rendering;
+- selection, viewport and local node positions;
+- translation of gestures into command requests;
+- displaying server projections, validation and history responses.
+
+React Flow must not own:
+
+- canonical nodes, edges or properties;
+- semantic validation or operation ordering;
+- durable undo/redo stacks;
+- Git, Hibernate or database implementation details;
+- an alternative browser document that can diverge from the server.
+
+The accepted update flow is:
+
+```text
+user gesture
+    -> revision-aware semantic command
+    -> server validation and durable append
+    -> accepted WorkflowProjection / conflict response
+    -> React Flow state replacement
+```
+
+Yjs remains optional for non-semantic awareness or UI helpers. It is not a mandatory dependency of the production frontend and may never contain canonical workflow state.
 
 ## Collaboration modes
 
-The user must be able to choose how a drawing is shared.
-
 ### `PRIVATE_WORKSPACE`
 
-Only the actor sees their current changes. Undo/redo is personal. Publishing or merging into a shared workflow is explicit.
+Only the actor sees current edits. Undo/redo is personal. Publishing or merging into a shared workflow is explicit.
 
 ### `SHARED_SESSION_PERSONAL_UNDO`
 
-Participants see the same live workflow. Each actor's undo stack contains only their own undoable operations. This is the recommended default for live collaboration.
+Participants see one live workflow, while each actor may undo only their own eligible operations. This is the recommended shared default.
 
 ### `SHARED_SESSION_SHARED_UNDO`
 
-Participants share one room-level undo stack. Undo may revert another user's operation, so the UI must show exactly which operation and actor will be affected before the user confirms.
+Participants use a room-level undo target. The UI must preview the affected operation and actor before confirmation.
 
-## Operation model
+A session mode is immutable for the session lifetime. Undo and redo append new semantic operations; accepted history is never rewritten.
 
-All durable workflow changes should be expressible as semantic operations:
+## Versioning and search
 
-```text
-CreateNode
-DeleteNode
-MoveNode
-RenameNode
-UpdateNodeProperty
-CreateEdge
-DeleteEdge
-UpdatePortType
-CreateComment
-ResolveConflict
-UndoOperation
-RedoOperation
-```
-
-These operations are required for:
-
-- deterministic undo/redo;
-- integration tests;
-- audit logs;
-- semantic merge;
-- conflict analysis;
-- collaboration replay after reconnect.
-
-Undo and redo are also operations. They must not silently rewrite history.
-
-## Git/JGit versioning
-
-Git stores stable workflow checkpoints:
-
-- commit;
-- branch;
-- merge;
-- cherry-pick;
-- revert;
-- history;
-- comparison;
-- restoration.
-
-Git is not the live-collaboration mechanism. Live collaboration uses semantic operations and session events. Git receives stable snapshots/checkpoints derived from the workflow model and deterministic DSL.
-
-The JGit storage layer is not implemented directly in Audio Analyzer. It should be consolidated as a separate `jgit-storage-hibernate` / `hibernate-jgit-store` component and accessed through a narrow `VersionedWorkflowStore` facade.
-
-## Storage format direction
-
-The canonical persisted representation should be deterministic and reviewable. JSON may be useful for APIs or debugging, but a naive large `workflow.json` should not become the long-term source format.
-
-Preferred direction:
+Git stores stable workflow checkpoints and supports branch, compare, merge, cherry-pick, revert and restoration semantics. It is not the live-collaboration transport.
 
 ```text
-workflow model
-    -> deterministic workflow DSL
-    -> Git blob/tree/commit
-    -> DB-backed JGit store
+current accepted revision
+    -> explicit checkpoint command
+    -> deterministic DSL tree
+    -> JGit commit/ref update
+    -> rebuildable search projections
 ```
 
-Layout and presence must stay separate from the workflow graph:
+Generic Git-history indexing remains in `jgit-storage-hibernate-search`. Audio Analyzer adds only workflow-specific projections and UI adapters.
+
+## Persistence and event boundary
+
+One Hibernate transaction records an accepted live command:
+
+1. semantic operation;
+2. canonical DSL snapshot;
+3. revision and event sequence;
+4. session recovery state;
+5. outbox event.
+
+After commit, the leased dispatcher publishes events. Pending, failed or leased events are not removed by retention. Git checkpoints remain separate expected-revision commands; cross-component atomicity is not claimed without a verified shared contract.
+
+## Execution boundary
+
+A workflow run uses an immutable input selected from either a current accepted revision or an exact stored commit:
 
 ```text
-workflow.apflow      semantic graph
-layout.aplayout      node positions, grouping, viewport defaults
-metadata.toml/json   name, tags, description, authoring metadata
+workflow revision or commit
+    -> validation
+    -> ExecutionSnapshot + content fingerprint
+    -> WorkflowRunService
+    -> replaceable WorkflowExecutionBackend
+    -> progress, cancellation and typed result artifacts
 ```
 
-## Web editor direction
-
-The future graphical editor is web-first, but the Swing app remains valid during the transition.
-
-Accepted direction (ADR-007):
-
-- React Flow + Yjs is the accepted editor stack for the first workbench MVP (see [`adr-007-editor-stack.md`](adr-007-editor-stack.md));
-- Yjs may own awareness, presence and viewport/layout helpers; it must not own canonical workflow
-  state, durable history, `WorkflowOperation` ordering, or semantic conflict resolution;
-- React Flow state is always derived from the server `WorkflowProjection`; no optimistic semantic
-  commits; rejected operations leave the UI on the last accepted projection;
-- `WorkflowEditorHttpAdapter` in `audio-app` is the HTTP bridge between the React Flow client and
-  the `WorkflowEditorService` in `audio-core`;
-- none of these client-side tools may become the canonical workflow persistence layer by accident;
-- GLSP remains documented as the evaluated fallback path if server-authoritativeness proves harder
-  to maintain in React.
-
-### Editor stack selection criteria
-
-The final editor stack should be chosen by evidence from spikes, not by document age.
-
-|              Criterion              |            GLSP-first spike            |                    React Flow/Yjs spike                     |
-|-------------------------------------|----------------------------------------|-------------------------------------------------------------|
-| Server-authoritative workflow model | Natural fit; model service is central. | Must be enforced by adapter/API discipline.                 |
-| Fast UX iteration                   | More upfront architecture.             | Strong advantage.                                           |
-| Typed ports and semantic validation | Natural fit.                           | Feasible, but custom code.                                  |
-| Multi-user awareness/presence       | Needs integration.                     | Strong advantage with Yjs-style helpers.                    |
-| Personal undo in shared sessions    | Domain operation model still required. | Yjs can help, but domain semantics must still be tested.    |
-| Deterministic replay/audit          | Domain operation model required.       | Domain operation model required.                            |
-| Avoiding browser state as truth     | Natural fit.                           | Explicit guardrail required.                                |
-| Long-term maintainability           | Good if GLSP complexity is acceptable. | Good if the adapter remains small and server-authoritative. |
-
-Recommended decision rule:
-
-```text
-If GLSP proves too heavy for the first useful editor, prefer React Flow/Yjs for the UI layer.
-If React Flow/Yjs cannot keep server-authoritative operations and deterministic replay clean, prefer GLSP.
-In both cases, audio-core Workflow + WorkflowOperationLog + VersionedWorkflowStore remain the canonical model.
-```
-
-The backend remains authoritative for workflow validation, operation ordering and durable checkpoints.
+Editing may continue while a run executes. The running job remains tied to its original fingerprint.
 
 ## Conflict examples
 
-### Different nodes changed
+### Independent properties
 
 ```text
 User A changes FFT.windowSize
 User B changes Classifier.threshold
 ```
 
-Expected result: no semantic conflict.
+Expected: no semantic conflict.
 
 ### Same property changed differently
 
@@ -226,104 +162,63 @@ User A: FFT.windowSize = 4096
 User B: FFT.windowSize = 1024
 ```
 
-Expected result: semantic property conflict, not a text conflict.
+Expected: explicit property conflict, not a raw textual DSL conflict.
 
-### Node deleted while another user connects it
+### Delete versus connection
 
 ```text
 User A deletes Node X
-User B creates Edge from Node X to Node Y
+User B connects Node X to Node Y
 ```
 
-Expected result: invalid edge or semantic conflict report.
+Expected: typed invalid-operation or merge conflict response.
 
-### Endpoint property changed while another user connects it
+## Verification strategy
 
-```text
-User A changes a property on Node Y that affects compatibility
-User B connects an edge to Node Y
-```
+Domain and application tests cover:
 
-Expected result: backend validation or semantic merge marks the edge for review.
+- structural and typed-port validation;
+- operation replay and conflicts;
+- deterministic DSL roundtrips;
+- restart recovery and event ordering;
+- migration and retention invariants;
+- semantic diff/merge and immutable execution.
 
-## Execution model
+Frontend verification covers:
 
-A workflow run always uses a stable snapshot:
+- strict TypeScript checking;
+- projection and command adapter unit tests;
+- architecture lint rejecting persistence knowledge and canonical Yjs state;
+- byte-identical clean production builds;
+- cache-safe assets packaged in the application classpath;
+- controlled SPA forwarding without API/asset capture.
 
-```text
-current editable workflow state
-    -> validation
-    -> ExecutionSnapshot
-    -> ExecutionPlan
-    -> ExecutionContext
-    -> ExecutionResult
-```
+End-to-end verification opens isolated browser contexts against the packaged Spring Boot process and proves convergence, reconnect/replay, restart and later undo/execution flows.
 
-Users may continue editing while a run executes. The running execution remains tied to the snapshot that started it.
+## Delivery order
 
-## Event transport
+Completed:
 
-The broker is transport only. It is not the source of truth.
+1. workflow domain, semantic operations and deterministic DSL;
+2. `VersionedWorkflowStore` and released Hibernate-backed JGit integration;
+3. collaboration sessions, ordered SSE, durable append, restart recovery and leased outbox;
+4. production migrations and safe published-outbox retention;
+5. editor-stack comparison and ADR-007 selection.
 
-Recommended pattern:
+Active and next:
 
-```text
-DB transaction:
-  append WorkflowOperation
-  update workflow/session projection
-  create optional Git checkpoint
-  insert outbox event
-commit
-
-outbox dispatcher:
-  publish event to broker/WebSocket clients
-```
-
-ActiveMQ Artemis, another JMS/AMQP broker, or a simple WebSocket adapter can be evaluated behind a `WorkflowEventBus` abstraction.
-
-## Testing strategy
-
-Unit tests:
-
-- workflow validation;
-- port compatibility;
-- node property validation;
-- DSL serialization;
-- semantic diff;
-- semantic merge;
-- execution planning.
-
-Collaboration tests with simulated users:
-
-- concurrent node moves;
-- concurrent property edits;
-- delete-vs-modify;
-- connect-vs-parameter-change;
-- undo-vs-remote-change;
-- offline/online reconnect;
-- commit while others edit.
-
-Fuzz tests should apply random operations and assert that the workflow remains structurally valid or produces explicit validation errors.
-
-End-to-end tests should eventually open two browser sessions, edit the same workflow, verify propagation, run undo and execute a saved snapshot.
-
-## Implementation order
-
-1. Finish the JGit/Hibernate storage spike.
-2. Define the `VersionedWorkflowStore` facade.
-3. Implement the minimal `Input -> Gain -> Output` workflow roundtrip.
-4. Add deterministic DSL serialization and reload.
-5. Add semantic diff for the vertical slice.
-6. Build the GLSP-first editor spike and, if feasible, a constrained React Flow/Yjs editor spike against the same backend API.
-7. Choose the editor stack using the criteria above.
-8. Add collaboration sessions and event transport.
-9. Add personal/shared undo behavior.
-10. Add Hibernate Search projections for workflow history.
+1. **#269** — package the maintained React Flow frontend reproducibly;
+2. **#270** — connect sessions, SSE replay/reconciliation and server-owned presence;
+3. **#271/#272** — durable semantic undo/redo and React Flow conflict UX;
+4. **#246/#247** — semantic diff/merge and rebuildable workflow-history search;
+5. **#273/#274/#275** — immutable run orchestration, real DSP execution and run UI;
+6. **#249** — staged packaged two-browser end-to-end evidence.
 
 ## Related documents
 
-- [`README.md`](README.md) — map of architecture documents.
-- [`bounded-contexts.md`](bounded-contexts.md) — module and package boundaries.
-- [`adr-006-versioned-collaborative-workflow-store.md`](adr-006-versioned-collaborative-workflow-store.md) — accepted decision with spike gates.
-- [`jgit-storage-hibernate-spike.md`](jgit-storage-hibernate-spike.md) — first technical verification step.
-
+- [`README.md`](README.md) — architecture document map.
+- [`bounded-contexts.md`](bounded-contexts.md) — package and dependency boundaries.
+- [`adr-006-versioned-collaborative-workflow-store.md`](adr-006-versioned-collaborative-workflow-store.md) — versioned store decision.
+- [`adr-007-editor-stack.md`](adr-007-editor-stack.md) — production React Flow adapter decision.
+- [`session-event-streaming.md`](session-event-streaming.md) — ordered SSE and replay contract.
+- [`../../audio-web-editor/README.md`](../../audio-web-editor/README.md) — maintained frontend build and packaging.
