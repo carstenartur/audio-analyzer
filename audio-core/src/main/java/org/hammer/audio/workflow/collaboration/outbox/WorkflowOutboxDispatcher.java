@@ -56,7 +56,14 @@ public final class WorkflowOutboxDispatcher {
       failed.add(entry.eventId());
       return;
     }
-    outboxStore.markPublished(entry.eventId(), lease.leaseToken(), clock.instant());
+    try {
+      outboxStore.markPublished(entry.eventId(), lease.leaseToken(), clock.instant());
+    } catch (RuntimeException acknowledgementFailure) {
+      throw new WorkflowOutboxDispatchException(
+          entry.eventId(),
+          "Published outbox event could not be acknowledged durably: " + entry.eventId(),
+          acknowledgementFailure);
+    }
     published.add(entry.eventId());
   }
 
@@ -69,8 +76,13 @@ public final class WorkflowOutboxDispatcher {
     try {
       outboxStore.markFailed(entry.eventId(), lease.leaseToken(), nextAttemptAt);
     } catch (RuntimeException persistenceFailure) {
-      persistenceFailure.addSuppressed(publicationFailure);
-      throw persistenceFailure;
+      WorkflowOutboxDispatchException dispatchFailure =
+          new WorkflowOutboxDispatchException(
+              entry.eventId(),
+              "Failed outbox publication could not be scheduled for retry: " + entry.eventId(),
+              persistenceFailure);
+      dispatchFailure.addSuppressed(publicationFailure);
+      throw dispatchFailure;
     }
   }
 
