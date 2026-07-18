@@ -12,6 +12,16 @@ import org.hammer.audio.workflow.Workflow;
 import org.hammer.audio.workflow.WorkflowOperation;
 import org.hammer.audio.workflow.WorkflowOperationLog;
 import org.hammer.audio.workflow.collaboration.WorkflowSessionException.Code;
+import org.hammer.audio.workflow.collaboration.store.StoredWorkflowOperation;
+import org.hammer.audio.workflow.collaboration.store.StoredWorkflowSession;
+import org.hammer.audio.workflow.collaboration.store.WorkflowOperationPersistenceCodec;
+import org.hammer.audio.workflow.collaboration.store.WorkflowOperationPersistenceData;
+import org.hammer.audio.workflow.collaboration.store.WorkflowOutboxEventData;
+import org.hammer.audio.workflow.collaboration.store.WorkflowSessionAppendCommand;
+import org.hammer.audio.workflow.collaboration.store.WorkflowSessionAppendResult;
+import org.hammer.audio.workflow.collaboration.store.WorkflowSessionStateStore;
+import org.hammer.audio.workflow.dsl.WorkflowDslParser;
+import org.hammer.audio.workflow.dsl.WorkflowDslSerializer;
 
 /**
  * Thread-safe application service for collaboration-session lifecycle and actor membership.
@@ -19,13 +29,20 @@ import org.hammer.audio.workflow.collaboration.WorkflowSessionException.Code;
  * <p>Sessions retain their canonical {@link WorkflowOperationLog} when the last participant leaves,
  * so actors can reconnect. A session is removed only by an explicit owner close operation. Session
  * mode is immutable for the complete lifetime of a session.
+ *
+ * <p>When a durable store is supplied, the registry recovers open canonical snapshots and accepted
+ * operation identities. Connection membership and presence intentionally start empty after restart.
  */
 public final class WorkflowSessionRegistry {
 
   private static final String SESSION_ID_FIELD = "sessionId";
+  private static final String OPERATION_EVENT_TYPE = "WORKFLOW_OPERATION_ACCEPTED";
 
   private final Map<String, SessionEntry> sessionEntries = new ConcurrentHashMap<>();
   private final WorkflowSessionEventHub sessionEventHub;
+  private final WorkflowSessionStateStore stateStore;
+  private final WorkflowDslParser dslParser = new WorkflowDslParser();
+  private final WorkflowDslSerializer dslSerializer = new WorkflowDslSerializer();
 
   /** Creates a registry with an in-memory bounded session-event hub. */
   public WorkflowSessionRegistry() {
@@ -34,7 +51,22 @@ public final class WorkflowSessionRegistry {
 
   /** Creates a registry publishing lifecycle and accepted-operation events to the supplied hub. */
   public WorkflowSessionRegistry(WorkflowSessionEventHub eventHub) {
+    this(eventHub, null);
+  }
+
+  /**
+   * Creates a registry backed by durable collaboration state and recovers all open sessions.
+   *
+   * @param eventHub transport-neutral event hub
+   * @param stateStore durable collaboration state store
+   */
+  public WorkflowSessionRegistry(
+      WorkflowSessionEventHub eventHub, WorkflowSessionStateStore stateStore) {
     this.sessionEventHub = Objects.requireNonNull(eventHub, "eventHub");
+    this.stateStore = stateStore;
+    if (stateStore != null) {
+      recoverDurableSessions();
+    }
   }
 
   /** Returns the transport-neutral event hub used by this registry. */
@@ -49,8 +81,18 @@ public final class WorkflowSessionRegistry {
     Objects.requireNonNull(mode, "mode");
     Objects.requireNonNull(owner, "owner");
     Objects.requireNonNull(initialWorkflow, "initialWorkflow");
+    Instant createdAt = Instant.now();
     SessionEntry created =
-        new SessionEntry(requiredSessionId, mode, owner, initialWorkflow, sessionEventHub);
+        SessionEntry.created(
+            requiredSessionId,
+            mode,
+            owner,
+            createdAt,
+            initialWorkflow,
+            sessionEventHub,
+            stateStore,
+            dslParser,
+            dslSerializer);
     SessionEntry previous = sessionEntries.putIfAbsent(requiredSessionId, created);
     if (previous != null) {
       throw error(
@@ -58,8 +100,32 @@ public final class WorkflowSessionRegistry {
           requiredSessionId,
           "Session already exists: " + requiredSessionId);
     }
-    sessionEventHub.openSession(requiredSessionId, owner, initialWorkflow);
-    return created.snapshot();
+
+    boolean persisted = false;
+    try {
+      if (stateStore != null) {
+        stateStore.create(
+            new StoredWorkflowSession(
+                requiredSessionId,
+                mode,
+                owner,
+                createdAt,
+                initialWorkflow.id(),
+                dslSerializer.serialize(initialWorkflow),
+                0,
+                0,
+                false));
+        persisted = true;
+      }
+      sessionEventHub.openSession(requiredSessionId, owner, initialWorkflow);
+      return created.snapshot();
+    } catch (RuntimeException failure) {
+      sessionEntries.remove(requiredSessionId, created);
+      if (persisted) {
+        stateStore.close(requiredSessionId, 0);
+      }
+      throw failure;
+    }
   }
 
   /** Joins an existing session. Duplicate joins with identical actor metadata are idempotent. */
@@ -124,14 +190,13 @@ public final class WorkflowSessionRegistry {
     String requiredSessionId = requireNotBlank(sessionId, SESSION_ID_FIELD);
     String actorId = requireNotBlank(requestedByActorId, "requestedByActorId");
     SessionEntry entry = requireSession(requiredSessionId);
-    entry.assertOwner(actorId);
+    entry.close(actorId);
     if (!sessionEntries.remove(requiredSessionId, entry)) {
       throw error(
           Code.SESSION_NOT_FOUND,
           requiredSessionId,
           "Session changed while closing: " + requiredSessionId);
     }
-    entry.close();
     sessionEventHub.closeSession(requiredSessionId, entry.sessionOwner());
   }
 
@@ -141,6 +206,80 @@ public final class WorkflowSessionRegistry {
         .map(SessionEntry::snapshot)
         .sorted(Comparator.comparing(SessionSnapshot::sessionId))
         .toList();
+  }
+
+  private void recoverDurableSessions() {
+    for (StoredWorkflowSession storedSession : stateStore.openSessions()) {
+      recoverDurableSession(storedSession);
+    }
+  }
+
+  private void recoverDurableSession(StoredWorkflowSession storedSession) {
+    String sessionId = storedSession.sessionId();
+    try {
+      Workflow workflow = dslParser.parse(storedSession.workflowDsl());
+      if (!workflow.id().equals(storedSession.workflowId())) {
+        throw new WorkflowSessionRecoveryException(
+            sessionId,
+            "Recovered workflow id '"
+                + workflow.id()
+                + "' does not match durable id '"
+                + storedSession.workflowId()
+                + "'");
+      }
+      List<StoredWorkflowOperation> operations = stateStore.operations(sessionId);
+      validateRecoveredHistory(storedSession, operations);
+      SessionEntry recovered =
+          SessionEntry.recovered(
+              storedSession,
+              workflow,
+              operations,
+              sessionEventHub,
+              stateStore,
+              dslParser,
+              dslSerializer);
+      if (sessionEntries.putIfAbsent(sessionId, recovered) != null) {
+        throw new WorkflowSessionRecoveryException(
+            sessionId, "Duplicate durable collaboration session: " + sessionId);
+      }
+      try {
+        sessionEventHub.restoreSession(
+            sessionId, workflow, storedSession.sequence(), storedSession.revision());
+      } catch (RuntimeException failure) {
+        sessionEntries.remove(sessionId, recovered);
+        throw failure;
+      }
+    } catch (WorkflowSessionRecoveryException failure) {
+      throw failure;
+    } catch (RuntimeException failure) {
+      throw new WorkflowSessionRecoveryException(
+          sessionId, "Failed to recover durable collaboration session " + sessionId, failure);
+    }
+  }
+
+  private static void validateRecoveredHistory(
+      StoredWorkflowSession session, List<StoredWorkflowOperation> operations) {
+    long expectedPosition = 1;
+    for (StoredWorkflowOperation operation : operations) {
+      if (!operation.sessionId().equals(session.sessionId())) {
+        throw new WorkflowSessionRecoveryException(
+            session.sessionId(),
+            "Durable operation belongs to a different session: " + operation.operationId());
+      }
+      if (operation.sequence() != expectedPosition || operation.revision() != expectedPosition) {
+        throw new WorkflowSessionRecoveryException(
+            session.sessionId(),
+            "Durable operation history is not contiguous at operation " + operation.operationId());
+      }
+      expectedPosition++;
+    }
+    long historySize = operations.size();
+    if (session.revision() != historySize || session.sequence() != historySize) {
+      throw new WorkflowSessionRecoveryException(
+          session.sessionId(),
+          "Durable aggregate revision/sequence does not match operation history for session "
+              + session.sessionId());
+    }
   }
 
   private SessionEntry requireSession(String sessionId) {
@@ -173,23 +312,40 @@ public final class WorkflowSessionRegistry {
     private final WorkflowOperationLog operationLog;
     private final CollaborativeWorkflowSessionService sessionService;
     private final WorkflowSessionEventHub eventHub;
+    private final WorkflowSessionStateStore stateStore;
+    private final WorkflowDslParser dslParser;
+    private final WorkflowDslSerializer dslSerializer;
     private final Map<String, OperationActor> participants = new ConcurrentHashMap<>();
-    private final Map<String, WorkflowOperation> operationsById = new ConcurrentHashMap<>();
+    private final Map<String, AcceptedOperationIdentity> operationsById = new ConcurrentHashMap<>();
     private final ReentrantLock lock = new ReentrantLock();
+    private int operationCount;
+    private long durableRevision;
+    private long durableSequence;
     private volatile boolean closed;
 
-    SessionEntry(
+    private SessionEntry(
         String sessionId,
         CollaborationMode mode,
         OperationActor owner,
-        Workflow initialWorkflow,
-        WorkflowSessionEventHub eventHub) {
+        Instant createdAt,
+        Workflow workflow,
+        List<StoredWorkflowOperation> recoveredOperations,
+        boolean ownerConnected,
+        long durableRevision,
+        long durableSequence,
+        WorkflowSessionEventHub eventHub,
+        WorkflowSessionStateStore stateStore,
+        WorkflowDslParser dslParser,
+        WorkflowDslSerializer dslSerializer) {
       this.sessionId = sessionId;
       this.mode = mode;
       this.owner = owner;
+      this.createdAt = createdAt;
       this.eventHub = Objects.requireNonNull(eventHub, "eventHub");
-      this.createdAt = Instant.now();
-      this.operationLog = new WorkflowOperationLog(initialWorkflow);
+      this.stateStore = stateStore;
+      this.dslParser = Objects.requireNonNull(dslParser, "dslParser");
+      this.dslSerializer = Objects.requireNonNull(dslSerializer, "dslSerializer");
+      this.operationLog = new WorkflowOperationLog(workflow);
       this.sessionService =
           new CollaborativeWorkflowSessionService(
               sessionId,
@@ -197,7 +353,71 @@ public final class WorkflowSessionRegistry {
               operationLog,
               new InMemoryWorkflowEventOutbox(),
               ignored -> ignoreEvent());
-      participants.put(owner.actorId(), owner);
+      this.durableRevision = durableRevision;
+      this.durableSequence = durableSequence;
+      for (StoredWorkflowOperation operation : recoveredOperations) {
+        AcceptedOperationIdentity previous =
+            operationsById.putIfAbsent(
+                operation.operationId(), AcceptedOperationIdentity.from(operation));
+        if (previous != null) {
+          throw new WorkflowSessionRecoveryException(
+              sessionId, "Duplicate durable operation id: " + operation.operationId());
+        }
+      }
+      this.operationCount = recoveredOperations.size();
+      if (ownerConnected) {
+        participants.put(owner.actorId(), owner);
+      }
+    }
+
+    static SessionEntry created(
+        String sessionId,
+        CollaborationMode mode,
+        OperationActor owner,
+        Instant createdAt,
+        Workflow workflow,
+        WorkflowSessionEventHub eventHub,
+        WorkflowSessionStateStore stateStore,
+        WorkflowDslParser dslParser,
+        WorkflowDslSerializer dslSerializer) {
+      return new SessionEntry(
+          sessionId,
+          mode,
+          owner,
+          createdAt,
+          workflow,
+          List.of(),
+          true,
+          0,
+          0,
+          eventHub,
+          stateStore,
+          dslParser,
+          dslSerializer);
+    }
+
+    static SessionEntry recovered(
+        StoredWorkflowSession storedSession,
+        Workflow workflow,
+        List<StoredWorkflowOperation> recoveredOperations,
+        WorkflowSessionEventHub eventHub,
+        WorkflowSessionStateStore stateStore,
+        WorkflowDslParser dslParser,
+        WorkflowDslSerializer dslSerializer) {
+      return new SessionEntry(
+          storedSession.sessionId(),
+          storedSession.mode(),
+          storedSession.owner(),
+          storedSession.createdAt(),
+          workflow,
+          recoveredOperations,
+          false,
+          storedSession.revision(),
+          storedSession.sequence(),
+          eventHub,
+          stateStore,
+          dslParser,
+          dslSerializer);
     }
 
     private static void ignoreEvent() {
@@ -252,39 +472,50 @@ public final class WorkflowSessionRegistry {
       lock.lock();
       try {
         requireOpen();
-        if (mode != requestedMode) {
-          throw error(
-              Code.SESSION_MODE_MISMATCH,
-              sessionId,
-              "Requested mode '" + requestedMode + "' does not match session mode '" + mode + "'");
-        }
-        OperationActor joinedActor = participants.get(actor.actorId());
-        if (joinedActor == null) {
-          throw error(Code.ACTOR_NOT_JOINED, sessionId, "Actor is not joined: " + actor.actorId());
-        }
-        if (!joinedActor.equals(actor)) {
-          throw error(
-              Code.ACTOR_METADATA_MISMATCH,
-              sessionId,
-              "Actor metadata mismatch: " + actor.actorId());
-        }
-        WorkflowOperation previous = operationsById.get(operation.operationId());
+        assertModeAndActor(requestedMode, actor);
+        AcceptedOperationIdentity candidate = AcceptedOperationIdentity.from(operation);
+        AcceptedOperationIdentity previous = operationsById.get(operation.operationId());
         if (previous != null) {
-          if (sameSemanticOperation(previous, operation)) {
+          if (previous.equals(candidate)) {
             return operationLog.currentWorkflow();
           }
-          throw error(
-              Code.DUPLICATE_OPERATION_ID,
-              sessionId,
-              "Operation id is already associated with different content: "
+          throw duplicateOperation(operation.operationId());
+        }
+
+        Workflow updatedWorkflow = operation.apply(operationLog.currentWorkflow());
+        if (stateStore != null) {
+          WorkflowSessionAppendResult durableResult = persist(operation, updatedWorkflow);
+          if (durableResult.duplicate()) {
+            Workflow durableWorkflow = dslParser.parse(durableResult.session().workflowDsl());
+            operationLog.reset(durableWorkflow);
+            operationsById.put(operation.operationId(), candidate);
+            operationCount++;
+            durableRevision = durableResult.session().revision();
+            durableSequence = durableResult.session().sequence();
+            return durableWorkflow;
+          }
+          durableRevision = durableResult.session().revision();
+          durableSequence = durableResult.session().sequence();
+        }
+
+        Workflow appliedWorkflow = operationLog.apply(operation);
+        if (!appliedWorkflow.equals(updatedWorkflow)) {
+          throw new IllegalStateException(
+              "Persisted workflow differs from applied workflow for operation "
                   + operation.operationId());
         }
-        WorkflowOperationEnvelope envelope =
-            new WorkflowOperationEnvelope(sessionId, mode, actor, operation, Instant.now());
-        Workflow updatedWorkflow = sessionService.applyOperation(envelope);
-        operationsById.put(operation.operationId(), operation);
-        eventHub.operationAccepted(sessionId, actor, operation, updatedWorkflow);
-        return updatedWorkflow;
+        operationsById.put(operation.operationId(), candidate);
+        operationCount++;
+        WorkflowSessionEvent accepted =
+            eventHub.operationAccepted(sessionId, actor, operation, appliedWorkflow);
+        if (stateStore == null) {
+          durableRevision = accepted.revision();
+          durableSequence = accepted.sequence();
+        } else if (accepted.revision() != durableRevision) {
+          throw new IllegalStateException(
+              "Event revision differs from durable revision for session " + sessionId);
+        }
+        return appliedWorkflow;
       } finally {
         lock.unlock();
       }
@@ -332,7 +563,7 @@ public final class WorkflowSessionRegistry {
       }
     }
 
-    void assertOwner(String actorId) {
+    void close(String actorId) {
       lock.lock();
       try {
         requireOpen();
@@ -342,6 +573,10 @@ public final class WorkflowSessionRegistry {
               sessionId,
               "Only the session owner may close it: " + owner.actorId());
         }
+        if (stateStore != null) {
+          stateStore.close(sessionId, durableRevision);
+        }
+        closed = true;
       } finally {
         lock.unlock();
       }
@@ -351,17 +586,51 @@ public final class WorkflowSessionRegistry {
       return owner;
     }
 
-    void close() {
-      closed = true;
+    private WorkflowSessionAppendResult persist(
+        WorkflowOperation operation, Workflow updatedWorkflow) {
+      WorkflowOperationPersistenceData persistenceData =
+          WorkflowOperationPersistenceCodec.encode(operation);
+      long nextSequence = Math.addExact(durableSequence, 1);
+      WorkflowOutboxEventData outboxEvent =
+          new WorkflowOutboxEventData(
+              sessionId + ":" + nextSequence,
+              OPERATION_EVENT_TYPE,
+              operation.timestamp(),
+              persistenceData.payload());
+      return stateStore.append(
+          new WorkflowSessionAppendCommand(
+              sessionId,
+              durableRevision,
+              persistenceData,
+              updatedWorkflow.id(),
+              dslSerializer.serialize(updatedWorkflow),
+              outboxEvent));
     }
 
-    private static boolean sameSemanticOperation(
-        WorkflowOperation existing, WorkflowOperation candidate) {
-      return existing.getClass().equals(candidate.getClass())
-          && existing.operationId().equals(candidate.operationId())
-          && existing.author().equals(candidate.author())
-          && existing.affectedObjectIds().equals(candidate.affectedObjectIds())
-          && existing.payload().equals(candidate.payload());
+    private void assertModeAndActor(CollaborationMode requestedMode, OperationActor actor) {
+      if (mode != requestedMode) {
+        throw error(
+            Code.SESSION_MODE_MISMATCH,
+            sessionId,
+            "Requested mode '" + requestedMode + "' does not match session mode '" + mode + "'");
+      }
+      OperationActor joinedActor = participants.get(actor.actorId());
+      if (joinedActor == null) {
+        throw error(Code.ACTOR_NOT_JOINED, sessionId, "Actor is not joined: " + actor.actorId());
+      }
+      if (!joinedActor.equals(actor)) {
+        throw error(
+            Code.ACTOR_METADATA_MISMATCH,
+            sessionId,
+            "Actor metadata mismatch: " + actor.actorId());
+      }
+    }
+
+    private WorkflowSessionException duplicateOperation(String operationId) {
+      return error(
+          Code.DUPLICATE_OPERATION_ID,
+          sessionId,
+          "Operation id is already associated with different content: " + operationId);
     }
 
     private void requireOpen() {
@@ -380,8 +649,22 @@ public final class WorkflowSessionRegistry {
           owner,
           createdAt,
           actors,
-          operationLog.operations().size(),
+          operationCount,
           operationLog.currentWorkflow().id());
+    }
+  }
+
+  private record AcceptedOperationIdentity(String operationType, String actorId, String payload) {
+
+    static AcceptedOperationIdentity from(WorkflowOperation operation) {
+      WorkflowOperationPersistenceData encoded = WorkflowOperationPersistenceCodec.encode(operation);
+      return new AcceptedOperationIdentity(
+          encoded.operationType(), encoded.actorId(), encoded.payload());
+    }
+
+    static AcceptedOperationIdentity from(StoredWorkflowOperation operation) {
+      return new AcceptedOperationIdentity(
+          operation.operationType(), operation.actorId(), operation.payload());
     }
   }
 
