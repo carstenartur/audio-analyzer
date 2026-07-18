@@ -7,12 +7,15 @@ on:
 
 permissions:
   contents: write
+  packages: read
 
 jobs:
   update-screenshots:
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -24,6 +27,9 @@ jobs:
           java-version: '21'
           distribution: temurin
           cache: maven
+          server-id: github
+          server-username: GITHUB_ACTOR
+          server-password: GITHUB_TOKEN
 
       - name: Install screenshot-test reactor artifacts
         run: >-
