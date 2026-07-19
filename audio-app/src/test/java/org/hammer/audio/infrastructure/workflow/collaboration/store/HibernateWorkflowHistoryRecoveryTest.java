@@ -66,10 +66,12 @@ class HibernateWorkflowHistoryRecoveryTest {
         undoOperationId = undone.operationId();
 
         WorkflowSessionRegistry.SessionSnapshot beforeQueries = registry.inspect(SESSION_ID);
+        int pendingOutboxBeforeQueries = store.pendingOutbox(100).size();
         expectedHistory = registry.history(SESSION_ID, OWNER, null, 10);
         expectedCapabilities = registry.capabilities(SESSION_ID, OWNER);
         assertEquals(beforeQueries, registry.inspect(SESSION_ID));
         assertEquals(3, store.operations(SESSION_ID).size());
+        assertEquals(pendingOutboxBeforeQueries, store.pendingOutbox(100).size());
         assertEquals(undoOperationId, expectedCapabilities.redo().operation().operationId());
       }
 
@@ -80,6 +82,7 @@ class HibernateWorkflowHistoryRecoveryTest {
             new WorkflowSessionRegistry(new WorkflowSessionEventHub(32, 8), store);
         registry.join(SESSION_ID, OWNER);
         WorkflowSessionRegistry.SessionSnapshot beforeQueries = registry.inspect(SESSION_ID);
+        int pendingOutboxBeforeQueries = store.pendingOutbox(100).size();
 
         WorkflowHistoryPage recoveredHistory = registry.history(SESSION_ID, OWNER, null, 10);
         WorkflowHistoryCapabilities recoveredCapabilities =
@@ -94,6 +97,7 @@ class HibernateWorkflowHistoryRecoveryTest {
         assertTrue(redoPreview.safe());
         assertEquals(beforeQueries, registry.inspect(SESSION_ID));
         assertEquals(3, store.operations(SESSION_ID).size());
+        assertEquals(pendingOutboxBeforeQueries, store.pendingOutbox(100).size());
       }
     } finally {
       deleteRecursively(databaseDirectory);
