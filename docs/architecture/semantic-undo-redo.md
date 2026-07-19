@@ -52,7 +52,7 @@ operation_body         = URL-safe Base64 of deterministic length-prefixed binary
 
 The framework-independent codec in `audio-core` covers every current `WorkflowOperation` subtype and all nested domain values. It does not use Java object serialization, Jackson, Hibernate or database classes.
 
-Migration V3 adds nullable body and command-relation columns. Existing rows remain readable and retain their retry fingerprint. Because they cannot be reconstructed safely, attempts to undo such a row return `OPERATION_NOT_UNDOABLE` rather than inventing missing state.
+Migration V3 adds nullable body and command-relation columns. Existing rows remain readable and retain their retry fingerprint. Their affected-object prefix is decoded for read-only history and conflict explanation. Because their complete semantic state cannot be reconstructed safely, attempts to undo such a row return `OPERATION_NOT_UNDOABLE` and capabilities report `NOT_RECONSTRUCTIBLE` rather than inventing missing state.
 
 ## Personal undo
 
@@ -164,7 +164,9 @@ Open sessions recover operation bodies, timestamps, revisions, event sequences a
 - redo can be accepted after restart;
 - history order and command-target linkage remain identical after restart;
 - actor-scoped redo discovery and redo preview work after restart;
-- read-only queries leave operation count, revision, durable rows and outbox entries unchanged;
+- empty sessions return an explicit empty page and no current targets;
+- legacy body-less operations remain visible with affected-object ids but are not executable;
+- read-only queries leave operation count, revision, event sequence, durable rows and outbox entries unchanged;
 - a second restart restores the redone canonical workflow;
 - two different commands at the same expected revision cannot both append.
 
@@ -174,8 +176,7 @@ The session lock serializes in-process commands and read-only capability calcula
 
 - Core round-trip tests cover every semantic operation subtype and malformed or truncated bodies.
 - Core command tests cover personal selection, shared preview, stale preview, same-actor and remote conflict, idempotent retry, redo and concurrent commands.
-- Core history tests cover newest-first pagination, stable cursors, capability transitions, blockers and immutable mode behavior.
+- Core history tests cover empty history, newest-first pagination, stable cursors, capability transitions, blockers, immutable mode behavior and legacy non-reconstructible rows.
 - HTTP tests cover history and capability contracts, timestamp-aware previews, validation and accepted command responses.
 - Hibernate tests cover operation-body round trips, migration compatibility, complete restart recovery and read-only history stability.
 - PostgreSQL Testcontainers migration coverage validates the same V3 schema used in production.
-
