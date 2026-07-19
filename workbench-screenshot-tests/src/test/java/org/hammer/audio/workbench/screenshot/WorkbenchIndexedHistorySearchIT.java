@@ -100,9 +100,7 @@ class WorkbenchIndexedHistorySearchIT {
   private static void waitForStatus(Page page, String expected) {
     page.waitForCondition(
         () ->
-            page.locator("[data-testid='indexed-history-status']")
-                .innerText()
-                .contains(expected));
+            page.locator("[data-testid='indexed-history-status']").innerText().contains(expected));
   }
 
   @SuppressWarnings("unchecked")
