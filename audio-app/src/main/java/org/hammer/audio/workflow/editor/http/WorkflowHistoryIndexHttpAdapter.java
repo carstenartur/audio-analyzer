@@ -44,6 +44,16 @@ public final class WorkflowHistoryIndexHttpAdapter {
     return new RebuildResponse(search.rebuild(branch, limit));
   }
 
+  /**
+   * Exact indexed commit hit returned without persistence implementation types.
+   *
+   * @param commitId authoritative Git commit identity
+   * @param message indexed commit summary
+   * @param authorName author display name, or {@code null}
+   * @param authorEmail author email, or {@code null}
+   * @param timestamp author timestamp, or {@code null}
+   * @param changedPaths first-parent changed paths represented by the projection
+   */
   public record SearchHitResponse(
       String commitId,
       String message,
@@ -63,5 +73,10 @@ public final class WorkflowHistoryIndexHttpAdapter {
     }
   }
 
-  public record RebuildResponse(int indexedCommits) {}
+  /**
+   * Outcome of an explicit rebuild request.
+   *
+   * @param indexedCommits number of previously missing commit projections created
+   */
+  public record RebuildResponse(int indexedCommits) { }
 }
