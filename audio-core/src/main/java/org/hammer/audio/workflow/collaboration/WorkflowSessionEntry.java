@@ -644,7 +644,9 @@ final class WorkflowSessionEntry {
             .operation()
             .map(WorkflowSessionEntry::sortedAffectedObjectIds)
             .orElseGet(
-                () -> WorkflowOperationPersistenceCodec.decodeAffectedObjectIds(operation.payload()));
+                () ->
+                    WorkflowOperationPersistenceCodec.decodeAffectedObjectIds(
+                        operation.payload()));
     return new WorkflowHistoryDescriptor(
         operation.operationId(),
         operation.operationType(),
