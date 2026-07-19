@@ -26,19 +26,18 @@ public final class WorkbenchContainerFactory {
   /** Creates the normal in-memory workbench container used by screenshots and Stage 1 E2E tests. */
   public static GenericContainer<?> create() throws IOException {
     return baseContainer(image(LAUNCHER_CLASS, false))
-        .withCommand(
-            "--server.port=" + WORKBENCH_PORT, "--workbench.static.dir=/app/static");
+        .withCommand("--server.port=" + WORKBENCH_PORT, "--workbench.static.dir=/app/static");
   }
 
   /**
    * Creates one process in the durable-restart scenario.
    *
-   * <p>Successive containers receive the same host directory, so H2, Hibernate collaboration rows and
-   * Hibernate-backed JGit objects survive a complete JVM/container restart. The publisher remains
-   * disabled in the first process and is explicitly enabled only after restart.
+   * <p>Successive containers receive the same host directory, so H2, Hibernate collaboration rows
+   * and Hibernate-backed JGit objects survive a complete JVM/container restart. The publisher
+   * remains disabled in the first process and is explicitly enabled only after restart.
    */
-  static GenericContainer<?> createDurableRestart(
-      Path dataDirectory, boolean publisherEnabled) throws IOException {
+  static GenericContainer<?> createDurableRestart(Path dataDirectory, boolean publisherEnabled)
+      throws IOException {
     Files.createDirectories(dataDirectory);
     return baseContainer(image(DurableRestartWorkbenchLauncher.class.getName(), true))
         .withFileSystemBind(
@@ -70,8 +69,7 @@ public final class WorkbenchContainerFactory {
     Path jarPath = requirePath("workbench.jar.path");
     Path libDir = requirePath("workbench.lib.dir");
     Path staticDir = requirePath("workbench.static.dir");
-    Path testClasses =
-        includeTestClasses ? requirePath("workbench.test.classes.dir") : null;
+    Path testClasses = includeTestClasses ? requirePath("workbench.test.classes.dir") : null;
     String classpath =
         includeTestClasses
             ? "/app/test-classes:/app/app.jar:/app/lib/*"
@@ -134,7 +132,8 @@ public final class WorkbenchContainerFactory {
       throw new IllegalStateException(
           "System property '"
               + property
-              + "' is not set. Run browser tests via Maven Failsafe with the screenshot-tests profile.");
+              + "' is not set. Run browser tests via Maven Failsafe with the screenshot-tests"
+              + " profile.");
     }
     Path path = Path.of(value);
     if (!Files.exists(path)) {

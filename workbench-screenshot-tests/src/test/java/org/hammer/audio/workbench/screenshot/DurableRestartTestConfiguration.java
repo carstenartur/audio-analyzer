@@ -17,8 +17,7 @@ import org.springframework.core.env.Environment;
 @Configuration(proxyBeanMethods = false)
 public class DurableRestartTestConfiguration {
 
-  private static final String PUBLICATIONS_PATH_PROPERTY =
-      "test.outbox.publications.path";
+  private static final String PUBLICATIONS_PATH_PROPERTY = "test.outbox.publications.path";
 
   /** Writes published envelopes to one append-only mounted file when explicitly enabled. */
   @Bean
@@ -59,6 +58,10 @@ public class DurableRestartTestConfiguration {
   }
 
   private static String field(String value) {
-    return value.replace("\\", "\\\\").replace("\t", "\\t").replace("\r", "\\r").replace("\n", "\\n");
+    return value
+        .replace("\\", "\\\\")
+        .replace("\t", "\\t")
+        .replace("\r", "\\r")
+        .replace("\n", "\\n");
   }
 }
