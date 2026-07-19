@@ -57,6 +57,7 @@ jobs:
           -Dexec.classpathScope=test
           -Dexec.args="install --with-deps chromium"
 
+      # This gate is read-only: it reproduces documentation images but never rewrites baselines.
       - name: Reproduce and compare committed screenshots
         run: >-
           mvn -B -Pscreenshot-tests -pl workbench-screenshot-tests
