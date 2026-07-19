@@ -25,6 +25,8 @@ import tools.jackson.databind.JsonNode;
 /** Request and response models for the workflow-session REST API. */
 public final class WorkflowSessionApiModels {
 
+  private static final String ACTOR_FIELD = "actor";
+
   private WorkflowSessionApiModels() {
     // Utility class.
   }
@@ -117,7 +119,7 @@ public final class WorkflowSessionApiModels {
       @NotNull JsonNode operation) {
     public SessionOperationRequest {
       Objects.requireNonNull(mode, "mode");
-      Objects.requireNonNull(actor, "actor");
+      Objects.requireNonNull(actor, ACTOR_FIELD);
       Objects.requireNonNull(operation, "operation");
     }
   }
@@ -130,7 +132,7 @@ public final class WorkflowSessionApiModels {
    */
   public record UndoPreviewRequest(@Valid @NotNull ActorRequest actor, String targetOperationId) {
     public UndoPreviewRequest {
-      Objects.requireNonNull(actor, "actor");
+      Objects.requireNonNull(actor, ACTOR_FIELD);
     }
   }
 
@@ -150,7 +152,7 @@ public final class WorkflowSessionApiModels {
       String targetOperationId,
       String previewId) {
     public UndoCommandRequest {
-      Objects.requireNonNull(actor, "actor");
+      Objects.requireNonNull(actor, ACTOR_FIELD);
     }
 
     UndoWorkflowCommand toDomain() {
@@ -173,7 +175,7 @@ public final class WorkflowSessionApiModels {
       @PositiveOrZero long expectedRevision,
       @NotBlank String targetUndoOperationId) {
     public RedoCommandRequest {
-      Objects.requireNonNull(actor, "actor");
+      Objects.requireNonNull(actor, ACTOR_FIELD);
     }
 
     RedoWorkflowCommand toDomain() {
@@ -283,7 +285,7 @@ public final class WorkflowSessionApiModels {
       Instant observedAt,
       @NotNull Map<String, String> attributes) {
     public PresenceRequest {
-      Objects.requireNonNull(actor, "actor");
+      Objects.requireNonNull(actor, ACTOR_FIELD);
       attributes = Map.copyOf(Objects.requireNonNull(attributes, "attributes"));
     }
 
