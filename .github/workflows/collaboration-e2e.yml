@@ -1,0 +1,81 @@
+name: Collaboration E2E
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/collaboration-e2e.yml'
+      - 'pom.xml'
+      - 'audio-core/**'
+      - 'audio-web-editor/**'
+      - 'audio-app/**'
+      - 'workbench-screenshot-tests/**'
+  push:
+    branches:
+      - master
+    paths:
+      - '.github/workflows/collaboration-e2e.yml'
+      - 'pom.xml'
+      - 'audio-core/**'
+      - 'audio-web-editor/**'
+      - 'audio-app/**'
+      - 'workbench-screenshot-tests/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: collaboration-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  two-browser-collaboration:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      JAVA_VERSION: '21'
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: maven
+
+      - name: Build packaged application and browser-test reactor
+        run: >-
+          mvn -B -Pscreenshot-tests -DskipTests install
+          -pl workbench-screenshot-tests -am
+
+      - name: Install Playwright Chromium
+        run: >-
+          mvn -B -Pscreenshot-tests -pl workbench-screenshot-tests
+          org.codehaus.mojo:exec-maven-plugin:3.5.0:java
+          -Dexec.mainClass=com.microsoft.playwright.CLI
+          -Dexec.classpathScope=test
+          -Dexec.args="install --with-deps chromium"
+
+      - name: Run two-browser collaboration scenarios
+        run: >-
+          mvn -B -Pscreenshot-tests -pl workbench-screenshot-tests
+          -Dit.test=WorkbenchTwoBrowserCollaborationIT verify
+
+      - name: Upload machine-readable test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: collaboration-e2e-results
+          path: workbench-screenshot-tests/target/failsafe-reports/
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Upload browser and server failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: collaboration-e2e-failures
+          path: workbench-screenshot-tests/target/collaboration-e2e-failures/
+          if-no-files-found: warn
+          retention-days: 30
