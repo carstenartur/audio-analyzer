@@ -34,6 +34,7 @@ jobs:
     timeout-minutes: 35
     env:
       JAVA_VERSION: '21'
+      E2E_LOG_DIR: workbench-screenshot-tests/target/collaboration-e2e-logs
     steps:
       - uses: actions/checkout@v7
 
@@ -44,23 +45,44 @@ jobs:
           java-version: ${{ env.JAVA_VERSION }}
           cache: maven
 
+      - name: Prepare diagnostic log directory
+        run: mkdir -p "$E2E_LOG_DIR"
+
       - name: Build packaged application and browser-test reactor
-        run: >-
-          mvn -B -Pscreenshot-tests -DskipTests install
-          -pl workbench-screenshot-tests -am
+        shell: bash
+        run: |
+          set -o pipefail
+          mvn -B -Pscreenshot-tests -DskipTests install \
+            -pl workbench-screenshot-tests -am \
+            2>&1 | tee "$E2E_LOG_DIR/build.log"
 
       - name: Install Playwright Chromium
-        run: >-
-          mvn -B -Pscreenshot-tests -pl workbench-screenshot-tests
-          org.codehaus.mojo:exec-maven-plugin:3.5.0:java
-          -Dexec.mainClass=com.microsoft.playwright.CLI
-          -Dexec.classpathScope=test
-          -Dexec.args="install --with-deps chromium"
+        shell: bash
+        run: |
+          set -o pipefail
+          mvn -B -Pscreenshot-tests -pl workbench-screenshot-tests \
+            org.codehaus.mojo:exec-maven-plugin:3.5.0:java \
+            -Dexec.mainClass=com.microsoft.playwright.CLI \
+            -Dexec.classpathScope=test \
+            -Dexec.args="install --with-deps chromium" \
+            2>&1 | tee "$E2E_LOG_DIR/playwright-install.log"
 
       - name: Run two-browser collaboration scenarios
-        run: >-
-          mvn -B -Pscreenshot-tests -pl workbench-screenshot-tests
-          -Dit.test=WorkbenchTwoBrowserCollaborationIT verify
+        shell: bash
+        run: |
+          set -o pipefail
+          mvn -B -Pscreenshot-tests -pl workbench-screenshot-tests \
+            -Dit.test=WorkbenchTwoBrowserCollaborationIT verify \
+            2>&1 | tee "$E2E_LOG_DIR/test.log"
+
+      - name: Upload collaboration workflow logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: collaboration-e2e-logs
+          path: workbench-screenshot-tests/target/collaboration-e2e-logs/
+          if-no-files-found: warn
+          retention-days: 30
 
       - name: Upload machine-readable test results
         if: always()
