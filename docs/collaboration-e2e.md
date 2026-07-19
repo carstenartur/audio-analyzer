@@ -17,13 +17,13 @@ The first staged suite proves:
 - a semantic React Flow edit accepted for client A arrives at client B through ordered SSE without refresh;
 - throttled presence is visible to the remote browser but absent from the canonical workflow projection;
 - an explicitly stale semantic request receives a revision conflict and never appears in either graph;
-- an offline browser misses an accepted semantic operation, reconnects from its previous revision and converges without a duplicate;
+- a browser with an intentionally interrupted SSE request misses an accepted semantic operation, reconnects from its previous revision and converges without a duplicate;
 - a full page reload restores actor and active-session identity and reloads canonical graph plus durable history;
 - personal undo and redo converge across both clients;
 - shared undo requires explicit target selection, fresh server preview and acknowledgement;
 - the actor that accepted shared undo can redo it and both clients converge again.
 
-The disconnect scenario does not wait for the browser's EventSource implementation to expose a particular transient connection label. Instead, client B is placed offline, client A appends another semantic operation, and the test proves that client B remains on the old revision until connectivity returns. Convergence to the missing revision and projection is the deterministic replay evidence.
+The reconnect scenario routes only client B's session-event request to a controlled network failure while ordinary REST reads remain available. Client A appends another semantic operation, and the test proves that B remains on the old revision until the event route is restored. Convergence to the missing revision and projection is the deterministic replay evidence; it does not rely on browser-specific timing for an operating-system offline signal.
 
 Durable full-process restart remains a separate stage because it must validate persisted collaboration rows, outbox delivery and later checkpoint/Git history through one restart boundary. It will extend the same harness rather than create another stack.
 
