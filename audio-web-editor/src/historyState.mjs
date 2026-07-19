@@ -74,26 +74,37 @@ function uniqueOperations(existing, incoming) {
   return [...byId.values()].sort((left, right) => right.revision - left.revision);
 }
 
+function acceptedPendingCommand(state, operations) {
+  if (state.pendingCommand === null) {
+    return false;
+  }
+  return operations.some((operation) => operation.commandId === state.pendingCommand.commandId);
+}
+
 export function reduceHistoryState(state, event) {
   switch (event.type) {
     case 'LOAD_STARTED':
-      return { ...state, status: 'loading', problem: null };
-    case 'LOADED':
+      return { ...state, status: state.pendingCommand === null ? 'loading' : state.status, problem: null };
+    case 'LOADED': {
+      const acceptedPending = acceptedPendingCommand(state, event.page.operations);
+      const pendingCommand = acceptedPending ? null : state.pendingCommand;
       return {
         ...state,
         capabilities: event.capabilities,
         operations: [...event.page.operations],
         nextBeforeRevision: event.page.nextBeforeRevision,
-        status: 'ready',
-        problem: null,
+        status: pendingCommand === null ? 'ready' : 'uncertain',
+        pendingCommand,
+        problem: pendingCommand === null ? null : state.problem,
       };
+    }
     case 'PAGE_APPENDED':
       return {
         ...state,
         operations: uniqueOperations(state.operations, event.page.operations),
         nextBeforeRevision: event.page.nextBeforeRevision,
-        status: 'ready',
-        problem: null,
+        status: state.pendingCommand === null ? 'ready' : state.status,
+        problem: state.pendingCommand === null ? null : state.problem,
       };
     case 'COMMAND_STARTED':
       return {
