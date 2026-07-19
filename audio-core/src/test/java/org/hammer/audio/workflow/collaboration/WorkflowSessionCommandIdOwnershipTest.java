@@ -25,8 +25,7 @@ class WorkflowSessionCommandIdOwnershipTest {
     WorkflowSessionRegistry registry = registry("session.undo-command");
     createNode(registry, "session.undo-command", "operation.create", 0);
     registry.undo(
-        "session.undo-command",
-        new UndoWorkflowCommand("command.shared", OWNER, 1, null, null));
+        "session.undo-command", new UndoWorkflowCommand("command.shared", OWNER, 1, null, null));
 
     assertCode(
         Code.DUPLICATE_OPERATION_ID,
@@ -42,8 +41,7 @@ class WorkflowSessionCommandIdOwnershipTest {
     createNode(registry, "session.redo-command", "operation.create", 0);
     WorkflowHistoryCommandResult undone =
         registry.undo(
-            "session.redo-command",
-            new UndoWorkflowCommand("command.undo", OWNER, 1, null, null));
+            "session.redo-command", new UndoWorkflowCommand("command.undo", OWNER, 1, null, null));
     registry.redo(
         "session.redo-command",
         new RedoWorkflowCommand("command.shared-redo", OWNER, 2, undone.operationId()));
@@ -53,8 +51,7 @@ class WorkflowSessionCommandIdOwnershipTest {
         () ->
             registry.redo(
                 "session.redo-command",
-                new RedoWorkflowCommand(
-                    "command.shared-redo", GUEST, 3, undone.operationId())));
+                new RedoWorkflowCommand("command.shared-redo", GUEST, 3, undone.operationId())));
   }
 
   private static WorkflowSessionRegistry registry(String sessionId) {
