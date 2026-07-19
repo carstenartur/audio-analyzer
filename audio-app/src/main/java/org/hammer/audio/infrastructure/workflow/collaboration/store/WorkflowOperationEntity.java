@@ -15,6 +15,8 @@ import org.hammer.audio.workflow.collaboration.store.StoredWorkflowOperation;
 import org.hammer.audio.workflow.collaboration.store.WorkflowOperationBodyCodec;
 import org.hammer.audio.workflow.collaboration.store.WorkflowOperationCommandMetadata;
 import org.hammer.audio.workflow.collaboration.store.WorkflowOperationPersistenceData;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 /** Hibernate-owned durable accepted semantic operation. */
 @Entity
@@ -64,7 +66,7 @@ public class WorkflowOperationEntity {
   @Column(name = "operation_body_version")
   private Integer bodyVersion;
 
-  @Lob
+  @JdbcTypeCode(SqlTypes.LONGVARCHAR)
   @Column(name = "operation_body")
   private String operationBody;
 
