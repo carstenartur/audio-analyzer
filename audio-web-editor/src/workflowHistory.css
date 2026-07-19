@@ -1,0 +1,154 @@
+.history-panel {
+  border-top: 1px solid #333a4d;
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 14px;
+}
+
+.history-panel h3,
+.history-panel h4,
+.history-panel p {
+  margin: 0;
+}
+
+.history-panel__heading,
+.history-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.history-actions {
+  justify-content: flex-start;
+}
+
+.action-button--secondary {
+  background: #2c3344;
+}
+
+.history-revision {
+  color: #b9c5dd;
+  font-size: 12px;
+}
+
+.history-browser,
+.history-dialog,
+.history-warning,
+.history-error {
+  background: #181d29;
+  border: 1px solid #3b465e;
+  border-radius: 6px;
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+}
+
+.history-dialog-backdrop {
+  align-items: center;
+  background: rgb(0 0 0 / 65%);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 20px;
+  position: fixed;
+  z-index: 1000;
+}
+
+.history-dialog {
+  border-color: #7487aa;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 35%);
+  max-height: min(90vh, 760px);
+  max-width: 680px;
+  overflow: auto;
+  width: min(100%, 680px);
+}
+
+.history-warning {
+  border-color: #b78939;
+}
+
+.history-error {
+  border-color: #b45c64;
+}
+
+.history-target-list,
+.history-blockers ul {
+  display: grid;
+  gap: 6px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.history-target-list {
+  max-height: 300px;
+  overflow: auto;
+}
+
+.history-target {
+  align-items: flex-start;
+  background: #222938;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  gap: 8px;
+  padding: 7px;
+}
+
+.history-target:has(input:checked) {
+  outline: 2px solid #7487aa;
+}
+
+.history-facts {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+}
+
+.history-facts div {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(72px, 0.35fr) 1fr;
+}
+
+.history-facts dt {
+  color: #9eabc4;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.history-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.history-blockers {
+  color: #f0c98a;
+  display: grid;
+  gap: 6px;
+}
+
+.history-blockers code,
+.history-warning code {
+  overflow-wrap: anywhere;
+}
+
+.history-shared-confirmation {
+  align-items: flex-start;
+  background: #2b2530;
+  border: 1px solid #785f79;
+  border-radius: 4px;
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .history-dialog {
+    scroll-behavior: auto;
+  }
+}
