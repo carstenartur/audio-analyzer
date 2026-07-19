@@ -99,7 +99,7 @@ The ordered accepted-operation sequence recovered into each session is also the 
 - operation id, semantic type, actor and occurrence timestamp;
 - semantic revision and durable event sequence;
 - command kind, command id and target relation;
-- affected semantic object ids when a reconstructible body is available;
+- affected semantic object ids, including the retained identity prefix of legacy rows;
 - reconstructibility and current active undo/redo-target flags.
 
 History pages are ordered by descending semantic revision. `beforeRevision` is an exclusive cursor, so inserting newer operations cannot reorder or duplicate entries on older pages. The server caps a page at 100 entries.
@@ -134,14 +134,12 @@ Accepted undo/redo responses contain the canonical workflow projection, command 
 
 SSE and durable history answer different questions:
 
-|       Mechanism       |                             Responsibility                              | Authoritative for semantic eligibility? |
-|-----------------------|-------------------------------------------------------------------------|-----------------------------------------|
-| Ordered SSE replay    | Deliver accepted changes and live presence after a cursor               | No                                      |
-| Canonical snapshot    | Recover graph state after an event gap or restart                        | No                                      |
-| Durable history query | Browse immutable accepted operations                                    | No, it is descriptive                   |
-| Capability query      | Discover the actor's current server-selected undo/redo targets           | Yes at the returned revision            |
-| Undo/redo preview     | Explain one target and current blockers immediately before confirmation | Yes at the returned revision            |
-| Undo/redo command     | Revalidate expected revision and atomically append an inverse            | Final authority                         |
+- **Ordered SSE replay:** delivers accepted changes and live presence after a cursor. It is not authoritative for semantic eligibility.
+- **Canonical snapshot:** restores graph state after an event gap or restart. It is not an undo stack.
+- **Durable history query:** browses immutable accepted operations. It is descriptive and does not approve execution.
+- **Capability query:** discovers the actor's current server-selected undo and redo targets at the returned revision.
+- **Undo/redo preview:** explains one target and its current blockers immediately before confirmation.
+- **Undo/redo command:** revalidates the expected revision and atomically appends the inverse. It is the final authority.
 
 A browser must not infer a complete undo stack from the SSE window. It must reload capabilities after join, full reload, reconciliation and every accepted history command. A cached capability or preview never overrides expected-revision validation during execution.
 
@@ -166,7 +164,7 @@ Open sessions recover operation bodies, timestamps, revisions, event sequences a
 - redo can be accepted after restart;
 - history order and command-target linkage remain identical after restart;
 - actor-scoped redo discovery and redo preview work after restart;
-- read-only queries leave operation count, revision and durable rows unchanged;
+- read-only queries leave operation count, revision, durable rows and outbox entries unchanged;
 - a second restart restores the redone canonical workflow;
 - two different commands at the same expected revision cannot both append.
 
