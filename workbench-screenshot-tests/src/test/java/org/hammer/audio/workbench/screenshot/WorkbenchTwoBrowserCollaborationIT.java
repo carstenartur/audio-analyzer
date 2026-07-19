@@ -129,7 +129,8 @@ class WorkbenchTwoBrowserCollaborationIT {
   }
 
   @Test
-  void sharedUndoRequiresExplicitTargetAndAcknowledgementBeforeBothClientsConverge() throws Throwable {
+  void sharedUndoRequiresExplicitTargetAndAcknowledgementBeforeBothClientsConverge()
+      throws Throwable {
     String scenario = "shared-undo-confirmation";
     try (WorkbenchBrowserHarness.ActorBrowser owner =
             harness.openActor("actor-e2e-owner", "user-e2e-owner", "Owner E2E");
@@ -145,8 +146,7 @@ class WorkbenchTwoBrowserCollaborationIT {
       waitForRevision(reviewer.page(), 1);
       reviewer.page().locator(GENERATOR_SELECTOR).first().waitFor();
 
-      Locator previewButton =
-          reviewer.page().locator("[data-testid='shared-undo-preview-button']");
+      Locator previewButton = reviewer.page().locator("[data-testid='shared-undo-preview-button']");
       previewButton.waitFor();
       assertFalse(previewButton.isEnabled(), "Shared undo must not auto-select a target");
       Locator target = reviewer.page().locator("input[name='shared-history-target']").first();
@@ -166,7 +166,9 @@ class WorkbenchTwoBrowserCollaborationIT {
       waitForRevision(owner.page(), 2);
       waitForRevision(reviewer.page(), 2);
       owner.page().waitForCondition(() -> owner.page().locator(GENERATOR_SELECTOR).count() == 0);
-      reviewer.page().waitForCondition(() -> reviewer.page().locator(GENERATOR_SELECTOR).count() == 0);
+      reviewer
+          .page()
+          .waitForCondition(() -> reviewer.page().locator(GENERATOR_SELECTOR).count() == 0);
 
       clickWhenEnabled(reviewer.page(), "[data-testid='redo-preview-button']");
       confirmHistoryDialog(reviewer.page(), false);

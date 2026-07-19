@@ -21,8 +21,8 @@ import org.testcontainers.containers.GenericContainer;
 /**
  * Reusable packaged-application harness for isolated Playwright browser actors.
  *
- * <p>The harness owns one real workbench container and one Chromium process. Every actor receives an
- * isolated browser context, storage partition and trace. Failures publish enough information to
+ * <p>The harness owns one real workbench container and one Chromium process. Every actor receives
+ * an isolated browser context, storage partition and trace. Failures publish enough information to
  * diagnose browser, transport and server behaviour without rerunning the scenario interactively.
  */
 final class WorkbenchBrowserHarness implements AutoCloseable {
@@ -77,8 +77,7 @@ final class WorkbenchBrowserHarness implements AutoCloseable {
             + "window.sessionStorage.removeItem('audio-analyzer.workflow.active-session');");
     context
         .tracing()
-        .start(
-            new Tracing.StartOptions().setScreenshots(true).setSnapshots(true).setSources(true));
+        .start(new Tracing.StartOptions().setScreenshots(true).setSnapshots(true).setSources(true));
 
     Page page = context.newPage();
     page.setDefaultTimeout(DEFAULT_TIMEOUT_MILLIS);
