@@ -84,7 +84,17 @@ function acceptedPendingCommand(state, operations) {
 export function reduceHistoryState(state, event) {
   switch (event.type) {
     case 'LOAD_STARTED':
-      return { ...state, status: state.pendingCommand === null ? 'loading' : state.status, problem: null };
+      return {
+        ...state,
+        status: state.pendingCommand === null ? 'loading' : state.status,
+        problem: null,
+      };
+    case 'LOAD_FAILED':
+      return {
+        ...state,
+        status: state.pendingCommand === null ? 'error' : state.status,
+        problem: event.problem,
+      };
     case 'LOADED': {
       const acceptedPending = acceptedPendingCommand(state, event.page.operations);
       const pendingCommand = acceptedPending ? null : state.pendingCommand;
@@ -131,6 +141,12 @@ export function reduceHistoryState(state, event) {
         ...state,
         status: 'loading',
         pendingCommand: null,
+        problem: null,
+      };
+    case 'PROBLEM_CLEARED':
+      return {
+        ...state,
+        status: state.pendingCommand === null ? 'ready' : state.status,
         problem: null,
       };
     case 'RESET':
