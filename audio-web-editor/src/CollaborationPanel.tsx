@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import type { ActorIdentity, CollaborationMode } from './api';
+import type { WorkflowHistoryController } from './useWorkflowHistory';
 import type { WorkflowSessionController } from './useWorkflowSession';
+import { WorkflowHistoryPanel } from './WorkflowHistoryPanel';
 
 interface CollaborationPanelProps {
   controller: WorkflowSessionController;
+  history: WorkflowHistoryController;
 }
 
 const MODES: readonly CollaborationMode[] = Object.freeze([
@@ -17,7 +20,7 @@ function message(failure: unknown): string {
   return failure instanceof Error ? failure.message : String(failure);
 }
 
-export function CollaborationPanel({ controller }: CollaborationPanelProps) {
+export function CollaborationPanel({ controller, history }: CollaborationPanelProps) {
   const [sessionId, setSessionId] = useState('shared-workflow');
   const [workflowName, setWorkflowName] = useState('Shared audio workflow');
   const [mode, setMode] = useState<CollaborationMode>('SHARED_SESSION_PERSONAL_UNDO');
@@ -219,6 +222,7 @@ export function CollaborationPanel({ controller }: CollaborationPanelProps) {
               Close session
             </button>
           </div>
+          <WorkflowHistoryPanel collaboration={controller} history={history} />
           <h3>Participants</h3>
           <ul className="participant-list" data-testid="participant-list">
             {controller.participants.map((participant) => (
