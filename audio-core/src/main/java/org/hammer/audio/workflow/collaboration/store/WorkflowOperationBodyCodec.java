@@ -411,7 +411,10 @@ public final class WorkflowOperationBodyCodec {
 
   private static Metadata readMetadata(DataInputStream input) throws IOException {
     Map<String, String> entries = readMap(input);
-    return entries.isEmpty() ? Metadata.empty() : new Metadata(entries);
+    if (entries.isEmpty()) {
+      return Metadata.empty();
+    }
+    return new Metadata(entries);
   }
 
   private static void writeStrings(DataOutputStream output, List<String> values)
