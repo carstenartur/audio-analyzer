@@ -61,8 +61,7 @@ public record WorkflowHistoryDescriptor(
     } else {
       targetOperationId = requireNotBlank(targetOperationId, "targetOperationId");
     }
-    affectedObjectIds =
-        List.copyOf(Objects.requireNonNull(affectedObjectIds, "affectedObjectIds"));
+    affectedObjectIds = List.copyOf(Objects.requireNonNull(affectedObjectIds, "affectedObjectIds"));
   }
 
   private static String requireNotBlank(String value, String field) {
