@@ -56,30 +56,6 @@ public record StoredWorkflowOperation(
     command = Objects.requireNonNull(command, "command");
   }
 
-  /** Creates a legacy stored operation without a reconstructible body. */
-  public StoredWorkflowOperation(
-      String sessionId,
-      String operationId,
-      String actorId,
-      String operationType,
-      Instant occurredAt,
-      long sequence,
-      long revision,
-      String payload) {
-    this(
-        sessionId,
-        operationId,
-        actorId,
-        operationType,
-        occurredAt,
-        sequence,
-        revision,
-        payload,
-        0,
-        null,
-        WorkflowOperationCommandMetadata.normal(operationId));
-  }
-
   /** Returns whether this operation can be reconstructed for semantic undo/redo. */
   public boolean hasOperationBody() {
     return bodyVersion > 0;
