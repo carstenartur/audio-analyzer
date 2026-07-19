@@ -67,7 +67,7 @@ jobs:
             -Dexec.args="install --with-deps chromium" \
             2>&1 | tee "$E2E_LOG_DIR/playwright-install.log"
 
-      # State/process/file conditions only: never fixed-delay sleeps.
+      # State, process, API and filesystem conditions only: never fixed-delay sleeps.
       - name: Run collaboration and durable restart scenarios
         shell: bash
         run: |
