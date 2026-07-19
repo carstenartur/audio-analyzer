@@ -1,13 +1,16 @@
 package org.hammer.audio.workflow.collaboration;
 
+import java.io.Serial;
 import java.util.List;
 import java.util.Objects;
 
 /** Machine-readable semantic conflict raised when a later operation blocks undo or redo. */
 public final class WorkflowUndoConflictException extends WorkflowSessionException {
 
-  private final String targetOperationId;
-  private final List<WorkflowUndoPreview.BlockingOperation> blockingOperations;
+  @Serial private static final long serialVersionUID = 1L;
+
+  private final String selectedTargetId;
+  private final List<WorkflowUndoPreview.BlockingOperation> blockers;
 
   /** Creates a conflict tied to one target and its later blockers. */
   public WorkflowUndoConflictException(
@@ -18,22 +21,21 @@ public final class WorkflowUndoConflictException extends WorkflowSessionExceptio
         Code.UNDO_CONFLICT,
         requireNotBlank(sessionId, "sessionId"),
         "Semantic history command is blocked by later operations for target " + targetOperationId);
-    this.targetOperationId = requireNotBlank(targetOperationId, "targetOperationId");
-    this.blockingOperations =
-        List.copyOf(Objects.requireNonNull(blockingOperations, "blockingOperations"));
-    if (this.blockingOperations.isEmpty()) {
+    this.selectedTargetId = requireNotBlank(targetOperationId, "targetOperationId");
+    this.blockers = List.copyOf(Objects.requireNonNull(blockingOperations, "blockingOperations"));
+    if (this.blockers.isEmpty()) {
       throw new IllegalArgumentException("blockingOperations must not be empty");
     }
   }
 
   /** Operation whose semantic inverse was requested. */
   public String targetOperationId() {
-    return targetOperationId;
+    return selectedTargetId;
   }
 
   /** Later operations intersecting the target's affected semantic objects. */
   public List<WorkflowUndoPreview.BlockingOperation> blockingOperations() {
-    return blockingOperations;
+    return blockers;
   }
 
   private static String requireNotBlank(String value, String name) {
