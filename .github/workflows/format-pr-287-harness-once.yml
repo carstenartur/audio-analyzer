@@ -1,0 +1,33 @@
+name: Format PR 287 harness once
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    if: github.event.pull_request.head.ref == 'feature/249-two-browser-collaboration-e2e'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feature/249-two-browser-collaboration-e2e
+          fetch-depth: 0
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Apply module formatter
+        run: mvn -B -Pscreenshot-tests -pl workbench-screenshot-tests spotless:apply
+      - name: Commit formatting and remove one-time workflow
+        run: |
+          rm .github/workflows/format-pr-287-harness-once.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Format collaboration browser harness"
+          git push origin HEAD:feature/249-two-browser-collaboration-e2e
