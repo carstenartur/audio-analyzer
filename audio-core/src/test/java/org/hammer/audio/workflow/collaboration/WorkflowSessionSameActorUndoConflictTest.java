@@ -25,8 +25,7 @@ class WorkflowSessionSameActorUndoConflictTest {
     createNode(registry, "operation.create", "Original", 0);
     renameNode(registry, "operation.rename", "Original", "Renamed", 1);
 
-    WorkflowUndoPreview preview =
-        registry.previewUndo("session.undo", OWNER, "operation.create");
+    WorkflowUndoPreview preview = registry.previewUndo("session.undo", OWNER, "operation.create");
 
     assertFalse(preview.safe());
     assertEquals(List.of("operation.rename"), blockerIds(preview));
@@ -35,8 +34,7 @@ class WorkflowSessionSameActorUndoConflictTest {
         () ->
             registry.undo(
                 "session.undo",
-                new UndoWorkflowCommand(
-                    "undo.create", OWNER, 2, "operation.create", null)));
+                new UndoWorkflowCommand("undo.create", OWNER, 2, "operation.create", null)));
     assertEquals("Renamed", node(registry).label());
   }
 
@@ -46,9 +44,7 @@ class WorkflowSessionSameActorUndoConflictTest {
     createNode(registry, "operation.create", "Original", 0);
     renameNode(registry, "operation.rename", "Original", "Renamed", 1);
     WorkflowHistoryCommandResult undone =
-        registry.undo(
-            "session.undo",
-            new UndoWorkflowCommand("undo.rename", OWNER, 2, null, null));
+        registry.undo("session.undo", new UndoWorkflowCommand("undo.rename", OWNER, 2, null, null));
     renameNode(registry, "operation.rename.after-undo", "Original", "Changed again", 3);
 
     WorkflowUndoConflictException exception =
