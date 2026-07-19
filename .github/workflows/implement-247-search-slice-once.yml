@@ -11,6 +11,8 @@ permissions:
   contents: write
   packages: read
 
+# Trigger revision 2: the workflow is intentionally self-deleting after a verified implementation commit.
+
 jobs:
   implement:
     runs-on: ubuntu-24.04
