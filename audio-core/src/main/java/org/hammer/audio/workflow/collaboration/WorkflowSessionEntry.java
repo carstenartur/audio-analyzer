@@ -495,9 +495,6 @@ final class WorkflowSessionEntry {
     List<WorkflowUndoPreview.BlockingOperation> blockers = new ArrayList<>();
     for (int index = targetIndex + 1; index < operationHistory.size(); index++) {
       OperationIdentity later = operationHistory.get(index);
-      if (later.actorId().equals(target.actorId())) {
-        continue;
-      }
       List<String> intersection = conflictingObjectIds(later, affected);
       if (!intersection.isEmpty()) {
         blockers.add(
