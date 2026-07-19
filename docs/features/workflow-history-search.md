@@ -30,6 +30,20 @@ The application uses one Hibernate `SessionFactory` for generic JGit storage, ge
 
 No second Hibernate bootstrap, raw JDBC search repository or Audio Analyzer copy of the generic index exists.
 
+## Workbench UI
+
+When `workbench.persistence.mode=hibernate` provides the indexed-search bean, the packaged React Flow workbench exposes a **Search version history** drawer. The drawer stays absent in non-indexed modes instead of presenting a control that cannot succeed.
+
+The production panel supports:
+
+- full-text queries across commit summaries, changed paths and deterministic workflow DSL content;
+- bounded result counts from 1 to 200;
+- explicit idempotent rebuild of missing projections from an authoritative branch;
+- exact commit identity, author, timestamp and changed-path evidence per result;
+- loading the authoritative workflow snapshot for the selected commit.
+
+Historical loading is blocked while the browser is attached to a collaboration session. The user must leave the session first, preventing a legacy history load from competing with a server-authoritative live projection. The rebuild action remains safe because it only recreates disposable search projections.
+
 ## HTTP API
 
 Search the indexed commit message, changed paths and changed workflow DSL:
@@ -61,4 +75,4 @@ POST /workflow/load
 
 ## Current boundary
 
-This first slice deliberately exposes no JGit, Hibernate, Hibernate Search or Lucene type in `audio-core` or HTTP responses. Structured compound author/path/time filters, workflow-specific indexed fields and the production search panel remain subsequent work in issue #247.
+No JGit, Hibernate, Hibernate Search or Lucene type crosses into `audio-core`, the frontend or HTTP responses. Structured compound author/path/time filters and workflow-specific indexed fields remain subsequent work in issue #247.
