@@ -197,7 +197,11 @@ final class WorkflowSessionEntry {
       requireOpen();
       assertJoinedActor(command.actor());
       WorkflowHistoryCommandResult retry =
-          historyCommandRetry(command.commandId(), Kind.UNDO, command.targetOperationId());
+          historyCommandRetry(
+              command.commandId(),
+              Kind.UNDO,
+              command.targetOperationId(),
+              command.actor().actorId());
       if (retry != null) {
         return retry;
       }
@@ -249,7 +253,11 @@ final class WorkflowSessionEntry {
       requireOpen();
       assertJoinedActor(command.actor());
       WorkflowHistoryCommandResult retry =
-          historyCommandRetry(command.commandId(), Kind.REDO, command.targetUndoOperationId());
+          historyCommandRetry(
+              command.commandId(),
+              Kind.REDO,
+              command.targetUndoOperationId(),
+              command.actor().actorId());
       if (retry != null) {
         return retry;
       }
@@ -540,11 +548,12 @@ final class WorkflowSessionEntry {
   }
 
   private WorkflowHistoryCommandResult historyCommandRetry(
-      String commandId, Kind kind, String requestedTargetOperationId) {
+      String commandId, Kind kind, String requestedTargetOperationId, String actorId) {
     for (OperationIdentity operation : operationHistory) {
       WorkflowOperationCommandMetadata metadata = operation.command();
       if (metadata.commandId().equals(commandId)) {
-        if (metadata.kind() != kind
+        if (!operation.actorId().equals(actorId)
+            || metadata.kind() != kind
             || (requestedTargetOperationId != null
                 && !requestedTargetOperationId.equals(metadata.targetOperationId()))) {
           throw duplicateOperation(commandId);
