@@ -205,7 +205,7 @@ class WorkbenchDurableRestartIT {
   }
 
   @SuppressWarnings("unchecked")
-  private static Map<?, ?> submitSessionOperation(Page page, long expectedRevision) {
+  private static Map<?, ?> submitSessionOperation(Page page, int expectedRevision) {
     return (Map<?, ?>)
         page.evaluate(
             """
