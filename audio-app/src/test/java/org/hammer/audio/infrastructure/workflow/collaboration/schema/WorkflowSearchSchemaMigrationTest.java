@@ -24,8 +24,8 @@ class WorkflowSearchSchemaMigrationTest {
     assertEquals(2, result.coreMigrationsExecuted());
     assertEquals(1, result.searchMigrationsExecuted());
     assertEquals(3, result.collaborationMigrationsExecuted());
-    assertEquals(1, tableCount(dataSource, "GIT_COMMIT_INDEX"));
-    assertEquals(1, tableCount(dataSource, "JGit_STORAGE_HIBERNATE_SEARCH_SCHEMA_HISTORY"));
+    assertEquals(1, tableCount(dataSource, "git_commit_index"));
+    assertEquals(1, tableCount(dataSource, "jgit_storage_hibernate_search_schema_history"));
   }
 
   private static int tableCount(DataSource dataSource, String tableName) throws Exception {
@@ -33,9 +33,10 @@ class WorkflowSearchSchemaMigrationTest {
         Statement statement = connection.createStatement();
         ResultSet resultSet =
             statement.executeQuery(
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = '"
-                    + tableName.toUpperCase(java.util.Locale.ROOT)
-                    + "'")) {
+                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES "
+                    + "WHERE UPPER(TABLE_NAME) = UPPER('"
+                    + tableName
+                    + "')")) {
       resultSet.next();
       return resultSet.getInt(1);
     }
