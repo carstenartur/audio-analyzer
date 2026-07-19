@@ -134,14 +134,14 @@ Accepted undo/redo responses contain the canonical workflow projection, command 
 
 SSE and durable history answer different questions:
 
-| Mechanism | Responsibility | Authoritative for semantic eligibility? |
-| --- | --- | --- |
-| Ordered SSE replay | Deliver accepted changes and live presence after a cursor | No |
-| Canonical snapshot | Recover graph state after an event gap or restart | No |
-| Durable history query | Browse immutable accepted operations | No, it is descriptive |
-| Capability query | Discover the actor's current server-selected undo/redo targets | Yes at the returned revision |
-| Undo/redo preview | Explain one target and current blockers immediately before confirmation | Yes at the returned revision |
-| Undo/redo command | Revalidate expected revision and atomically append an inverse | Final authority |
+|       Mechanism       |                             Responsibility                              | Authoritative for semantic eligibility? |
+|-----------------------|-------------------------------------------------------------------------|-----------------------------------------|
+| Ordered SSE replay    | Deliver accepted changes and live presence after a cursor               | No                                      |
+| Canonical snapshot    | Recover graph state after an event gap or restart                        | No                                      |
+| Durable history query | Browse immutable accepted operations                                    | No, it is descriptive                   |
+| Capability query      | Discover the actor's current server-selected undo/redo targets           | Yes at the returned revision            |
+| Undo/redo preview     | Explain one target and current blockers immediately before confirmation | Yes at the returned revision            |
+| Undo/redo command     | Revalidate expected revision and atomically append an inverse            | Final authority                         |
 
 A browser must not infer a complete undo stack from the SSE window. It must reload capabilities after join, full reload, reconciliation and every accepted history command. A cached capability or preview never overrides expected-revision validation during execution.
 
@@ -180,3 +180,4 @@ The session lock serializes in-process commands and read-only capability calcula
 - HTTP tests cover history and capability contracts, timestamp-aware previews, validation and accepted command responses.
 - Hibernate tests cover operation-body round trips, migration compatibility, complete restart recovery and read-only history stability.
 - PostgreSQL Testcontainers migration coverage validates the same V3 schema used in production.
+
