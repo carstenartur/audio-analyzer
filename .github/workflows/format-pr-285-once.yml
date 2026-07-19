@@ -4,8 +4,6 @@ on:
   push:
     branches:
       - feature/284-durable-history-capabilities
-    paths:
-      - .github/workflows/format-pr-285-once.yml
 
 permissions:
   contents: write
