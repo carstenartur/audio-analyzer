@@ -50,8 +50,7 @@ class WorkflowSearchSchemaMigrationTest {
                 List.of(
                     new WorkflowSearchPersistenceConfiguration()
                         .workflowSearchPersistenceEntities(),
-                    new CollaborationPersistenceConfiguration()
-                        .collaborationPersistenceEntities()),
+                    new CollaborationPersistenceConfiguration().collaborationPersistenceEntities()),
                 result,
                 "validate")) {
       assertNotNull(provider.getSessionFactory().getMetamodel().entity(GitCommitIndex.class));
