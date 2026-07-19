@@ -12,7 +12,6 @@ import {
   type RedoPreviewResponse,
   type SessionResponse,
   type UndoPreviewResponse,
-  type WorkflowProjection,
 } from './api';
 import {
   createHistoryCommandEnvelope,
@@ -46,11 +45,8 @@ interface HistoryState {
   problem: ApiProblem | null;
 }
 
-interface WorkflowHistoryCallbacks {
+interface WorkflowHistoryInput {
   collaboration: WorkflowSessionController;
-  onProjection: (projection: WorkflowProjection) => void;
-  onError: (message: string | null) => void;
-  onStatus: (message: string) => void;
 }
 
 export interface WorkflowHistoryController extends HistoryState {
@@ -100,10 +96,7 @@ async function loadHistorySnapshot(
 
 export function useWorkflowHistory({
   collaboration,
-  onProjection,
-  onError,
-  onStatus,
-}: WorkflowHistoryCallbacks): WorkflowHistoryController {
+}: WorkflowHistoryInput): WorkflowHistoryController {
   const historyReducer = reduceHistoryState as unknown as Reducer<HistoryState, HistoryEvent>;
   const [state, dispatch] = useReducer(historyReducer, emptyHistoryState() as HistoryState);
   const stateRef = useRef(state);
@@ -126,17 +119,21 @@ export function useWorkflowHistory({
           return;
         }
         dispatch({ type: 'LOADED', ...snapshot });
-        onError(null);
-        onStatus(`Loaded: durable history at revision ${snapshot.capabilities.revision}`);
       } catch (failure) {
         if (generation !== loadGeneration.current) {
           return;
         }
-        dispatch({ type: 'LOAD_FAILED', problem: problemFor(failure) });
-        onError(`History reload failed after ${reason}: ${failureMessage(failure)}`);
+        dispatch({
+          type: 'LOAD_FAILED',
+          problem: {
+            ...problemFor(failure),
+            detail: `History reload failed after ${reason}: ${failureMessage(failure)}`,
+          },
+        });
         throw failure;
       }
-    }, [collaboration.actor, collaboration.session, onError, onStatus],
+    },
+    [collaboration.actor, collaboration.session],
   );
 
   const loadMore = useCallback(async () => {
@@ -153,13 +150,11 @@ export function useWorkflowHistory({
         limit: HISTORY_PAGE_SIZE,
       });
       dispatch({ type: 'PAGE_APPENDED', page });
-      onError(null);
     } catch (failure) {
       dispatch({ type: 'LOAD_FAILED', problem: problemFor(failure) });
-      onError(failureMessage(failure));
       throw failure;
     }
-  }, [collaboration.actor, collaboration.session, onError]);
+  }, [collaboration.actor, collaboration.session]);
 
   const previewUndo = useCallback(
     async (targetOperationId: string) => {
@@ -212,8 +207,6 @@ export function useWorkflowHistory({
       }
       const request = historyCommandRequest(envelope, collaboration.actor);
       dispatch({ type: 'COMMAND_STARTED', command: envelope });
-      onError(null);
-      onStatus(`Submitting: ${envelope.kind.toLowerCase()} ${envelope.commandId}`);
 
       let response: HistoryCommandResponse;
       try {
@@ -223,36 +216,37 @@ export function useWorkflowHistory({
         );
       } catch (failure) {
         if (!(failure instanceof ApiError)) {
-          dispatch({ type: 'COMMAND_UNCERTAIN', problem: problemFor(failure) });
-          onError(
-            `The server response was lost. Command ${envelope.commandId} remains pending until history reconciliation proves its result.`,
-          );
+          dispatch({
+            type: 'COMMAND_UNCERTAIN',
+            problem: {
+              detail: `The server response was lost. Command ${envelope.commandId} remains pending until durable history proves its result.`,
+            },
+          });
           await collaboration.reconcile('uncertain history command').catch(() => undefined);
           await reload('uncertain history command').catch(() => undefined);
           throw failure;
         }
 
         dispatch({ type: 'COMMAND_REJECTED', problem: problemFor(failure) });
-        onError(failureMessage(failure));
         await recoverDefinitiveFailure(failure);
         throw failure;
       }
 
       dispatch({ type: 'COMMAND_ACCEPTED' });
-      onProjection(response.projection);
-      onStatus(
-        `Loaded: accepted ${response.commandKind.toLowerCase()} at revision ${response.revision}`,
-      );
       try {
         await collaboration.reconcile(`accepted ${response.commandKind.toLowerCase()}`);
         await reload(`accepted ${response.commandKind.toLowerCase()}`);
       } catch (failure) {
-        onError(
-          `The ${response.commandKind.toLowerCase()} was accepted, but the follow-up history reload failed: ${failureMessage(failure)}`,
-        );
+        dispatch({
+          type: 'LOAD_FAILED',
+          problem: {
+            detail: `The ${response.commandKind.toLowerCase()} was accepted, but canonical reconciliation failed: ${failureMessage(failure)}`,
+          },
+        });
       }
       return response;
-    }, [collaboration, onError, onProjection, onStatus, recoverDefinitiveFailure, reload],
+    },
+    [collaboration, recoverDefinitiveFailure, reload],
   );
 
   const executeUndo = useCallback(
