@@ -182,8 +182,7 @@ public final class WorkflowSessionRegistry {
 
   /** Returns actor-scoped personal undo, redo and shared-undo capabilities. */
   public WorkflowHistoryCapabilities capabilities(String sessionId, OperationActor actor) {
-    return requireSession(sessionId)
-        .capabilities(Objects.requireNonNull(actor, "actor"));
+    return requireSession(sessionId).capabilities(Objects.requireNonNull(actor, "actor"));
   }
 
   /** Applies a revision-aware server-side semantic undo command. */
