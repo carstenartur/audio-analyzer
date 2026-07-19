@@ -37,7 +37,13 @@ public final class WorkflowSessionApiModels {
     return "Workflow " + sessionId;
   }
 
-  /** Actor identity supplied by the transport/authentication boundary. */
+  /**
+   * Actor identity supplied by the transport/authentication boundary.
+   *
+   * @param actorId stable actor identifier within collaboration history
+   * @param userId stable authenticated user identifier
+   * @param displayName human-readable actor name
+   */
   public record ActorRequest(
       @NotBlank String actorId, @NotBlank String userId, @NotBlank String displayName) {
     OperationActor toDomain() {
@@ -45,7 +51,15 @@ public final class WorkflowSessionApiModels {
     }
   }
 
-  /** Request for creating and initially joining a session. */
+  /**
+   * Request for creating and initially joining a session.
+   *
+   * @param sessionId stable collaboration-session identifier
+   * @param mode immutable collaboration mode
+   * @param actor owner and initially joined actor
+   * @param workflowId optional initial workflow identifier
+   * @param workflowName optional initial workflow display name
+   */
   public record CreateSessionRequest(
       @NotBlank String sessionId,
       @NotNull CollaborationMode mode,
@@ -63,7 +77,13 @@ public final class WorkflowSessionApiModels {
     }
   }
 
-  /** Request for joining an existing session. */
+  /**
+   * Request for joining an existing session.
+   *
+   * @param actorId stable actor identifier within collaboration history
+   * @param userId stable authenticated user identifier
+   * @param displayName human-readable actor name
+   */
   public record JoinSessionRequest(
       @NotBlank String actorId, @NotBlank String userId, @NotBlank String displayName) {
     OperationActor toDomain() {
@@ -71,14 +91,25 @@ public final class WorkflowSessionApiModels {
     }
   }
 
-  /** Request for leaving or closing a session. */
+  /**
+   * Request for leaving or closing a session.
+   *
+   * @param actorId actor requesting the lifecycle transition
+   */
   public record ActorIdRequest(@NotBlank String actorId) {
     public ActorIdRequest {
       actorId = Objects.requireNonNull(actorId, "actorId");
     }
   }
 
-  /** Request for one server-authoritative semantic session operation. */
+  /**
+   * Request for one server-authoritative semantic session operation.
+   *
+   * @param mode collaboration mode expected by the client
+   * @param actor actor authoring the operation
+   * @param expectedRevision optional optimistic-concurrency revision
+   * @param operation transport representation of the semantic operation
+   */
   public record SessionOperationRequest(
       @NotNull CollaborationMode mode,
       @Valid @NotNull ActorRequest actor,
@@ -91,14 +122,27 @@ public final class WorkflowSessionApiModels {
     }
   }
 
-  /** Request for a revision-bound undo preview. */
+  /**
+   * Request for a revision-bound undo preview.
+   *
+   * @param actor actor requesting the preview
+   * @param targetOperationId optional explicit target, required in shared-undo mode
+   */
   public record UndoPreviewRequest(@Valid @NotNull ActorRequest actor, String targetOperationId) {
     public UndoPreviewRequest {
       Objects.requireNonNull(actor, "actor");
     }
   }
 
-  /** Request for an idempotent semantic undo command. */
+  /**
+   * Request for an idempotent semantic undo command.
+   *
+   * @param commandId stable idempotency identity owned by the actor
+   * @param actor actor requesting the undo
+   * @param expectedRevision optimistic-concurrency revision
+   * @param targetOperationId optional explicit operation target
+   * @param previewId required revision-bound preview identity in shared-undo mode
+   */
   public record UndoCommandRequest(
       @NotBlank String commandId,
       @Valid @NotNull ActorRequest actor,
@@ -115,7 +159,14 @@ public final class WorkflowSessionApiModels {
     }
   }
 
-  /** Request for an idempotent semantic redo command. */
+  /**
+   * Request for an idempotent semantic redo command.
+   *
+   * @param commandId stable idempotency identity owned by the actor
+   * @param actor actor requesting the redo
+   * @param expectedRevision optimistic-concurrency revision
+   * @param targetUndoOperationId accepted undo operation to invert
+   */
   public record RedoCommandRequest(
       @NotBlank String commandId,
       @Valid @NotNull ActorRequest actor,
@@ -131,7 +182,18 @@ public final class WorkflowSessionApiModels {
     }
   }
 
-  /** Stable undo preview response. */
+  /**
+   * Stable undo preview response.
+   *
+   * @param previewId identity bound to session revision, target, and blockers
+   * @param targetOperationId selected accepted operation
+   * @param targetActorId actor that authored the selected operation
+   * @param operationType semantic operation type
+   * @param affectedObjectIds semantic objects affected by the operation
+   * @param revision revision at which the preview is valid
+   * @param safe whether the inverse currently has no blockers
+   * @param blockingOperations later operations that conflict with the inverse
+   */
   public record UndoPreviewResponse(
       String previewId,
       String targetOperationId,
@@ -159,7 +221,13 @@ public final class WorkflowSessionApiModels {
     }
   }
 
-  /** Machine-readable later operation blocking undo/redo. */
+  /**
+   * Machine-readable later operation blocking undo or redo.
+   *
+   * @param operationId stable accepted-operation identifier
+   * @param actorId actor that authored the blocking operation
+   * @param conflictingObjectIds semantic object identifiers shared with the target
+   */
   public record BlockingOperationResponse(
       String operationId, String actorId, List<String> conflictingObjectIds) {
     public BlockingOperationResponse {
@@ -172,7 +240,17 @@ public final class WorkflowSessionApiModels {
     }
   }
 
-  /** Stable response for accepted undo and redo commands. */
+  /**
+   * Stable response for accepted undo and redo commands.
+   *
+   * @param projection resulting canonical workflow projection
+   * @param commandKind accepted command kind
+   * @param commandId stable command idempotency identity
+   * @param targetOperationId operation targeted by the command
+   * @param operationId newly appended inverse-operation identifier
+   * @param revision resulting semantic revision
+   * @param sequence resulting ordered event sequence
+   */
   public record HistoryCommandResponse(
       WorkflowProjection projection,
       Kind commandKind,
@@ -193,7 +271,13 @@ public final class WorkflowSessionApiModels {
     }
   }
 
-  /** Request for non-semantic cursor, selection or viewport presence state. */
+  /**
+   * Request for non-semantic cursor, selection, or viewport presence state.
+   *
+   * @param actor actor publishing the state
+   * @param observedAt client observation time, or {@code null} to use server time
+   * @param attributes transport-neutral presence attributes
+   */
   public record PresenceRequest(
       @Valid @NotNull ActorRequest actor,
       Instant observedAt,
@@ -209,7 +293,13 @@ public final class WorkflowSessionApiModels {
     }
   }
 
-  /** Stable transport response for accepted presence state. */
+  /**
+   * Stable transport response for accepted presence state.
+   *
+   * @param actorId actor represented by the state
+   * @param observedAt accepted observation timestamp
+   * @param attributes transport-neutral presence attributes
+   */
   public record PresenceResponse(
       String actorId, Instant observedAt, Map<String, String> attributes) {
     public PresenceResponse {
@@ -221,7 +311,20 @@ public final class WorkflowSessionApiModels {
     }
   }
 
-  /** Ordered SSE payload derived from a transport-neutral session event. */
+  /**
+   * Ordered SSE payload derived from a transport-neutral session event.
+   *
+   * @param eventId stable event identifier
+   * @param sessionId owning collaboration-session identifier
+   * @param sequence monotonically increasing event sequence
+   * @param revision semantic workflow revision
+   * @param occurredAt event occurrence timestamp
+   * @param type event type
+   * @param actor optional actor associated with the event
+   * @param operationId optional accepted semantic operation identifier
+   * @param projection optional canonical workflow projection
+   * @param attributes transport-neutral event attributes
+   */
   public record SessionEventResponse(
       String eventId,
       String sessionId,
@@ -256,14 +359,32 @@ public final class WorkflowSessionApiModels {
     }
   }
 
-  /** Stable actor representation returned by the API. */
+  /**
+   * Stable actor representation returned by the API.
+   *
+   * @param actorId stable collaboration actor identifier
+   * @param userId stable authenticated user identifier
+   * @param displayName human-readable actor name
+   */
   public record ActorResponse(String actorId, String userId, String displayName) {
     static ActorResponse from(OperationActor actor) {
       return new ActorResponse(actor.actorId(), actor.userId(), actor.displayName());
     }
   }
 
-  /** Transport response for collaboration-session metadata. */
+  /**
+   * Transport response for collaboration-session metadata.
+   *
+   * @param sessionId stable collaboration-session identifier
+   * @param mode immutable collaboration mode
+   * @param owner session owner
+   * @param createdAt session creation timestamp
+   * @param participants currently joined actors
+   * @param operationCount number of accepted semantic operations
+   * @param workflowId canonical workflow identifier
+   * @param revision current semantic revision
+   * @param sequence current ordered event sequence
+   */
   public record SessionResponse(
       String sessionId,
       CollaborationMode mode,
