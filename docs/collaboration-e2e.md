@@ -116,3 +116,4 @@ It does not:
 - replace Hibernate restart tests;
 - treat presence as workflow DSL or checkpoint data;
 - close issue #249 until the durable process-restart stage and final milestone coverage are complete.
+
