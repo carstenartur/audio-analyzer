@@ -21,6 +21,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 public final class WorkflowApiExceptionHandler {
 
   private static final String PROBLEM_BASE = "https://audio-analyzer.dev/problems/";
+  private static final String CODE_PROPERTY = "code";
+  private static final String SESSION_ID_PROPERTY = "sessionId";
 
   /** Maps typed collaboration-domain errors without inspecting exception-message text. */
   @ExceptionHandler(WorkflowSessionException.class)
@@ -29,9 +31,9 @@ public final class WorkflowApiExceptionHandler {
     HttpStatus status = statusFor(exception.code());
     ProblemDetail problem =
         problem(status, problemName(exception.code()), exception.getMessage(), request);
-    problem.setProperty("code", exception.code().name());
+    problem.setProperty(CODE_PROPERTY, exception.code().name());
     if (exception.sessionId() != null) {
-      problem.setProperty("sessionId", exception.sessionId());
+      problem.setProperty(SESSION_ID_PROPERTY, exception.sessionId());
     }
     return problem;
   }
@@ -42,8 +44,8 @@ public final class WorkflowApiExceptionHandler {
       WorkflowUndoConflictException exception, HttpServletRequest request) {
     ProblemDetail problem =
         problem(HttpStatus.CONFLICT, "undo-conflict", exception.getMessage(), request);
-    problem.setProperty("code", "UNDO_CONFLICT");
-    problem.setProperty("sessionId", exception.sessionId());
+    problem.setProperty(CODE_PROPERTY, "UNDO_CONFLICT");
+    problem.setProperty(SESSION_ID_PROPERTY, exception.sessionId());
     problem.setProperty("targetOperationId", exception.targetOperationId());
     problem.setProperty(
         "blockingOperations",
@@ -61,8 +63,8 @@ public final class WorkflowApiExceptionHandler {
             "workflow-session-revision-conflict",
             exception.getMessage(),
             request);
-    problem.setProperty("code", "WORKFLOW_SESSION_REVISION_CONFLICT");
-    problem.setProperty("sessionId", exception.sessionId());
+    problem.setProperty(CODE_PROPERTY, "WORKFLOW_SESSION_REVISION_CONFLICT");
+    problem.setProperty(SESSION_ID_PROPERTY, exception.sessionId());
     problem.setProperty("expectedRevision", exception.expectedRevision());
     problem.setProperty("actualRevision", exception.actualRevision());
     return problem;
@@ -78,8 +80,8 @@ public final class WorkflowApiExceptionHandler {
             "workflow-session-sequence-conflict",
             exception.getMessage(),
             request);
-    problem.setProperty("code", "WORKFLOW_SESSION_SEQUENCE_CONFLICT");
-    problem.setProperty("sessionId", exception.sessionId());
+    problem.setProperty(CODE_PROPERTY, "WORKFLOW_SESSION_SEQUENCE_CONFLICT");
+    problem.setProperty(SESSION_ID_PROPERTY, exception.sessionId());
     problem.setProperty("expectedSequence", exception.expectedSequence());
     problem.setProperty("actualSequence", exception.actualSequence());
     return problem;
