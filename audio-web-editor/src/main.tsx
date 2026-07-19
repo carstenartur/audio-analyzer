@@ -1,8 +1,10 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 
+import { IndexedWorkflowHistoryPanel } from './IndexedWorkflowHistoryPanel';
 import WorkflowEditorApp from './WorkflowEditorApp';
 import './styles.css';
+import './indexed-history.css';
 
 const ACTOR_STORAGE_KEY = 'audio-analyzer.workflow.actor';
 
@@ -60,5 +62,6 @@ if (rootElement === null) {
 createRoot(rootElement).render(
   <StrictMode>
     <WorkflowEditorApp />
+    <IndexedWorkflowHistoryPanel />
   </StrictMode>,
 );
