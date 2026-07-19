@@ -1,6 +1,6 @@
 # Two-browser collaboration end-to-end tests
 
-Status: staged implementation for issue #249  
+Status: Stage 0, Stage 1 and undo/redo extension implemented for issue #249; durable restart remains staged  
 Harness: `workbench-screenshot-tests`  
 CI: `.github/workflows/collaboration-e2e.yml`
 
