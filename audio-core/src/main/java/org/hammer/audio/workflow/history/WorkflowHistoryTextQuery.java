@@ -13,12 +13,7 @@ import java.time.Instant;
  * @param limit maximum result count between 1 and 200
  */
 public record WorkflowHistoryTextQuery(
-    String text,
-    String authorEmail,
-    String pathText,
-    Instant from,
-    Instant to,
-    int limit) {
+    String text, String authorEmail, String pathText, Instant from, Instant to, int limit) {
 
   public WorkflowHistoryTextQuery {
     text = normalize(text, "");
