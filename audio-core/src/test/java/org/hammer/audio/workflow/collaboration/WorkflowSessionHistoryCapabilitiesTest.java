@@ -59,8 +59,7 @@ class WorkflowSessionHistoryCapabilitiesTest {
     assertNull(beforeUndo.redo());
 
     WorkflowHistoryCommandResult undone =
-        registry.undo(
-            SESSION_ID, new UndoWorkflowCommand("command.undo", OWNER, 1, null, null));
+        registry.undo(SESSION_ID, new UndoWorkflowCommand("command.undo", OWNER, 1, null, null));
     WorkflowHistoryCapabilities afterUndo = registry.capabilities(SESSION_ID, OWNER);
     assertNull(afterUndo.personalUndo());
     assertEquals(ActionStatus.AVAILABLE, afterUndo.redo().status());
@@ -84,13 +83,7 @@ class WorkflowSessionHistoryCapabilitiesTest {
     WorkflowSessionRegistry personal = registry(CollaborationMode.SHARED_SESSION_PERSONAL_UNDO);
     createNode(personal, OWNER, "operation.owner.create", "node.shared", 0);
     renameNode(
-        personal,
-        GUEST,
-        "operation.guest.rename",
-        "node.shared",
-        "node.shared",
-        "Guest rename",
-        1);
+        personal, GUEST, "operation.guest.rename", "node.shared", "node.shared", "Guest rename", 1);
 
     WorkflowHistoryCapabilities blocked = personal.capabilities(SESSION_ID, OWNER);
     assertEquals(ActionStatus.BLOCKED, blocked.personalUndo().status());

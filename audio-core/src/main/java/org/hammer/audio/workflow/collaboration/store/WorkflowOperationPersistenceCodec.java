@@ -161,7 +161,8 @@ public final class WorkflowOperationPersistenceCodec {
       try {
         parsed = Integer.parseInt(value.substring(offset, delimiter));
       } catch (NumberFormatException exception) {
-        throw new IllegalArgumentException("Invalid " + description + " in semantic identity", exception);
+        throw new IllegalArgumentException(
+            "Invalid " + description + " in semantic identity", exception);
       }
       if (parsed < 0) {
         throw malformed(description);
@@ -176,7 +177,8 @@ public final class WorkflowOperationPersistenceCodec {
       try {
         end = Math.addExact(offset, length);
       } catch (ArithmeticException exception) {
-        throw new IllegalArgumentException("Invalid " + description + " in semantic identity", exception);
+        throw new IllegalArgumentException(
+            "Invalid " + description + " in semantic identity", exception);
       }
       if (end > value.length()) {
         throw malformed(description);
