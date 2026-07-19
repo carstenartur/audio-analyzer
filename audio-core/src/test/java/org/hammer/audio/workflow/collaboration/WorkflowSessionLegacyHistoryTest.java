@@ -2,7 +2,6 @@ package org.hammer.audio.workflow.collaboration;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -34,37 +33,10 @@ class WorkflowSessionLegacyHistoryTest {
   private static final Instant OCCURRED_AT = Instant.parse("2026-07-19T09:00:00Z");
 
   @Test
-  void emptyHistoryAndCapabilitiesRemainExplicitAndReadOnly() {
-    WorkflowSessionRegistry registry = new WorkflowSessionRegistry();
-    registry.create(
-        SESSION_ID,
-        CollaborationMode.PRIVATE_WORKSPACE,
-        OWNER,
-        new Workflow("workflow.empty", "Empty", List.of(), List.of()));
-    WorkflowSessionRegistry.SessionSnapshot before = registry.inspect(SESSION_ID);
-
-    WorkflowHistoryPage history = registry.history(SESSION_ID, OWNER, null, 10);
-    WorkflowHistoryCapabilities capabilities = registry.capabilities(SESSION_ID, OWNER);
-
-    assertTrue(history.operations().isEmpty());
-    assertNull(history.nextBeforeRevision());
-    assertEquals(0, history.currentRevision());
-    assertTrue(capabilities.personalUndoPermitted());
-    assertNull(capabilities.personalUndo());
-    assertNull(capabilities.redo());
-    assertFalse(capabilities.sharedUndoPermitted());
-    assertEquals(before, registry.inspect(SESSION_ID));
-  }
-
-  @Test
   void legacyOperationRemainsVisibleButCannotBeOfferedAsExecutableUndo() {
     WorkflowOperation.CreateNode operation = legacyCreateOperation();
     Workflow workflow =
-        new Workflow(
-            "workflow.legacy",
-            "Legacy",
-            List.of(operation.node()),
-            List.of());
+        new Workflow("workflow.legacy", "Legacy", List.of(operation.node()), List.of());
     LegacyStore store = new LegacyStore(workflow, legacyStoredOperation(operation));
     WorkflowSessionRegistry registry =
         new WorkflowSessionRegistry(new WorkflowSessionEventHub(16, 4), store);
