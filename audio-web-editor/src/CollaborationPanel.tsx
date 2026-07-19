@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type { ActorIdentity, CollaborationMode, WorkflowProjection } from './api';
 import { useWorkflowHistory } from './useWorkflowHistory';
@@ -14,12 +14,34 @@ const MODES: readonly CollaborationMode[] = Object.freeze([
   'SHARED_SESSION_PERSONAL_UNDO',
   'SHARED_SESSION_SHARED_UNDO',
 ]);
+const ACTIVE_SESSION_STORAGE_KEY = 'audio-analyzer.workflow.active-session';
 
 const IGNORE_PROJECTION = (_projection: WorkflowProjection) => undefined;
 const IGNORE_STATUS = (_status: string) => undefined;
 
 function message(failure: unknown): string {
   return failure instanceof Error ? failure.message : String(failure);
+}
+
+function storedSessionId(): string | null {
+  try {
+    const value = sessionStorage.getItem(ACTIVE_SESSION_STORAGE_KEY);
+    return value === null || value.trim().length === 0 ? null : value;
+  } catch {
+    return null;
+  }
+}
+
+function storeSessionId(sessionId: string | null): void {
+  try {
+    if (sessionId === null) {
+      sessionStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY);
+    } else {
+      sessionStorage.setItem(ACTIVE_SESSION_STORAGE_KEY, sessionId);
+    }
+  } catch {
+    // Session operation remains valid when browser storage is unavailable.
+  }
 }
 
 export function CollaborationPanel({ controller }: CollaborationPanelProps) {
@@ -29,12 +51,47 @@ export function CollaborationPanel({ controller }: CollaborationPanelProps) {
   const [actorDraft, setActorDraft] = useState<ActorIdentity>(controller.actor);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionPending, setActionPending] = useState(false);
+  const restoreAttempted = useRef(false);
+  const previouslyActive = useRef(false);
   const history = useWorkflowHistory({
     collaboration: controller,
     onProjection: IGNORE_PROJECTION,
     onError: setActionError,
     onStatus: IGNORE_STATUS,
   });
+
+  useEffect(() => {
+    if (restoreAttempted.current) {
+      return;
+    }
+    restoreAttempted.current = true;
+    const rememberedSessionId = storedSessionId();
+    if (rememberedSessionId === null || controller.active) {
+      return;
+    }
+    setSessionId(rememberedSessionId);
+    setActionPending(true);
+    setActionError(null);
+    void controller
+      .joinSession(rememberedSessionId)
+      .catch((failure: unknown) => {
+        storeSessionId(null);
+        setActionError(`Could not restore session ${rememberedSessionId}: ${message(failure)}`);
+      })
+      .finally(() => setActionPending(false));
+  }, [controller.active, controller.joinSession]);
+
+  useEffect(() => {
+    if (controller.session !== null) {
+      previouslyActive.current = true;
+      storeSessionId(controller.session.sessionId);
+      return;
+    }
+    if (previouslyActive.current) {
+      previouslyActive.current = false;
+      storeSessionId(null);
+    }
+  }, [controller.session]);
 
   useEffect(() => {
     if (!controller.active) {
@@ -170,7 +227,7 @@ export function CollaborationPanel({ controller }: CollaborationPanelProps) {
               onClick={() => void run(() => controller.joinSession(sessionId))}
               type="button"
             >
-              Join session
+              {actionPending && storedSessionId() === sessionId ? 'Restoring…' : 'Join session'}
             </button>
           </div>
         </>
