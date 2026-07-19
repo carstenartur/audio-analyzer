@@ -129,6 +129,8 @@ class WorkbenchTwoBrowserCollaborationIT {
       waitForActiveSession(bob.page(), PERSONAL_SESSION_ID);
       waitForLive(bob.page());
       waitForRevision(bob.page(), 4);
+      bob.page().locator(GENERATOR_SELECTOR).first().waitFor();
+      bob.page().locator(GAIN_SELECTOR).first().waitFor();
       assertEquals(1, bob.page().locator(GENERATOR_SELECTOR).count());
       assertEquals(1, bob.page().locator(GAIN_SELECTOR).count());
       assertEquals(
