@@ -10,9 +10,10 @@ public final class DurableRestartWorkbenchLauncher {
 
   private DurableRestartWorkbenchLauncher() {}
 
-  /** Starts the real workbench plus the test-module-only outbox publisher configuration. */
+  /** Starts the real workbench and registers the test publisher before context refresh. */
   public static void main(String[] args) {
-    SpringApplication.run(
-        new Class<?>[] {WorkbenchApplication.class, DurableRestartTestConfiguration.class}, args);
+    SpringApplication application = new SpringApplication(WorkbenchApplication.class);
+    application.addInitializers(DurableRestartTestConfiguration::registerPublisher);
+    application.run(args);
   }
 }
