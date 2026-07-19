@@ -62,6 +62,86 @@ export interface SessionResponse {
   sequence: number;
 }
 
+export type HistoryCommandKind = 'NORMAL' | 'UNDO' | 'REDO';
+export type HistoryActionStatus = 'AVAILABLE' | 'BLOCKED' | 'NOT_RECONSTRUCTIBLE';
+
+export interface HistoryOperationResponse {
+  operationId: string;
+  operationType: string;
+  actorId: string;
+  occurredAt: string;
+  revision: number;
+  sequence: number;
+  commandKind: HistoryCommandKind;
+  commandId: string;
+  targetOperationId: string | null;
+  affectedObjectIds: string[];
+  reconstructible: boolean;
+  activeUndoTarget: boolean;
+  activeRedoTarget: boolean;
+}
+
+export interface BlockingOperationResponse {
+  operationId: string;
+  actorId: string;
+  conflictingObjectIds: string[];
+}
+
+export interface HistoryActionResponse {
+  operation: HistoryOperationResponse;
+  status: HistoryActionStatus;
+  available: boolean;
+  blockingOperations: BlockingOperationResponse[];
+}
+
+export interface HistoryCapabilitiesResponse {
+  mode: CollaborationMode;
+  revision: number;
+  personalUndoPermitted: boolean;
+  personalUndo: HistoryActionResponse | null;
+  redo: HistoryActionResponse | null;
+  sharedUndoPermitted: boolean;
+}
+
+export interface HistoryPageResponse {
+  operations: HistoryOperationResponse[];
+  nextBeforeRevision: number | null;
+  currentRevision: number;
+}
+
+export interface UndoPreviewResponse {
+  previewId: string;
+  targetOperationId: string;
+  targetActorId: string;
+  targetOccurredAt: string;
+  operationType: string;
+  affectedObjectIds: string[];
+  revision: number;
+  safe: boolean;
+  blockingOperations: BlockingOperationResponse[];
+}
+
+export interface RedoPreviewResponse {
+  targetUndoOperationId: string;
+  targetActorId: string;
+  targetOccurredAt: string;
+  operationType: string;
+  affectedObjectIds: string[];
+  revision: number;
+  safe: boolean;
+  blockingOperations: BlockingOperationResponse[];
+}
+
+export interface HistoryCommandResponse {
+  projection: WorkflowProjection;
+  commandKind: 'UNDO' | 'REDO';
+  commandId: string;
+  targetOperationId: string;
+  operationId: string;
+  revision: number;
+  sequence: number;
+}
+
 export interface PresenceResponse {
   actorId: string;
   observedAt: string;
@@ -98,6 +178,8 @@ export interface ApiProblem {
   instance?: string;
   code?: string;
   violations?: unknown[];
+  blockingOperations?: BlockingOperationResponse[];
+  targetOperationId?: string;
   [key: string]: unknown;
 }
 
