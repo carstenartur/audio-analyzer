@@ -107,8 +107,8 @@ public final class WorkflowEditorHttpAdapter {
    */
   @GetMapping("/history")
   public List<HistoryEntry> history(
-      @RequestParam(defaultValue = DEFAULT_BRANCH) String branch,
-      @RequestParam(defaultValue = DEFAULT_HISTORY_LIMIT_STR) int limit) {
+      @RequestParam(name = "branch", defaultValue = DEFAULT_BRANCH) String branch,
+      @RequestParam(name = "limit", defaultValue = DEFAULT_HISTORY_LIMIT_STR) int limit) {
     return editorService.history(branch, limit).stream().map(HistoryEntry::from).toList();
   }
 
