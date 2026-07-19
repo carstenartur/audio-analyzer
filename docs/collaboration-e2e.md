@@ -17,11 +17,13 @@ The first staged suite proves:
 - a semantic React Flow edit accepted for client A arrives at client B through ordered SSE without refresh;
 - throttled presence is visible to the remote browser but absent from the canonical workflow projection;
 - an explicitly stale semantic request receives a revision conflict and never appears in either graph;
-- an offline browser reconnects from its accepted sequence without duplicating operations;
+- an offline browser misses an accepted semantic operation, reconnects from its previous revision and converges without a duplicate;
 - a full page reload restores actor and active-session identity and reloads canonical graph plus durable history;
 - personal undo and redo converge across both clients;
 - shared undo requires explicit target selection, fresh server preview and acknowledgement;
 - the actor that accepted shared undo can redo it and both clients converge again.
+
+The disconnect scenario does not wait for the browser's EventSource implementation to expose a particular transient connection label. Instead, client B is placed offline, client A appends another semantic operation, and the test proves that client B remains on the old revision until connectivity returns. Convergence to the missing revision and projection is the deterministic replay evidence.
 
 Durable full-process restart remains a separate stage because it must validate persisted collaboration rows, outbox delivery and later checkpoint/Git history through one restart boundary. It will extend the same harness rather than create another stack.
 
@@ -71,7 +73,7 @@ The normal Maven reactor remains Docker-free because `workbench-screenshot-tests
 - independent browser storage and SSE connections;
 - failure-only diagnostics.
 
-The scenario code uses visible workbench selectors, semantic revision and connection-state markers, ordered UI convergence and real HTTP problem responses. It does not use arbitrary sleeps.
+The scenario code uses visible workbench selectors, semantic revision markers, ordered UI convergence and real HTTP problem responses. It does not use arbitrary sleeps or depend on browser-specific timing for transient connection-state labels.
 
 The stale-operation assertion intentionally submits a production semantic operation from the second browser with an old `expectedRevision`. This exercises the same REST parser, domain validation and durable append boundary as a real stale client while proving no optimistic graph residue appears.
 
@@ -83,7 +85,7 @@ On scenario failure the harness writes under:
 workbench-screenshot-tests/target/collaboration-e2e-failures/<scenario>/
 ```
 
-For each actor it captures:
+For each actor it captures, before the browser context is closed:
 
 - full-page screenshot;
 - final HTML;
@@ -114,4 +116,3 @@ It does not:
 - replace Hibernate restart tests;
 - treat presence as workflow DSL or checkpoint data;
 - close issue #249 until the durable process-restart stage and final milestone coverage are complete.
-
