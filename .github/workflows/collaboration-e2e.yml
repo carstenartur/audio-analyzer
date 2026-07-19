@@ -67,7 +67,7 @@ jobs:
             -Dexec.args="install --with-deps chromium" \
             2>&1 | tee "$E2E_LOG_DIR/playwright-install.log"
 
-      # The suite waits on observable state and proves that session restore keeps the canonical graph.
+      # State-based conditions only: session/revision/SSE/DOM contracts, never fixed-delay sleeps.
       - name: Run two-browser collaboration scenarios
         shell: bash
         run: |
