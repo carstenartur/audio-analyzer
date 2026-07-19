@@ -501,8 +501,7 @@ final class WorkflowSessionEntry {
       OperationActor actor, String targetUndoOperationId) {
     OperationIdentity targetUndo =
         requireOperation(targetUndoOperationId, Code.REDO_TARGET_NOT_FOUND);
-    if (targetUndo.command().kind() != Kind.UNDO
-        || !targetUndo.actorId().equals(actor.actorId())) {
+    if (targetUndo.command().kind() != Kind.UNDO || !targetUndo.actorId().equals(actor.actorId())) {
       throw error(
           Code.REDO_TARGET_INVALID,
           "Redo target is not an undo command owned by the requesting actor: "
@@ -653,10 +652,8 @@ final class WorkflowSessionEntry {
         operation.command().targetOperationId(),
         affectedObjectIds,
         operation.hasOperationBody(),
-        operation.command().kind() != Kind.UNDO
-            && !isTargeted(operation.operationId(), Kind.UNDO),
-        operation.command().kind() == Kind.UNDO
-            && !isTargeted(operation.operationId(), Kind.REDO));
+        operation.command().kind() != Kind.UNDO && !isTargeted(operation.operationId(), Kind.UNDO),
+        operation.command().kind() == Kind.UNDO && !isTargeted(operation.operationId(), Kind.REDO));
   }
 
   private Action historyAction(OperationIdentity operation) {
