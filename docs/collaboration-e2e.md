@@ -1,0 +1,133 @@
+# Two-browser collaboration end-to-end tests
+
+Status: Stage 0, Stage 1 and undo/redo extension implemented for issue #249; durable restart remains staged  
+Harness: `workbench-screenshot-tests`  
+CI: `.github/workflows/collaboration-e2e.yml`
+
+## Purpose
+
+The suite provides executable cross-process evidence that the packaged React Flow workbench and the packaged Spring Boot collaboration platform converge across isolated browser actors.
+
+It deliberately reuses the existing Testcontainers and Java Playwright infrastructure instead of introducing a second browser framework or test-only server endpoint.
+
+The first staged suite proves:
+
+- two isolated browser contexts have independent actor and session storage;
+- both contexts create or join the same real collaboration session;
+- a semantic React Flow edit accepted for client A arrives at client B through ordered SSE without refresh;
+- throttled presence is visible to the remote browser but absent from the canonical workflow projection;
+- an explicitly stale semantic request receives a revision conflict and never appears in either graph;
+- a browser with an intentionally interrupted SSE request misses an accepted semantic operation, reconnects from its previous revision and converges without a duplicate;
+- a full page reload restores actor and active-session identity and reloads canonical graph plus durable history;
+- personal undo and redo converge across both clients;
+- shared undo requires explicit target selection, fresh server preview and acknowledgement;
+- the actor that accepted shared undo can redo it and both clients converge again.
+
+The reconnect scenario routes only client B's session-event request to a controlled network failure while ordinary REST reads remain available. Client A appends another semantic operation, and the test proves that B remains on the old revision until the event route is restored. Convergence to the missing revision and projection is the deterministic replay evidence; it does not rely on browser-specific timing for an operating-system offline signal.
+
+Durable full-process restart remains a separate stage because it must validate persisted collaboration rows, outbox delivery and later checkpoint/Git history through one restart boundary. It will extend the same harness rather than create another stack.
+
+## Local execution
+
+Prerequisites:
+
+- JDK 21;
+- Maven;
+- Docker;
+- network access for Maven dependencies and the first Playwright browser installation.
+
+Build the packaged application and browser-test reactor without running tests:
+
+```bash
+mvn -B -Pscreenshot-tests -DskipTests install \
+  -pl workbench-screenshot-tests -am
+```
+
+Install the pinned Playwright Chromium runtime:
+
+```bash
+mvn -B -Pscreenshot-tests -pl workbench-screenshot-tests \
+  org.codehaus.mojo:exec-maven-plugin:3.5.0:java \
+  -Dexec.mainClass=com.microsoft.playwright.CLI \
+  -Dexec.classpathScope=test \
+  -Dexec.args="install --with-deps chromium"
+```
+
+Run only the two-browser scenarios:
+
+```bash
+mvn -B -Pscreenshot-tests -pl workbench-screenshot-tests \
+  -Dit.test=WorkbenchTwoBrowserCollaborationIT verify
+```
+
+The normal Maven reactor remains Docker-free because `workbench-screenshot-tests` is activated only by the opt-in profile.
+
+## Test architecture
+
+`WorkbenchBrowserHarness` owns:
+
+- one real packaged application container;
+- one Chromium process;
+- one isolated `BrowserContext` per actor;
+- stable actor identity injected before page startup;
+- independent browser storage and SSE connections;
+- failure-only diagnostics.
+
+A new actor context starts with empty session storage, so the harness only injects the stable actor identity. It deliberately does not clear the active-session key during later navigations. This lets a full reload exercise the production client's own session-restore path rather than an artificial test shortcut.
+
+The stale-operation assertion intentionally submits a production semantic operation from the second browser with an old `expectedRevision`. This exercises the same REST parser, domain validation and durable append boundary as a real stale client while proving no optimistic graph residue appears.
+
+## Synchronization discipline
+
+The suite contains no `sleep`, `Thread.sleep`, `waitForTimeout` or equivalent fixed-delay synchronization. Every wait is tied to an observable contract:
+
+- session identity appears in the active-session view;
+- the ordered event transport reports `live` or `reconnecting`;
+- the semantic revision reaches the expected server revision;
+- an expected node becomes visible or disappears from the React Flow DOM;
+- a history button becomes enabled from server-reported capabilities;
+- a preview or confirmation dialog becomes visible;
+- an HTTP response returns the expected structured problem code.
+
+Playwright's configured timeout is only an upper bound that turns a missing condition into a diagnostic failure. It is not used as a delay and does not determine when the test proceeds. A failing condition must be diagnosed from the captured state; increasing a delay is not an accepted stabilization strategy.
+
+## Failure diagnostics
+
+On scenario failure the harness writes under:
+
+```text
+workbench-screenshot-tests/target/collaboration-e2e-failures/<scenario>/
+```
+
+For each actor it captures, before the browser context is closed:
+
+- full-page screenshot;
+- final HTML;
+- Playwright trace with screenshots, snapshots and sources;
+- browser console messages;
+- page errors;
+- failed network requests.
+
+It also writes the complete packaged-server log and the Java failure stack trace.
+
+The dedicated GitHub workflow additionally publishes:
+
+- `collaboration-e2e-logs`: complete Maven build, Playwright installation and test-session logs;
+- `collaboration-e2e-results`: Failsafe XML and text reports;
+- `collaboration-e2e-failures`: browser traces, screenshots and server diagnostics when a scenario fails.
+
+These artifacts make early reactor failures and later browser failures independently diagnosable.
+
+## Boundaries
+
+The suite does not make browser state authoritative. Assertions observe canonical server projections, revisions and SSE-driven UI state.
+
+It does not:
+
+- add raw JDBC or a second persistence model;
+- add a test-only collaboration endpoint;
+- infer undo eligibility from local React Flow state;
+- replace Hibernate restart tests;
+- treat presence as workflow DSL or checkpoint data;
+- close issue #249 until the durable process-restart stage and final milestone coverage are complete.
+

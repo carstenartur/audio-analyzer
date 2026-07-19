@@ -15,6 +15,11 @@ const MODES: readonly CollaborationMode[] = Object.freeze([
   'SHARED_SESSION_SHARED_UNDO',
 ]);
 const ACTIVE_SESSION_STORAGE_KEY = 'audio-analyzer.workflow.active-session';
+const MODE_LABELS: Readonly<Record<CollaborationMode, string>> = Object.freeze({
+  PRIVATE_WORKSPACE: 'Private workspace',
+  SHARED_SESSION_PERSONAL_UNDO: 'Shared session · personal undo',
+  SHARED_SESSION_SHARED_UNDO: 'Shared session · shared undo',
+});
 
 function message(failure: unknown): string {
   return failure instanceof Error ? failure.message : String(failure);
@@ -145,7 +150,7 @@ export function CollaborationPanel({ controller }: CollaborationPanelProps) {
             >
               {MODES.map((candidate) => (
                 <option key={candidate} value={candidate}>
-                  {candidate}
+                  {MODE_LABELS[candidate]}
                 </option>
               ))}
             </select>
@@ -232,7 +237,9 @@ export function CollaborationPanel({ controller }: CollaborationPanelProps) {
             </div>
             <div>
               <dt>Mode</dt>
-              <dd data-testid="active-session-mode">{session.mode}</dd>
+              <dd data-mode={session.mode} data-testid="active-session-mode">
+              {MODE_LABELS[session.mode]}
+            </dd>
             </div>
             <div>
               <dt>Connection</dt>

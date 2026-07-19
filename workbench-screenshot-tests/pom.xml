@@ -7,8 +7,8 @@
     <version>0.0.4-SNAPSHOT</version>
   </parent>
   <artifactId>workbench-screenshot-tests</artifactId>
-  <name>Workbench Screenshot Tests</name>
-  <description>Testcontainers + Playwright integration-test pipeline for workbench UI documentation screenshots.</description>
+  <name>Workbench Browser Integration Tests</name>
+  <description>Testcontainers + Playwright integration-test pipeline for documentation screenshots and packaged-application browser scenarios.</description>
 
   <properties>
     <testcontainers.version>1.20.4</testcontainers.version>
@@ -46,6 +46,8 @@
       A value of 2 means up to 2 % of pixels may differ before the comparison fails.
     -->
     <screenshot.tolerance.pct>2</screenshot.tolerance.pct>
+    <!-- Failure-only diagnostics for cross-process collaboration scenarios. -->
+    <collaboration.e2e.artifacts.dir>${project.build.directory}/collaboration-e2e-failures</collaboration.e2e.artifacts.dir>
   </properties>
 
   <dependencies>
@@ -104,6 +106,7 @@
             <docs.screenshots.dir>${docs.screenshots.dir}</docs.screenshots.dir>
             <updateScreenshots>${updateScreenshots}</updateScreenshots>
             <screenshot.tolerance.pct>${screenshot.tolerance.pct}</screenshot.tolerance.pct>
+            <collaboration.e2e.artifacts.dir>${collaboration.e2e.artifacts.dir}</collaboration.e2e.artifacts.dir>
           </systemPropertyVariables>
           <failIfNoSpecifiedTests>false</failIfNoSpecifiedTests>
         </configuration>

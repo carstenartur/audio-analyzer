@@ -147,6 +147,32 @@
   padding: 8px;
 }
 
+
+.history-shortcuts {
+  color: #b9c5dd;
+  display: grid;
+  font-size: 11px;
+  gap: 4px;
+}
+
+.history-shortcuts span {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.history-shortcuts kbd {
+  background: #252c3c;
+  border: 1px solid #48536c;
+  border-radius: 3px;
+  color: #e4e9f5;
+  font-family: inherit;
+  font-size: 10px;
+  padding: 1px 4px;
+  white-space: nowrap;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .history-dialog {
     scroll-behavior: auto;

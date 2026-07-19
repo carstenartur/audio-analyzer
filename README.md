@@ -1,6 +1,7 @@
 # Audio Analyzer
 
 [![Java CI with Maven](https://github.com/carstenartur/audio-analyzer/actions/workflows/maven.yml/badge.svg?branch=master)](https://github.com/carstenartur/audio-analyzer/actions/workflows/maven.yml)
+[![Collaboration E2E](https://github.com/carstenartur/audio-analyzer/actions/workflows/collaboration-e2e.yml/badge.svg?branch=master)](https://github.com/carstenartur/audio-analyzer/actions/workflows/collaboration-e2e.yml)
 [![Tests](https://img.shields.io/endpoint?url=https://carstenartur.github.io/audio-analyzer/tests/badge.json)](https://carstenartur.github.io/audio-analyzer/tests/surefire-report.html)
 [![Coverage](https://img.shields.io/endpoint?url=https://carstenartur.github.io/audio-analyzer/coverage/badge.json)](https://carstenartur.github.io/audio-analyzer/coverage/)
 [![CodeQL](https://github.com/carstenartur/audio-analyzer/actions/workflows/codeql.yml/badge.svg?branch=master)](https://github.com/carstenartur/audio-analyzer/actions/workflows/codeql.yml)
@@ -8,167 +9,168 @@
 [![DOI](https://zenodo.org/badge/7397122.svg)](https://doi.org/10.5281/zenodo.21186367)
 [![SBOM](https://img.shields.io/badge/SBOM-CycloneDX-informational?logo=owasp)](https://github.com/carstenartur/audio-analyzer/dependency-graph/sbom)
 
-**Audio Analyzer** is a Java 21 / Swing and web workbench for reproducible audio analysis, DSP experiments,
-versioned workflow design and acoustic-localization research. It combines a desktop dashboard,
-deterministic signal pipelines, recording/replay tooling, evidence export and a server-authoritative
-React Flow workflow editor.
+**Explore signals, reproduce experiments and design versioned audio-processing workflows in Java.**
 
-The repository is useful for algorithm development, measurement experiments, UI prototyping and
-research documentation. It is **not** a validated production detector for mosquitoes, species
-classification or safety-critical tracking.
+Audio Analyzer combines a desktop signal workbench with a browser-based workflow editor. It is intended for people who want to inspect audio, compare processing results, build repeatable experiments or collaborate on a signal-processing graph without giving up deterministic Java models and auditable history.
 
-## Current status
+The project provides real DSP and measurement foundations, recording and replay, evidence export, a server-authoritative workflow model and an experimental acoustic-localization plugin. It is a research and engineering workbench—not a validated species detector, safety system or turnkey digital audio workstation.
 
-Stable application and library foundations:
+## What you can do
 
-- immutable audio-domain models, ring buffer and deterministic signal generators;
-- sample decoding, FFT spectrum, measurements, spectrogram and diagnosis analyzers;
-- Swing dashboard panels for waveform, phase, spectrum, spectrogram, measurements and diagnosis;
-- versioned semantic workflows, collaboration sessions, ordered SSE and a packaged React Flow client;
-- `.aar` recording/replay, evidence export and Markdown A/B comparison reports;
-- Maven, Spotless, unit tests, architecture fitness tests, JaCoCo, Checkstyle, PMD, SpotBugs and
-  CodeQL integration.
+|             Goal              |                                       Current support                                       |
+|-------------------------------|---------------------------------------------------------------------------------------------|
+| Inspect a signal              | Waveform, phase, spectrum, spectrogram, RMS/peak measurements and diagnostic findings       |
+| Compare processing behavior   | Deterministic demo sources, averaging, peak hold, recording/replay and Markdown A/B reports |
+| Build a workflow visually     | Typed React Flow nodes and ports backed by immutable Java workflow models                   |
+| Work with other people        | Shared sessions, ordered SSE updates, presence, revision conflicts and canonical reload     |
+| Undo safely                   | Personal or explicit shared semantic undo/redo with previews, blockers and durable history  |
+| Preserve evidence             | `.aar` recordings, CSV/PNG exports, evidence bundles and versioned workflow checkpoints     |
+| Explore localization research | Simulated microphone arrays, TDOA, beamforming, tracking and HumBugDB-oriented experiments  |
 
-Experimental research areas:
+## Choose your workbench
 
-- acoustic-localization plugin with simulation and imported-recording workbenches;
-- multi-peak detection, frequency clustering, TDOA estimation, beamforming and Kalman tracking;
-- HumBugDB import, wingbeat feature extraction and rule-based classification baseline;
-- synthetic-vs-real comparison, generator calibration and localization benchmark metrics.
+### Desktop signal workbench
 
-## Quickstart
+Use the Swing application when the signal itself is the focus: live or deterministic input, waveform and spectrum inspection, recording, replay and evidence export.
+
+![Audio Analyzer desktop dashboard with waveform, spectrum and measurements](docs/images/screenshot.png)
+
+### Web workflow workbench
+
+Use the packaged web application when the processing graph, collaboration or version history is the focus. The browser is a rendering and input client; accepted workflow state remains server-owned.
+
+![React Flow workbench with a live server-owned collaboration session](docs/assets/screenshots/workbench/collaboration-session.png)
+
+The web workbench supports three immutable collaboration modes:
+
+- **Private workspace** — one actor with personal undo and redo.
+- **Shared session with personal undo** — everyone sees accepted changes, while an actor can undo only their own current operation.
+- **Shared session with shared undo** — an explicitly selected shared operation can be undone only after a fresh server preview and confirmation.
+
+See [Collaborative workflows](docs/features/collaborative-workflows.md) for the user workflow and generated screenshots.
+
+## First run
 
 Requirements:
 
 - Java 21 or newer;
-- a POSIX shell for the commands below, or `mvnw.cmd` on Windows;
-- Docker when running the optional Testcontainers/Playwright screenshot scenarios.
+- the included Maven Wrapper;
+- Docker only for optional Testcontainers/Playwright integration scenarios.
+
+Build the project:
 
 ```bash
-# Build, test and run all configured quality gates
-./mvnw clean verify
-
-# Run the packaged Swing application
-java -jar audio-app/target/audio-app-*.jar
-
-# Run the packaged web workbench
-java -cp "audio-app/target/audio-app-*.jar:audio-app/target/lib/*" \
-  org.hammer.audio.app.WorkbenchApplication
-
-# Regenerate Swing README and feature screenshots from compiled classes
-java -cp "audio-app/target/classes:audio-app/target/lib/*" \
-  org.hammer.tools.DocImageRenderer docs/images
-
-# Verify committed web-workbench screenshots against the packaged application
-./mvnw -Pscreenshot-tests verify
-
-# Intentionally update web-workbench documentation screenshots after a UI change
-./mvnw -Pscreenshot-tests verify -DupdateScreenshots=true
-
-# Optional JMH benchmarks
-./mvnw -pl audio-dsp -Pjmh package
+./mvnw clean package
 ```
 
-On Windows, replace `./mvnw` with `mvnw.cmd`, use `;` instead of `:` in classpaths and substitute the
-concrete built JAR name if the shell does not expand `audio-app/target/audio-app-*.jar`.
+Run the desktop workbench:
 
-## Dashboard screenshot
+```bash
+DESKTOP_JAR=$(find audio-app/target -maxdepth 1 -type f \
+  -name 'audio-app-*.jar' ! -name '*-workbench.jar' -print -quit)
+java -jar "$DESKTOP_JAR"
+```
 
-![Audio Analyzer dashboard showing a reproducible 440 Hz sine demo](docs/images/screenshot.png)
+Run the web workflow workbench:
 
-The Swing screenshot is generated headlessly by `DocImageRenderer`. It is intended as release evidence
-as well as documentation, so it should be regenerated and visually reviewed whenever the dashboard
-layout changes.
+```bash
+java -jar audio-app/target/audio-app-*-workbench.jar
+```
 
-## Web workflow workbench
+Then open the local URL printed by the application. The initial graph is a read-only orientation example; create or join a collaboration session before editing.
 
-![Packaged React Flow workbench showing the deterministic seed workflow](docs/assets/screenshots/workbench/initial-load.png)
+Windows users should use `mvnw.cmd` and launch the unclassified `audio-app-<version>.jar` for the desktop or the `audio-app-<version>-workbench.jar` for the web application.
 
-![React Flow workbench showing a live server-owned collaboration session](docs/assets/screenshots/workbench/collaboration-session.png)
+For a guided first experiment, continue with [Getting started](docs/getting-started.md).
 
-These images are produced by Playwright integration scenarios running the packaged Spring Boot
-application in Testcontainers. `WorkbenchInitialLoadIT` verifies the seed workflow and
-`WorkbenchCollaborationScreenshotIT` creates a deterministic live session, waits for SSE, applies
-semantic commands and verifies the server projection before capture. The screenshots are updated only
-through the explicit screenshot-test update mode and remain reviewable generated artifacts. A UI change
-that intentionally changes either documented state must update the relevant integration scenario and its
-committed baseline in the same pull request.
+## A practical first experiment
 
-## Main workflows
+A useful introduction requires no microphone:
 
-- **Inspect audio live or from deterministic demo sources.** Use waveform, phase, spectrum,
-  spectrogram, measurement and diagnosis panels to inspect signal behavior.
-- **Design and share server-authoritative workflows.** Create or join a collaboration session, then
-  submit typed node, connection and property operations through the packaged React Flow workbench.
-- **Stabilize periodic waveforms.** Enable oscilloscope-style triggering to lock a repeating signal to
-  a readable position.
-- **Analyze spectra over time.** Use exponential averaging and peak hold to separate steady tones from
-  intermittent transients.
-- **Record and replay sessions.** Capture `.aar` recordings and replay them through the same analysis
-  pipeline for reproducible debugging.
-- **Export evidence.** Create CSV/PNG/evidence bundles and Markdown A/B comparisons for regression
-  notes or QA tickets.
-- **Run experimental localization scenarios.** The optional acoustic plugin provides deterministic
-  microphone-array simulations, dataset import and benchmarking. Treat those workflows as research
-  tools unless synchronized hardware and calibration evidence are available.
+1. Start the desktop application with its deterministic demo source.
+2. Inspect the repeating waveform and its dominant spectral peak.
+3. Enable averaging or peak hold to compare steady and transient behavior.
+4. Record a short `.aar` session and replay it through the same analysis path.
+5. Start the web workbench and create a workflow session.
+6. Add a signal generator and a gain stage.
+7. Open the semantic history preview before undoing the latest operation.
 
-## Documentation map
+This path demonstrates the central design goal: the same project supports immediate signal inspection and reproducible, version-aware workflow engineering.
 
-Start here:
+## Collaboration is semantic, not browser-local
 
-- [Architecture](ARCHITECTURE.md) — module boundaries, package structure and plugin/workbench design.
-- [Web collaboration client](docs/architecture/react-flow-session-client.md) — session lifecycle,
-  expected-revision commands, SSE recovery, presence and its generated screenshot.
-- [Workbench screenshot pipeline](docs/workbench-screenshot-pipeline.md) — reproducible Playwright and
-  Testcontainers screenshot verification/update workflow.
-- [Development](docs/development.md) — build, tests, CI, screenshot generation and contribution notes.
-- [Quality gates and coverage](docs/quality.md) — what fails the build and what remains baseline debt.
-- [Feature guides](docs/features/README.md) — user-facing dashboard, recording and comparison features.
-- [Experimental acoustic localization](docs/plugins/acoustic-localization.md) — plugin overview,
-  capabilities and limitations.
-- [Roadmap](ROADMAP.md) — open next steps and research directions.
-- [QA findings](docs/QA-FINDINGS.md) — current product-hardening risks and follow-up actions.
-- [Release QA checklists](docs/qa/README.md) — manual QA, screenshot QA and release readiness.
+Workflow edits are typed operations such as creating a node, connecting ports or changing a property. The server validates the actor, collaboration mode and expected revision before appending a new canonical operation.
 
-## Module overview
+Undo and redo are also new audited semantic operations. They do not erase accepted history, rewrite Git commits or depend on a browser-local/Yjs undo stack. A full reload obtains the graph and current undo/redo capabilities from the server.
+
+![Personal semantic undo preview showing operation impact](docs/assets/screenshots/workbench/collaboration-personal-undo-preview.png)
+
+The production-packaged client is exercised with two isolated Chromium contexts. The test proves live convergence, stale-revision rejection, presence separation, reconnect/replay, full reload and personal/shared undo/redo without fixed-delay sleeps.
+
+## Stable foundations and experimental research
+
+### Stable foundations
+
+- immutable audio blocks, format descriptors and deterministic generators;
+- bounded buffering and reproducible DSP pipelines;
+- sample decoding, FFT, spectrum, spectrogram and measurement snapshots;
+- recording/replay and evidence-oriented exports;
+- immutable workflow models and deterministic serialization;
+- packaged React Flow client with server-authoritative collaboration;
+- Hibernate-backed session history, transactional outbox and migration validation;
+- JGit-backed workflow checkpoints through the shared storage library;
+- architecture tests, static analysis, coverage, CodeQL and reproducible screenshots.
+
+### Experimental areas
+
+The acoustic-localization plugin contains research-grade simulation, TDOA estimation, beamforming, tracking, wingbeat features and dataset-oriented classification baselines. Real microphone-array localization still requires synchronized channels, calibrated geometry and documented error budgets.
+
+The project deliberately keeps experimental claims separate from stable platform guarantees.
+
+## Documentation
+
+Start with the task that matches your goal:
+
+- [Documentation home](docs/README.md) — guides organized for users, researchers, operators and contributors.
+- [Getting started](docs/getting-started.md) — build, launch and first signal/workflow experiment.
+- [Feature guides](docs/features/README.md) — signal inspection, recording, comparison and collaborative workflows.
+- [Collaborative workflows](docs/features/collaborative-workflows.md) — sessions, revision safety and semantic undo/redo.
+- [Experimental acoustic localization](docs/plugins/acoustic-localization.md) — capabilities, evidence and limitations.
+- [Architecture](ARCHITECTURE.md) — audio, workflow, collaboration, persistence and module boundaries.
+- [Persistent workbench operation](docs/workbench-hibernate-persistence.md) — Hibernate/JGit mode, migrations and outbox operation.
+- [Development](docs/development.md) — build, tests, quality gates and generated documentation.
+- [Plugin development](docs/development/plugin-development.md) — stable API, ServiceLoader registration and contribution design.
+- [Roadmap](ROADMAP.md) — current open product and research work.
+
+## Modules
 
 ```text
-audio-core                  immutable audio/workflow domain and collaboration contracts
+audio-core                  immutable audio and workflow domain contracts
 audio-geometry              reusable 2D geometry and localization constraints
-audio-acquisition           microphone metadata, arrays, multichannel sources and clocks
-audio-dsp                   FFT, DSP pipelines, analyzers, diagnosis and recording format
+audio-acquisition           microphone metadata, arrays, sources and clocks
+audio-dsp                   decoding, DSP, analysis, diagnosis and recording
 audio-plugin-api            stable host-facing plugin contracts
-audio-experimental-acoustic optional research plugin for localization and datasets
-audio-web-editor            maintained React Flow source and reproducible production assets
-audio-app                   Swing UI, Spring Boot workbench, exports and plugin host
+audio-experimental-acoustic optional localization and dataset research plugin
+audio-web-editor            React Flow source and reproducible production assets
+audio-app                   Swing UI, Spring Boot workbench, persistence and plugin host
 ```
 
-The application should depend on stable contracts and load experimental plugins through the plugin
-host. Production-ready primitives belong in the stable modules; research code belongs in
-`audio-experimental-acoustic` until it has stable API, tests and documentation.
+The optional `workbench-screenshot-tests` profile exercises the packaged application with Testcontainers and Java Playwright. It is not part of the default Docker-free Maven reactor.
 
-## Quality expectations
+## Quality and reproducibility
 
-The repository treats formatting, tests and architecture checks as part of the product:
+Before a contribution is merged, the repository expects:
 
-- `./mvnw clean verify` is the default validation command;
-- Spotless formats Java, POM and Markdown files;
-- static analysis is baseline-gated in CI;
-- generated screenshots are tracked, reproducible from integration scenarios and visually reviewed;
-- public documentation must not make stronger claims than the implemented tests and QA evidence
-  support.
+```bash
+./mvnw clean verify
+```
 
-## Important limitations
+This includes tests, formatting, architecture checks, coverage and static analysis. Browser collaboration and documentation screenshots use dedicated opt-in workflows because they require Docker and Chromium.
 
-- Acoustic localization is currently experimental and mostly validated through deterministic synthetic
-  scenarios.
-- Real microphone-array localization requires synchronized channels, calibrated geometry and timing
-  error budgets.
-- The HumBugDB workflows operate on local dataset exports; the project does not automatically download
-  third-party datasets.
-- The rule-based wingbeat classifier is a transparent baseline, not a trained species classifier.
-- Documentation screenshots are generated assets and still require visual QA before public release.
+Generated screenshots are executable documentation: the integration test creates the documented state, asserts its semantics and only then captures the image. Hand-edited screenshots are not treated as equivalent evidence.
 
-## License
+## Citation and license
 
-This project is licensed under the MIT License. See [LICENSE](LICENSE).
+Releases are archived through Zenodo. Use the DOI badge above for the current citation record.
+
+Audio Analyzer is licensed under the [MIT License](LICENSE).
