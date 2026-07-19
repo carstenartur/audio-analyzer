@@ -66,7 +66,7 @@ public class WorkflowOperationEntity {
   @Column(name = "operation_body_version")
   private Integer bodyVersion;
 
-  @JdbcTypeCode(SqlTypes.LONGVARCHAR)
+  @JdbcTypeCode(SqlTypes.LONG32VARCHAR)
   @Column(name = "operation_body")
   private String operationBody;
 
