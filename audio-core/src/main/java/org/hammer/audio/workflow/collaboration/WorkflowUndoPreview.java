@@ -2,6 +2,7 @@ package org.hammer.audio.workflow.collaboration;
 
 import java.io.Serial;
 import java.io.Serializable;
+import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 
@@ -12,6 +13,7 @@ import java.util.Objects;
  * @param targetOperationId selected operation
  * @param targetActorId original operation actor
  * @param operationType semantic operation type
+ * @param targetOccurredAt target operation occurrence timestamp
  * @param affectedObjectIds semantic objects affected by the target
  * @param revision revision at which the preview is valid
  * @param blockingOperations later conflicting operations, empty when undo is safe
@@ -21,6 +23,7 @@ public record WorkflowUndoPreview(
     String targetOperationId,
     String targetActorId,
     String operationType,
+    Instant targetOccurredAt,
     List<String> affectedObjectIds,
     long revision,
     List<BlockingOperation> blockingOperations) {
@@ -30,6 +33,7 @@ public record WorkflowUndoPreview(
     targetOperationId = requireNotBlank(targetOperationId, "targetOperationId");
     targetActorId = requireNotBlank(targetActorId, "targetActorId");
     operationType = requireNotBlank(operationType, "operationType");
+    Objects.requireNonNull(targetOccurredAt, "targetOccurredAt");
     affectedObjectIds = List.copyOf(Objects.requireNonNull(affectedObjectIds, "affectedObjectIds"));
     if (revision < 0) {
       throw new IllegalArgumentException("revision must be >= 0");

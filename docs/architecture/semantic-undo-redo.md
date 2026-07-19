@@ -1,6 +1,6 @@
 # Durable semantic undo and redo
 
-Status: Implemented by issue #271  
+Status: Implemented by issues #271 and #284  
 Depends on: durable session append #261, restart recovery #263, ordered events #242
 
 ## Decision
@@ -52,20 +52,20 @@ operation_body         = URL-safe Base64 of deterministic length-prefixed binary
 
 The framework-independent codec in `audio-core` covers every current `WorkflowOperation` subtype and all nested domain values. It does not use Java object serialization, Jackson, Hibernate or database classes.
 
-Migration V3 adds nullable body and command-relation columns. Existing rows remain readable and retain their retry fingerprint. Because they cannot be reconstructed safely, attempts to undo such a row return `OPERATION_NOT_UNDOABLE` rather than inventing missing state.
+Migration V3 adds nullable body and command-relation columns. Existing rows remain readable and retain their retry fingerprint. Their affected-object prefix is decoded for read-only history and conflict explanation. Because their complete semantic state cannot be reconstructed safely, attempts to undo such a row return `OPERATION_NOT_UNDOABLE` and capabilities report `NOT_RECONSTRUCTIBLE` rather than inventing missing state.
 
 ## Personal undo
 
-`PRIVATE_WORKSPACE` and `SHARED_SESSION_PERSONAL_UNDO` select the requesting actor's latest active undoable operation. A later operation from another actor that intersects any affected semantic object blocks the command.
+`PRIVATE_WORKSPACE` and `SHARED_SESSION_PERSONAL_UNDO` select the requesting actor's latest active operation. The server does not silently skip that operation when it is blocked or predates reconstructible operation bodies.
 
-The preview and conflict response identify:
+Any later accepted operation that intersects an affected semantic object blocks the command, including a later operation from the same actor. The preview and conflict response identify:
 
-- the target operation and original actor;
+- the target operation, original actor and timestamp;
 - affected object ids;
 - each blocking operation and actor;
 - the precise intersecting object ids.
 
-A rejected command appends no operation, advances no revision/sequence and creates no outbox residue.
+A rejected command appends no operation, advances no revision or sequence and creates no outbox residue.
 
 ## Shared undo
 
@@ -90,19 +90,58 @@ Redo targets one accepted undo operation owned by the requesting actor. It creat
 - later semantic state conflicts with the inverse;
 - the expected revision is stale.
 
-Redo is therefore a new audited command, not removal of the undo record.
+Redo is therefore a new audited command, not removal of the undo record. A read-only redo preview uses the same target validation and blocker analysis as execution.
+
+## Durable history discovery
+
+The ordered accepted-operation sequence recovered into each session is also the only source for history discovery. The public descriptor contains:
+
+- operation id, semantic type, actor and occurrence timestamp;
+- semantic revision and durable event sequence;
+- command kind, command id and target relation;
+- affected semantic object ids, including the retained identity prefix of legacy rows;
+- reconstructibility and current active undo/redo-target flags.
+
+History pages are ordered by descending semantic revision. `beforeRevision` is an exclusive cursor, so inserting newer operations cannot reorder or duplicate entries on older pages. The server caps a page at 100 entries.
+
+Actor-scoped capabilities report:
+
+- the immutable collaboration mode and current semantic revision;
+- whether personal undo is permitted;
+- the actor's current personal-undo target without skipping a blocked or legacy target;
+- the actor's current redo target;
+- `AVAILABLE`, `BLOCKED` or `NOT_RECONSTRUCTIBLE` status;
+- whether explicit shared-target undo is permitted.
+
+History, capability and preview queries run under the same per-session lock and reuse the same conflict analysis as command execution. They do not append an operation, advance revision or event sequence, publish SSE, or write an outbox entry.
 
 ## REST API
 
 ```text
+POST /workflow/sessions/{id}/history/query
+POST /workflow/sessions/{id}/history/capabilities
 POST /workflow/sessions/{id}/undo/preview
 POST /workflow/sessions/{id}/undo
+POST /workflow/sessions/{id}/redo/preview
 POST /workflow/sessions/{id}/redo
 ```
 
-Accepted undo/redo responses contain the canonical workflow projection, command kind/id/target, fresh operation id, resulting revision and event sequence. Rejections use RFC 9457 problem details with stable codes. Semantic conflicts additionally expose target and blocker details.
+POST query bodies carry the complete actor identity because membership and actor metadata are validated at the application boundary. History requests may additionally carry `beforeRevision` and `limit`.
 
-## Ordered events
+Accepted undo/redo responses contain the canonical workflow projection, command kind, command id, target, fresh operation id, resulting revision and event sequence. Rejections use RFC 9457 problem details with stable codes. Semantic conflicts additionally expose target and blocker details.
+
+## Ordered events versus history queries
+
+SSE and durable history answer different questions:
+
+- **Ordered SSE replay:** delivers accepted changes and live presence after a cursor. It is not authoritative for semantic eligibility.
+- **Canonical snapshot:** restores graph state after an event gap or restart. It is not an undo stack.
+- **Durable history query:** browses immutable accepted operations. It is descriptive and does not approve execution.
+- **Capability query:** discovers the actor's current server-selected undo and redo targets at the returned revision.
+- **Undo/redo preview:** explains one target and its current blockers immediately before confirmation.
+- **Undo/redo command:** revalidates the expected revision and atomically appends the inverse. It is the final authority.
+
+A browser must not infer a complete undo stack from the SSE window. It must reload capabilities after join, full reload, reconciliation and every accepted history command. A cached capability or preview never overrides expected-revision validation during execution.
 
 Accepted history commands continue to use `OPERATION_ACCEPTED`. SSE attributes distinguish them without introducing a parallel event hierarchy:
 
@@ -114,25 +153,31 @@ commandId
 targetOperationId   # undo/redo only
 ```
 
-Clients rebuild graph state only from the accepted projection. Presence remains separate and never participates in undo history.
+Clients rebuild graph state only from the accepted projection. Presence remains separate and never participates in undo history. Browser-local or Yjs undo may cover non-semantic viewport helpers, but it never restores canonical nodes, edges or properties.
 
 ## Restart and concurrency guarantees
 
-Open sessions recover the ordered operation body and command relation from Hibernate. Tests prove:
+Open sessions recover operation bodies, timestamps, revisions, event sequences and command relations from Hibernate. Tests prove:
 
 - an undo accepted before complete process shutdown is restored;
 - retrying the same command after restart is idempotent;
 - redo can be accepted after restart;
+- history order and command-target linkage remain identical after restart;
+- actor-scoped redo discovery and redo preview work after restart;
+- empty sessions return an explicit empty page and no current targets;
+- legacy body-less operations remain visible with affected-object ids but are not executable;
+- read-only queries leave operation count, revision, event sequence, durable rows and outbox entries unchanged;
 - a second restart restores the redone canonical workflow;
 - two different commands at the same expected revision cannot both append.
 
-The session lock serializes in-process commands. The durable store independently revalidates revision under pessimistic locking, so the same invariant holds across competing application instances.
+The session lock serializes in-process commands and read-only capability calculations. The durable store independently revalidates revision under pessimistic locking, so the same mutation invariant holds across competing application instances.
 
 ## Verification boundaries
 
-- Core round-trip tests cover every semantic operation subtype and malformed/truncated bodies.
-- Core command tests cover personal selection, shared preview, stale preview, remote conflict, idempotent retry, redo and concurrent commands.
-- HTTP tests cover accepted command responses and machine-readable conflict problems.
-- Hibernate tests cover operation-body round trips, migration compatibility and complete restart recovery.
+- Core round-trip tests cover every semantic operation subtype and malformed or truncated bodies.
+- Core command tests cover personal selection, shared preview, stale preview, same-actor and remote conflict, idempotent retry, redo and concurrent commands.
+- Core history tests cover empty history, newest-first pagination, stable cursors, capability transitions, blockers, immutable mode behavior and legacy non-reconstructible rows.
+- HTTP tests cover history and capability contracts, timestamp-aware previews, validation and accepted command responses.
+- Hibernate tests cover operation-body round trips, migration compatibility, complete restart recovery and read-only history stability.
 - PostgreSQL Testcontainers migration coverage validates the same V3 schema used in production.
 

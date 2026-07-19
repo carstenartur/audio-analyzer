@@ -134,7 +134,12 @@ final class WorkflowSessionPersistenceCoordinator {
     long nextRevision = Math.addExact(expectedRevision, 1);
     long nextSequence = Math.addExact(expectedSequence, 1);
     if (!durable()) {
-      return new AppendOutcome(updatedWorkflow, candidate, nextRevision, nextSequence, false);
+      return new AppendOutcome(
+          updatedWorkflow,
+          candidate.withOrdering(nextRevision, nextSequence),
+          nextRevision,
+          nextSequence,
+          false);
     }
 
     WorkflowSessionAppendResult result =
@@ -296,6 +301,9 @@ final class WorkflowSessionPersistenceCoordinator {
       String operationId,
       String operationType,
       String actorId,
+      Instant occurredAt,
+      long revision,
+      long sequence,
       String payload,
       int bodyVersion,
       String operationBody,
@@ -305,8 +313,12 @@ final class WorkflowSessionPersistenceCoordinator {
       Objects.requireNonNull(operationId, "operationId");
       Objects.requireNonNull(operationType, "operationType");
       Objects.requireNonNull(actorId, "actorId");
+      Objects.requireNonNull(occurredAt, "occurredAt");
       Objects.requireNonNull(payload, "payload");
       Objects.requireNonNull(command, "command");
+      if (revision < 0 || sequence < revision || (revision == 0) != (sequence == 0)) {
+        throw new IllegalArgumentException("Invalid operation revision/event sequence");
+      }
       if (bodyVersion < 0) {
         throw new IllegalArgumentException("bodyVersion must be >= 0");
       }
@@ -323,6 +335,9 @@ final class WorkflowSessionPersistenceCoordinator {
           operation.operationId(),
           operation.operationType(),
           operation.actorId(),
+          operation.occurredAt(),
+          0,
+          0,
           operation.payload(),
           operation.bodyVersion(),
           operation.operationBody(),
@@ -334,10 +349,27 @@ final class WorkflowSessionPersistenceCoordinator {
           operation.operationId(),
           operation.operationType(),
           operation.actorId(),
+          operation.occurredAt(),
+          operation.revision(),
+          operation.sequence(),
           operation.payload(),
           operation.bodyVersion(),
           operation.operationBody(),
           operation.command());
+    }
+
+    OperationIdentity withOrdering(long acceptedRevision, long acceptedSequence) {
+      return new OperationIdentity(
+          operationId,
+          operationType,
+          actorId,
+          occurredAt,
+          acceptedRevision,
+          acceptedSequence,
+          payload,
+          bodyVersion,
+          operationBody,
+          command);
     }
 
     boolean hasOperationBody() {

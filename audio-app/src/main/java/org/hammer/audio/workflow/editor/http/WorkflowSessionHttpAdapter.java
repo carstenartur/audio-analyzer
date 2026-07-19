@@ -9,6 +9,13 @@ import org.hammer.audio.workflow.WorkflowOperation;
 import org.hammer.audio.workflow.collaboration.OperationActor;
 import org.hammer.audio.workflow.collaboration.WorkflowSessionRegistry;
 import org.hammer.audio.workflow.editor.WorkflowProjection;
+import org.hammer.audio.workflow.editor.http.WorkflowHistoryApiModels.HistoryCapabilitiesRequest;
+import org.hammer.audio.workflow.editor.http.WorkflowHistoryApiModels.HistoryCapabilitiesResponse;
+import org.hammer.audio.workflow.editor.http.WorkflowHistoryApiModels.HistoryPageResponse;
+import org.hammer.audio.workflow.editor.http.WorkflowHistoryApiModels.HistoryQueryRequest;
+import org.hammer.audio.workflow.editor.http.WorkflowHistoryApiModels.RedoPreviewRequest;
+import org.hammer.audio.workflow.editor.http.WorkflowHistoryApiModels.RedoPreviewResponse;
+import org.hammer.audio.workflow.editor.http.WorkflowHistoryApiModels.UndoPreviewResponse;
 import org.hammer.audio.workflow.editor.http.WorkflowSessionApiModels.ActorIdRequest;
 import org.hammer.audio.workflow.editor.http.WorkflowSessionApiModels.CreateSessionRequest;
 import org.hammer.audio.workflow.editor.http.WorkflowSessionApiModels.HistoryCommandResponse;
@@ -20,7 +27,6 @@ import org.hammer.audio.workflow.editor.http.WorkflowSessionApiModels.SessionOpe
 import org.hammer.audio.workflow.editor.http.WorkflowSessionApiModels.SessionResponse;
 import org.hammer.audio.workflow.editor.http.WorkflowSessionApiModels.UndoCommandRequest;
 import org.hammer.audio.workflow.editor.http.WorkflowSessionApiModels.UndoPreviewRequest;
-import org.hammer.audio.workflow.editor.http.WorkflowSessionApiModels.UndoPreviewResponse;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -100,7 +106,28 @@ public final class WorkflowSessionHttpAdapter {
     return WorkflowProjection.fromWorkflow(workflow);
   }
 
-  /** Computes an immutable undo preview at the current semantic revision. */
+  /** Returns one bounded newest-first page of durable semantic history. */
+  @PostMapping("/{sessionId}/history/query")
+  public HistoryPageResponse history(
+      @PathVariable(SESSION_ID) String sessionId, @Valid @RequestBody HistoryQueryRequest request) {
+    return HistoryPageResponse.from(
+        registry.history(
+            sessionId,
+            request.actor().toDomain(),
+            request.beforeRevision(),
+            request.resolvedLimit()));
+  }
+
+  /** Returns actor-scoped undo, redo and shared-undo capabilities. */
+  @PostMapping("/{sessionId}/history/capabilities")
+  public HistoryCapabilitiesResponse capabilities(
+      @PathVariable(SESSION_ID) String sessionId,
+      @Valid @RequestBody HistoryCapabilitiesRequest request) {
+    return HistoryCapabilitiesResponse.from(
+        registry.capabilities(sessionId, request.actor().toDomain()));
+  }
+
+  /** Computes an immutable timestamp-aware undo preview at the current semantic revision. */
   @PostMapping("/{sessionId}/undo/preview")
   public UndoPreviewResponse previewUndo(
       @PathVariable(SESSION_ID) String sessionId, @Valid @RequestBody UndoPreviewRequest request) {
@@ -113,6 +140,15 @@ public final class WorkflowSessionHttpAdapter {
   public HistoryCommandResponse undo(
       @PathVariable(SESSION_ID) String sessionId, @Valid @RequestBody UndoCommandRequest request) {
     return HistoryCommandResponse.from(registry.undo(sessionId, request.toDomain()));
+  }
+
+  /** Computes an immutable timestamp-aware redo preview at the current semantic revision. */
+  @PostMapping("/{sessionId}/redo/preview")
+  public RedoPreviewResponse previewRedo(
+      @PathVariable(SESSION_ID) String sessionId, @Valid @RequestBody RedoPreviewRequest request) {
+    return RedoPreviewResponse.from(
+        registry.previewRedo(
+            sessionId, request.actor().toDomain(), request.targetUndoOperationId()));
   }
 
   /** Applies one idempotent revision-aware semantic redo command. */
@@ -142,7 +178,7 @@ public final class WorkflowSessionHttpAdapter {
     return WorkflowProjection.fromWorkflow(registry.workflow(sessionId));
   }
 
-  /** Explicitly closes a session. Only the owner may close it. */
+  /** Explicitly closes a session. Only its owner may close it. */
   @DeleteMapping("/{sessionId}")
   public ResponseEntity<Void> close(
       @PathVariable(SESSION_ID) String sessionId, @Valid @RequestBody ActorIdRequest request) {

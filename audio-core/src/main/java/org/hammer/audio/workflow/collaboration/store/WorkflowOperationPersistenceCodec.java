@@ -1,5 +1,6 @@
 package org.hammer.audio.workflow.collaboration.store;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -7,6 +8,8 @@ import org.hammer.audio.workflow.WorkflowOperation;
 
 /** Converts semantic workflow operations into deterministic durable persistence data. */
 public final class WorkflowOperationPersistenceCodec {
+
+  private static final int MAX_AFFECTED_OBJECTS = 1_000_000;
 
   private WorkflowOperationPersistenceCodec() {
     // Utility class.
@@ -94,6 +97,30 @@ public final class WorkflowOperationPersistenceCodec {
     return encoded.toString();
   }
 
+  /**
+   * Decodes the affected-object prefix retained by legacy semantic identity payloads.
+   *
+   * <p>The remaining operation-specific payload map is deliberately ignored. This method exists so
+   * read-only history can still describe legacy rows without claiming that their complete semantic
+   * bodies are reconstructible.
+   *
+   * @param payload deterministic semantic identity payload
+   * @return immutable affected object identifiers in their original order
+   */
+  public static List<String> decodeAffectedObjectIds(String payload) {
+    String requiredPayload = Objects.requireNonNull(payload, "payload");
+    Cursor cursor = new Cursor(requiredPayload);
+    int size = cursor.readNonNegativeLength("affected object count");
+    if (size > MAX_AFFECTED_OBJECTS) {
+      throw new IllegalArgumentException("affected object count is too large: " + size);
+    }
+    List<String> affectedObjectIds = new ArrayList<>(size);
+    for (int index = 0; index < size; index++) {
+      affectedObjectIds.add(cursor.readValue("affected object id"));
+    }
+    return List.copyOf(affectedObjectIds);
+  }
+
   private static String encodeSemanticIdentity(WorkflowOperation operation) {
     StringBuilder encoded = new StringBuilder();
     appendList(encoded, operation.affectedObjectIds());
@@ -115,5 +142,54 @@ public final class WorkflowOperationPersistenceCodec {
       return;
     }
     encoded.append(value.length()).append(':').append(value);
+  }
+
+  private static final class Cursor {
+    private final String value;
+    private int offset;
+
+    Cursor(String value) {
+      this.value = value;
+    }
+
+    int readNonNegativeLength(String description) {
+      int delimiter = value.indexOf(':', offset);
+      if (delimiter < 0) {
+        throw malformed(description);
+      }
+      int parsed;
+      try {
+        parsed = Integer.parseInt(value.substring(offset, delimiter));
+      } catch (NumberFormatException exception) {
+        throw new IllegalArgumentException(
+            "Invalid " + description + " in semantic identity", exception);
+      }
+      if (parsed < 0) {
+        throw malformed(description);
+      }
+      offset = delimiter + 1;
+      return parsed;
+    }
+
+    String readValue(String description) {
+      int length = readNonNegativeLength(description + " length");
+      int end;
+      try {
+        end = Math.addExact(offset, length);
+      } catch (ArithmeticException exception) {
+        throw new IllegalArgumentException(
+            "Invalid " + description + " in semantic identity", exception);
+      }
+      if (end > value.length()) {
+        throw malformed(description);
+      }
+      String parsed = value.substring(offset, end);
+      offset = end;
+      return parsed;
+    }
+
+    private IllegalArgumentException malformed(String description) {
+      return new IllegalArgumentException("Malformed " + description + " in semantic identity");
+    }
   }
 }
