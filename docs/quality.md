@@ -1,93 +1,131 @@
 # Quality gates and coverage
 
-This page documents the checks that protect the repository during local development and CI. The goal
-is not to claim that every warning has already been eliminated. The goal is to make quality visible,
-prevent regressions and gradually reduce remaining technical debt.
+Audio Analyzer treats executable behavior, architecture boundaries and public documentation as parts of one product-quality system. A green default build is necessary, but browser, persistence and visual changes also require the opt-in checks that exercise those boundaries.
 
-## Required validation command
+## Default validation
 
-Run the full Maven verification before merging release-facing changes:
+Run before merging:
 
 ```bash
 ./mvnw clean verify
 ```
 
-This command runs the core build, tests, formatting checks, static analysis, coverage checks and
-architecture fitness tests.
+This covers:
 
-## Build gates
+- Java 21 enforcement;
+- Java and TypeScript compilation;
+- unit and integration tests in the default reactor;
+- Spotless for Java, POM and Markdown;
+- architecture fitness tests;
+- JaCoCo reporting and minimum coverage;
+- Checkstyle, PMD and SpotBugs baseline gates;
+- production Vite build and asset reproducibility.
 
-The following gates are expected to pass in `mvn verify`:
+CodeQL runs as a separate GitHub workflow with an explicit Maven build.
 
-- **Java version** — Maven Enforcer requires Java 21 or newer.
-- **Unit tests** — Surefire runs module tests with `java.awt.headless=true`.
-- **Spotless** — Java, POM and Markdown formatting must match the configured formatter.
-- **Architecture fitness tests** — package and dependency boundaries are checked by tests.
-- **JaCoCo** — coverage reports are generated and the configured minimum is enforced.
-- **Checkstyle** — style findings are baseline-gated through the Maven/CI setup.
-- **PMD** — code-quality findings are baseline-gated through the Maven/CI setup.
-- **SpotBugs** — bug-pattern findings are baseline-gated through the Maven/CI setup.
-- **CodeQL** — the GitHub workflow performs a separate security-analysis build.
+Codecov upload is informative rather than a hard artifact gate. Upload failures still require investigation.
 
-Codecov upload is intentionally not a hard gate. Upload failures should be investigated, but they do
-not automatically mean that the build artifact is invalid.
+## Opt-in packaged-product gates
 
-## Current coverage position
+The normal reactor remains Docker-free. Changes to the web workbench, collaboration, SSE, session restore or generated web screenshots must also run the relevant Docker/Chromium workflows.
 
-The JaCoCo line-coverage floor is intentionally low. It proves that coverage cannot disappear and that
-reports are generated consistently, but it is not a claim of comprehensive test coverage.
+### Collaboration E2E
 
-Coverage should be raised gradually only when new tests exercise behavior that matters:
+The Collaboration E2E workflow starts the packaged Spring Boot application and two isolated Chromium contexts. It verifies:
 
-1. keep the current gate green;
-2. add focused tests for critical paths;
-3. raise the threshold in small steps;
-4. avoid coverage-only tests that do not protect behavior.
+- live cross-browser canonical projection convergence;
+- presence outside workflow state;
+- stale-revision rejection without optimistic residue;
+- controlled SSE interruption and catch-up;
+- full reload and session restoration;
+- durable personal and shared undo/redo behavior.
 
-High-value coverage targets:
+The suite uploads Failsafe reports and full browser/server diagnostics. It does not use fixed-delay sleeps; waits are tied to observable revisions, connection states, responses and DOM visibility.
 
-- `SampleDecoder` format and partial-buffer paths;
-- `AudioRingBuffer` boundary behavior and SPSC stress cases;
-- waveform trigger and spectrum display-state edge cases;
-- `SpectrumAnalyzer`, `StereoDelayAnalyzer`, `SpectrogramAnalyzer` and `DiagnosisAnalyzer` rejection
-  and threshold paths;
-- recording/replay and evidence-bundle assembly;
-- `SampleClock` drift/jitter assumptions before stronger synchronized-array claims are made;
-- workbench model tests that do not depend on live audio hardware.
+### Screenshot verification
+
+The screenshot profile generates documented states from the packaged application and compares them with committed PNG baselines.
+
+A screenshot is accepted only when:
+
+- the scenario asserts the described semantic state before capture;
+- volatile presentation data is deliberately normalized or masked;
+- labels, object ids and controls remain readable;
+- important content is not clipped or obscured;
+- the surrounding documentation matches the image;
+- verify mode reproduces the committed baseline.
+
+See [Workbench screenshot documentation pipeline](workbench-screenshot-pipeline.md).
+
+## Persistence and migration gates
+
+Durable-mode changes should prove:
+
+- ordered Flyway migrations by schema owner;
+- Hibernate `validate` startup;
+- one application-managed `SessionFactory`;
+- collaboration/session/outbox recovery;
+- shared JGit storage integration;
+- H2 and PostgreSQL behavior where production SQL semantics matter;
+- no raw-JDBC or second-bootstrap test implementation.
+
+## Coverage position
+
+The JaCoCo floor is intentionally conservative. It proves that reporting and minimum behavior coverage cannot disappear; it is not a claim of comprehensive testing.
+
+Raise coverage by protecting meaningful behavior:
+
+1. add a focused test for a real contract or failure mode;
+2. keep the current gate green;
+3. raise the threshold in a small reviewable step;
+4. avoid tests that execute lines without asserting behavior.
+
+High-value targets include:
+
+- sample-format and partial-buffer decoding;
+- bounded ring-buffer behavior;
+- waveform trigger and spectrum state transitions;
+- analyzer rejection and threshold paths;
+- recording/replay and evidence bundles;
+- collaboration conflict, retry and recovery paths;
+- persistence migration and restart invariants;
+- UI adapter tests that avoid live hardware.
 
 ## Static-analysis baseline
 
-The repository may still contain existing Checkstyle, PMD or SpotBugs findings. CI should prevent the
-number of findings from increasing beyond the committed baseline while the project reduces debt module
-by module.
+Existing findings may be baseline-gated while debt is reduced. A touched area should not introduce new findings.
 
-When touching a file with existing findings:
+When changing a file:
 
-- do not introduce new findings;
-- fix local findings when the fix is low-risk;
-- document intentionally deferred findings in the PR;
-- prefer small, reviewable cleanup PRs over broad mechanical rewrites.
+- fix nearby low-risk findings;
+- do not broaden exclusions to hide unrelated problems;
+- document a necessary, narrow exclusion centrally;
+- prefer behavior-preserving cleanups over mechanical repository-wide rewrites;
+- keep framework adapters from leaking into stable domain packages.
 
-## Documentation and screenshot quality
+## Documentation quality
 
-Documentation is part of the product. Public-facing documentation changes should satisfy the QA plan:
+Public documentation must:
 
-- command examples must work from a clean checkout or clearly state prerequisites;
-- generated screenshots must be regenerated from the current codebase;
-- screenshots must be visually reviewed for overlapping labels, clipped text and misleading states;
-- experimental acoustic-localization claims must be limited to what tests, calibration and benchmark
-  evidence support;
-- remaining limitations must be recorded in `docs/QA-FINDINGS.md` or linked issues.
+- serve audio-processing users before implementation specialists;
+- distinguish stable capabilities from experimental research;
+- use commands that work from a clean checkout or state prerequisites;
+- link detailed architecture and plugin material instead of overloading the README;
+- regenerate user-interface images from current code;
+- include visual QA in addition to pixel comparison;
+- avoid calibrated-performance, species or safety claims without evidence;
+- record remaining limitations in `docs/QA-FINDINGS.md` or linked issues.
 
 See:
 
+- [Documentation home](README.md)
 - [Application and documentation QA plan](qa/application-documentation-qa-plan.md)
 - [Screenshot QA checklist](qa/screenshot-qa-checklist.md)
 - [Release-readiness checklist](qa/release-readiness-checklist.md)
 
-## Report locations after `mvn verify`
+## Common reports
 
-Common report locations:
+After `mvn verify`:
 
 - Checkstyle: `*/target/checkstyle-result.xml`
 - PMD: `*/target/pmd.xml`
@@ -95,9 +133,19 @@ Common report locations:
 - JaCoCo HTML: `*/target/site/jacoco/index.html`
 - JaCoCo XML: `*/target/site/jacoco/jacoco.xml`
 - Surefire XML: `*/target/surefire-reports/*.xml`
+- Failsafe XML: `*/target/failsafe-reports/*.xml`
+
+GitHub workflows additionally publish report bundles and failure artifacts.
 
 ## Release readiness
 
-Before a public release or announcement, complete the release-readiness checklist and either close or
-explicitly defer blocking QA findings. A release should not rely only on CI: manual app QA and visual
-screenshot review are required for user-facing quality.
+Before a public release or research-facing announcement:
+
+1. run the default and relevant opt-in workflows;
+2. complete visual screenshot review;
+3. complete a dated manual packaged-application QA record;
+4. verify persistent-mode migration/recovery when that mode is part of the release;
+5. close or explicitly defer blocking findings;
+6. ensure README and feature documentation describe the released behavior conservatively.
+
+CI is evidence, not a substitute for manual usability and visual review.
