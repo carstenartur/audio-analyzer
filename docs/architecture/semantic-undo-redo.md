@@ -180,3 +180,4 @@ The session lock serializes in-process commands and read-only capability calcula
 - HTTP tests cover history and capability contracts, timestamp-aware previews, validation and accepted command responses.
 - Hibernate tests cover operation-body round trips, migration compatibility, complete restart recovery and read-only history stability.
 - PostgreSQL Testcontainers migration coverage validates the same V3 schema used in production.
+
