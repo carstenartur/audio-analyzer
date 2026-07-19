@@ -3,7 +3,7 @@
 Audio Analyzer provides two complementary ways to query versioned workflow history.
 
 - `WorkflowHistorySearch` in `audio-core` performs exact semantic queries over a bounded set of authoritative workflow snapshots. It can answer domain questions such as which versions contain a node type or metadata value.
-- `IndexedWorkflowHistorySearch` uses the released `jgit-storage-hibernate-search` projection for repeated full-text queries over commit messages, changed paths and changed `workflow.dsl` content.
+- `IndexedWorkflowHistorySearch` uses the shared `jgit-storage-hibernate-search` projection for repeated compound queries over commit messages, authors, changed paths, commit time and changed `workflow.dsl` content.
 
 Every indexed result contains the exact Git commit identifier. The matching workflow is loaded through the existing `VersionedWorkflowStore.loadAtCommit` boundary or the `/workflow/load` command; the Lucene projection never becomes workflow authority.
 
@@ -11,7 +11,8 @@ Every indexed result contains the exact Git commit identifier. The matching work
 checkpoint -> Hibernate-backed JGit commit and ref update
            -> best-effort CommitIndexer upsert
 
-query      -> GitHistorySearchService / Lucene projection
+query      -> one bounded CommitHistoryQuery
+           -> GitHistorySearchService / Lucene projection
            -> WorkflowHistoryTextResult
            -> exact CommitId
            -> authoritative workflow snapshot
@@ -36,21 +37,34 @@ When `workbench.persistence.mode=hibernate` provides the indexed-search bean, th
 
 The production panel supports:
 
-- full-text queries across commit summaries, changed paths and deterministic workflow DSL content;
+- full-text expressions across commit summaries, changed paths and deterministic workflow DSL content;
+- exact author-email filtering;
+- analyzed changed-path terms;
+- inclusive lower and upper commit-time bounds entered in local browser time and transmitted as instants;
 - bounded result counts from 1 to 200;
 - explicit idempotent rebuild of missing projections from an authoritative branch;
 - exact commit identity, author, timestamp and changed-path evidence per result;
 - loading the authoritative workflow snapshot for the selected commit.
 
+All supplied generic search predicates execute in one bounded server-side query. The client does not intersect independently truncated result lists.
+
 Historical loading is blocked while the browser is attached to a collaboration session. The user must leave the session first, preventing a legacy history load from competing with a server-authoritative live projection. The rebuild action remains safe because it only recreates disposable search projections.
 
 ## HTTP API
 
-Search the indexed commit message, changed paths and changed workflow DSL:
+Search indexed commit metadata and changed workflow content:
 
 ```text
-GET /workflow/history/index?q=<query>&limit=<count>
+GET /workflow/history/index
+    ?q=<simple-query-string expression>
+    &author=<exact email>
+    &path=<analyzed path terms>
+    &from=<inclusive ISO-8601 instant>
+    &to=<inclusive ISO-8601 instant>
+    &limit=<1..200>
 ```
+
+Every filter is optional. Blank full text with structured filters uses the shared relational newest-first query path; a non-blank full-text expression combines the remaining predicates as filters while preserving relevance ordering.
 
 Each result includes:
 
@@ -73,6 +87,10 @@ POST /workflow/load
 {"commitId":"<exact commit id>"}
 ```
 
+## Branch boundary
+
+The generic commit projection intentionally does not duplicate Git ref membership. The current branch parameter therefore controls rebuild traversal, not search filtering. Correct branch-scoped search belongs in the planned Audio Analyzer semantic projection, where branch lifecycle and application access rules can be enforced without pretending that a globally indexed commit has only one branch identity.
+
 ## Current boundary
 
-No JGit, Hibernate, Hibernate Search or Lucene type crosses into `audio-core`, the frontend or HTTP responses. Structured compound author/path/time filters and workflow-specific indexed fields remain subsequent work in issue #247.
+No JGit, Hibernate, Hibernate Search or Lucene type crosses into `audio-core`, the frontend or HTTP responses. Workflow-specific indexed fields, branch-scoped search, compare/restore commands and PostgreSQL end-to-end projection coverage remain subsequent work in issue #247.
