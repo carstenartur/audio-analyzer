@@ -6,6 +6,9 @@ import java.util.Objects;
 /**
  * Stable newest-first page of immutable semantic history.
  *
+ * <p>Passing {@link #nextBeforeRevision()} as the next request cursor cannot duplicate the final
+ * entry from this page because the cursor is exclusive.
+ *
  * @param operations history entries ordered by descending semantic revision
  * @param nextBeforeRevision exclusive revision cursor for the next older page, or {@code null}
  * @param currentRevision current session revision at query time
