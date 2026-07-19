@@ -437,8 +437,9 @@ public final class WorkflowOperationBodyCodec {
   private static void writeMap(DataOutputStream output, Map<String, String> values)
       throws IOException {
     writeSize(output, values.size());
-    for (Map.Entry<String, String> entry :
-        values.entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
+    List<Map.Entry<String, String>> entries =
+        values.entrySet().stream().sorted(Map.Entry.comparingByKey()).toList();
+    for (Map.Entry<String, String> entry : entries) {
       writeString(output, entry.getKey());
       writeString(output, entry.getValue());
     }
