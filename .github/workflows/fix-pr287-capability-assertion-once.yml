@@ -1,0 +1,70 @@
+name: Fix PR 287 capability assertion once
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/fix-pr287-capability-assertion-once.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.event.pull_request.number == 287 && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feature/249-two-browser-collaboration-e2e
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Assert durable capability revision instead of a nonexistent test hook
+        shell: python
+        run: |
+          from pathlib import Path
+          path = Path('workbench-screenshot-tests/src/test/java/org/hammer/audio/workbench/screenshot/WorkbenchTwoBrowserCollaborationIT.java')
+          text = path.read_text()
+          old = '''      assertEquals(
+              "ready", bob.page().locator("[data-testid='history-controller-state']").innerText());
+          '''
+          new = '''      waitForHistoryCapabilityRevision(bob.page(), 4);
+          '''
+          if old not in text:
+              raise SystemExit('obsolete history controller assertion not found')
+          text = text.replace(old, new, 1)
+          marker = '''  private static void assertRevision(Page page, int revision) {
+              assertEquals(
+                  Integer.toString(revision), page.locator("[data-testid='semantic-revision']").innerText());
+            }
+
+          '''
+          addition = '''  private static void assertRevision(Page page, int revision) {
+              assertEquals(
+                  Integer.toString(revision), page.locator("[data-testid='semantic-revision']").innerText());
+            }
+
+            private static void waitForHistoryCapabilityRevision(Page page, int revision) {
+              Locator value = page.locator("[data-testid='history-capability-revision']");
+              value.waitFor();
+              String expected = "Capability revision " + revision;
+              page.waitForCondition(() -> expected.equals(value.innerText()));
+            }
+
+          '''
+          if marker not in text:
+              raise SystemExit('assertRevision insertion marker not found')
+          path.write_text(text.replace(marker, addition, 1))
+      - name: Format optional browser module
+        run: mvn -B -Pscreenshot-tests -pl workbench-screenshot-tests spotless:apply
+      - name: Commit assertion fix and remove helper
+        run: |
+          rm .github/workflows/fix-pr287-capability-assertion-once.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add workbench-screenshot-tests/src/test/java/org/hammer/audio/workbench/screenshot/WorkbenchTwoBrowserCollaborationIT.java .github/workflows/fix-pr287-capability-assertion-once.yml
+          git commit -m "test: assert durable capability state after reload"
+          git push origin HEAD:feature/249-two-browser-collaboration-e2e
