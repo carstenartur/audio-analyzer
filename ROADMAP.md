@@ -1,94 +1,159 @@
 # Roadmap
 
-This roadmap lists open work. Implemented capabilities are documented in the README and in the feature
-and plugin guides. The roadmap is intentionally forward-looking: it should help contributors choose
-what to do next, not repeat completed history.
+This roadmap lists open work from the current implemented baseline. Completed collaboration, persistence and UI foundations are documented in the README and architecture guides rather than repeated as future plans.
 
-## Release-quality documentation and QA
+## Current baseline
 
-The current public-quality priority is the documentation and screenshot overhaul tracked in #198.
+The repository currently provides:
 
-Near-term goals:
+- desktop signal inspection, recording/replay and evidence export;
+- immutable workflow models and deterministic semantic operations;
+- packaged React Flow workflow editing;
+- session lifecycle, ordered SSE, presence and revision-safe commands;
+- durable personal/shared undo and redo with previews and conflicts;
+- Hibernate-backed session recovery, migrations and transactional outbox;
+- JGit-backed workflow checkpoint integration;
+- executable two-browser collaboration coverage for live convergence and undo/redo;
+- generated documentation screenshots for stable UI states.
 
-1. Keep `./mvnw clean verify` green, including Spotless Markdown checks.
-2. Regenerate all checked-in documentation screenshots from the current codebase.
-3. Visually review screenshots for overlapping labels, clipped axes, unreadable legends and misleading
-   empty states.
-4. Replace stale version-specific command examples with release-tolerant instructions.
-5. Complete a dated manual QA evidence file under `docs/qa/` before public release messaging.
+This baseline is useful, but it is not yet the complete workflow platform described by epic #239.
 
-Relevant documents:
+## Priority 1 — complete cross-process durability evidence
 
-- [Application and documentation QA plan](docs/qa/application-documentation-qa-plan.md)
-- [Screenshot QA checklist](docs/qa/screenshot-qa-checklist.md)
-- [Manual application QA template](docs/qa/manual-application-qa-template.md)
-- [Release-readiness checklist](docs/qa/release-readiness-checklist.md)
+Issue #249 remains open after the live two-browser stage.
 
-## Product hardening
+The next stage must run the packaged application in durable Hibernate mode, stop the complete process and restart it against the same database. It should prove:
 
-Open hardening work:
+- session, operation identity, revision and event sequence recovery;
+- actor history and undo/redo capability recovery;
+- command idempotency after restart;
+- pending transactional outbox dispatch after restart;
+- migration plus Hibernate `validate` startup;
+- checkpoint and old-commit loading when the checkpoint lifecycle is included;
+- useful browser, server and database diagnostics on failure.
 
-- reduce Checkstyle, PMD and SpotBugs findings below the committed CI baseline;
-- raise JaCoCo thresholds gradually after adding behavior-focused tests;
-- add an offline documentation link checker;
-- add more layout tests for Swing panels that contain dynamic labels or resizing behavior;
-- keep generated documentation images reproducible and reviewable.
+The test must continue using the shared `SessionFactory`, Hibernate-backed collaboration store and Hibernate-backed JGit store. It must not introduce raw JDBC or a parallel test persistence model.
 
-## Application UX
+## Priority 2 — semantic diff and merge
 
-The Swing dashboard is functional but should be hardened as a user-facing tool:
+Issue #246 owns deterministic workflow comparison, three-way merge and conflict resolution.
 
-- verify startup, demo mode, recording/replay and export workflows on a packaged build;
-- test common desktop sizes and HiDPI scale factors;
-- review long labels before adding them to fixed-width controls;
-- add visual or panel-level tests where generated screenshots cannot cover runtime states.
+Required outcomes:
 
-## Architecture
+- semantic rather than line-oriented diffs;
+- typed conflicts for modify/modify, delete/modify, delete/connect and stable-id collisions;
+- deterministic auto-merge for independent changes;
+- explicit auditable resolution choices;
+- validation before committing the resolved workflow;
+- a React Flow conflict panel without JGit/Hibernate knowledge;
+- exact resulting commit identity and reload.
 
-Current architecture work should protect the separation between stable platform code and experimental
-research code:
+## Priority 3 — searchable workflow history
 
-- keep stable plugin contracts in `audio-plugin-api`;
-- keep experimental acoustic-localization code inside `audio-experimental-acoustic` until APIs and
-  evidence justify promotion;
-- continue enforcing bounded contexts with architecture fitness tests;
-- resolve the `org.hammer.audio` split package before any JPMS migration;
-- decide whether demo-signal types belong in a stable API package or remain application-specific.
+Issue #247 owns rebuildable search projections over versioned workflow history.
 
-## Recording, replay and evidence export
+Required outcomes:
 
-Recording and replay are core reproducibility features. Useful next steps:
+- reuse of `jgit-storage-hibernate-search`;
+- generic commit/path/author/message/content search from the shared library;
+- Audio Analyzer-specific workflow/node/property projections only where necessary;
+- deterministic full rebuild from Git authority;
+- branch, author, time, workflow, node and property filters;
+- exact matching commit load;
+- clear index-unavailable versus history-lost behavior;
+- no second Hibernate/Search bootstrap or raw-JDBC search path.
 
-- add richer evidence-bundle metadata, including build/version and capture settings;
-- expand A/B comparison reports with configurable pass/fail thresholds;
-- add replay-driven integration tests around end-to-end analysis publication;
-- document expected behavior for very large recordings and memory limits.
+Search is derived state and must remain disposable without losing authoritative workflow history.
+
+## Priority 4 — execute immutable workflow snapshots truthfully
+
+Epic #248 and children #273–#275 own actual workflow execution.
+
+### #273 — run orchestration and lifecycle
+
+Introduce immutable source selection, stable run identity, expected-revision checks, backend ports, lifecycle, cancellation and REST contracts. The existing status-only dry run must remain labeled as simulation.
+
+### #274 — real deterministic audio computation
+
+Execute at least:
+
+```text
+Synthetic Signal Generator -> Gain
+```
+
+through a real backend and assert the numerical output and reproducibility fingerprint.
+
+### #275 — production run UX
+
+Add preflight, provenance, progress, cancellation, result and failure views to the React Flow workbench. Editing may continue, but it must never mutate the captured run input.
+
+The epic is complete only when simulation and actual computation are visibly distinct.
+
+## Product documentation and usability
+
+Documentation should continue to serve audio-processing users first:
+
+- maintain a short task-oriented README;
+- keep getting-started and feature guides synchronized with the packaged product;
+- keep plugin implementation material in dedicated development pages;
+- generate screenshots from integration scenarios;
+- reject screenshots with clipped controls, unreadable text or misleading empty states;
+- record a dated manual QA pass before release-facing claims.
+
+New stable UI states should receive selectors, assertions and generated documentation in the same change.
+
+## Desktop audio workbench
+
+Useful hardening work includes:
+
+- packaged-build QA for demo, capture, recording, replay and export;
+- HiDPI and common desktop-size review;
+- explicit handling of long labels and dynamic layout;
+- larger-recording memory and streaming guidance;
+- richer evidence metadata including software version and capture settings;
+- configurable pass/fail criteria for A/B reports.
+
+## Plugin ecosystem
+
+The stable plugin API should evolve conservatively:
+
+- publish a compatibility policy before promising third-party binary stability;
+- provide a minimal standalone reference plugin;
+- validate contribution id uniqueness and descriptor/documentation quality;
+- clarify runtime classpath packaging for external plugins;
+- prefer UI-independent contributions where web/headless use is expected;
+- avoid moving experimental acoustic assumptions into the stable API.
 
 ## Experimental acoustic localization
 
-The acoustic-localization module remains a research plugin, not a production detector. It is valuable
-because it makes algorithm assumptions executable and benchmarkable.
+The localization module remains research-grade.
 
-Implemented research foundations include:
+Open research issues include:
 
-- deterministic simulation scenarios with moving sources, reflections and noise;
-- multi-peak detection, frequency clustering, TDOA estimation and grid beamforming;
-- Kalman-based source tracking and benchmark metrics;
-- simulation and imported-recording workbenches;
-- local HumBugDB import, feature extraction and rule-based classification baseline;
-- synthetic-vs-real comparison and generator calibration infrastructure.
+- #136 — synchronization and calibration framework;
+- #138 — algorithm improvements beyond baseline GCC-PHAT and grid beamforming;
+- #139 — complete real-world microphone-array workflow.
 
-Open technical research work is tracked in issues:
+Research priorities:
 
-- Issue #136 — synchronization and calibration framework for microphone-array experiments;
-- Issue #138 — algorithm improvements beyond baseline GCC-PHAT and grid beamforming;
-- Issue #139 — complete real-world microphone-array workflow from hardware to localization.
+1. make timing and geometry assumptions executable;
+2. add calibrated array profiles and offset/drift fixtures;
+3. improve confidence, sub-sample TDOA and reflection handling;
+4. expand real-recording benchmark evidence;
+5. document supported and unsupported hardware paths;
+6. avoid species or safety claims unsupported by calibrated experiments.
 
-Research directions after the documentation QA pass:
+## Release-quality gate
 
-1. make timing assumptions explicit in code and documentation;
-2. add calibrated array profiles and deterministic offset/drift tests;
-3. improve TDOA confidence, sub-sample precision and reflection handling;
-4. expand benchmark evidence with real recordings and reproducible fixtures;
-5. document supported and unsupported hardware paths without overstating reliability.
+A public release should require:
 
+- `./mvnw clean verify`;
+- CodeQL;
+- relevant Docker/Chromium integration workflows;
+- reproducible screenshot verification;
+- migration/schema-validation checks for persistent mode;
+- visual review of generated images;
+- a dated manual QA record;
+- explicit stable/experimental boundaries and known limitations.
+
+The roadmap should be updated when an issue closes so completed work moves into feature or architecture documentation rather than remaining presented as future intent.
