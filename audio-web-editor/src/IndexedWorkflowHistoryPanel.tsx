@@ -51,7 +51,7 @@ function isUnavailable(failure: unknown): boolean {
   return failure instanceof ApiError && failure.status === 404;
 }
 
-/** Optional indexed-history UI, rendered only when the Hibernate Search boundary is available. */
+/** Optional version-history UI, rendered only when the indexed search endpoint is available. */
 export function IndexedWorkflowHistoryPanel() {
   const [availability, setAvailability] = useState<Availability>('probing');
   const [expanded, setExpanded] = useState(false);
