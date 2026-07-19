@@ -25,17 +25,17 @@ Dependency arrows point from a consumer to an allowed upstream contract. Infrast
 
 ## Overview
 
-| Context | Primary modules | Status | Authority |
-|---|---|---|---|
-| Audio Processing | `audio-core`, `audio-geometry`, `audio-acquisition`, `audio-dsp` | Stable foundation | Audio samples, formats, DSP and analysis snapshots |
-| Workflow Modeling | `audio-core` | Stable foundation | Immutable workflow graph and semantic operations |
-| Validation | `audio-core` | Stable foundation | Structural and semantic workflow acceptance |
-| Execution | `audio-core` contracts; concrete backend work remains | Partial | Immutable run model; current dry run is simulation only |
-| Collaboration | `audio-core`, `audio-app` | Implemented | Session membership, operation order, revision, history and undo eligibility |
-| Versioning and Persistence | `audio-core` facade, `audio-app`, shared JGit library | Implemented | Durable sessions/outbox and versioned workflow checkpoints |
-| Plugin Extension | `audio-plugin-api`, host adapter in `audio-app` | Stable API foundation | Host-visible contribution metadata |
-| Presentation | `audio-app`, `audio-web-editor` | Implemented | Rendering and user intent only |
-| Experimental Acoustic Research | `audio-experimental-acoustic` | Experimental | Simulation and research models inside its scope |
+|            Context             |                         Primary modules                          |        Status         |                                  Authority                                  |
+|--------------------------------|------------------------------------------------------------------|-----------------------|-----------------------------------------------------------------------------|
+| Audio Processing               | `audio-core`, `audio-geometry`, `audio-acquisition`, `audio-dsp` | Stable foundation     | Audio samples, formats, DSP and analysis snapshots                          |
+| Workflow Modeling              | `audio-core`                                                     | Stable foundation     | Immutable workflow graph and semantic operations                            |
+| Validation                     | `audio-core`                                                     | Stable foundation     | Structural and semantic workflow acceptance                                 |
+| Execution                      | `audio-core` contracts; concrete backend work remains            | Partial               | Immutable run model; current dry run is simulation only                     |
+| Collaboration                  | `audio-core`, `audio-app`                                        | Implemented           | Session membership, operation order, revision, history and undo eligibility |
+| Versioning and Persistence     | `audio-core` facade, `audio-app`, shared JGit library            | Implemented           | Durable sessions/outbox and versioned workflow checkpoints                  |
+| Plugin Extension               | `audio-plugin-api`, host adapter in `audio-app`                  | Stable API foundation | Host-visible contribution metadata                                          |
+| Presentation                   | `audio-app`, `audio-web-editor`                                  | Implemented           | Rendering and user intent only                                              |
+| Experimental Acoustic Research | `audio-experimental-acoustic`                                    | Experimental          | Simulation and research models inside its scope                             |
 
 ## 1. Audio Processing
 
@@ -349,3 +349,4 @@ Before adding a dependency or public type:
 4. Confirm no UI or persistence type leaks into the contract.
 5. Add an architecture test when the boundary is important.
 6. Update this map and the high-level architecture when ownership changes.
+

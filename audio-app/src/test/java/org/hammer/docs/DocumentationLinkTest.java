@@ -15,11 +15,12 @@ import java.util.regex.Pattern;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 
-/** Verifies that repository-local Markdown links and images resolve from their declaring document. */
+/**
+ * Verifies that repository-local Markdown links and images resolve from their declaring document.
+ */
 class DocumentationLinkTest {
 
-  private static final Pattern MARKDOWN_TARGET =
-      Pattern.compile("!?\\[[^]\\n]*]\\(([^)\\n]+)\\)");
+  private static final Pattern MARKDOWN_TARGET = Pattern.compile("!?\\[[^]\\n]*]\\(([^)\\n]+)\\)");
 
   @Test
   void localDocumentationTargetsExist() throws IOException {
@@ -38,12 +39,7 @@ class DocumentationLinkTest {
         Path resolved = document.getParent().resolve(target).normalize();
         if (!resolved.startsWith(root) || !Files.exists(resolved)) {
           failures.add(
-              root.relativize(document)
-                  + " -> "
-                  + rawTarget
-                  + " (resolved as "
-                  + resolved
-                  + ")");
+              root.relativize(document) + " -> " + rawTarget + " (resolved as " + resolved + ")");
         }
       }
     }
