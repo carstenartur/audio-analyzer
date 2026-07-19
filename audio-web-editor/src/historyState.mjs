@@ -1,3 +1,44 @@
+/**
+ * Framework-independent durable history state used by the React adapter and Node-native tests.
+ * Canonical semantic history is always reloaded from the server.
+ */
+
+/** @typedef {'UNDO' | 'REDO'} HistoryCommandKind */
+/**
+ * @typedef {{
+ *   kind: HistoryCommandKind,
+ *   commandId: string,
+ *   expectedRevision: number,
+ *   targetOperationId: string,
+ *   previewId: string | null
+ * }} HistoryCommandEnvelope
+ */
+/**
+ * @typedef {{
+ *   operationId: string,
+ *   commandId: string,
+ *   revision: number,
+ *   [key: string]: unknown
+ * }} HistoryOperation
+ */
+/**
+ * @typedef {{
+ *   operations: HistoryOperation[],
+ *   nextBeforeRevision: number | null,
+ *   currentRevision?: number
+ * }} HistoryPage
+ */
+/**
+ * @typedef {{
+ *   capabilities: object | null,
+ *   operations: HistoryOperation[],
+ *   nextBeforeRevision: number | null,
+ *   status: 'idle' | 'loading' | 'ready' | 'pending' | 'uncertain' | 'error',
+ *   pendingCommand: HistoryCommandEnvelope | null,
+ *   problem: Record<string, unknown> | null
+ * }} HistoryState
+ */
+
 const INITIAL_STATE = Object.freeze({
   capabilities: null,
   operations: Object.freeze([]),
@@ -7,10 +48,27 @@ const INITIAL_STATE = Object.freeze({
   problem: null,
 });
 
+/** @returns {HistoryState} empty client history state */
 export function emptyHistoryState() {
-  return { ...INITIAL_STATE, operations: [] };
+  return {
+    ...INITIAL_STATE,
+    operations: [],
+    status: /** @type {'idle'} */ ('idle'),
+  };
 }
 
+/**
+ * Creates an immutable, retry-stable history command envelope.
+ *
+ * @param {{
+ *   kind: HistoryCommandKind,
+ *   commandId: string,
+ *   expectedRevision: number,
+ *   targetOperationId: string,
+ *   previewId?: string | null
+ * }} input command values
+ * @returns {Readonly<HistoryCommandEnvelope>} validated envelope
+ */
 export function createHistoryCommandEnvelope({
   kind,
   commandId,
@@ -42,6 +100,13 @@ export function createHistoryCommandEnvelope({
   });
 }
 
+/**
+ * Maps one stable envelope to the exact REST command contract.
+ *
+ * @param {HistoryCommandEnvelope} envelope pending command
+ * @param {{actorId: string, userId: string, displayName: string}} actor actor identity
+ * @returns {{endpoint: 'undo' | 'redo', body: Record<string, unknown>}} REST request
+ */
 export function historyCommandRequest(envelope, actor) {
   if (envelope.kind === 'UNDO') {
     return {
@@ -66,6 +131,11 @@ export function historyCommandRequest(envelope, actor) {
   };
 }
 
+/**
+ * @param {HistoryOperation[]} existing current operations
+ * @param {HistoryOperation[]} incoming next page
+ * @returns {HistoryOperation[]} deduplicated newest-first operations
+ */
 function uniqueOperations(existing, incoming) {
   const byId = new Map(existing.map((operation) => [operation.operationId, operation]));
   for (const operation of incoming) {
@@ -74,6 +144,11 @@ function uniqueOperations(existing, incoming) {
   return [...byId.values()].sort((left, right) => right.revision - left.revision);
 }
 
+/**
+ * @param {HistoryState} state current state
+ * @param {HistoryOperation[]} operations freshly loaded durable history
+ * @returns {boolean} whether the uncertain command is durably accepted
+ */
 function acceptedPendingCommand(state, operations) {
   if (state.pendingCommand === null) {
     return false;
@@ -81,13 +156,21 @@ function acceptedPendingCommand(state, operations) {
   return operations.some((operation) => operation.commandId === state.pendingCommand.commandId);
 }
 
+/**
+ * Reduces one history controller event. Events are internal to the typed React adapter, so their
+ * payload is intentionally transport-agnostic here.
+ *
+ * @param {HistoryState} state current state
+ * @param {any} event controller event
+ * @returns {HistoryState} next state
+ */
 export function reduceHistoryState(state, event) {
   switch (event.type) {
     case 'LOAD_STARTED':
       return {
         ...state,
         status: state.pendingCommand === null ? 'loading' : state.status,
-        problem: null,
+        problem: state.pendingCommand === null ? null : state.problem,
       };
     case 'LOAD_FAILED':
       return {
@@ -156,6 +239,10 @@ export function reduceHistoryState(state, event) {
   }
 }
 
+/**
+ * @param {string | null} code stable RFC 9457 problem code
+ * @returns {'reconcile' | 'reload' | 'reset' | 'reject'} recovery strategy
+ */
 export function historyRecoveryForProblemCode(code) {
   switch (code) {
     case 'WORKFLOW_SESSION_REVISION_CONFLICT':
