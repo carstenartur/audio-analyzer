@@ -37,62 +37,53 @@ jobs:
               'import java.util.concurrent.TimeUnit;\n',
               'import java.util.concurrent.TimeUnit;\nimport java.util.stream.Stream;\n',
               1)
-          first_start = '''      Page page = actor.page();
-              open(first, page);
-          '''
-          first_new = '''      Page page = actor.page();
-              try {
-                open(first, page);
-          '''
+          first_start = "      Page page = actor.page();\n      open(first, page);"
+          first_new = "      Page page = actor.page();\n      try {\n        open(first, page);"
           if first_start not in text:
               raise SystemExit('first durable process body not found')
           text = text.replace(first_start, first_new, 1)
-          first_end = '''      assertFalse(Files.exists(publications));
-            }
-
-            assertFalse(Files.exists(publications));
-          '''
-          first_end_new = '''      assertFalse(Files.exists(publications));
-              } catch (Throwable failure) {
-                captureDurableFailure("process-1", first, publications, failure);
-                throw failure;
-              }
-            }
-
-            assertFalse(Files.exists(publications));
-          '''
+          first_end = (
+              "      assertFalse(Files.exists(publications));\n"
+              "    }\n\n"
+              "    assertFalse(Files.exists(publications));"
+          )
+          first_end_new = (
+              "      assertFalse(Files.exists(publications));\n"
+              "      } catch (Throwable failure) {\n"
+              "        captureDurableFailure(\"process-1\", first, publications, failure);\n"
+              "        throw failure;\n"
+              "      }\n"
+              "    }\n\n"
+              "    assertFalse(Files.exists(publications));"
+          )
           if first_end not in text:
               raise SystemExit('first durable process end not found')
           text = text.replace(first_end, first_end_new, 1)
-          second_start = '''        Page page = actor.page();
-                open(second, page);
-          '''
-          second_new = '''        Page page = actor.page();
-                try {
-                  open(second, page);
-          '''
+          second_start = "        Page page = actor.page();\n        open(second, page);"
+          second_new = "        Page page = actor.page();\n        try {\n          open(second, page);"
           if second_start not in text:
               raise SystemExit('second durable process body not found')
           text = text.replace(second_start, second_new, 1)
-          second_end = '''        assertEquals("WORKFLOW_OPERATION_ACCEPTED", fields[4]);
-              }
-            }
-          }
-          '''
-          second_end_new = '''        assertEquals("WORKFLOW_OPERATION_ACCEPTED", fields[4]);
-                } catch (Throwable failure) {
-                  captureDurableFailure("process-2", second, publications, failure);
-                  throw failure;
-                }
-              }
-            }
-          }
-          '''
+          second_end = (
+              "        assertEquals(\"WORKFLOW_OPERATION_ACCEPTED\", fields[4]);\n"
+              "      }\n"
+              "    }\n"
+              "  }"
+          )
+          second_end_new = (
+              "        assertEquals(\"WORKFLOW_OPERATION_ACCEPTED\", fields[4]);\n"
+              "        } catch (Throwable failure) {\n"
+              "          captureDurableFailure(\"process-2\", second, publications, failure);\n"
+              "          throw failure;\n"
+              "        }\n"
+              "      }\n"
+              "    }\n"
+              "  }"
+          )
           if second_end not in text:
               raise SystemExit('second durable process end not found')
           text = text.replace(second_end, second_end_new, 1)
-          marker = '''  private static boolean isDockerAvailable() {
-          '''
+          marker = "  private static boolean isDockerAvailable() {"
           addition = '''  private void captureDurableFailure(
               String stage,
               WorkbenchBrowserHarness harness,
@@ -136,11 +127,10 @@ jobs:
             }
           }
 
-            private static boolean isDockerAvailable() {
           '''
           if marker not in text:
               raise SystemExit('diagnostics insertion marker not found')
-          path.write_text(text.replace(marker, addition, 1))
+          path.write_text(text.replace(marker, addition + marker, 1))
       - name: Link executable restart evidence from operational documentation
         shell: python
         run: |
