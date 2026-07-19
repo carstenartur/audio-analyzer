@@ -1,0 +1,89 @@
+name: Fix PR 287 launch commands once
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/fix-pr287-launch-commands-once.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.event.pull_request.number == 287 && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feature/249-two-browser-collaboration-e2e
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Replace ambiguous or invalid JAR wildcards
+        shell: python
+        run: |
+          from pathlib import Path
+
+          desktop_old = '''```bash
+          java -jar audio-app/target/audio-app-*.jar
+          ```'''
+          desktop_new = '''```bash
+          DESKTOP_JAR=$(find audio-app/target -maxdepth 1 -type f \\
+            -name 'audio-app-*.jar' ! -name '*-workbench.jar' -print -quit)
+          java -jar "$DESKTOP_JAR"
+          ```'''
+
+          web_old = '''```bash
+          java -cp "audio-app/target/audio-app-*.jar:audio-app/target/lib/*" \\
+            org.hammer.audio.app.WorkbenchApplication
+          ```'''
+          web_new = '''```bash
+          java -jar audio-app/target/audio-app-*-workbench.jar
+          ```'''
+
+          for filename in ['README.md', 'docs/getting-started.md', 'docs/development.md']:
+              path = Path(filename)
+              text = path.read_text()
+              if desktop_old not in text:
+                  raise SystemExit(f'desktop launch block not found in {filename}')
+              text = text.replace(desktop_old, desktop_new, 1)
+              if web_old in text:
+                  text = text.replace(web_old, web_new, 1)
+              path.write_text(text)
+
+          readme = Path('README.md')
+          text = readme.read_text().replace(
+              'Windows users should use `mvnw.cmd`, replace `:` with `;` in classpaths and substitute the concrete JAR filename when wildcard expansion is unavailable.',
+              'Windows users should use `mvnw.cmd` and launch the unclassified `audio-app-<version>.jar` for the desktop or the `audio-app-<version>-workbench.jar` for the web application.',
+          )
+          readme.write_text(text)
+
+          plugin = Path('docs/development/plugin-development.md')
+          text = plugin.read_text()
+          old = '''```bash
+          java -cp \\
+            "audio-app/target/audio-app-*.jar:audio-app/target/lib/*:path/to/measurement-plugin.jar" \\
+            org.hammer.AudioAnalyseFrame
+          ```'''
+          new = '''```bash
+          DESKTOP_JAR=$(find audio-app/target -maxdepth 1 -type f \\
+            -name 'audio-app-*.jar' ! -name '*-workbench.jar' -print -quit)
+          java -cp "$DESKTOP_JAR:audio-app/target/lib/*:path/to/measurement-plugin.jar" \\
+            org.hammer.AudioAnalyseFrame
+          ```'''
+          if old not in text:
+              raise SystemExit('plugin launch block not found')
+          plugin.write_text(text.replace(old, new, 1))
+      - name: Format documentation
+        run: mvn -B spotless:apply
+      - name: Commit command corrections and remove helper
+        run: |
+          rm .github/workflows/fix-pr287-launch-commands-once.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "docs: make packaged application launch commands unambiguous"
+          git push origin HEAD:feature/249-two-browser-collaboration-e2e
