@@ -22,7 +22,7 @@ class WorkflowSearchSchemaMigrationTest {
         new WorkflowSchemaMigrator(dataSource).migrate(false, false, false);
 
     assertEquals(2, result.coreMigrationsExecuted());
-    assertEquals(1, result.searchMigrationsExecuted());
+    assertEquals(2, result.searchMigrationsExecuted());
     assertEquals(3, result.collaborationMigrationsExecuted());
     assertEquals(1, tableCount(dataSource, "git_commit_index"));
     assertEquals(1, tableCount(dataSource, "jgit_storage_hibernate_search_schema_history"));
