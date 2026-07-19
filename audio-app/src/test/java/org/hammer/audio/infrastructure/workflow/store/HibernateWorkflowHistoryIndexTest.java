@@ -39,8 +39,7 @@ class HibernateWorkflowHistoryIndexTest {
       WorkflowSnapshot matching =
           new WorkflowSnapshot("workflow.search", "node classifier label wingbeatneedle");
       store.commit("main", baseline, metadata("Baseline checkpoint", 1));
-      CommitId matchingCommit =
-          store.commit("main", matching, metadata("Add wingbeat needle", 2));
+      CommitId matchingCommit = store.commit("main", matching, metadata("Add wingbeat needle", 2));
       Instant matchingTime = BASE_TIME.plusSeconds(2);
 
       var hits =
