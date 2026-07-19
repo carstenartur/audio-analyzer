@@ -106,14 +106,21 @@ class WorkbenchTwoBrowserCollaborationIT {
       bob.page().locator(GENERATOR_SELECTOR).first().waitFor();
       assertEquals(1, bob.page().locator(GENERATOR_SELECTOR).count());
 
-      bob.context().setOffline(true);
+      String eventStreamRoute = "**/events?afterSequence=*";
+      bob.context().route(eventStreamRoute, route -> route.abort());
+      bob.page().reload();
+      waitForActiveSession(bob.page(), PERSONAL_SESSION_ID);
+      Locator connectionState = bob.page().locator("[data-testid='connection-state']");
+      bob.page().waitForCondition(() -> "reconnecting".equals(connectionState.innerText()));
+
       alice.page().locator("[data-testid='palette-node-gain']").click();
       waitForRevision(alice.page(), 4);
       assertRevision(bob.page(), 3);
       assertEquals(0, bob.page().locator(GAIN_SELECTOR).count());
-      bob.context().setOffline(false);
-      waitForRevision(bob.page(), 4);
+
+      bob.context().unroute(eventStreamRoute);
       waitForLive(bob.page());
+      waitForRevision(bob.page(), 4);
       bob.page().locator(GAIN_SELECTOR).first().waitFor();
       assertEquals(1, bob.page().locator(GENERATOR_SELECTOR).count());
       assertEquals(1, bob.page().locator(GAIN_SELECTOR).count());
