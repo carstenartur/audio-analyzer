@@ -78,5 +78,12 @@ public final class WorkflowHistoryIndexHttpAdapter {
    *
    * @param indexedCommits number of previously missing commit projections created
    */
-  public record RebuildResponse(int indexedCommits) { }
+  public record RebuildResponse(int indexedCommits) {
+
+    public RebuildResponse {
+      if (indexedCommits < 0) {
+        throw new IllegalArgumentException("indexedCommits must be >= 0");
+      }
+    }
+  }
 }
