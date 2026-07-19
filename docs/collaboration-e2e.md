@@ -89,7 +89,7 @@ The suite contains no `sleep`, `Thread.sleep`, `waitForTimeout` or equivalent fi
 - a preview or confirmation dialog becomes visible;
 - an HTTP response returns the expected structured problem code.
 
-Playwright's configured timeout is only an upper bound that turns a missing condition into a diagnostic failure. It is not used as a delay and does not determine when the test proceeds.
+Playwright's configured timeout is only an upper bound that turns a missing condition into a diagnostic failure. It is not used as a delay and does not determine when the test proceeds. A failing condition must be diagnosed from the captured state; increasing a delay is not an accepted stabilization strategy.
 
 ## Failure diagnostics
 
@@ -130,3 +130,4 @@ It does not:
 - replace Hibernate restart tests;
 - treat presence as workflow DSL or checkpoint data;
 - close issue #249 until the durable process-restart stage and final milestone coverage are complete.
+
