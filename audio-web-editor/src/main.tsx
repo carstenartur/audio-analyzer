@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { IndexedWorkflowHistoryPanel } from './IndexedWorkflowHistoryPanel';
 import WorkflowEditorApp from './WorkflowEditorApp';
 import './styles.css';
+import './indexed-history.css';
 
 const ACTOR_STORAGE_KEY = 'audio-analyzer.workflow.actor';
 
