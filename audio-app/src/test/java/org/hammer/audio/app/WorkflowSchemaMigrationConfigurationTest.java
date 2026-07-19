@@ -19,7 +19,7 @@ class WorkflowSchemaMigrationConfigurationTest {
 
     WorkflowSchemaMigrationResult result =
         configuration.workflowSchemaMigrationResult(
-            dataSource, new MockEnvironment(), false, false, false, "update");
+            dataSource, new MockEnvironment(), false, false, false, false, "update");
 
     assertFalse(result.applied());
     verifyNoInteractions(dataSource);
@@ -36,7 +36,7 @@ class WorkflowSchemaMigrationConfigurationTest {
         IllegalStateException.class,
         () ->
             configuration.workflowSchemaMigrationResult(
-                dataSource, environment, true, false, false, "update"));
+                dataSource, environment, true, false, false, false, "update"));
     verifyNoInteractions(dataSource);
   }
 }
