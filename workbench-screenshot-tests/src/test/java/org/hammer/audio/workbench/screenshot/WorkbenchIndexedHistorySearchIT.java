@@ -22,6 +22,7 @@ import org.testcontainers.DockerClientFactory;
 class WorkbenchIndexedHistorySearchIT {
 
   private static final String HISTORICAL_TERM = "wingbeathistorybaseline";
+  private static final String AUTHOR_EMAIL = "indexed-history-e2e@audio-analyzer.invalid";
   private static final String LATER_NODE_ID = "node.e2e.indexed-history.later-gain";
   private static final String LATER_NODE_SELECTOR = "[data-testid='node-" + LATER_NODE_ID + "']";
   private static final String ACTIVE_SESSION_STORAGE_KEY = "audio-analyzer.workflow.active-session";
@@ -38,7 +39,7 @@ class WorkbenchIndexedHistorySearchIT {
   }
 
   @Test
-  void searchesAndLoadsTheExactAuthoritativeCommitFromThePackagedWorkbench() throws Exception {
+  void searchesWithStructuredFiltersAndLoadsTheExactAuthoritativeCommit() throws Exception {
     try (WorkbenchBrowserHarness harness =
             WorkbenchBrowserHarness.start(
                 WorkbenchContainerFactory.createDurableRestart(dataDirectory, false));
@@ -59,6 +60,15 @@ class WorkbenchIndexedHistorySearchIT {
       toggle.waitFor();
       toggle.click();
       page.locator("[data-testid='indexed-history-query']").fill(HISTORICAL_TERM);
+      page.locator("[data-testid='indexed-history-author']").fill("nobody@example.org");
+      page.locator("[data-testid='indexed-history-path']").fill("workflow");
+      page.locator("[data-testid='indexed-history-from']").fill("2026-07-19T12:59");
+      page.locator("[data-testid='indexed-history-to']").fill("2026-07-19T13:00");
+      page.locator("[data-testid='indexed-history-search']").click();
+      waitForStatus(page, "No indexed checkpoints match these filters.");
+      assertEquals(0, page.locator("[data-testid^='indexed-history-load-']").count());
+
+      page.locator("[data-testid='indexed-history-author']").fill(AUTHOR_EMAIL);
       page.locator("[data-testid='indexed-history-search']").click();
 
       Locator exactLoad =
@@ -85,6 +95,13 @@ class WorkbenchIndexedHistorySearchIT {
       page.locator("[data-testid='workbench-title']").waitFor();
       assertFalse(currentProjectionNodeIds(page).contains(LATER_NODE_ID));
     }
+  }
+
+  private static void waitForStatus(Page page, String expected) {
+    page.waitForCondition(
+        expected,
+        value ->
+            page.locator("[data-testid='indexed-history-status']").innerText().contains(value));
   }
 
   @SuppressWarnings("unchecked")
