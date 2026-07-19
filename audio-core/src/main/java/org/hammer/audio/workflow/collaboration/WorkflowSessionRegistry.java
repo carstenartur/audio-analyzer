@@ -166,6 +166,26 @@ public final class WorkflowSessionRegistry {
         .previewUndo(Objects.requireNonNull(actor, "actor"), targetOperationId);
   }
 
+  /** Computes an immutable redo preview at the current semantic revision. */
+  public WorkflowRedoPreview previewRedo(
+      String sessionId, OperationActor actor, String targetUndoOperationId) {
+    return requireSession(sessionId)
+        .previewRedo(Objects.requireNonNull(actor, "actor"), targetUndoOperationId);
+  }
+
+  /** Returns one bounded newest-first page of durable semantic history. */
+  public WorkflowHistoryPage history(
+      String sessionId, OperationActor actor, Long beforeRevision, int limit) {
+    return requireSession(sessionId)
+        .history(Objects.requireNonNull(actor, "actor"), beforeRevision, limit);
+  }
+
+  /** Returns actor-scoped personal undo, redo and shared-undo capabilities. */
+  public WorkflowHistoryCapabilities capabilities(String sessionId, OperationActor actor) {
+    return requireSession(sessionId)
+        .capabilities(Objects.requireNonNull(actor, "actor"));
+  }
+
   /** Applies a revision-aware server-side semantic undo command. */
   public WorkflowHistoryCommandResult undo(String sessionId, UndoWorkflowCommand command) {
     return requireSession(sessionId).undo(Objects.requireNonNull(command, "command"));
