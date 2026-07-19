@@ -1,13 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 
-import type { ActorIdentity, CollaborationMode } from './api';
-import type { WorkflowHistoryController } from './useWorkflowHistory';
+import type { ActorIdentity, CollaborationMode, WorkflowProjection } from './api';
+import { useWorkflowHistory } from './useWorkflowHistory';
 import type { WorkflowSessionController } from './useWorkflowSession';
 import { WorkflowHistoryPanel } from './WorkflowHistoryPanel';
 
 interface CollaborationPanelProps {
   controller: WorkflowSessionController;
-  history: WorkflowHistoryController;
 }
 
 const MODES: readonly CollaborationMode[] = Object.freeze([
@@ -16,17 +15,26 @@ const MODES: readonly CollaborationMode[] = Object.freeze([
   'SHARED_SESSION_SHARED_UNDO',
 ]);
 
+const IGNORE_PROJECTION = (_projection: WorkflowProjection) => undefined;
+const IGNORE_STATUS = (_status: string) => undefined;
+
 function message(failure: unknown): string {
   return failure instanceof Error ? failure.message : String(failure);
 }
 
-export function CollaborationPanel({ controller, history }: CollaborationPanelProps) {
+export function CollaborationPanel({ controller }: CollaborationPanelProps) {
   const [sessionId, setSessionId] = useState('shared-workflow');
   const [workflowName, setWorkflowName] = useState('Shared audio workflow');
   const [mode, setMode] = useState<CollaborationMode>('SHARED_SESSION_PERSONAL_UNDO');
   const [actorDraft, setActorDraft] = useState<ActorIdentity>(controller.actor);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionPending, setActionPending] = useState(false);
+  const history = useWorkflowHistory({
+    collaboration: controller,
+    onProjection: IGNORE_PROJECTION,
+    onError: setActionError,
+    onStatus: IGNORE_STATUS,
+  });
 
   useEffect(() => {
     if (!controller.active) {
