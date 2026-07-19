@@ -62,6 +62,12 @@ public final class WorkflowHistoryIndexHttpAdapter {
       Instant timestamp,
       List<String> changedPaths) {
 
+    public SearchHitResponse {
+      commitId = Objects.requireNonNull(commitId, "commitId");
+      message = message == null ? "" : message;
+      changedPaths = List.copyOf(Objects.requireNonNull(changedPaths, "changedPaths"));
+    }
+
     static SearchHitResponse from(WorkflowHistoryTextResult result) {
       return new SearchHitResponse(
           result.commitId().value(),
