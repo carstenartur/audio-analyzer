@@ -55,7 +55,8 @@ export function historyModeExplanation(mode) {
 export function historyControlPolicy({ capabilities, connectionState, historyStatus }) {
   const live = connectionState === 'live';
   const busy = historyStatus === 'loading' || historyStatus === 'pending';
-  const usable = live && !busy && historyStatus !== 'uncertain';
+  const ready = historyStatus === 'ready';
+  const usable = live && ready;
   const personalUndo = capabilities?.personalUndo ?? null;
   const redo = capabilities?.redo ?? null;
 
@@ -63,10 +64,10 @@ export function historyControlPolicy({ capabilities, connectionState, historySta
     busy,
     personalUndoVisible: capabilities?.personalUndoPermitted === true,
     personalUndoEnabled: usable && personalUndo?.available === true,
-    personalUndoReason: actionReason(personalUndo, live, busy, 'undo'),
-    redoVisible: capabilities?.personalUndoPermitted === true,
+    personalUndoReason: actionReason(personalUndo, live, busy, ready, 'undo'),
+    redoVisible: capabilities !== null,
     redoEnabled: usable && redo?.available === true,
-    redoReason: actionReason(redo, live, busy, 'redo'),
+    redoReason: actionReason(redo, live, busy, ready, 'redo'),
     sharedUndoVisible: capabilities?.sharedUndoPermitted === true,
     sharedUndoEnabled: usable && capabilities?.sharedUndoPermitted === true,
   };
@@ -76,15 +77,19 @@ export function historyControlPolicy({ capabilities, connectionState, historySta
  * @param {HistoryAction | null} action server-reported action
  * @param {boolean} live transport state
  * @param {boolean} busy command state
+ * @param {boolean} ready whether capabilities are current and usable
  * @param {'undo' | 'redo'} kind action kind
  * @returns {string} user-facing unavailable reason
  */
-function actionReason(action, live, busy, kind) {
+function actionReason(action, live, busy, ready, kind) {
   if (!live) {
     return `${kind} is unavailable until the collaboration stream is live.`;
   }
   if (busy) {
     return `A history request is already in progress.`;
+  }
+  if (!ready) {
+    return `Durable history capabilities must be reloaded before ${kind}.`;
   }
   if (action === null) {
     return `No current ${kind} target is reported by the server.`;
