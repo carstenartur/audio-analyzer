@@ -73,6 +73,8 @@ The normal Maven reactor remains Docker-free because `workbench-screenshot-tests
 - independent browser storage and SSE connections;
 - failure-only diagnostics.
 
+A new actor context starts with empty session storage, so the harness only injects the stable actor identity. It deliberately does not clear the active-session key during later navigations. This lets a full reload exercise the production client's own session-restore path rather than an artificial test shortcut.
+
 The scenario code uses visible workbench selectors, semantic revision markers, ordered UI convergence and real HTTP problem responses. It does not use arbitrary sleeps or depend on browser-specific timing for transient connection-state labels.
 
 The stale-operation assertion intentionally submits a production semantic operation from the second browser with an old `expectedRevision`. This exercises the same REST parser, domain validation and durable append boundary as a real stale client while proving no optimistic graph residue appears.
