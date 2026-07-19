@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import type { ActorIdentity, CollaborationMode, WorkflowProjection } from './api';
+import type { ActorIdentity, CollaborationMode } from './api';
 import { useWorkflowHistory } from './useWorkflowHistory';
 import type { WorkflowSessionController } from './useWorkflowSession';
 import { WorkflowHistoryPanel } from './WorkflowHistoryPanel';
@@ -15,9 +15,6 @@ const MODES: readonly CollaborationMode[] = Object.freeze([
   'SHARED_SESSION_SHARED_UNDO',
 ]);
 const ACTIVE_SESSION_STORAGE_KEY = 'audio-analyzer.workflow.active-session';
-
-const IGNORE_PROJECTION = (_projection: WorkflowProjection) => undefined;
-const IGNORE_STATUS = (_status: string) => undefined;
 
 function message(failure: unknown): string {
   return failure instanceof Error ? failure.message : String(failure);
@@ -53,12 +50,7 @@ export function CollaborationPanel({ controller }: CollaborationPanelProps) {
   const [actionPending, setActionPending] = useState(false);
   const restoreAttempted = useRef(false);
   const previouslyActive = useRef(false);
-  const history = useWorkflowHistory({
-    collaboration: controller,
-    onProjection: IGNORE_PROJECTION,
-    onError: setActionError,
-    onStatus: IGNORE_STATUS,
-  });
+  const history = useWorkflowHistory({ collaboration: controller });
 
   useEffect(() => {
     if (restoreAttempted.current) {
