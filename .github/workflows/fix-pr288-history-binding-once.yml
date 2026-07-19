@@ -1,0 +1,117 @@
+name: Fix PR 288 history binding once
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/fix-pr288-history-binding-once.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.event.pull_request.number == 288 && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feature/249-durable-restart-e2e
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Give history query parameters explicit HTTP names
+        shell: python
+        run: |
+          from pathlib import Path
+          path = Path('audio-app/src/main/java/org/hammer/audio/workflow/editor/http/WorkflowEditorHttpAdapter.java')
+          text = path.read_text()
+          text = text.replace(
+              '@RequestParam(defaultValue = DEFAULT_BRANCH) String branch',
+              '@RequestParam(name = "branch", defaultValue = DEFAULT_BRANCH) String branch',
+              1)
+          text = text.replace(
+              '@RequestParam(defaultValue = DEFAULT_HISTORY_LIMIT_STR) int limit',
+              '@RequestParam(name = "limit", defaultValue = DEFAULT_HISTORY_LIMIT_STR) int limit',
+              1)
+          if 'name = "branch"' not in text or 'name = "limit"' not in text:
+              raise SystemExit('history request parameter patch failed')
+          path.write_text(text)
+      - name: Add an MVC binding regression test
+        run: |
+          cat > audio-app/src/test/java/org/hammer/audio/workflow/editor/http/WorkflowEditorHttpAdapterTest.java <<'JAVA'
+          package org.hammer.audio.workflow.editor.http;
+
+          import static org.mockito.Mockito.mock;
+          import static org.mockito.Mockito.verify;
+          import static org.mockito.Mockito.when;
+          import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+          import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+          import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+          import java.util.List;
+          import org.hammer.audio.workflow.editor.WorkflowEditorService;
+          import org.junit.jupiter.api.Test;
+          import org.springframework.http.MediaType;
+          import org.springframework.test.web.servlet.MockMvc;
+          import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+
+          class WorkflowEditorHttpAdapterTest {
+
+            @Test
+            void historyBindsExplicitBranchAndLimitQueryParameters() throws Exception {
+              WorkflowEditorService editorService = mock(WorkflowEditorService.class);
+              when(editorService.history("feature/durable", 7)).thenReturn(List.of());
+              MockMvc mvc =
+                  MockMvcBuilders.standaloneSetup(new WorkflowEditorHttpAdapter(editorService)).build();
+
+              mvc.perform(
+                      get("/workflow/history")
+                          .param("branch", "feature/durable")
+                          .param("limit", "7"))
+                  .andExpect(status().isOk())
+                  .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                  .andExpect(content().json("[]"));
+
+              verify(editorService).history("feature/durable", 7);
+            }
+          }
+          JAVA
+      - name: Format and commit the production fix
+        run: |
+          mvn -B -Pscreenshot-tests spotless:apply
+          rm .github/workflows/fix-pr288-history-binding-once.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "fix: bind workflow history query parameters explicitly"
+          git push origin HEAD:feature/249-durable-restart-e2e
+      - name: Run the MVC regression test
+        run: >-
+          mvn -B -pl audio-app -am
+          -Dtest=WorkflowEditorHttpAdapterTest
+          -Dsurefire.failIfNoSpecifiedTests=false test
+      - name: Build packaged browser reactor
+        run: mvn -B -Pscreenshot-tests -DskipTests install -pl workbench-screenshot-tests -am
+      - name: Install Playwright Chromium
+        run: >-
+          mvn -B -Pscreenshot-tests -pl workbench-screenshot-tests
+          org.codehaus.mojo:exec-maven-plugin:3.5.0:java
+          -Dexec.mainClass=com.microsoft.playwright.CLI
+          -Dexec.classpathScope=test
+          -Dexec.args="install --with-deps chromium"
+      - name: Run durable process restart scenario
+        run: >-
+          mvn -B -Pscreenshot-tests -pl workbench-screenshot-tests
+          -Dit.test=WorkbenchDurableRestartIT verify
+      - name: Upload durable Failsafe reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pr-288-history-binding-results
+          path: workbench-screenshot-tests/target/failsafe-reports/
+          if-no-files-found: warn
+          retention-days: 30
