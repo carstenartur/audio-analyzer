@@ -12,7 +12,9 @@ import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.support.GenericApplicationContext;
 import org.springframework.core.env.Environment;
 
-/** Test-only transport adapter registered before production conditional configuration is evaluated. */
+/**
+ * Test-only transport adapter registered before production conditional configuration is evaluated.
+ */
 final class DurableRestartTestConfiguration {
 
   private static final String PUBLISHER_ENABLED_PROPERTY = "test.outbox.publisher.enabled";
@@ -20,7 +22,9 @@ final class DurableRestartTestConfiguration {
 
   private DurableRestartTestConfiguration() {}
 
-  /** Registers the observer early enough for the production outbox dispatcher conditions to see it. */
+  /**
+   * Registers the observer early enough for the production outbox dispatcher conditions to see it.
+   */
   static void registerPublisher(ConfigurableApplicationContext context) {
     if (!(context instanceof GenericApplicationContext genericContext)) {
       throw new IllegalStateException(
