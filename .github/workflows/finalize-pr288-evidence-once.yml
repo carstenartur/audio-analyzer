@@ -1,0 +1,191 @@
+name: Finalize PR 288 evidence once
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/finalize-pr288-evidence-once.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    if: github.event.pull_request.number == 288 && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feature/249-durable-restart-e2e
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Add process and durable-filesystem failure diagnostics
+        shell: python
+        run: |
+          from pathlib import Path
+          path = Path('workbench-screenshot-tests/src/test/java/org/hammer/audio/workbench/screenshot/WorkbenchDurableRestartIT.java')
+          text = path.read_text()
+          text = text.replace(
+              'import java.nio.file.StandardWatchEventKinds;\n',
+              'import java.nio.file.StandardCopyOption;\nimport java.nio.file.StandardWatchEventKinds;\n',
+              1)
+          text = text.replace(
+              'import java.util.concurrent.TimeUnit;\n',
+              'import java.util.concurrent.TimeUnit;\nimport java.util.stream.Stream;\n',
+              1)
+          first_start = '''      Page page = actor.page();
+              open(first, page);
+          '''
+          first_new = '''      Page page = actor.page();
+              try {
+                open(first, page);
+          '''
+          if first_start not in text:
+              raise SystemExit('first durable process body not found')
+          text = text.replace(first_start, first_new, 1)
+          first_end = '''      assertFalse(Files.exists(publications));
+            }
+
+            assertFalse(Files.exists(publications));
+          '''
+          first_end_new = '''      assertFalse(Files.exists(publications));
+              } catch (Throwable failure) {
+                captureDurableFailure("process-1", first, publications, failure);
+                throw failure;
+              }
+            }
+
+            assertFalse(Files.exists(publications));
+          '''
+          if first_end not in text:
+              raise SystemExit('first durable process end not found')
+          text = text.replace(first_end, first_end_new, 1)
+          second_start = '''        Page page = actor.page();
+                open(second, page);
+          '''
+          second_new = '''        Page page = actor.page();
+                try {
+                  open(second, page);
+          '''
+          if second_start not in text:
+              raise SystemExit('second durable process body not found')
+          text = text.replace(second_start, second_new, 1)
+          second_end = '''        assertEquals("WORKFLOW_OPERATION_ACCEPTED", fields[4]);
+              }
+            }
+          }
+          '''
+          second_end_new = '''        assertEquals("WORKFLOW_OPERATION_ACCEPTED", fields[4]);
+                } catch (Throwable failure) {
+                  captureDurableFailure("process-2", second, publications, failure);
+                  throw failure;
+                }
+              }
+            }
+          }
+          '''
+          if second_end not in text:
+              raise SystemExit('second durable process end not found')
+          text = text.replace(second_end, second_end_new, 1)
+          marker = '''  private static boolean isDockerAvailable() {
+          '''
+          addition = '''  private void captureDurableFailure(
+              String stage,
+              WorkbenchBrowserHarness harness,
+              Path publications,
+              Throwable failure) {
+            harness.captureFailure("durable-restart-" + stage, failure);
+            Path diagnostics =
+                Path.of("target", "durable-restart-diagnostics", stage).toAbsolutePath();
+            try {
+              Files.createDirectories(diagnostics);
+              try (Stream<Path> paths = Files.walk(dataDirectory)) {
+                List<String> inventory =
+                    paths.sorted()
+                        .map(this::describeDurablePath)
+                        .toList();
+                Files.write(
+                    diagnostics.resolve("durable-files.tsv"),
+                    inventory,
+                    StandardCharsets.UTF_8);
+              }
+              if (Files.exists(publications)) {
+                Files.copy(
+                    publications,
+                    diagnostics.resolve("published-outbox.tsv"),
+                    StandardCopyOption.REPLACE_EXISTING);
+              }
+            } catch (IOException | RuntimeException diagnosticsFailure) {
+              failure.addSuppressed(diagnosticsFailure);
+            }
+          }
+
+          private String describeDurablePath(Path path) {
+            Path relative = dataDirectory.relativize(path);
+            try {
+              if (Files.isDirectory(path)) {
+                return relative + "\tdirectory";
+              }
+              return relative + "\tfile\t" + Files.size(path) + " bytes";
+            } catch (IOException exception) {
+              return relative + "\tunreadable\t" + exception.getMessage();
+            }
+          }
+
+            private static boolean isDockerAvailable() {
+          '''
+          if marker not in text:
+              raise SystemExit('diagnostics insertion marker not found')
+          path.write_text(text.replace(marker, addition, 1))
+      - name: Link executable restart evidence from operational documentation
+        shell: python
+        run: |
+          from pathlib import Path
+          docs = Path('docs/README.md')
+          text = docs.read_text()
+          old = '- [Two-browser end-to-end evidence](collaboration-e2e.md)\n'
+          new = old + '- [Durable full-process restart evidence](durable-restart-e2e.md)\n'
+          if old not in text:
+              raise SystemExit('documentation navigation marker not found')
+          docs.write_text(text.replace(old, new, 1))
+
+          persistence = Path('docs/workbench-hibernate-persistence.md')
+          content = persistence.read_text()
+          marker = '## Transaction boundary\n'
+          section = '''## Executable restart evidence
+
+          The opt-in `WorkbenchDurableRestartIT` scenario starts two independent packaged Spring Boot
+          processes against the same mounted file-backed H2 database. Both processes run the released
+          storage migrations followed by Hibernate `validate`.
+
+          The scenario proves recovery of collaboration revision, operation identity and canonical
+          projection; publication of a previously pending outbox row with the same stable event id; and
+          exact load of two JGit checkpoints after restart. See
+          [Durable collaboration restart evidence](durable-restart-e2e.md) for the complete topology,
+          synchronization discipline and verified boundaries.
+
+          Collaboration state and versioned workflow checkpoints remain separate application contexts.
+          The restart test proves that both survive the same physical process boundary; it does not claim
+          that a live-session append automatically creates a Git commit or that both commands share one
+          cross-component transaction.
+
+          '''
+          if marker not in content:
+              raise SystemExit('persistence transaction boundary marker not found')
+          persistence.write_text(content.replace(marker, section + marker, 1))
+      - name: Format and compile finalized evidence
+        run: |
+          mvn -B -Pscreenshot-tests spotless:apply
+          mvn -B -Pscreenshot-tests -DskipTests install -pl workbench-screenshot-tests -am
+      - name: Commit finalization and remove helper
+        run: |
+          rm .github/workflows/finalize-pr288-evidence-once.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "docs: finalize durable restart evidence"
+          git push origin HEAD:feature/249-durable-restart-e2e
