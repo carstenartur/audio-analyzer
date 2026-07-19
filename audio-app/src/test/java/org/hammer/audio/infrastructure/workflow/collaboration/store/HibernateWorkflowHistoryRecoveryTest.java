@@ -87,8 +87,7 @@ class HibernateWorkflowHistoryRecoveryTest {
         WorkflowHistoryPage recoveredHistory = registry.history(SESSION_ID, OWNER, null, 10);
         WorkflowHistoryCapabilities recoveredCapabilities =
             registry.capabilities(SESSION_ID, OWNER);
-        WorkflowRedoPreview redoPreview =
-            registry.previewRedo(SESSION_ID, OWNER, undoOperationId);
+        WorkflowRedoPreview redoPreview = registry.previewRedo(SESSION_ID, OWNER, undoOperationId);
 
         assertEquals(expectedHistory, recoveredHistory);
         assertEquals(expectedCapabilities, recoveredCapabilities);
@@ -110,12 +109,7 @@ class HibernateWorkflowHistoryRecoveryTest {
         BASE_TIME,
         OWNER.actorId(),
         new Node(
-            "node.input",
-            "recording-input",
-            "node.input",
-            List.of(),
-            List.of(),
-            Metadata.empty()));
+            "node.input", "recording-input", "node.input", List.of(), List.of(), Metadata.empty()));
   }
 
   private static WorkflowOperation.RenameNode renameNode(
@@ -155,9 +149,7 @@ class HibernateWorkflowHistoryRecoveryTest {
       return;
     }
     try (var paths = Files.walk(directory)) {
-      paths
-          .sorted(Comparator.reverseOrder())
-          .forEach(HibernateWorkflowHistoryRecoveryTest::delete);
+      paths.sorted(Comparator.reverseOrder()).forEach(HibernateWorkflowHistoryRecoveryTest::delete);
     }
   }
 

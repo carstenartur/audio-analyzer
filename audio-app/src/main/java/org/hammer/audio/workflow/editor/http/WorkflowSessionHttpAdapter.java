@@ -109,8 +109,7 @@ public final class WorkflowSessionHttpAdapter {
   /** Returns one bounded newest-first page of durable semantic history. */
   @PostMapping("/{sessionId}/history/query")
   public HistoryPageResponse history(
-      @PathVariable(SESSION_ID) String sessionId,
-      @Valid @RequestBody HistoryQueryRequest request) {
+      @PathVariable(SESSION_ID) String sessionId, @Valid @RequestBody HistoryQueryRequest request) {
     return HistoryPageResponse.from(
         registry.history(
             sessionId,
@@ -146,8 +145,7 @@ public final class WorkflowSessionHttpAdapter {
   /** Computes an immutable timestamp-aware redo preview at the current semantic revision. */
   @PostMapping("/{sessionId}/redo/preview")
   public RedoPreviewResponse previewRedo(
-      @PathVariable(SESSION_ID) String sessionId,
-      @Valid @RequestBody RedoPreviewRequest request) {
+      @PathVariable(SESSION_ID) String sessionId, @Valid @RequestBody RedoPreviewRequest request) {
     return RedoPreviewResponse.from(
         registry.previewRedo(
             sessionId, request.actor().toDomain(), request.targetUndoOperationId()));
