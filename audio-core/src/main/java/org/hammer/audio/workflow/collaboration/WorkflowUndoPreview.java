@@ -41,7 +41,13 @@ public record WorkflowUndoPreview(
     return blockingOperations.isEmpty();
   }
 
-  /** Later operation that intersects the selected target's semantic objects. */
+  /**
+   * Later operation that intersects the selected target's semantic objects.
+   *
+   * @param operationId stable id of the later blocking operation
+   * @param actorId actor that authored the blocking operation
+   * @param conflictingObjectIds semantic object ids shared with the target operation
+   */
   public record BlockingOperation(
       String operationId, String actorId, List<String> conflictingObjectIds) {
     public BlockingOperation {
