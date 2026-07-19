@@ -41,8 +41,7 @@ class WorkflowSessionHistoryCapabilitiesTest {
     assertEquals(3, newest.operations().getFirst().revision());
     assertEquals(5, newest.operations().getFirst().sequence());
 
-    WorkflowHistoryPage older =
-        registry.history(SESSION_ID, OWNER, newest.nextBeforeRevision(), 2);
+    WorkflowHistoryPage older = registry.history(SESSION_ID, OWNER, newest.nextBeforeRevision(), 2);
     assertEquals(List.of("operation.one"), operationIds(older));
     assertNull(older.nextBeforeRevision());
     assertEquals(before, registry.inspect(SESSION_ID));
