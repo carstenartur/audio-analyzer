@@ -50,7 +50,7 @@ class WorkbenchTwoBrowserCollaborationIT {
   }
 
   @Test
-  void personalHistoryConvergesAcrossPresenceConflictReconnectReloadUndoAndRedo() {
+  void personalHistoryConvergesAcrossPresenceConflictReconnectReloadUndoAndRedo() throws Throwable {
     String scenario = "personal-history-convergence";
     try (WorkbenchBrowserHarness.ActorBrowser alice =
             harness.openActor("actor-e2e-alice", "user-e2e-alice", "Alice E2E");
@@ -129,7 +129,7 @@ class WorkbenchTwoBrowserCollaborationIT {
   }
 
   @Test
-  void sharedUndoRequiresExplicitTargetAndAcknowledgementBeforeBothClientsConverge() {
+  void sharedUndoRequiresExplicitTargetAndAcknowledgementBeforeBothClientsConverge() throws Throwable {
     String scenario = "shared-undo-confirmation";
     try (WorkbenchBrowserHarness.ActorBrowser owner =
             harness.openActor("actor-e2e-owner", "user-e2e-owner", "Owner E2E");

@@ -277,6 +277,7 @@ final class WorkbenchBrowserHarness implements AutoCloseable {
         traceStopped = true;
       }
       context.close();
+      actors.remove(this);
     }
   }
 }
