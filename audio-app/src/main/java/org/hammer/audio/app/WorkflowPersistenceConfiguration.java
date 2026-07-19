@@ -43,13 +43,20 @@ public class WorkflowPersistenceConfiguration {
     properties.setProperty("hibernate.hbm2ddl.auto", requireNotBlank(schemaAction, "schemaAction"));
     properties.setProperty("hibernate.show_sql", "false");
     properties.setProperty("hibernate.format_sql", "false");
+    properties.setProperty("hibernate.search.backend.type", "lucene");
+    properties.setProperty(
+        "hibernate.search.backend.directory.type",
+        environment.getProperty("workbench.history-search.directory-type", "local-heap"));
+    String searchDirectoryRoot = environment.getProperty("workbench.history-search.directory-root");
+    if (searchDirectoryRoot != null && !searchDirectoryRoot.isBlank()) {
+      properties.setProperty(
+          "hibernate.search.backend.directory.root", searchDirectoryRoot.trim());
+    }
     return new HibernateSessionFactoryProvider(
         properties, additionalAnnotatedClasses(entityContributors));
   }
 
-  /**
-   * Exposes the application-managed SessionFactory for the JGit store and future domain entities.
-   */
+  /** Exposes the application-managed SessionFactory for all persistent workflow adapters. */
   @Bean(destroyMethod = "")
   @ConditionalOnProperty(name = PERSISTENCE_MODE_PROPERTY, havingValue = "hibernate")
   public SessionFactory workflowPersistenceSessionFactory(
@@ -60,7 +67,7 @@ public class WorkflowPersistenceConfiguration {
   /** Opens the production database-backed logical JGit repository. */
   @Bean(destroyMethod = "close")
   @ConditionalOnProperty(name = PERSISTENCE_MODE_PROPERTY, havingValue = "hibernate")
-  public VersionedWorkflowStore hibernateVersionedWorkflowStore(
+  public HibernateJGitVersionedWorkflowStore hibernateVersionedWorkflowStore(
       @Qualifier("workflowPersistenceSessionFactory") SessionFactory sessionFactory,
       @Value("${workbench.persistence.repository-name:audio-analyzer-workflows}")
           String repositoryName) {
