@@ -1,0 +1,145 @@
+name: Polish PR 287 collaboration UI once
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/polish-pr287-collaboration-ui-once.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  polish:
+    if: github.event.pull_request.number == 287 && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feature/249-two-browser-collaboration-e2e
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Replace technical mode and shortcut presentation
+        shell: python
+        run: |
+          from pathlib import Path
+
+          panel = Path('audio-web-editor/src/CollaborationPanel.tsx')
+          text = panel.read_text()
+          marker = "const ACTIVE_SESSION_STORAGE_KEY = 'audio-analyzer.workflow.active-session';\n"
+          labels = """const ACTIVE_SESSION_STORAGE_KEY = 'audio-analyzer.workflow.active-session';
+          const MODE_LABELS: Readonly<Record<CollaborationMode, string>> = Object.freeze({
+            PRIVATE_WORKSPACE: 'Private workspace',
+            SHARED_SESSION_PERSONAL_UNDO: 'Shared session · personal undo',
+            SHARED_SESSION_SHARED_UNDO: 'Shared session · shared undo',
+          });
+          """
+          if marker not in text:
+              raise SystemExit('mode label insertion marker not found')
+          text = text.replace(marker, labels, 1)
+          text = text.replace('{candidate}\n                </option>', '{MODE_LABELS[candidate]}\n                </option>', 1)
+          old_active = '<dd data-testid="active-session-mode">{session.mode}</dd>'
+          new_active = '''<dd data-mode={session.mode} data-testid="active-session-mode">
+                        {MODE_LABELS[session.mode]}
+                      </dd>'''
+          if old_active not in text:
+              raise SystemExit('active mode presentation not found')
+          panel.write_text(text.replace(old_active, new_active, 1))
+
+          history = Path('audio-web-editor/src/WorkflowHistoryPanel.tsx')
+          text = history.read_text()
+          old_shortcuts = '''          <p className="help-text">Keyboard: Ctrl/⌘+Z · Ctrl/⌘+Shift+Z or Ctrl/⌘+Y</p>'''
+          new_shortcuts = '''          <div aria-label="Keyboard shortcuts" className="history-shortcuts">
+                    <span>
+                      <kbd>Ctrl/⌘+Z</kbd> Undo
+                    </span>
+                    <span>
+                      <kbd>Ctrl/⌘+Shift+Z</kbd> or <kbd>Ctrl/⌘+Y</kbd> Redo
+                    </span>
+                  </div>'''
+          if old_shortcuts not in text:
+              raise SystemExit('history shortcut presentation not found')
+          history.write_text(text.replace(old_shortcuts, new_shortcuts, 1))
+
+          css = Path('audio-web-editor/src/workflowHistory.css')
+          text = css.read_text()
+          css_rules = '''
+          .history-shortcuts {
+            color: #b9c5dd;
+            display: grid;
+            font-size: 11px;
+            gap: 4px;
+          }
+
+          .history-shortcuts span {
+            align-items: baseline;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+          }
+
+          .history-shortcuts kbd {
+            background: #252c3c;
+            border: 1px solid #48536c;
+            border-radius: 3px;
+            color: #e4e9f5;
+            font-family: inherit;
+            font-size: 10px;
+            padding: 1px 4px;
+            white-space: nowrap;
+          }
+          '''
+          media = '@media (prefers-reduced-motion: reduce) {'
+          if media not in text:
+              raise SystemExit('workflow history CSS insertion marker not found')
+          css.write_text(text.replace(media, css_rules + '\n' + media, 1))
+
+          screenshot = Path('workbench-screenshot-tests/src/test/java/org/hammer/audio/workbench/screenshot/WorkbenchCollaborationScreenshotIT.java')
+          text = screenshot.read_text()
+          raw_assertion = '''      assertEquals("SHARED_SESSION_PERSONAL_UNDO", activeMode.innerText());'''
+          friendly_assertion = '''      assertEquals("SHARED_SESSION_PERSONAL_UNDO", activeMode.getAttribute("data-mode"));
+                assertEquals("Shared session · personal undo", activeMode.innerText());'''
+          occurrences = text.count(raw_assertion)
+          if occurrences != 2:
+              raise SystemExit(f'expected two raw mode assertions, found {occurrences}')
+          screenshot.write_text(text.replace(raw_assertion, friendly_assertion))
+      - name: Build and format changed sources
+        run: |
+          mvn -B -pl audio-web-editor -am -DskipTests package
+          mvn -B -Pscreenshot-tests -pl workbench-screenshot-tests spotless:apply
+      - name: Build packaged screenshot reactor
+        run: >-
+          mvn -B -Pscreenshot-tests -DskipTests install
+          -pl workbench-screenshot-tests -am
+      - name: Install Playwright Chromium
+        run: >-
+          mvn -B -Pscreenshot-tests -pl workbench-screenshot-tests
+          org.codehaus.mojo:exec-maven-plugin:3.5.0:java
+          -Dexec.mainClass=com.microsoft.playwright.CLI
+          -Dexec.classpathScope=test
+          -Dexec.args="install --with-deps chromium"
+      - name: Generate all workbench screenshots from asserted states
+        run: >-
+          mvn -B -Pscreenshot-tests -pl workbench-screenshot-tests
+          -DupdateScreenshots=true verify
+      - name: Upload generated screenshots for visual review
+        uses: actions/upload-artifact@v7
+        with:
+          name: pr-287-polished-workbench-screenshots
+          path: docs/assets/screenshots/workbench/*.png
+          if-no-files-found: error
+          retention-days: 30
+      - name: Commit UI polish, generated baselines and remove helper
+        run: |
+          rm .github/workflows/polish-pr287-collaboration-ui-once.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "ui: present collaboration modes and shortcuts clearly"
+          git pull --rebase origin feature/249-two-browser-collaboration-e2e
+          git push origin HEAD:feature/249-two-browser-collaboration-e2e
