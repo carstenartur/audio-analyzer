@@ -67,7 +67,7 @@ jobs:
             -Dexec.args="install --with-deps chromium" \
             2>&1 | tee "$E2E_LOG_DIR/playwright-install.log"
 
-      # The Java suite waits only for observable revisions, transport states and DOM visibility.
+      # The suite waits on observable state and proves that session restore keeps the canonical graph.
       - name: Run two-browser collaboration scenarios
         shell: bash
         run: |
