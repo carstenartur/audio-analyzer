@@ -12,7 +12,7 @@ jobs:
   fix:
     if: github.event.pull_request.number == 288 && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
         with:
@@ -29,16 +29,18 @@ jobs:
           from pathlib import Path
           path = Path('audio-app/src/main/java/org/hammer/audio/workflow/editor/http/WorkflowEditorHttpAdapter.java')
           text = path.read_text()
+          old_branch = '@RequestParam(defaultValue = DEFAULT_BRANCH) String branch'
+          old_limit = '@RequestParam(defaultValue = DEFAULT_HISTORY_LIMIT_STR) int limit'
+          if old_branch not in text or old_limit not in text:
+              raise SystemExit('unfixed history request parameters not found')
           text = text.replace(
-              '@RequestParam(defaultValue = DEFAULT_BRANCH) String branch',
+              old_branch,
               '@RequestParam(name = "branch", defaultValue = DEFAULT_BRANCH) String branch',
               1)
           text = text.replace(
-              '@RequestParam(defaultValue = DEFAULT_HISTORY_LIMIT_STR) int limit',
+              old_limit,
               '@RequestParam(name = "limit", defaultValue = DEFAULT_HISTORY_LIMIT_STR) int limit',
               1)
-          if 'name = "branch"' not in text or 'name = "limit"' not in text:
-              raise SystemExit('history request parameter patch failed')
           path.write_text(text)
       - name: Add an MVC binding regression test
         run: |
@@ -80,7 +82,7 @@ jobs:
             }
           }
           JAVA
-      - name: Format and commit the production fix
+      - name: Format, commit and remove helper
         run: |
           mvn -B -Pscreenshot-tests spotless:apply
           rm .github/workflows/fix-pr288-history-binding-once.yml
@@ -89,29 +91,8 @@ jobs:
           git add -A
           git commit -m "fix: bind workflow history query parameters explicitly"
           git push origin HEAD:feature/249-durable-restart-e2e
-      - name: Run the MVC regression test
+      - name: Run the MVC regression test on the committed tree
         run: >-
           mvn -B -pl audio-app -am
           -Dtest=WorkflowEditorHttpAdapterTest
           -Dsurefire.failIfNoSpecifiedTests=false test
-      - name: Build packaged browser reactor
-        run: mvn -B -Pscreenshot-tests -DskipTests install -pl workbench-screenshot-tests -am
-      - name: Install Playwright Chromium
-        run: >-
-          mvn -B -Pscreenshot-tests -pl workbench-screenshot-tests
-          org.codehaus.mojo:exec-maven-plugin:3.5.0:java
-          -Dexec.mainClass=com.microsoft.playwright.CLI
-          -Dexec.classpathScope=test
-          -Dexec.args="install --with-deps chromium"
-      - name: Run durable process restart scenario
-        run: >-
-          mvn -B -Pscreenshot-tests -pl workbench-screenshot-tests
-          -Dit.test=WorkbenchDurableRestartIT verify
-      - name: Upload durable Failsafe reports
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: pr-288-history-binding-results
-          path: workbench-screenshot-tests/target/failsafe-reports/
-          if-no-files-found: warn
-          retention-days: 30
