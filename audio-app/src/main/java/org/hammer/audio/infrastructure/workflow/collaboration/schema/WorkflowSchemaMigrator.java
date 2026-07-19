@@ -20,6 +20,16 @@ public final class WorkflowSchemaMigrator {
     this.dataSource = Objects.requireNonNull(dataSource, "dataSource");
   }
 
+  /**
+   * Migrates with no legacy Search adoption.
+   *
+   * <p>This overload preserves the pre-Search application integration contract.
+   */
+  public WorkflowSchemaMigrationResult migrate(
+      boolean adoptLegacyCoreSchema, boolean adoptPreLeaseCollaborationSchema) {
+    return migrate(adoptLegacyCoreSchema, false, adoptPreLeaseCollaborationSchema);
+  }
+
   /** Migrates generic Core, generic Search and application collaboration state in that order. */
   public WorkflowSchemaMigrationResult migrate(
       boolean adoptLegacyCoreSchema,
