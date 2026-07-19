@@ -1,394 +1,351 @@
-# Bounded Contexts
+# Bounded contexts
 
-This document defines the explicit bounded contexts of the Audio Analyzer platform, their package
-and module boundaries, allowed dependency directions, public APIs and ownership.
+This document defines the current semantic and technical boundaries of Audio Analyzer. A bounded context owns its terminology, invariants and public contracts. Cross-context communication uses explicit APIs or adapters; implementation packages are not shared by convenience.
 
-Each bounded context has a single responsibility. Cross-context communication happens only through
-stable interfaces listed under *Public API* for each context. Cyclic dependencies between contexts
-are prohibited.
+## Context map
 
-## Context overview
+```text
+Audio Processing ───────────────┐
+                               ├──> Desktop Presentation
+Plugin Extension ──────────────┤
+                               └──> Experimental Acoustic Research
 
-Dependency direction: `A ◄── B` means B may import from A. The reverse is forbidden.
-
-```
-  Foundation layer (no project-internal imports):
-    Audio Processing            Workflow
-          ◄── Persistence           ◄── Execution
-          ◄── Benchmarking          ◄── Validation
-          ◄── Visualization         ◄── Benchmarking
-                                    ◄── Visualization
-                                    ◄── Collaboration (future)
-
-  Persistence ◄── Visualization
-  Persistence ◄── Collaboration (future)
-  Execution   ◄── Visualization
-  Validation  ◄── Visualization
-
-  Visualization: terminal context — nothing may import from it.
+Workflow Modeling ──> Validation ──> Execution
+        │
+        ├──> Collaboration ──> Web Presentation
+        │          │
+        │          └──> Ordered Events / Outbox
+        │
+        └──> Versioning and Persistence
+                   │
+                   └──> future rebuildable Search Projection
 ```
 
-|  Bounded Context   |                        Module(s)                         |                                                                                                                                                                     Root package(s)                                                                                                                                                                     |                    Status                    |
-|--------------------|----------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------|
-| Audio Processing   | audio-core, audio-geometry, audio-acquisition, audio-dsp | `org.hammer.audio.core`, `org.hammer.audio.buffer`, `org.hammer.audio.snapshot`, `org.hammer.audio.geometry`, `org.hammer.audio.acquisition`, `org.hammer.audio.capture`, `org.hammer.audio.dsp`, `org.hammer.audio.analysis`, `org.hammer.audio.localization`, `org.hammer.audio.signal`, `org.hammer.audio.diagnosis`, `org.hammer.audio.spectrogram` | Stable                                       |
-| Workflow           | audio-core                                               | `org.hammer.audio.workflow`                                                                                                                                                                                                                                                                                                                             | Stable                                       |
-| Experiment Catalog | audio-core                                               | `org.hammer.audio.workflow.catalog`                                                                                                                                                                                                                                                                                                                     | New (issue #215)                             |
-| Workflow DSL       | audio-core                                               | `org.hammer.audio.workflow.dsl`                                                                                                                                                                                                                                                                                                                         | New (issue #217)                             |
-| Workflow Store     | audio-core (facade); future storage module (impl)        | `org.hammer.audio.workflow.store`                                                                                                                                                                                                                                                                                                                       | New facade (issue #218)                      |
-| Execution          | audio-core                                               | `org.hammer.audio.workflow.execution`                                                                                                                                                                                                                                                                                                                   | Stable                                       |
-| Validation         | audio-core                                               | `org.hammer.audio.workflow` (`WorkflowValidator`)                                                                                                                                                                                                                                                                                                       | Stable                                       |
-| Persistence        | audio-dsp                                                | `org.hammer.audio.recording`                                                                                                                                                                                                                                                                                                                            | Stable (audio); Workflow persistence: future |
-| Visualization      | audio-app, audio-experimental-acoustic                   | `org.hammer.audio.ui`, `org.hammer`, `org.hammer.audio.experimental.acoustic.visualization`, `org.hammer.audio.experimental.acoustic.workbench`                                                                                                                                                                                                         | App-layer                                    |
-| Benchmarking       | audio-dsp (JMH), audio-experimental-acoustic             | `org.hammer.audio.benchmark`, `org.hammer.audio.experimental.acoustic.benchmark`                                                                                                                                                                                                                                                                        | Stable (JMH); Experimental (acoustic)        |
-| Collaboration      | future                                                   | future                                                                                                                                                                                                                                                                                                                                                  | Future                                       |
+Dependency arrows point from a consumer to an allowed upstream contract. Infrastructure adapters implement ports owned by stable contexts; stable contexts never import infrastructure implementations.
 
----
+## Overview
+
+| Context | Primary modules | Status | Authority |
+|---|---|---|---|
+| Audio Processing | `audio-core`, `audio-geometry`, `audio-acquisition`, `audio-dsp` | Stable foundation | Audio samples, formats, DSP and analysis snapshots |
+| Workflow Modeling | `audio-core` | Stable foundation | Immutable workflow graph and semantic operations |
+| Validation | `audio-core` | Stable foundation | Structural and semantic workflow acceptance |
+| Execution | `audio-core` contracts; concrete backend work remains | Partial | Immutable run model; current dry run is simulation only |
+| Collaboration | `audio-core`, `audio-app` | Implemented | Session membership, operation order, revision, history and undo eligibility |
+| Versioning and Persistence | `audio-core` facade, `audio-app`, shared JGit library | Implemented | Durable sessions/outbox and versioned workflow checkpoints |
+| Plugin Extension | `audio-plugin-api`, host adapter in `audio-app` | Stable API foundation | Host-visible contribution metadata |
+| Presentation | `audio-app`, `audio-web-editor` | Implemented | Rendering and user intent only |
+| Experimental Acoustic Research | `audio-experimental-acoustic` | Experimental | Simulation and research models inside its scope |
 
 ## 1. Audio Processing
 
-**Responsibility**: Core audio domain types and the signal-processing pipeline. Provides the
-foundational building blocks — immutable audio blocks, ring buffers, DSP processors, analyzers,
-signal generators and geometry — that all other contexts build on.
+### Responsibility
 
-**Modules**: `audio-core`, `audio-geometry`, `audio-acquisition`, `audio-dsp`
-
-**Package roots**:
-
-|             Package             |                              Responsibility                               |
-|---------------------------------|---------------------------------------------------------------------------|
-| `org.hammer.audio.core`         | Immutable audio-domain models: `AudioBlock`, `AudioFormatDescriptor`      |
-| `org.hammer.audio.buffer`       | `AudioRingBuffer<T>` — lock-free SPSC ring buffer                         |
-| `org.hammer.audio.snapshot`     | UI-friendly immutable snapshots: `WaveformSnapshot`, `PhaseScopeSnapshot` |
-| `org.hammer.audio.geometry`     | 2D positions, rays and localization constraints                           |
-| `org.hammer.audio.acquisition`  | Multichannel source, microphone metadata, sample clock APIs               |
-| `org.hammer.audio.capture`      | `SampleDecoder` — byte-to-float PCM decoding                              |
-| `org.hammer.audio.dsp`          | `DSPProcessor`, `DSPPipeline` — composable stateless DSP stages           |
-| `org.hammer.audio.analysis`     | `AnalysisModule`, `Fft`, `RmsPeakAnalyzer`, `SpectrumAnalyzer`            |
-| `org.hammer.audio.localization` | Stereo delay estimation: `StereoDelayAnalyzer`, `StereoDelaySnapshot`     |
-| `org.hammer.audio.signal`       | Deterministic generators and demo presets                                 |
-| `org.hammer.audio.diagnosis`    | Reusable acoustic diagnostic analyzers and immutable findings             |
-| `org.hammer.audio.spectrogram`  | Spectrogram analyzer, frames and rolling history                          |
+Own framework-independent audio values and signal-processing behavior:
 
-**Public API** (stable interfaces for cross-context use):
-- `AudioBlock`, `AudioFormatDescriptor`
-- `AudioRingBuffer<T>`
-- `WaveformSnapshot`, `PhaseScopeSnapshot`
-- `DSPProcessor`, `DSPPipeline`
-- `AnalysisModule<S>`, `AnalysisSnapshot`
-- `Fft`
-- `SignalGenerator`
-- `SampleDecoder`
+- immutable `AudioBlock` data;
+- format descriptors and sample clocks;
+- bounded buffering;
+- sample decoding;
+- deterministic generators;
+- DSP processors and pipelines;
+- FFT, spectrum, spectrogram and measurement analysis;
+- recording/replay format;
+- broad stereo delay diagnostics.
 
-**Allowed dependencies**: None within this project. Depends only on Java SE.
+### Modules and package roots
 
-**Dependency rules**:
-- Must not import from `org.hammer.audio.workflow.*`
-- Must not import from `org.hammer.audio.workflow.execution.*`
-- Must not import from `org.hammer.audio.ui.*`
-- Must not import from `org.hammer.*` (Swing panels)
-- Must not import from `org.hammer.audio.experimental.*`
-- Must not import from `org.hammer.audio.plugin.*`
+```text
+audio-core
+  org.hammer.audio.core
+  org.hammer.audio.buffer
+  org.hammer.audio.snapshot
 
-**Ownership**: Core platform team.
+audio-geometry
+  org.hammer.audio.geometry
 
----
+audio-acquisition
+  org.hammer.audio.acquisition
 
-## 2. Workflow
+audio-dsp
+  org.hammer.audio.capture
+  org.hammer.audio.dsp
+  org.hammer.audio.analysis
+  org.hammer.audio.diagnosis
+  org.hammer.audio.localization
+  org.hammer.audio.recording
+  org.hammer.audio.signal
+  org.hammer.audio.spectrogram
+```
 
-**Responsibility**: Immutable, framework-independent domain model for workflow graphs. Describes
-*what* should be executed — nodes, ports, edges, metadata and typed data flows — without containing
-any execution state, persistence concerns or UI code.
+### Rules
 
-**Module**: `audio-core`
+- No Swing, Spring, React, JGit, Hibernate or Playwright imports.
+- No dependency on experimental acoustic implementations.
+- Analysis produces immutable snapshots rather than pixel output.
+- Recording persists audio-domain values without depending on workflow UI state.
 
-**Package root**: `org.hammer.audio.workflow`
+## 2. Workflow Modeling
 
-**Key types**:
-- `Workflow` — immutable top-level graph
-- `Node` — typed executable or configuring unit
-- `Port` — typed, directional connection point
-- `Edge` — connects two compatible ports
-- `Metadata` — name, description and creation timestamp
-- `DataType`, `DataTypes`, `TypeRegistry` — port type system
-- `PortDirection`, `PortMultiplicity`
-- `StableIds` — deterministic ID generation
-- `WorkflowOperation`, `WorkflowOperationLog` — semantic edit operations for undo/redo and audit
+### Responsibility
 
-**Public API**: All types listed above.
+Own the immutable design-time graph and semantic edit vocabulary:
 
-**Allowed dependencies**: Java SE only.
+- `Workflow`, nodes, ports, edges and metadata;
+- typed port compatibility;
+- stable semantic identifiers;
+- catalog descriptions;
+- deterministic workflow DSL;
+- `WorkflowOperation` subtypes and complete reconstructible bodies.
 
-**Dependency rules**:
-- Must not import from `org.hammer.audio.workflow.execution.*` (Execution context)
-- Must not import from `org.hammer.audio.core.*`, `org.hammer.audio.buffer.*`, etc. (Audio Processing)
-- Must not import from `org.hammer.audio.ui.*` or `org.hammer.*` (Visualization)
+### Module and package roots
 
-**Ownership**: Workflow domain team.
+```text
+audio-core
+  org.hammer.audio.workflow
+  org.hammer.audio.workflow.catalog
+  org.hammer.audio.workflow.dsl
+```
 
----
+### Rules
 
-## 3. Execution
+- No audio sample computation in the workflow graph.
+- No browser or Swing state in nodes, edges or DSL.
+- No JGit, Hibernate, Spring or HTTP types in public contracts.
+- Semantic operations describe domain intent, not component events.
+- The legacy in-memory operation log is not the collaborative durable undo authority.
 
-**Responsibility**: Runtime execution model derived from a frozen workflow snapshot. Manages the
-lifecycle of a single workflow run: snapshot creation, topological ordering, per-node status
-transitions and immutable result capture.
+## 3. Validation
 
-**Module**: `audio-core`
+### Responsibility
 
-**Package root**: `org.hammer.audio.workflow.execution`
+Validate the exact immutable workflow or operation candidate before acceptance or execution:
 
-**Key types**:
-- `ExecutionSnapshot` — immutable freeze of a workflow at execution start time
-- `ExecutionPlan` — topologically ordered node list derived from a snapshot
-- `ExecutionContext` — mutable per-node status tracking during a run
-- `ExecutionResult` — immutable terminal outcome of a completed run
-- `ExecutionStatus` — `IDLE → QUEUED → RUNNING → {COMPLETED | FAILED | SKIPPED | CANCELLED}`
-- `StableExecutionIds` — deterministic ID generation for execution artifacts
+- duplicate and dangling identifiers;
+- port direction, multiplicity and data-type compatibility;
+- cycle and structural constraints;
+- operation-specific preconditions;
+- resolved merge or run input validity.
 
-**Public API**: All types listed above.
+### Ownership
 
-**Allowed dependencies**: Workflow context (`org.hammer.audio.workflow`), Java SE.
+Validation currently lives with workflow contracts in `audio-core`. It may be extracted into a dedicated package when its public vocabulary grows.
 
-**Dependency rules**:
-- Must not import from `org.hammer.audio.recording.*` (Persistence)
-- Must not import from `org.hammer.audio.ui.*` or `org.hammer.*` (Visualization)
-- Must not import from `org.hammer.audio.experimental.*`
-- Must not import from `org.hammer.audio.plugin.*`
+### Rules
 
-**Ownership**: Workflow domain team.
+- Validation results are deterministic and structured.
+- Presentation may explain violations but must not redefine them.
+- Infrastructure failures are not disguised as workflow validation failures.
 
----
+## 4. Collaboration
 
-## 4. Validation
+### Responsibility
 
-**Responsibility**: Structural validation of workflow graphs: duplicate IDs, port compatibility,
-cyclic edge detection, dangling references and data-type compatibility.
+Own live multi-user workflow editing:
 
-**Module**: `audio-core`
+- immutable session mode;
+- owner and participant membership;
+- actor identity and authorship;
+- accepted semantic revision and ordered event sequence;
+- idempotent operation/command identity;
+- personal and explicit shared undo/redo policy;
+- blocker and conflict analysis;
+- durable history/capability queries;
+- session recovery.
 
-**Location**: Currently co-located in the Workflow package as `WorkflowValidator`. Can be extracted
-to its own package (`org.hammer.audio.workflow.validation`) when it grows.
+### Modules and package roots
 
-**Key types**:
-- `WorkflowValidator` — validates a `Workflow` instance and returns a list of violation messages
+```text
+audio-core
+  org.hammer.audio.workflow.collaboration
+  framework-independent collaboration/store ports
 
-**Public API**: `WorkflowValidator`
+audio-app
+  HTTP and SSE adapters
+  Hibernate collaboration/outbox adapters
+  Spring lifecycle and scheduling configuration
+```
 
-**Allowed dependencies**: Workflow context, Java SE.
+### Authority rules
 
-**Dependency rules**: Same as Workflow context (it is embedded in that package).
+- The server owns canonical graph state and semantic eligibility.
+- Presence is transient actor-scoped data, not workflow state.
+- SSE transports accepted events; it is not an undo stack.
+- Undo and redo append new audited semantic operations.
+- A cached browser row or preview never overrides expected-revision validation.
+- Rejected commands append no operation, revision, event or outbox residue.
 
-**Ownership**: Workflow domain team.
+See:
 
----
+- [React Flow session client](react-flow-session-client.md)
+- [Durable semantic undo and redo](semantic-undo-redo.md)
+- [Two-browser collaboration evidence](../collaboration-e2e.md)
 
-## 5. Persistence
+## 5. Versioning and Persistence
 
-**Responsibility**: Durable storage of audio data and (future) workflow snapshots.
+### Responsibility
 
-**Module**: `audio-dsp`
+Own durable infrastructure behind framework-independent ports:
 
-**Package root**: `org.hammer.audio.recording`
+- deterministic workflow checkpoint load/save;
+- Git object, ref and history storage through `jgit-storage-hibernate-core`;
+- durable collaboration sessions and complete operation bodies;
+- transactional outbox rows and leased delivery;
+- versioned schema migration and Hibernate validation;
+- file-system fallback for explicit local/test use.
 
-**Key types** (current — audio persistence):
-- `AudioBlockRecordingWriter` — writes a sequence of `AudioBlock` values to a file
-- `AudioBlockRecordingReader` — reads them back in order
-- `AudioBlockRecordingFormat` — binary format constants
+### Boundary
 
-**Future scope**: JGit-based workflow snapshot persistence (branch, commit, merge, history). When
-implemented, that code will live in a new module or under a dedicated package such as
-`org.hammer.audio.workflow.persistence`.
+```text
+Workflow/Collaboration ports
+  -> audio-app infrastructure adapters
+  -> one DataSource and one SessionFactory
+       shared JGit entities
+       Audio Analyzer collaboration/outbox entities
+  -> database
+```
 
-**Public API**: `AudioBlockRecordingWriter`, `AudioBlockRecordingReader`, `AudioBlockRecordingFormat`
+### Authority rules
 
-**Allowed dependencies**: Audio Processing context (`AudioBlock`, `AudioFormatDescriptor`), Java SE.
+- Workflow DSL in Git and durable collaboration rows are authoritative in their documented scopes.
+- The outbox is durable transport work, not a second workflow history.
+- Future search indexes are rebuildable derived state.
+- Audio Analyzer does not copy generic JGit DDL or internal storage code.
+- Production startup uses versioned migrations followed by `validate`, not implicit schema update.
+- Tests use the shared persistence path, not raw-JDBC alternatives.
 
-**Dependency rules**:
-- Must not import from `org.hammer.audio.ui.*` or `org.hammer.*` (Visualization)
-- Must not import from `org.hammer.audio.workflow.*` (Workflow) — current audio persistence is
-workflow-independent; workflow persistence will be in a separate package
-- Must not import from `org.hammer.audio.experimental.*`
+See [Hibernate-backed workflow persistence](../workbench-hibernate-persistence.md).
 
-**Ownership**: Infrastructure team.
+## 6. Execution
 
----
+### Responsibility
 
-## 6. Visualization
+Own immutable run input and lifecycle contracts:
 
-**Responsibility**: Pixel-aware rendering, Swing UI panels and UI-independent visualization models.
-This is the only context that knows about pixels, panel dimensions or Swing/AWT types.
+- `ExecutionSnapshot`;
+- `ExecutionPlan`;
+- `ExecutionContext`;
+- `ExecutionResult`;
+- deterministic run/provenance identifiers;
+- future backend and cancellation ports.
 
-**Module**: `audio-app`, `audio-experimental-acoustic`
+### Current status
 
-**Package roots**:
+The current `SnapshotExecutionService` dry run orders nodes and changes statuses. It is useful for contract testing but is not actual audio computation.
 
-|                        Package                         |            Module             |                    Responsibility                    |
-|--------------------------------------------------------|-------------------------------|------------------------------------------------------|
-| `org.hammer.audio.ui`                                  | `audio-app`                   | `WaveformRenderer` — snapshot-to-pixel conversion    |
-| `org.hammer.audio.ui.theme`                            | `audio-app`                   | `UiTheme`, `PlotRenderTheme` — color and font tokens |
-| `org.hammer`                                           | `audio-app`                   | Swing panels and application frame                   |
-| `org.hammer.audio.experimental.acoustic.visualization` | `audio-experimental-acoustic` | UI-independent 2D room/track visualization DTOs      |
-| `org.hammer.audio.experimental.acoustic.workbench`     | `audio-experimental-acoustic` | Interactive Swing workbench panels for localization  |
+Epic #248 and issues #273–#275 own truthful run orchestration, a real deterministic audio backend and production run UX.
 
-**Public API**: Visualization is a terminal context — it is not imported by other contexts.
-- `WaveformRenderer` — consumed only by Swing panels in `org.hammer`
-- Visualization DTOs in `org.hammer.audio.experimental.acoustic.visualization`
+### Rules
 
-**Allowed dependencies**: Audio Processing, Workflow, Execution, Plugin API (`audio-plugin-api`).
+- A run captures immutable input before dispatch.
+- Later editor changes cannot mutate a run.
+- Simulation and actual computation must be explicitly distinguished.
+- Concrete DSP executors do not leak into the workflow domain API.
 
-**Dependency rules**:
-- Must never be imported by Audio Processing, Workflow, Execution, Validation or Persistence
-contexts (these are enforced by the `ArchitectureBoundaryTest`).
-- The `audio-app` module must not import concrete plugin packages at compile time; it uses
-`audio-plugin-api` only and loads plugins via `ServiceLoader` at runtime.
+## 7. Plugin Extension
 
-**Ownership**: UI team.
+### Responsibility
 
----
+Own stable host-facing extension contracts:
 
-## 7. Benchmarking
+- plugin descriptor;
+- analyses and demo signals;
+- signal sources and experiments;
+- pipelines and snapshot streams;
+- visualization metadata;
+- calibration, benchmarks and exports;
+- menu actions and optional Swing views.
 
-**Responsibility**: Quality metrics, evaluation procedures and regression tracking for both JMH
-micro-benchmarks (ring buffer, FFT, signal generators) and acoustic/classification experiment
-benchmarks.
+### Module and package root
 
-**Modules**: `audio-dsp` (JMH profile), `audio-experimental-acoustic`
+```text
+audio-plugin-api
+  org.hammer.audio.plugin
+```
 
-**Package roots**:
+### Rules
 
-|                             Package                             |            Module             |                       Responsibility                       |
-|-----------------------------------------------------------------|-------------------------------|------------------------------------------------------------|
-| `org.hammer.audio.benchmark`                                    | `audio-dsp` (JMH profile)     | JMH micro-benchmarks for ring buffer, FFT, sample decoding |
-| `org.hammer.audio.experimental.acoustic.benchmark`              | `audio-experimental-acoustic` | Localization/classification benchmark framework            |
-| `org.hammer.audio.experimental.acoustic.benchmark.localization` | `audio-experimental-acoustic` | Position, velocity, frequency and Doppler error metrics    |
-| `org.hammer.audio.experimental.acoustic.benchmark.classifier`   | `audio-experimental-acoustic` | Accuracy, precision/recall, confusion matrix metrics       |
+- The API does not depend on concrete audio or application modules.
+- Plugins register `AudioAnalyzerPlugin` through `ServiceLoader`.
+- The host loads providers independently and records individual failures.
+- A contributed Swing factory returns a fresh component per invocation.
+- Prefer UI-independent contributions for web/headless reuse.
 
-**Public API**:
-- JMH benchmarks (`@Benchmark` methods) — run via `./mvnw -Pjmh package`
-- `BenchmarkContribution` interface in `audio-plugin-api` — registers a named metric and unit
-- `LocalizationErrorMetric`, `ClassificationAccuracyMetric`, etc. in the experimental module
+See [Plugin development](../development/plugin-development.md).
 
-**Allowed dependencies**: Audio Processing, Workflow (for scenario-grounded benchmarks).
+## 8. Presentation
 
-**Dependency rules**:
-- JMH benchmarks (`org.hammer.audio.benchmark`) must not import from `org.hammer.audio.ui.*`
-or `org.hammer.*` (Visualization)
-- Experimental acoustic benchmarks must not import from `org.hammer.audio.ui.*` or `org.hammer.*`
+### Desktop presentation
 
-**Ownership**: Quality / research team.
+`audio-app` Swing packages render audio snapshots, manage user interaction, open plugin views and create exports.
 
----
+```text
+org.hammer
+org.hammer.audio.ui
+org.hammer.audio.ui.theme
+```
 
-## 8. Collaboration
+### Web presentation
 
-**Responsibility**: Multi-user real-time concurrent editing of workflow graphs, including presence
-awareness, per-user undo/redo, and conflict-free update merging. Provides a gateway between
-browser clients and the Workflow/Persistence context.
+`audio-web-editor` contains React/TypeScript source and the reproducible Vite production assets packaged by `audio-app`.
 
-**Status**: Future. Architecture is documented in
-[`docs/architecture/collaborative-workflow-platform.md`](collaborative-workflow-platform.md).
+The web client:
 
-**Planned packages**:
-- `org.hammer.audio.workflow.collaboration` — collaboration session model, awareness events
-- `org.hammer.audio.workflow.collaboration.sync` — Yjs bridge and WebSocket adapter
+- renders canonical workflow projections;
+- converts gestures into typed commands;
+- displays server-reported history and conflicts;
+- manages transient dialog, selection and viewport state;
+- reconciles on revision/event gaps.
 
-**Planned public API**:
-- Collaboration session API (session join/leave, awareness update)
-- `WorkflowOperation` stream for broadcasting semantic edits (reuses Workflow context type)
+### Rules
 
-**Allowed dependencies**: Workflow context, Persistence context, Java SE.
+- Presentation may depend on stable contracts and application APIs.
+- Stable contexts never import presentation code.
+- React component state and Yjs are not canonical semantic workflow state.
+- UI tests use stable selectors and production adapters rather than test-only semantic endpoints.
 
-**Dependency rules**:
-- Must not import from Audio Processing packages
-- Must not import from Visualization packages
-- Must not import from Benchmarking packages
+## 9. Experimental Acoustic Research
 
-**Ownership**: Collaboration infrastructure team.
+### Responsibility
 
----
+Own research-grade localization and dataset functionality:
 
-## Dependency rule summary
+```text
+audio-experimental-acoustic
+  org.hammer.audio.experimental.acoustic.*
+```
 
-The table below uses ✓ (allowed) and ✗ (forbidden) to summarise which context (row) may import
-types from which other context (column).
+Current areas include simulation, microphone arrays, TDOA, beamforming, tracking, wingbeat features, datasets and benchmark metrics.
 
-|                   | Audio Proc | Workflow | Execution | Validation | Persistence | Visualization | Benchmarking | Collaboration |
-|-------------------|:----------:|:--------:|:---------:|:----------:|:-----------:|:-------------:|:------------:|:-------------:|
-| **Audio Proc**    |     —      |    ✗     |     ✗     |     ✗      |      ✗      |       ✗       |      ✗       |       ✗       |
-| **Workflow**      |     ✗      |    —     |     ✗     |     ✗      |      ✗      |       ✗       |      ✗       |       ✗       |
-| **Execution**     |     ✗      |    ✓     |     —     |     ✗      |      ✗      |       ✗       |      ✗       |       ✗       |
-| **Validation**    |     ✗      |    ✓     |     ✗     |     —      |      ✗      |       ✗       |      ✗       |       ✗       |
-| **Persistence**   |     ✓      |    ✗     |     ✗     |     ✗      |      —      |       ✗       |      ✗       |       ✗       |
-| **Visualization** |     ✓      |    ✓     |     ✓     |     ✓      |      ✓      |       —       |      ✗       |       ✗       |
-| **Benchmarking**  |     ✓      |    ✓     |     ✗     |     ✗      |      ✗      |       ✗       |      —       |       ✗       |
-| **Collaboration** |     ✗      |    ✓     |     ✗     |     ✓      |      ✓      |       ✗       |      ✗       |       —       |
+### Rules
 
----
+- Experimental assumptions do not migrate into stable APIs without evidence and review.
+- Simulation results are not presented as calibrated hardware performance.
+- Real microphone-array claims require synchronization, geometry calibration and error budgets.
+- Plugin descriptor and documentation mark experimental status truthfully.
 
-## Enforcement
+## Verification boundary
 
-Architecture boundary rules are enforced at two levels:
+The architecture is protected by:
 
-### 1. Maven module boundaries (compile-time)
+- Maven dependency direction;
+- source/import boundary tests;
+- ArchUnit fitness tests;
+- TypeScript architecture lint;
+- framework-independent operation/history reducers and codecs;
+- Hibernate migration/recovery tests;
+- packaged two-browser collaboration tests;
+- generated screenshot integration tests.
 
-The Maven module dependency graph enforces coarse-grained boundaries automatically. See
-[`ARCHITECTURE.md`](../../ARCHITECTURE.md) for the module dependency graph. Key rules:
+A test adapter may depend on Playwright/Testcontainers. Production domain code may not.
 
-- `audio-core`, `audio-geometry`, `audio-acquisition`, `audio-dsp` must not declare compile
-  dependencies on `audio-app`, `audio-plugin-api` or `audio-experimental-acoustic`.
-- `audio-plugin-api` must not declare any `audio-*` dependency.
-- `audio-app` must declare `audio-experimental-acoustic` as `runtime` scope only (ServiceLoader
-  discovery); never as `compile`.
+## Change checklist
 
-### 2. ArchUnit fitness tests (bytecode-level)
+Before adding a dependency or public type:
 
-`ArchitectureFitnessTest` in `audio-app` uses [ArchUnit](https://www.archunit.org) to analyse
-compiled bytecode and enforces the following rules automatically on every `mvn verify` run:
-
-|                         Test method                         |                                  Bounded-context rule                                  |
-|-------------------------------------------------------------|----------------------------------------------------------------------------------------|
-| `workflowContextDoesNotDependOnSwing`                       | Workflow must not depend on `javax.swing` / `java.awt`                                 |
-| `workflowContextDoesNotDependOnJGit`                        | Workflow must not depend on `org.eclipse.jgit`                                         |
-| `workflowContextDoesNotDependOnPersistence`                 | Workflow (incl. Validation) must not depend on `org.hammer.audio.recording`            |
-| `executionContextDoesNotDependOnPersistence`                | Execution must not depend on `org.hammer.audio.recording`                              |
-| `executionContextDoesNotDependOnVisualization`              | Execution must not depend on `org.hammer.audio.ui` / Swing / AWT                       |
-| `storeFacadeDoesNotDependOnInfrastructureAdapters`          | `workflow.store` facade must not depend on concrete infrastructure adapter packages    |
-| `editorHttpAdapterDoesNotDependOnStorageInternals`          | Editor HTTP adapter must not depend on JGit or storage implementation internals        |
-| `collaborationPackageDoesNotDependOnEditorOrVisualization`  | Collaboration package must not depend on editor HTTP or visualization packages         |
-| `semanticWorkflowPackagesDoNotDependOnCollaborationPackage` | Semantic workflow packages must not depend on collaboration transport/presence         |
-| `noCyclicDependenciesBetweenBoundedContextSlices`           | No cyclic dependencies between bounded-context package slices under `org.hammer.audio` |
-
-Note: React and Yjs are JavaScript frameworks with no Java package equivalent in this project.
-The Workflow context is protected from Java UI dependencies plus JGit / Persistence dependencies by
-the rules above. Collaboration boundaries are enforced by dedicated ArchUnit rules that keep
-semantic workflow packages separate from collaboration/editor concerns.
-
-### 3. Source-level import checks (fitness tests)
-
-`ArchitectureBoundaryTest` in `audio-app` walks all Java source files and asserts that:
-
-- Stable audio packages do not import experimental packages.
-- Stable modules do not import UI or app packages.
-- Module POM dependencies respect the compile-scope rules above.
-- `audio-app` sources do not import concrete plugin packages.
-- `audio-plugin-api` sources do not import host or concrete plugin packages.
-- The Workflow domain model (`org.hammer.audio.workflow`, excluding the `execution` subpackage)
-  does not import from the Execution context (`org.hammer.audio.workflow.execution`).
-- The Execution context does not import from Persistence or Visualization.
-- The Persistence context (`org.hammer.audio.recording`) does not import Visualization.
-- The Benchmarking context does not import Visualization.
-
----
-
-## Future reuse
-
-Each bounded context is designed to be independently reusable as a module in a broader graph
-platform:
-
-- **Workflow** and **Execution** contexts have no audio-specific dependencies and can be extracted
-  into a `workflow-core` library shared with the Taxonomy project or other graph editors.
-- **Collaboration** (when implemented) will be a standalone WebSocket service.
-- **Persistence** (JGit layer) will be a standalone service wrapping a Git repository.
-- **Audio Processing** stable modules (`audio-core`, `audio-dsp`, etc.) are already independently
-  deployable.
-
+1. Identify the context that owns the invariant.
+2. Put the port with the owning stable context.
+3. Put the implementation in an adapter/infrastructure module.
+4. Confirm no UI or persistence type leaks into the contract.
+5. Add an architecture test when the boundary is important.
+6. Update this map and the high-level architecture when ownership changes.
