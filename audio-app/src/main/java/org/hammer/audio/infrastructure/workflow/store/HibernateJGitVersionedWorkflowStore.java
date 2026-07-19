@@ -5,6 +5,7 @@ import io.github.carstenartur.jgit.storage.hibernate.HibernateGitStorage;
 import io.github.carstenartur.jgit.storage.hibernate.HibernateRepositoryFactory;
 import io.github.carstenartur.jgit.storage.hibernate.RepositoryName;
 import io.github.carstenartur.jgit.storage.hibernate.search.entity.GitCommitIndex;
+import io.github.carstenartur.jgit.storage.hibernate.search.service.CommitHistoryQuery;
 import io.github.carstenartur.jgit.storage.hibernate.search.service.CommitIndexer;
 import io.github.carstenartur.jgit.storage.hibernate.search.service.GitHistorySearchService;
 import java.io.IOException;
@@ -103,7 +104,19 @@ public final class HibernateJGitVersionedWorkflowStore
   public List<WorkflowHistoryTextResult> search(WorkflowHistoryTextQuery query) {
     Objects.requireNonNull(query, "query");
     requireSearchEnabled();
-    return searchService.searchCommitText(repositoryName, query.text(), query.limit()).stream()
+    CommitHistoryQuery.Builder sharedQuery =
+        CommitHistoryQuery.forRepository(repositoryName)
+            .matchingText(query.text())
+            .authoredBy(query.authorEmail())
+            .touchingPath(query.pathText())
+            .limit(query.limit());
+    if (query.from() != null) {
+      sharedQuery.from(query.from());
+    }
+    if (query.to() != null) {
+      sharedQuery.to(query.to());
+    }
+    return searchService.findChanges(sharedQuery.build()).stream()
         .map(HibernateJGitVersionedWorkflowStore::toResult)
         .toList();
   }
