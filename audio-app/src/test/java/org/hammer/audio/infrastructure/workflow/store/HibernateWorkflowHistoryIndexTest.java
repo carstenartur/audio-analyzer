@@ -47,7 +47,7 @@ class HibernateWorkflowHistoryIndexTest {
               new WorkflowHistoryTextQuery(
                   "wingbeatneedle",
                   "search-test@audio-analyzer.invalid",
-                  "workflow",
+                  "workflow.dsl",
                   matchingTime,
                   matchingTime,
                   10));
@@ -61,7 +61,7 @@ class HibernateWorkflowHistoryIndexTest {
           store
               .search(
                   new WorkflowHistoryTextQuery(
-                      "wingbeatneedle", "nobody@example.org", "workflow", null, null, 10))
+                      "wingbeatneedle", "nobody@example.org", "workflow.dsl", null, null, 10))
               .size());
       assertEquals(0, store.rebuild("main", -1));
     }
