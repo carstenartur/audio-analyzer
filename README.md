@@ -17,15 +17,15 @@ The project provides real DSP and measurement foundations, recording and replay,
 
 ## What you can do
 
-| Goal | Current support |
-|---|---|
-| Inspect a signal | Waveform, phase, spectrum, spectrogram, RMS/peak measurements and diagnostic findings |
-| Compare processing behavior | Deterministic demo sources, averaging, peak hold, recording/replay and Markdown A/B reports |
-| Build a workflow visually | Typed React Flow nodes and ports backed by immutable Java workflow models |
-| Work with other people | Shared sessions, ordered SSE updates, presence, revision conflicts and canonical reload |
-| Undo safely | Personal or explicit shared semantic undo/redo with previews, blockers and durable history |
-| Preserve evidence | `.aar` recordings, CSV/PNG exports, evidence bundles and versioned workflow checkpoints |
-| Explore localization research | Simulated microphone arrays, TDOA, beamforming, tracking and HumBugDB-oriented experiments |
+|             Goal              |                                       Current support                                       |
+|-------------------------------|---------------------------------------------------------------------------------------------|
+| Inspect a signal              | Waveform, phase, spectrum, spectrogram, RMS/peak measurements and diagnostic findings       |
+| Compare processing behavior   | Deterministic demo sources, averaging, peak hold, recording/replay and Markdown A/B reports |
+| Build a workflow visually     | Typed React Flow nodes and ports backed by immutable Java workflow models                   |
+| Work with other people        | Shared sessions, ordered SSE updates, presence, revision conflicts and canonical reload     |
+| Undo safely                   | Personal or explicit shared semantic undo/redo with previews, blockers and durable history  |
+| Preserve evidence             | `.aar` recordings, CSV/PNG exports, evidence bundles and versioned workflow checkpoints     |
+| Explore localization research | Simulated microphone arrays, TDOA, beamforming, tracking and HumBugDB-oriented experiments  |
 
 ## Choose your workbench
 
@@ -66,19 +66,20 @@ Build the project:
 Run the desktop workbench:
 
 ```bash
-java -jar audio-app/target/audio-app-*.jar
+DESKTOP_JAR=$(find audio-app/target -maxdepth 1 -type f \
+  -name 'audio-app-*.jar' ! -name '*-workbench.jar' -print -quit)
+java -jar "$DESKTOP_JAR"
 ```
 
 Run the web workflow workbench:
 
 ```bash
-java -cp "audio-app/target/audio-app-*.jar:audio-app/target/lib/*" \
-  org.hammer.audio.app.WorkbenchApplication
+java -jar audio-app/target/audio-app-*-workbench.jar
 ```
 
 Then open the local URL printed by the application. The initial graph is a read-only orientation example; create or join a collaboration session before editing.
 
-Windows users should use `mvnw.cmd`, replace `:` with `;` in classpaths and substitute the concrete JAR filename when wildcard expansion is unavailable.
+Windows users should use `mvnw.cmd` and launch the unclassified `audio-app-<version>.jar` for the desktop or the `audio-app-<version>-workbench.jar` for the web application.
 
 For a guided first experiment, continue with [Getting started](docs/getting-started.md).
 

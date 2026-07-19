@@ -130,9 +130,17 @@ The localization module remains research-grade.
 
 Open research issues include:
 
-- #136 — synchronization and calibration framework;
-- #138 — algorithm improvements beyond baseline GCC-PHAT and grid beamforming;
-- #139 — complete real-world microphone-array workflow.
+- 
+
+# 136 — synchronization and calibration framework;
+
+- 
+
+# 138 — algorithm improvements beyond baseline GCC-PHAT and grid beamforming;
+
+- 
+
+# 139 — complete real-world microphone-array workflow.
 
 Research priorities:
 

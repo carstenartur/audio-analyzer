@@ -92,20 +92,20 @@ The host loads providers from its runtime class loader. A plugin JAR must theref
 
 `AudioAnalyzerPlugin` exposes independent immutable contribution lists:
 
-| Contribution | Use it for |
-|---|---|
-| `AnalysisContribution` | An analyzer, derived snapshot or post-processing capability |
-| `DemoSignalContribution` | A deterministic signal users can select for experiments |
-| `SignalSourceContribution` | Microphone, synthetic, recording or dataset input |
-| `ExperimentContribution` | A named repeatable experimental scenario |
-| `PipelineContribution` | A described DSP and analysis stage chain |
-| `SnapshotStreamContribution` | A per-frame result stream contract |
-| `VisualizationContribution` | UI-independent visualization metadata |
-| `CalibrationContribution` | A calibration procedure or persistent calibration state |
-| `BenchmarkContribution` | A quality metric and evaluation procedure |
-| `ExportFormatContribution` | A serialization or report format |
-| `MenuContribution` | A named action exposed by the host |
-| `ViewContribution` | A lazily created Swing component |
+|         Contribution         |                         Use it for                          |
+|------------------------------|-------------------------------------------------------------|
+| `AnalysisContribution`       | An analyzer, derived snapshot or post-processing capability |
+| `DemoSignalContribution`     | A deterministic signal users can select for experiments     |
+| `SignalSourceContribution`   | Microphone, synthetic, recording or dataset input           |
+| `ExperimentContribution`     | A named repeatable experimental scenario                    |
+| `PipelineContribution`       | A described DSP and analysis stage chain                    |
+| `SnapshotStreamContribution` | A per-frame result stream contract                          |
+| `VisualizationContribution`  | UI-independent visualization metadata                       |
+| `CalibrationContribution`    | A calibration procedure or persistent calibration state     |
+| `BenchmarkContribution`      | A quality metric and evaluation procedure                   |
+| `ExportFormatContribution`   | A serialization or report format                            |
+| `MenuContribution`           | A named action exposed by the host                          |
+| `ViewContribution`           | A lazily created Swing component                            |
 
 Return `List.of()` for unsupported contribution types. Do not return `null` or a mutable list.
 
@@ -140,8 +140,9 @@ Use it as an API example, not as evidence that every experimental algorithm is p
 Build the plugin JAR and place it on the runtime classpath together with the application and its dependencies. For example:
 
 ```bash
-java -cp \
-  "audio-app/target/audio-app-*.jar:audio-app/target/lib/*:path/to/measurement-plugin.jar" \
+DESKTOP_JAR=$(find audio-app/target -maxdepth 1 -type f \
+  -name 'audio-app-*.jar' ! -name '*-workbench.jar' -print -quit)
+java -cp "$DESKTOP_JAR:audio-app/target/lib/*:path/to/measurement-plugin.jar" \
   org.hammer.AudioAnalyseFrame
 ```
 

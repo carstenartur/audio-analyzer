@@ -31,7 +31,9 @@ The build creates the desktop application, the packaged Spring Boot workbench an
 Run:
 
 ```bash
-java -jar audio-app/target/audio-app-*.jar
+DESKTOP_JAR=$(find audio-app/target -maxdepth 1 -type f \
+  -name 'audio-app-*.jar' ! -name '*-workbench.jar' -print -quit)
+java -jar "$DESKTOP_JAR"
 ```
 
 Start with a deterministic demo source. This avoids microphone, driver and room-acoustics variables while you learn the displays.
@@ -53,8 +55,7 @@ Continue with the [feature guides](features/README.md) for trigger, spectrum and
 Run:
 
 ```bash
-java -cp "audio-app/target/audio-app-*.jar:audio-app/target/lib/*" \
-  org.hammer.audio.app.WorkbenchApplication
+java -jar audio-app/target/audio-app-*-workbench.jar
 ```
 
 Open the local URL printed by the server.
@@ -115,3 +116,4 @@ Record the exact setup when results matter. For microphone-array localization, s
 - [Collaborative workflows](features/collaborative-workflows.md)
 - [Experimental acoustic localization](plugins/acoustic-localization.md)
 - [Plugin development](development/plugin-development.md)
+

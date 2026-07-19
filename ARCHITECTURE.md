@@ -279,3 +279,4 @@ When adding functionality:
 5. Keep experimental assumptions in an experimental module.
 6. Add deterministic tests before release-facing claims.
 7. Update executable documentation and screenshots when visible behavior changes.
+

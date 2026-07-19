@@ -90,14 +90,14 @@ Durable-history timestamps use `<time class="history-timestamp" dateTime="…">`
 
 ## Configuration
 
-| System property | Default | Purpose |
-|---|---|---|
-| `updateScreenshots` | `false` | Write new committed baselines instead of comparing |
-| `screenshot.tolerance.pct` | `2` | Allowed pixel-difference percentage |
-| `docs.screenshots.dir` | `docs/assets/screenshots/workbench` | Baseline directory |
-| `workbench.jar.path` | packaged `audio-app` JAR | Application under test |
-| `workbench.lib.dir` | `audio-app/target/lib` | Runtime dependency directory |
-| `workbench.static.dir` | `audio-web-editor/target/frontend-dist` | Verified production assets |
+|      System property       |                 Default                 |                      Purpose                       |
+|----------------------------|-----------------------------------------|----------------------------------------------------|
+| `updateScreenshots`        | `false`                                 | Write new committed baselines instead of comparing |
+| `screenshot.tolerance.pct` | `2`                                     | Allowed pixel-difference percentage                |
+| `docs.screenshots.dir`     | `docs/assets/screenshots/workbench`     | Baseline directory                                 |
+| `workbench.jar.path`       | packaged `audio-app` JAR                | Application under test                             |
+| `workbench.lib.dir`        | `audio-app/target/lib`                  | Runtime dependency directory                       |
+| `workbench.static.dir`     | `audio-web-editor/target/frontend-dist` | Verified production assets                         |
 
 ## Documented scenarios
 
@@ -194,11 +194,12 @@ An update workflow may commit generated PNGs only when intentionally invoked for
 
 ## Layer boundaries
 
-| Allowed | Forbidden |
-|---|---|
-| Testcontainers and Playwright in the test module | Playwright types in audio/workflow domain modules |
-| Stable production selectors | Test-only semantic endpoints |
+|                           Allowed                            |                       Forbidden                        |
+|--------------------------------------------------------------|--------------------------------------------------------|
+| Testcontainers and Playwright in the test module             | Playwright types in audio/workflow domain modules      |
+| Stable production selectors                                  | Test-only semantic endpoints                           |
 | Test-only deterministic identities and display normalization | Replacing canonical server state with browser fixtures |
-| Committed generated PNGs | Hand-edited or unreproducible screenshots |
-| UI and semantic assertions before capture | Sleep-driven screenshots |
-| Visual review plus pixel comparison | Treating pixel comparison alone as product correctness |
+| Committed generated PNGs                                     | Hand-edited or unreproducible screenshots              |
+| UI and semantic assertions before capture                    | Sleep-driven screenshots                               |
+| Visual review plus pixel comparison                          | Treating pixel comparison alone as product correctness |
+

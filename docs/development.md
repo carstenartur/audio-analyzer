@@ -41,7 +41,9 @@ For a faster package-only iteration:
 ## Run the desktop workbench
 
 ```bash
-java -jar audio-app/target/audio-app-*.jar
+DESKTOP_JAR=$(find audio-app/target -maxdepth 1 -type f \
+  -name 'audio-app-*.jar' ! -name '*-workbench.jar' -print -quit)
+java -jar "$DESKTOP_JAR"
 ```
 
 If the shell does not expand the wildcard, substitute the concrete JAR name in `audio-app/target/`.
@@ -49,8 +51,7 @@ If the shell does not expand the wildcard, substitute the concrete JAR name in `
 ## Run the web workbench
 
 ```bash
-java -cp "audio-app/target/audio-app-*.jar:audio-app/target/lib/*" \
-  org.hammer.audio.app.WorkbenchApplication
+java -jar audio-app/target/audio-app-*-workbench.jar
 ```
 
 The application serves the verified Vite production assets packaged by `audio-web-editor`. Do not use a separately mocked frontend as evidence for production behavior.
@@ -229,3 +230,4 @@ Before opening or merging a PR:
 5. update user and architecture documentation;
 6. regenerate and visually review affected screenshots;
 7. record deferred QA or known limitations in the PR description.
+
