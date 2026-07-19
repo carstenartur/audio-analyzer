@@ -41,8 +41,7 @@ public final class HibernateJGitVersionedWorkflowStore
   private final GitHistorySearchService searchService;
 
   /** Opens a searchable logical repository using the application-managed SessionFactory. */
-  public HibernateJGitVersionedWorkflowStore(
-      SessionFactory sessionFactory, String repositoryName) {
+  public HibernateJGitVersionedWorkflowStore(SessionFactory sessionFactory, String repositoryName) {
     this(openStorage(sessionFactory, repositoryName), sessionFactory, repositoryName);
   }
 
@@ -91,8 +90,7 @@ public final class HibernateJGitVersionedWorkflowStore
   }
 
   @Override
-  public RefUpdateResult updateRef(
-      String refName, CommitId expectedOldCommit, CommitId newCommit) {
+  public RefUpdateResult updateRef(String refName, CommitId expectedOldCommit, CommitId newCommit) {
     return delegate.updateRef(refName, expectedOldCommit, newCommit);
   }
 

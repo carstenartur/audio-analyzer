@@ -33,10 +33,7 @@ public class WorkflowSchemaMigrationConfiguration {
     requireExplicitDataSource(environment);
     requireValidateSchemaAction(schemaAction);
     return new WorkflowSchemaMigrator(dataSource)
-        .migrate(
-            adoptLegacyCoreSchema,
-            adoptLegacySearchSchema,
-            adoptPreLeaseCollaborationSchema);
+        .migrate(adoptLegacyCoreSchema, adoptLegacySearchSchema, adoptPreLeaseCollaborationSchema);
   }
 
   private static void requireExplicitDataSource(Environment environment) {

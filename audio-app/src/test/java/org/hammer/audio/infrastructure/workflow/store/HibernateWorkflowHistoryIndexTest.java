@@ -37,8 +37,7 @@ class HibernateWorkflowHistoryIndexTest {
       WorkflowSnapshot matching =
           new WorkflowSnapshot("workflow.search", "node classifier label wingbeat-needle");
       store.commit("main", baseline, metadata("Baseline checkpoint", 1));
-      CommitId matchingCommit =
-          store.commit("main", matching, metadata("Add wingbeat needle", 2));
+      CommitId matchingCommit = store.commit("main", matching, metadata("Add wingbeat needle", 2));
 
       var hits = store.search(new WorkflowHistoryTextQuery("wingbeat-needle", 10));
       assertEquals(1, hits.size());
@@ -52,8 +51,6 @@ class HibernateWorkflowHistoryIndexTest {
 
   private static CommitMetadata metadata(String message, long seconds) {
     return new CommitMetadata(
-        "search-test",
-        message,
-        Instant.parse("2026-07-19T00:00:00Z").plusSeconds(seconds));
+        "search-test", message, Instant.parse("2026-07-19T00:00:00Z").plusSeconds(seconds));
   }
 }

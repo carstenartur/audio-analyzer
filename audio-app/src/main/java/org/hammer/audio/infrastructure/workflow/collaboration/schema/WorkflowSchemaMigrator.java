@@ -109,8 +109,7 @@ public final class WorkflowSchemaMigrator {
 
   private DatabaseFamily detectDatabaseFamily() {
     try (Connection connection = dataSource.getConnection()) {
-      String product =
-          connection.getMetaData().getDatabaseProductName().toLowerCase(Locale.ROOT);
+      String product = connection.getMetaData().getDatabaseProductName().toLowerCase(Locale.ROOT);
       if (product.contains("h2")) {
         return DatabaseFamily.H2;
       }

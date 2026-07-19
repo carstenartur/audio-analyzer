@@ -49,8 +49,7 @@ public class WorkflowPersistenceConfiguration {
         environment.getProperty("workbench.history-search.directory-type", "local-heap"));
     String searchDirectoryRoot = environment.getProperty("workbench.history-search.directory-root");
     if (searchDirectoryRoot != null && !searchDirectoryRoot.isBlank()) {
-      properties.setProperty(
-          "hibernate.search.backend.directory.root", searchDirectoryRoot.trim());
+      properties.setProperty("hibernate.search.backend.directory.root", searchDirectoryRoot.trim());
     }
     return new HibernateSessionFactoryProvider(
         properties, additionalAnnotatedClasses(entityContributors));
