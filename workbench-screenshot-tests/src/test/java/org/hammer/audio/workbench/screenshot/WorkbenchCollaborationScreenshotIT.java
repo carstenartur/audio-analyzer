@@ -87,11 +87,11 @@ class WorkbenchCollaborationScreenshotIT {
       page.locator("[data-testid='create-session-button']").click();
 
       Locator activeSession = page.locator("[data-testid='active-session-id']");
+      Locator activeMode = page.locator("[data-testid='active-session-mode']");
+      Locator revision = page.locator("[data-testid='semantic-revision']");
       activeSession.waitFor(new Locator.WaitForOptions().setTimeout(PAGE_LOAD_TIMEOUT_MS));
       assertEquals(SESSION_ID, activeSession.innerText());
-      assertEquals(
-          "SHARED_SESSION_PERSONAL_UNDO",
-          page.locator("[data-testid='active-session-mode']").innerText());
+      assertEquals("SHARED_SESSION_PERSONAL_UNDO", activeMode.innerText());
       assertTrue(page.locator("[data-testid='participant-actor-docs']").isVisible());
 
       Locator connectionState = page.locator("[data-testid='connection-state']");
@@ -108,6 +108,16 @@ class WorkbenchCollaborationScreenshotIT {
       assertTrue(
           page.locator("[data-testid^='node-node.gain.']").isVisible(),
           "Accepted gain node must be rendered from the server projection");
+
+      activeSession.scrollIntoViewIfNeeded();
+      page.waitForCondition(
+          () ->
+              activeSession.isVisible()
+                  && activeMode.isVisible()
+                  && revision.isVisible()
+                  && "2".equals(revision.innerText()));
+      assertEquals(SESSION_ID, activeSession.innerText());
+      assertEquals("SHARED_SESSION_PERSONAL_UNDO", activeMode.innerText());
 
       byte[] pngBytes = page.screenshot(new Page.ScreenshotOptions().setFullPage(false));
       ScreenshotPipeline.processScreenshot("collaboration-session.png", pngBytes);
