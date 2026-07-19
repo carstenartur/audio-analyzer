@@ -29,8 +29,7 @@ class WorkflowSessionPersistenceModelTest {
             session.workflowId(),
             "workflow workflow.test { node input }",
             eventData);
-    StoredWorkflowOperation operation =
-        legacyOperation(session.sessionId(), operationData, 1, 1);
+    StoredWorkflowOperation operation = legacyOperation(session.sessionId(), operationData, 1, 1);
     StoredWorkflowOutboxEntry outbox = storedOutbox(null);
     WorkflowSessionAppendResult result =
         new WorkflowSessionAppendResult(session, operation, outbox, false);
