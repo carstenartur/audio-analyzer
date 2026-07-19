@@ -130,7 +130,7 @@ class WorkbenchDurableRestartIT {
         assertEquals(SESSION_ID, fields[1]);
         assertEquals(Long.toString(acceptedSequence), fields[2]);
         assertEquals("1", fields[3]);
-        assertEquals("OPERATION_ACCEPTED", fields[4]);
+        assertEquals("WORKFLOW_OPERATION_ACCEPTED", fields[4]);
       }
     }
   }
