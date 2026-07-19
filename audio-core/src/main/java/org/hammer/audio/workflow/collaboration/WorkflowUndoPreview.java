@@ -1,5 +1,7 @@
 package org.hammer.audio.workflow.collaboration;
 
+import java.io.Serial;
+import java.io.Serializable;
 import java.util.List;
 import java.util.Objects;
 
@@ -49,7 +51,11 @@ public record WorkflowUndoPreview(
    * @param conflictingObjectIds semantic object ids shared with the target operation
    */
   public record BlockingOperation(
-      String operationId, String actorId, List<String> conflictingObjectIds) {
+      String operationId, String actorId, List<String> conflictingObjectIds)
+      implements Serializable {
+
+    @Serial private static final long serialVersionUID = 1L;
+
     public BlockingOperation {
       operationId = requireNotBlank(operationId, "operationId");
       actorId = requireNotBlank(actorId, "actorId");
