@@ -10,7 +10,7 @@
   <name>Audio Analyzer App</name>
   <properties>
     <flyway.version>12.8.1</flyway.version>
-    <jgit-storage-hibernate.version>0.1.5</jgit-storage-hibernate.version>
+    <jgit-storage-hibernate.version>0.1.6-SNAPSHOT</jgit-storage-hibernate.version>
     <postgresql.version>42.7.13</postgresql.version>
     <testcontainers.version>2.0.5</testcontainers.version>
   </properties>
