@@ -15,6 +15,9 @@ import java.util.Set;
 import java.util.concurrent.locks.ReentrantLock;
 import org.hammer.audio.workflow.Workflow;
 import org.hammer.audio.workflow.WorkflowOperation;
+import org.hammer.audio.workflow.collaboration.WorkflowHistoryCapabilities.Action;
+import org.hammer.audio.workflow.collaboration.WorkflowHistoryCapabilities.ActionStatus;
+import org.hammer.audio.workflow.collaboration.WorkflowHistoryDescriptor.CommandKind;
 import org.hammer.audio.workflow.collaboration.WorkflowSessionException.Code;
 import org.hammer.audio.workflow.collaboration.WorkflowSessionPersistenceCoordinator.AppendOutcome;
 import org.hammer.audio.workflow.collaboration.WorkflowSessionPersistenceCoordinator.OperationIdentity;
@@ -24,6 +27,8 @@ import org.hammer.audio.workflow.collaboration.store.WorkflowOperationCommandMet
 
 /** Owns the synchronized runtime state for one collaboration session. */
 final class WorkflowSessionEntry {
+
+  private static final int MAX_HISTORY_PAGE_SIZE = 100;
 
   private final String sessionId;
   private final CollaborationMode mode;
@@ -191,6 +196,74 @@ final class WorkflowSessionEntry {
     }
   }
 
+  WorkflowRedoPreview previewRedo(OperationActor actor, String targetUndoOperationId) {
+    lock.lock();
+    try {
+      requireOpen();
+      assertJoinedActor(actor);
+      return previewRedoLocked(actor, targetUndoOperationId);
+    } finally {
+      lock.unlock();
+    }
+  }
+
+  WorkflowHistoryPage history(OperationActor actor, Long beforeRevision, int limit) {
+    lock.lock();
+    try {
+      requireOpen();
+      assertJoinedActor(actor);
+      if (limit <= 0 || limit > MAX_HISTORY_PAGE_SIZE) {
+        throw new IllegalArgumentException(
+            "history limit must be between 1 and " + MAX_HISTORY_PAGE_SIZE);
+      }
+      long cursor = beforeRevision == null ? Math.addExact(revision, 1) : beforeRevision;
+      if (cursor <= 0 || cursor > Math.addExact(revision, 1)) {
+        throw new IllegalArgumentException(
+            "beforeRevision must be between 1 and current revision plus one");
+      }
+      List<WorkflowHistoryDescriptor> entries = new ArrayList<>();
+      for (int index = operationHistory.size() - 1; index >= 0; index--) {
+        OperationIdentity operation = operationHistory.get(index);
+        if (operation.revision() >= cursor) {
+          continue;
+        }
+        entries.add(describe(operation));
+        if (entries.size() > limit) {
+          break;
+        }
+      }
+      Long nextBeforeRevision = null;
+      if (entries.size() > limit) {
+        entries.remove(entries.size() - 1);
+        nextBeforeRevision = entries.get(entries.size() - 1).revision();
+      }
+      return new WorkflowHistoryPage(entries, nextBeforeRevision, revision);
+    } finally {
+      lock.unlock();
+    }
+  }
+
+  WorkflowHistoryCapabilities capabilities(OperationActor actor) {
+    lock.lock();
+    try {
+      requireOpen();
+      assertJoinedActor(actor);
+      boolean personalUndoPermitted = mode != CollaborationMode.SHARED_SESSION_SHARED_UNDO;
+      OperationIdentity personalUndo =
+          personalUndoPermitted ? findPersonalUndoTarget(actor.actorId()) : null;
+      OperationIdentity redo = findRedoTarget(actor.actorId());
+      return new WorkflowHistoryCapabilities(
+          mode,
+          revision,
+          personalUndoPermitted,
+          historyAction(personalUndo),
+          historyAction(redo),
+          mode == CollaborationMode.SHARED_SESSION_SHARED_UNDO);
+    } finally {
+      lock.unlock();
+    }
+  }
+
   WorkflowHistoryCommandResult undo(UndoWorkflowCommand command) {
     lock.lock();
     try {
@@ -262,26 +335,15 @@ final class WorkflowSessionEntry {
         return retry;
       }
       persistence.requireExpectedRevision(sessionId, command.expectedRevision(), revision);
+      WorkflowRedoPreview preview =
+          previewRedoLocked(command.actor(), command.targetUndoOperationId());
+      if (!preview.safe()) {
+        throw new WorkflowUndoConflictException(
+            sessionId, preview.targetUndoOperationId(), preview.blockingOperations());
+      }
       OperationIdentity targetUndo =
-          requireOperation(command.targetUndoOperationId(), Code.REDO_TARGET_NOT_FOUND);
-      if (targetUndo.command().kind() != Kind.UNDO
-          || !targetUndo.actorId().equals(command.actor().actorId())) {
-        throw error(
-            Code.REDO_TARGET_INVALID,
-            "Redo target is not an undo command owned by the requesting actor: "
-                + command.targetUndoOperationId());
-      }
-      if (isTargeted(targetUndo.operationId(), Kind.REDO)) {
-        throw error(
-            Code.REDO_ALREADY_APPLIED,
-            "Undo operation has already been redone: " + targetUndo.operationId());
-      }
+          requireOperation(preview.targetUndoOperationId(), Code.REDO_TARGET_NOT_FOUND);
       WorkflowOperation targetOperation = requireUndoableOperation(targetUndo);
-      List<WorkflowUndoPreview.BlockingOperation> blockers =
-          blockingOperations(targetUndo, targetOperation.affectedObjectIds());
-      if (!blockers.isEmpty()) {
-        throw new WorkflowUndoConflictException(sessionId, targetUndo.operationId(), blockers);
-      }
       WorkflowOperation inverse =
           targetOperation
               .inverseOperation()
@@ -421,8 +483,7 @@ final class WorkflowSessionEntry {
   private WorkflowUndoPreview previewUndoLocked(OperationActor actor, String requestedTargetId) {
     OperationIdentity target = selectUndoTarget(actor, requestedTargetId);
     WorkflowOperation targetOperation = requireUndoableOperation(target);
-    List<String> affectedObjectIds =
-        targetOperation.affectedObjectIds().stream().distinct().sorted().toList();
+    List<String> affectedObjectIds = sortedAffectedObjectIds(targetOperation);
     List<WorkflowUndoPreview.BlockingOperation> blockers =
         blockingOperations(target, affectedObjectIds);
     return new WorkflowUndoPreview(
@@ -430,6 +491,38 @@ final class WorkflowSessionEntry {
         target.operationId(),
         target.actorId(),
         target.operationType(),
+        target.occurredAt(),
+        affectedObjectIds,
+        revision,
+        blockers);
+  }
+
+  private WorkflowRedoPreview previewRedoLocked(
+      OperationActor actor, String targetUndoOperationId) {
+    OperationIdentity targetUndo =
+        requireOperation(targetUndoOperationId, Code.REDO_TARGET_NOT_FOUND);
+    if (targetUndo.command().kind() != Kind.UNDO
+        || !targetUndo.actorId().equals(actor.actorId())) {
+      throw error(
+          Code.REDO_TARGET_INVALID,
+          "Redo target is not an undo command owned by the requesting actor: "
+              + targetUndoOperationId);
+    }
+    if (isTargeted(targetUndo.operationId(), Kind.REDO)) {
+      throw error(
+          Code.REDO_ALREADY_APPLIED,
+          "Undo operation has already been redone: " + targetUndo.operationId());
+    }
+    WorkflowOperation targetOperation = requireUndoableOperation(targetUndo);
+    List<String> affectedObjectIds = sortedAffectedObjectIds(targetOperation);
+    List<WorkflowUndoPreview.BlockingOperation> blockers =
+        blockingOperations(targetUndo, affectedObjectIds);
+    return new WorkflowRedoPreview(
+        previewId(targetUndo.operationId(), blockers),
+        targetUndo.operationId(),
+        targetUndo.actorId(),
+        targetUndo.operationType(),
+        targetUndo.occurredAt(),
         affectedObjectIds,
         revision,
         blockers);
@@ -447,15 +540,35 @@ final class WorkflowSessionEntry {
       return validateForwardUndoTarget(
           requireOperation(requestedTargetId, Code.UNDO_TARGET_NOT_FOUND), actor.actorId());
     }
+    OperationIdentity target = findPersonalUndoTarget(actor.actorId());
+    if (target != null) {
+      return target;
+    }
+    throw error(Code.UNDO_TARGET_NOT_FOUND, "No active operation is available for personal undo");
+  }
+
+  private OperationIdentity findPersonalUndoTarget(String actorId) {
     for (int index = operationHistory.size() - 1; index >= 0; index--) {
       OperationIdentity candidate = operationHistory.get(index);
-      if (candidate.actorId().equals(actor.actorId())
+      if (candidate.actorId().equals(actorId)
           && candidate.command().kind() != Kind.UNDO
           && !isTargeted(candidate.operationId(), Kind.UNDO)) {
         return candidate;
       }
     }
-    throw error(Code.UNDO_TARGET_NOT_FOUND, "No active operation is available for personal undo");
+    return null;
+  }
+
+  private OperationIdentity findRedoTarget(String actorId) {
+    for (int index = operationHistory.size() - 1; index >= 0; index--) {
+      OperationIdentity candidate = operationHistory.get(index);
+      if (candidate.actorId().equals(actorId)
+          && candidate.command().kind() == Kind.UNDO
+          && !isTargeted(candidate.operationId(), Kind.REDO)) {
+        return candidate;
+      }
+    }
+    return null;
   }
 
   private OperationIdentity validateForwardUndoTarget(
@@ -523,6 +636,46 @@ final class WorkflowSessionEntry {
         .distinct()
         .sorted()
         .toList();
+  }
+
+  private WorkflowHistoryDescriptor describe(OperationIdentity operation) {
+    List<String> affectedObjectIds =
+        operation.operation().map(WorkflowSessionEntry::sortedAffectedObjectIds).orElse(List.of());
+    return new WorkflowHistoryDescriptor(
+        operation.operationId(),
+        operation.operationType(),
+        operation.actorId(),
+        operation.occurredAt(),
+        operation.revision(),
+        operation.sequence(),
+        CommandKind.valueOf(operation.command().kind().name()),
+        operation.command().commandId(),
+        operation.command().targetOperationId(),
+        affectedObjectIds,
+        operation.hasOperationBody(),
+        operation.command().kind() != Kind.UNDO
+            && !isTargeted(operation.operationId(), Kind.UNDO),
+        operation.command().kind() == Kind.UNDO
+            && !isTargeted(operation.operationId(), Kind.REDO));
+  }
+
+  private Action historyAction(OperationIdentity operation) {
+    if (operation == null) {
+      return null;
+    }
+    WorkflowHistoryDescriptor descriptor = describe(operation);
+    if (!operation.hasOperationBody()) {
+      return new Action(descriptor, ActionStatus.NOT_RECONSTRUCTIBLE, List.of());
+    }
+    List<WorkflowUndoPreview.BlockingOperation> blockers =
+        blockingOperations(operation, descriptor.affectedObjectIds());
+    return blockers.isEmpty()
+        ? new Action(descriptor, ActionStatus.AVAILABLE, List.of())
+        : new Action(descriptor, ActionStatus.BLOCKED, blockers);
+  }
+
+  private static List<String> sortedAffectedObjectIds(WorkflowOperation operation) {
+    return operation.affectedObjectIds().stream().distinct().sorted().toList();
   }
 
   private String previewId(
