@@ -149,3 +149,37 @@ jobs:
           path: target/gh-pages/
           if-no-files-found: error
           retention-days: 30
+
+  format-pr-290:
+    if: github.event_name == 'pull_request' && github.event.pull_request.number == 290 && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      packages: read
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feature/247-workflow-history-search
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          server-id: github
+          server-username: GITHUB_ACTOR
+          server-password: GITHUB_TOKEN
+      - name: Apply repository formatters
+        run: mvn -B spotless:apply
+      - name: Commit formatting and restore standard workflow
+        run: |
+          git fetch origin master
+          git checkout origin/master -- .github/workflows/maven.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "style: format indexed workflow history search"
+          git push origin HEAD:feature/247-workflow-history-search
