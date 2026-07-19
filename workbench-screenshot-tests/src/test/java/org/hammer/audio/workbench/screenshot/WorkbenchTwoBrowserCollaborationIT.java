@@ -28,6 +28,7 @@ class WorkbenchTwoBrowserCollaborationIT {
   private static final String SHARED_SESSION_ID = "e2e-shared-history";
   private static final String GENERATOR_SELECTOR =
       "[data-testid^='node-node.synthetic-signal-generator.']";
+  private static final String GAIN_SELECTOR = "[data-testid^='node-node.gain.']";
 
   private WorkbenchBrowserHarness harness;
 
@@ -52,10 +53,11 @@ class WorkbenchTwoBrowserCollaborationIT {
   @Test
   void personalHistoryConvergesAcrossPresenceConflictReconnectReloadUndoAndRedo() throws Throwable {
     String scenario = "personal-history-convergence";
-    try (WorkbenchBrowserHarness.ActorBrowser alice =
-            harness.openActor("actor-e2e-alice", "user-e2e-alice", "Alice E2E");
-        WorkbenchBrowserHarness.ActorBrowser bob =
-            harness.openActor("actor-e2e-bob", "user-e2e-bob", "Bob E2E")) {
+    WorkbenchBrowserHarness.ActorBrowser alice =
+        harness.openActor("actor-e2e-alice", "user-e2e-alice", "Alice E2E");
+    WorkbenchBrowserHarness.ActorBrowser bob =
+        harness.openActor("actor-e2e-bob", "user-e2e-bob", "Bob E2E");
+    try {
       open(alice.page());
       open(bob.page());
       createSession(alice.page(), PERSONAL_SESSION_ID, "SHARED_SESSION_PERSONAL_UNDO");
@@ -105,26 +107,31 @@ class WorkbenchTwoBrowserCollaborationIT {
       assertEquals(1, bob.page().locator(GENERATOR_SELECTOR).count());
 
       bob.context().setOffline(true);
-      bob.page()
-          .waitForCondition(
-              () ->
-                  !"live"
-                      .equals(bob.page().locator("[data-testid='connection-state']").innerText()));
-      bob.context().setOffline(false);
-      waitForLive(bob.page());
+      alice.page().locator("[data-testid='palette-node-gain']").click();
+      waitForRevision(alice.page(), 4);
       assertRevision(bob.page(), 3);
+      assertEquals(0, bob.page().locator(GAIN_SELECTOR).count());
+      bob.context().setOffline(false);
+      waitForRevision(bob.page(), 4);
+      waitForLive(bob.page());
+      bob.page().locator(GAIN_SELECTOR).first().waitFor();
       assertEquals(1, bob.page().locator(GENERATOR_SELECTOR).count());
+      assertEquals(1, bob.page().locator(GAIN_SELECTOR).count());
 
       bob.page().reload();
       waitForActiveSession(bob.page(), PERSONAL_SESSION_ID);
       waitForLive(bob.page());
-      waitForRevision(bob.page(), 3);
+      waitForRevision(bob.page(), 4);
       assertEquals(1, bob.page().locator(GENERATOR_SELECTOR).count());
+      assertEquals(1, bob.page().locator(GAIN_SELECTOR).count());
       assertEquals(
           "ready", bob.page().locator("[data-testid='history-controller-state']").innerText());
     } catch (Throwable failure) {
       harness.captureFailure(scenario, failure);
       throw failure;
+    } finally {
+      bob.close();
+      alice.close();
     }
   }
 
@@ -132,10 +139,11 @@ class WorkbenchTwoBrowserCollaborationIT {
   void sharedUndoRequiresExplicitTargetAndAcknowledgementBeforeBothClientsConverge()
       throws Throwable {
     String scenario = "shared-undo-confirmation";
-    try (WorkbenchBrowserHarness.ActorBrowser owner =
-            harness.openActor("actor-e2e-owner", "user-e2e-owner", "Owner E2E");
-        WorkbenchBrowserHarness.ActorBrowser reviewer =
-            harness.openActor("actor-e2e-reviewer", "user-e2e-reviewer", "Reviewer E2E")) {
+    WorkbenchBrowserHarness.ActorBrowser owner =
+        harness.openActor("actor-e2e-owner", "user-e2e-owner", "Owner E2E");
+    WorkbenchBrowserHarness.ActorBrowser reviewer =
+        harness.openActor("actor-e2e-reviewer", "user-e2e-reviewer", "Reviewer E2E");
+    try {
       open(owner.page());
       open(reviewer.page());
       createSession(owner.page(), SHARED_SESSION_ID, "SHARED_SESSION_SHARED_UNDO");
@@ -181,6 +189,9 @@ class WorkbenchTwoBrowserCollaborationIT {
     } catch (Throwable failure) {
       harness.captureFailure(scenario, failure);
       throw failure;
+    } finally {
+      reviewer.close();
+      owner.close();
     }
   }
 
