@@ -73,7 +73,11 @@ function OperationFacts({
       </div>
       <div>
         <dt>Accepted</dt>
-        <dd>{timestamp(operation.occurredAt)}</dd>
+        <dd>
+          <time className="history-timestamp" dateTime={operation.occurredAt}>
+            {timestamp(operation.occurredAt)}
+          </time>
+        </dd>
       </div>
       <div>
         <dt>Revision</dt>
@@ -366,7 +370,10 @@ export function WorkflowHistoryPanel({
                     />
                     <span>
                       <strong>{operation.operationType}</strong> ·{' '}
-                      {actorLabel(collaboration, operation.actorId)} · {timestamp(operation.occurredAt)}
+                      {actorLabel(collaboration, operation.actorId)} ·{' '}
+              <time className="history-timestamp" dateTime={operation.occurredAt}>
+                {timestamp(operation.occurredAt)}
+              </time>
                       {!operation.reconstructible ? ' · legacy' : ''}
                     </span>
                   </label>
@@ -486,7 +493,11 @@ export function WorkflowHistoryPanel({
               </div>
               <div>
                 <dt>Accepted</dt>
-                <dd>{timestamp(preview.value.targetOccurredAt)}</dd>
+                <dd>
+            <time className="history-timestamp" dateTime={preview.value.targetOccurredAt}>
+              {timestamp(preview.value.targetOccurredAt)}
+            </time>
+          </dd>
               </div>
               <div>
                 <dt>Objects</dt>

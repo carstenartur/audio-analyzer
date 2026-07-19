@@ -17,7 +17,9 @@ import org.junit.jupiter.api.TestInstance;
 import org.opentest4j.TestAbortedException;
 import org.testcontainers.DockerClientFactory;
 
-/** Generates documentation screenshots for durable personal and shared semantic history controls. */
+/**
+ * Generates documentation screenshots for durable personal and shared semantic history controls.
+ */
 @Tag("screenshot")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class WorkbenchHistoryScreenshotIT {
@@ -29,7 +31,8 @@ class WorkbenchHistoryScreenshotIT {
 
   @BeforeAll
   void setUp() throws IOException {
-    assumeTrue(isDockerAvailable(), "Docker is not available — skipping screenshot integration tests");
+    assumeTrue(
+        isDockerAvailable(), "Docker is not available — skipping screenshot integration tests");
     assumeTrue(isJarAvailable(), "audio-app JAR not found — build the project first");
     try {
       harness = WorkbenchBrowserHarness.start();
@@ -67,6 +70,7 @@ class WorkbenchHistoryScreenshotIT {
       assertTrue(dialog.innerText().contains("Confirm undo"));
       assertTrue(dialog.innerText().contains("Audio Researcher"));
       assertTrue(page.locator("[data-testid='history-confirm-button']").isEnabled());
+      normalizeHistoryTimestamps(page);
 
       disableAnimations(page);
       byte[] pngBytes = page.screenshot(new Page.ScreenshotOptions().setFullPage(false));
@@ -108,16 +112,15 @@ class WorkbenchHistoryScreenshotIT {
 
       Locator dialog = reviewer.page().locator("[data-testid='history-preview-dialog']");
       dialog.waitFor();
-      Locator acknowledgement =
-          reviewer.page().locator("[data-testid='shared-undo-confirmation']");
+      Locator acknowledgement = reviewer.page().locator("[data-testid='shared-undo-confirmation']");
       acknowledgement.waitFor();
       assertFalse(acknowledgement.isChecked());
       assertFalse(reviewer.page().locator("[data-testid='history-confirm-button']").isEnabled());
       assertTrue(dialog.innerText().contains("Workflow Owner"));
+      normalizeHistoryTimestamps(reviewer.page());
 
       disableAnimations(reviewer.page());
-      byte[] pngBytes =
-          reviewer.page().screenshot(new Page.ScreenshotOptions().setFullPage(false));
+      byte[] pngBytes = reviewer.page().screenshot(new Page.ScreenshotOptions().setFullPage(false));
       ScreenshotPipeline.processScreenshot("collaboration-shared-undo-preview.png", pngBytes);
     } catch (Throwable failure) {
       harness.captureFailure(scenario, failure);
@@ -181,6 +184,13 @@ class WorkbenchHistoryScreenshotIT {
     button.waitFor();
     page.waitForCondition(button::isEnabled);
     button.click();
+  }
+
+  private static void normalizeHistoryTimestamps(Page page) {
+    page.evaluate(
+        "document.querySelectorAll('time.history-timestamp').forEach(element => "
+            + "{ element.textContent = '19 Jul 2026, 12:00 UTC'; });");
+    assertTrue(page.locator("time.history-timestamp").count() > 0);
   }
 
   private static void disableAnimations(Page page) {
