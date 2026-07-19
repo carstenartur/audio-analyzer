@@ -30,15 +30,7 @@ class WorkflowSessionPersistenceModelTest {
             "workflow workflow.test { node input }",
             eventData);
     StoredWorkflowOperation operation =
-        new StoredWorkflowOperation(
-            session.sessionId(),
-            operationData.operationId(),
-            operationData.actorId(),
-            operationData.operationType(),
-            operationData.occurredAt(),
-            1,
-            1,
-            operationData.payload());
+        legacyOperation(session.sessionId(), operationData, 1, 1);
     StoredWorkflowOutboxEntry outbox = storedOutbox(null);
     WorkflowSessionAppendResult result =
         new WorkflowSessionAppendResult(session, operation, outbox, false);
@@ -121,7 +113,10 @@ class WorkflowSessionPersistenceModelTest {
                         OCCURRED_AT,
                         0,
                         1,
-                        "payload")),
+                        "payload",
+                        0,
+                        null,
+                        WorkflowOperationCommandMetadata.normal("operation"))),
         () ->
             assertThrows(
                 IllegalArgumentException.class,
@@ -158,6 +153,25 @@ class WorkflowSessionPersistenceModelTest {
         () -> assertEquals("session.test", operationConflict.sessionId()),
         () -> assertEquals("operation.test", operationConflict.operationId()),
         () -> assertTrue(operationConflict.getMessage().contains("operation.test")));
+  }
+
+  private static StoredWorkflowOperation legacyOperation(
+      String sessionId,
+      WorkflowOperationPersistenceData operationData,
+      long sequence,
+      long revision) {
+    return new StoredWorkflowOperation(
+        sessionId,
+        operationData.operationId(),
+        operationData.actorId(),
+        operationData.operationType(),
+        operationData.occurredAt(),
+        sequence,
+        revision,
+        operationData.payload(),
+        0,
+        null,
+        WorkflowOperationCommandMetadata.normal(operationData.operationId()));
   }
 
   private static StoredWorkflowSession session() {
