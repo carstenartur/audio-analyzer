@@ -26,7 +26,9 @@ public final class WorkflowHistoryIndexHttpAdapter {
     this.historySearch = Objects.requireNonNull(historySearch, "historySearch");
   }
 
-  /** Searches messages, paths and deterministic workflow DSL content with optional metadata filters. */
+  /**
+   * Searches messages, paths and deterministic workflow DSL content with optional metadata filters.
+   */
   @GetMapping
   public List<SearchHitResponse> search(
       @RequestParam(name = "q", defaultValue = "") String query,
