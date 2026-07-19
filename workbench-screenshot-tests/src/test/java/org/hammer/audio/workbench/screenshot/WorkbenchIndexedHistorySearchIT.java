@@ -21,7 +21,7 @@ import org.testcontainers.DockerClientFactory;
 @Tag("collaboration-e2e")
 class WorkbenchIndexedHistorySearchIT {
 
-  private static final String HISTORICAL_TERM = "wingbeat-history-baseline";
+  private static final String HISTORICAL_TERM = "wingbeathistorybaseline";
   private static final String LATER_NODE_ID = "node.e2e.indexed-history.later-gain";
   private static final String LATER_NODE_SELECTOR = "[data-testid='node-" + LATER_NODE_ID + "']";
   private static final String ACTIVE_SESSION_STORAGE_KEY = "audio-analyzer.workflow.active-session";
