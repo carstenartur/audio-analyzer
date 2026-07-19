@@ -11,11 +11,16 @@ import org.hammer.audio.workflow.collaboration.WorkflowSessionRegistry;
 import org.hammer.audio.workflow.editor.WorkflowProjection;
 import org.hammer.audio.workflow.editor.http.WorkflowSessionApiModels.ActorIdRequest;
 import org.hammer.audio.workflow.editor.http.WorkflowSessionApiModels.CreateSessionRequest;
+import org.hammer.audio.workflow.editor.http.WorkflowSessionApiModels.HistoryCommandResponse;
 import org.hammer.audio.workflow.editor.http.WorkflowSessionApiModels.JoinSessionRequest;
 import org.hammer.audio.workflow.editor.http.WorkflowSessionApiModels.PresenceRequest;
 import org.hammer.audio.workflow.editor.http.WorkflowSessionApiModels.PresenceResponse;
+import org.hammer.audio.workflow.editor.http.WorkflowSessionApiModels.RedoCommandRequest;
 import org.hammer.audio.workflow.editor.http.WorkflowSessionApiModels.SessionOperationRequest;
 import org.hammer.audio.workflow.editor.http.WorkflowSessionApiModels.SessionResponse;
+import org.hammer.audio.workflow.editor.http.WorkflowSessionApiModels.UndoCommandRequest;
+import org.hammer.audio.workflow.editor.http.WorkflowSessionApiModels.UndoPreviewRequest;
+import org.hammer.audio.workflow.editor.http.WorkflowSessionApiModels.UndoPreviewResponse;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -27,7 +32,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.util.UriComponentsBuilder;
 
-/** Spring MVC REST controller for collaboration-session lifecycle from issue #241. */
+/** Spring MVC REST controller for collaboration-session lifecycle and semantic commands. */
 @RestController
 @RequestMapping("/workflow/sessions")
 public final class WorkflowSessionHttpAdapter {
@@ -93,6 +98,28 @@ public final class WorkflowSessionHttpAdapter {
             : registry.applyOperation(
                 sessionId, request.mode(), actor, request.expectedRevision(), operation);
     return WorkflowProjection.fromWorkflow(workflow);
+  }
+
+  /** Computes an immutable undo preview at the current semantic revision. */
+  @PostMapping("/{sessionId}/undo/preview")
+  public UndoPreviewResponse previewUndo(
+      @PathVariable(SESSION_ID) String sessionId, @Valid @RequestBody UndoPreviewRequest request) {
+    return UndoPreviewResponse.from(
+        registry.previewUndo(sessionId, request.actor().toDomain(), request.targetOperationId()));
+  }
+
+  /** Applies one idempotent revision-aware semantic undo command. */
+  @PostMapping("/{sessionId}/undo")
+  public HistoryCommandResponse undo(
+      @PathVariable(SESSION_ID) String sessionId, @Valid @RequestBody UndoCommandRequest request) {
+    return HistoryCommandResponse.from(registry.undo(sessionId, request.toDomain()));
+  }
+
+  /** Applies one idempotent revision-aware semantic redo command. */
+  @PostMapping("/{sessionId}/redo")
+  public HistoryCommandResponse redo(
+      @PathVariable(SESSION_ID) String sessionId, @Valid @RequestBody RedoCommandRequest request) {
+    return HistoryCommandResponse.from(registry.redo(sessionId, request.toDomain()));
   }
 
   /** Updates non-semantic presence and broadcasts it separately from workflow history. */

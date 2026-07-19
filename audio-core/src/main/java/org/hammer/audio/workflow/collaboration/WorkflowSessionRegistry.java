@@ -159,6 +159,23 @@ public final class WorkflowSessionRegistry {
     return requireSession(sessionId).apply(mode, actor, expectedRevision, operation);
   }
 
+  /** Computes an immutable undo preview at the current semantic revision. */
+  public WorkflowUndoPreview previewUndo(
+      String sessionId, OperationActor actor, String targetOperationId) {
+    return requireSession(sessionId)
+        .previewUndo(Objects.requireNonNull(actor, "actor"), targetOperationId);
+  }
+
+  /** Applies a revision-aware server-side semantic undo command. */
+  public WorkflowHistoryCommandResult undo(String sessionId, UndoWorkflowCommand command) {
+    return requireSession(sessionId).undo(Objects.requireNonNull(command, "command"));
+  }
+
+  /** Applies a revision-aware server-side semantic redo command. */
+  public WorkflowHistoryCommandResult redo(String sessionId, RedoWorkflowCommand command) {
+    return requireSession(sessionId).redo(Objects.requireNonNull(command, "command"));
+  }
+
   /** Updates non-semantic presence for a joined actor. */
   public PresenceState updatePresence(
       String sessionId, OperationActor actor, PresenceState presenceState) {
@@ -277,15 +294,15 @@ public final class WorkflowSessionRegistry {
   /**
    * Immutable transport-neutral session metadata.
    *
-   * @param sessionId stable unique session identifier
+   * @param sessionId stable collaboration-session identifier
    * @param mode immutable collaboration mode
-   * @param owner owner actor metadata
+   * @param owner actor that owns the session lifecycle
    * @param createdAt session creation timestamp
-   * @param participants currently joined participants
-   * @param operationCount number of applied operations
-   * @param workflowId identifier of the canonical workflow
-   * @param revision current semantic workflow revision
-   * @param sequence latest collaboration-event sequence
+   * @param participants currently joined actors
+   * @param operationCount accepted semantic operation count
+   * @param workflowId canonical workflow identifier
+   * @param revision current semantic revision
+   * @param sequence current ordered event sequence
    */
   public record SessionSnapshot(
       String sessionId,

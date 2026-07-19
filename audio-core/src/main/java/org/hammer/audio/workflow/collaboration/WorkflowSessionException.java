@@ -1,9 +1,12 @@
 package org.hammer.audio.workflow.collaboration;
 
+import java.io.Serial;
 import java.util.Objects;
 
-/** Typed application error for workflow-session lifecycle and membership failures. */
-public final class WorkflowSessionException extends RuntimeException {
+/** Typed application error for workflow-session lifecycle and command failures. */
+public class WorkflowSessionException extends RuntimeException {
+
+  @Serial private static final long serialVersionUID = 1L;
 
   /** Stable error codes independent of HTTP or any other transport. */
   public enum Code {
@@ -15,7 +18,16 @@ public final class WorkflowSessionException extends RuntimeException {
     SESSION_MODE_MISMATCH,
     SESSION_CLOSE_FORBIDDEN,
     DUPLICATE_OPERATION_ID,
-    INVALID_OPERATION_AUTHOR
+    INVALID_OPERATION_AUTHOR,
+    UNDO_TARGET_REQUIRED,
+    UNDO_TARGET_NOT_FOUND,
+    OPERATION_NOT_UNDOABLE,
+    UNDO_PREVIEW_REQUIRED,
+    UNDO_PREVIEW_STALE,
+    UNDO_CONFLICT,
+    REDO_TARGET_NOT_FOUND,
+    REDO_TARGET_INVALID,
+    REDO_ALREADY_APPLIED
   }
 
   private final Code errorCode;
@@ -23,8 +35,8 @@ public final class WorkflowSessionException extends RuntimeException {
 
   /** Creates a typed session exception. */
   public WorkflowSessionException(Code code, String sessionId, String message) {
-    super(Objects.requireNonNull(message, "message"));
-    this.errorCode = Objects.requireNonNull(code, "code");
+    super(validateBeforeConstruction(code, message));
+    this.errorCode = code;
     this.relatedSessionId = sessionId;
   }
 
@@ -36,5 +48,10 @@ public final class WorkflowSessionException extends RuntimeException {
   /** Returns the related session id, or {@code null} when none is available. */
   public String sessionId() {
     return relatedSessionId;
+  }
+
+  private static String validateBeforeConstruction(Code code, String message) {
+    Objects.requireNonNull(code, "code");
+    return Objects.requireNonNull(message, "message");
   }
 }

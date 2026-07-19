@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -17,6 +18,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 import org.hammer.audio.workflow.Workflow;
 import org.hammer.audio.workflow.WorkflowOperation;
+import org.hammer.audio.workflow.collaboration.store.WorkflowOperationCommandMetadata;
 
 /**
  * Bounded, transport-neutral replay and fan-out hub for collaboration-session events.
@@ -146,24 +148,45 @@ public final class WorkflowSessionEventHub {
             Instant.now());
   }
 
-  /** Publishes one server-accepted semantic operation and advances the semantic revision. */
+  /** Publishes one ordinary server-accepted semantic operation. */
   public WorkflowSessionEvent operationAccepted(
       String sessionId,
       OperationActor actor,
       WorkflowOperation operation,
       Workflow resultingWorkflow) {
     Objects.requireNonNull(operation, "operation");
-    Map<String, String> attributes =
-        Map.of(
-            "operationType", operation.getClass().getSimpleName(),
-            "operationAuthor", operation.author());
+    return operationAccepted(
+        sessionId,
+        actor,
+        operation,
+        resultingWorkflow,
+        WorkflowOperationCommandMetadata.normal(operation.operationId()));
+  }
+
+  /** Publishes one accepted normal, undo or redo operation and advances semantic revision. */
+  public WorkflowSessionEvent operationAccepted(
+      String sessionId,
+      OperationActor actor,
+      WorkflowOperation operation,
+      Workflow resultingWorkflow,
+      WorkflowOperationCommandMetadata command) {
+    Objects.requireNonNull(operation, "operation");
+    Objects.requireNonNull(command, "command");
+    Map<String, String> attributes = new LinkedHashMap<>();
+    attributes.put("operationType", operation.getClass().getSimpleName());
+    attributes.put("operationAuthor", operation.author());
+    attributes.put("commandKind", command.kind().name());
+    attributes.put("commandId", command.commandId());
+    if (command.targetOperationId() != null) {
+      attributes.put("targetOperationId", command.targetOperationId());
+    }
     return requireSession(sessionId)
         .publish(
             WorkflowSessionEvent.Type.OPERATION_ACCEPTED,
             Objects.requireNonNull(actor, ACTOR_FIELD),
             operation.operationId(),
             Objects.requireNonNull(resultingWorkflow, "resultingWorkflow"),
-            attributes,
+            Map.copyOf(attributes),
             true,
             Instant.now());
   }

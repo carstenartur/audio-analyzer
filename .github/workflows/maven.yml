@@ -34,7 +34,19 @@ jobs:
           server-password: GITHUB_TOKEN
 
       - name: Build and verify with Maven
-        run: mvn -B clean verify --file pom.xml
+        shell: bash
+        run: |
+          set -o pipefail
+          mvn -B clean verify --file pom.xml 2>&1 | tee maven-build.log
+
+      - name: Upload Maven build log
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: maven-build-log
+          path: maven-build.log
+          if-no-files-found: error
+          retention-days: 30
 
       - name: Upload workbench screenshot failure artifacts
         if: failure()

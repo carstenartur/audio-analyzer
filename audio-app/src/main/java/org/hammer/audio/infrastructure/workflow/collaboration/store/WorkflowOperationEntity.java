@@ -10,8 +10,13 @@ import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import java.time.Instant;
+import org.hammer.audio.workflow.WorkflowOperation;
 import org.hammer.audio.workflow.collaboration.store.StoredWorkflowOperation;
+import org.hammer.audio.workflow.collaboration.store.WorkflowOperationBodyCodec;
+import org.hammer.audio.workflow.collaboration.store.WorkflowOperationCommandMetadata;
 import org.hammer.audio.workflow.collaboration.store.WorkflowOperationPersistenceData;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 /** Hibernate-owned durable accepted semantic operation. */
 @Entity
@@ -58,6 +63,22 @@ public class WorkflowOperationEntity {
   @Column(name = "operation_payload", nullable = false)
   private String payload;
 
+  @Column(name = "operation_body_version")
+  private Integer bodyVersion;
+
+  @JdbcTypeCode(SqlTypes.LONG32VARCHAR)
+  @Column(name = "operation_body")
+  private String operationBody;
+
+  @Column(name = "command_kind", length = 32)
+  private String commandKind;
+
+  @Column(name = "command_id", length = 255)
+  private String commandId;
+
+  @Column(name = "target_operation_id", length = 255)
+  private String targetOperationId;
+
   protected WorkflowOperationEntity() {
     // Required by Jakarta Persistence.
   }
@@ -73,10 +94,22 @@ public class WorkflowOperationEntity {
     entity.storedOperationSequence = sequence;
     entity.storedSemanticRevision = revision;
     entity.payload = operation.payload();
+    entity.bodyVersion = operation.hasOperationBody() ? operation.bodyVersion() : null;
+    entity.operationBody = operation.operationBody();
+    entity.commandKind = operation.command().kind().name();
+    entity.commandId = operation.command().commandId();
+    entity.targetOperationId = operation.command().targetOperationId();
     return entity;
   }
 
   StoredWorkflowOperation toStoredOperation() {
+    WorkflowOperationCommandMetadata command =
+        commandKind == null || commandId == null
+            ? WorkflowOperationCommandMetadata.normal(storedOperationId)
+            : new WorkflowOperationCommandMetadata(
+                WorkflowOperationCommandMetadata.Kind.valueOf(commandKind),
+                commandId,
+                targetOperationId);
     return new StoredWorkflowOperation(
         storedSessionId,
         storedOperationId,
@@ -85,16 +118,41 @@ public class WorkflowOperationEntity {
         occurredAt,
         storedOperationSequence,
         storedSemanticRevision,
-        payload);
+        payload,
+        bodyVersion == null ? 0 : bodyVersion,
+        operationBody,
+        command);
   }
 
   boolean hasSameSemanticContent(
       String expectedSessionId, WorkflowOperationPersistenceData candidate) {
-    return storedSessionId.equals(expectedSessionId)
-        && actorId.equals(candidate.actorId())
-        && operationType.equals(candidate.operationType())
-        && occurredAt.equals(candidate.occurredAt())
-        && payload.equals(candidate.payload());
+    boolean identityMatches =
+        storedSessionId.equals(expectedSessionId)
+            && actorId.equals(candidate.actorId())
+            && operationType.equals(candidate.operationType())
+            && payload.equals(candidate.payload())
+            && command().equals(candidate.command());
+    if (!identityMatches || bodyVersion == null) {
+      return identityMatches;
+    }
+    if (!candidate.hasOperationBody() || bodyVersion != candidate.bodyVersion()) {
+      return false;
+    }
+    WorkflowOperation candidateOperation =
+        WorkflowOperationBodyCodec.decode(candidate.bodyVersion(), candidate.operationBody());
+    WorkflowOperation normalizedCandidate =
+        WorkflowOperationBodyCodec.reidentify(
+            candidateOperation, candidate.operationId(), occurredAt, candidate.actorId());
+    return operationBody.equals(WorkflowOperationBodyCodec.encode(normalizedCandidate).body());
+  }
+
+  private WorkflowOperationCommandMetadata command() {
+    return commandKind == null || commandId == null
+        ? WorkflowOperationCommandMetadata.normal(storedOperationId)
+        : new WorkflowOperationCommandMetadata(
+            WorkflowOperationCommandMetadata.Kind.valueOf(commandKind),
+            commandId,
+            targetOperationId);
   }
 
   String sessionId() {

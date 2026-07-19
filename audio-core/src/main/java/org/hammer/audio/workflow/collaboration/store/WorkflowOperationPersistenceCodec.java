@@ -5,34 +5,51 @@ import java.util.Map;
 import java.util.Objects;
 import org.hammer.audio.workflow.WorkflowOperation;
 
-/** Converts semantic workflow operations into deterministic durable identity data. */
+/** Converts semantic workflow operations into deterministic durable persistence data. */
 public final class WorkflowOperationPersistenceCodec {
 
   private WorkflowOperationPersistenceCodec() {
     // Utility class.
   }
 
-  /**
-   * Encodes one operation for durable append and restart-safe idempotency checks.
-   *
-   * @param operation semantic workflow operation
-   * @return deterministic persistence data
-   */
+  /** Encodes one ordinary forward operation. */
   public static WorkflowOperationPersistenceData encode(WorkflowOperation operation) {
     WorkflowOperation requiredOperation = Objects.requireNonNull(operation, "operation");
+    return encode(
+        requiredOperation,
+        WorkflowOperationCommandMetadata.normal(requiredOperation.operationId()));
+  }
+
+  /**
+   * Encodes one operation for durable append, restart-safe idempotency and semantic reconstruction.
+   *
+   * @param operation semantic workflow operation
+   * @param command durable normal/undo/redo command relation
+   * @return deterministic persistence data
+   */
+  public static WorkflowOperationPersistenceData encode(
+      WorkflowOperation operation, WorkflowOperationCommandMetadata command) {
+    WorkflowOperation requiredOperation = Objects.requireNonNull(operation, "operation");
+    WorkflowOperationBodyCodec.EncodedBody body =
+        WorkflowOperationBodyCodec.encode(requiredOperation);
     return new WorkflowOperationPersistenceData(
         requiredOperation.operationId(),
         requiredOperation.author(),
         requiredOperation.getClass().getSimpleName(),
         requiredOperation.timestamp(),
-        encodeSemanticIdentity(requiredOperation));
+        encodeSemanticIdentity(requiredOperation),
+        body.version(),
+        body.body(),
+        Objects.requireNonNull(command, "command"));
   }
 
   /**
    * Compares a durable operation with a retry candidate without applying it again.
    *
-   * <p>The timestamp is intentionally excluded to preserve the existing command-idempotency
-   * contract: a transport retry may recreate an otherwise identical operation with a new timestamp.
+   * <p>The timestamp is intentionally excluded from the legacy fingerprint to preserve the existing
+   * command-idempotency contract. New rows additionally compare the complete operation body after
+   * normalizing the candidate to the stored timestamp, because a transport retry may recreate the
+   * same semantic operation with a new timestamp.
    *
    * @param stored durable accepted operation
    * @param candidate semantic retry candidate
@@ -40,11 +57,22 @@ public final class WorkflowOperationPersistenceCodec {
    */
   public static boolean matches(StoredWorkflowOperation stored, WorkflowOperation candidate) {
     StoredWorkflowOperation requiredStored = Objects.requireNonNull(stored, "stored");
-    WorkflowOperationPersistenceData encodedCandidate = encode(candidate);
-    return requiredStored.operationId().equals(encodedCandidate.operationId())
-        && requiredStored.actorId().equals(encodedCandidate.actorId())
-        && requiredStored.operationType().equals(encodedCandidate.operationType())
-        && requiredStored.payload().equals(encodedCandidate.payload());
+    WorkflowOperationPersistenceData encodedCandidate = encode(candidate, requiredStored.command());
+    boolean identityMatches =
+        requiredStored.operationId().equals(encodedCandidate.operationId())
+            && requiredStored.actorId().equals(encodedCandidate.actorId())
+            && requiredStored.operationType().equals(encodedCandidate.operationType())
+            && requiredStored.payload().equals(encodedCandidate.payload());
+    if (!identityMatches || !requiredStored.hasOperationBody()) {
+      return identityMatches;
+    }
+    WorkflowOperation normalizedCandidate =
+        WorkflowOperationBodyCodec.reidentify(
+            candidate, candidate.operationId(), requiredStored.occurredAt(), candidate.author());
+    WorkflowOperationBodyCodec.EncodedBody normalizedBody =
+        WorkflowOperationBodyCodec.encode(normalizedCandidate);
+    return requiredStored.bodyVersion() == normalizedBody.version()
+        && requiredStored.operationBody().equals(normalizedBody.body());
   }
 
   /**
