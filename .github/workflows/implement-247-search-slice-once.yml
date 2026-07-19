@@ -1,0 +1,842 @@
+name: Implement issue 247 search slice once
+
+on:
+  push:
+    branches:
+      - feature/247-workflow-history-search
+    paths:
+      - '.github/workflows/implement-247-search-slice-once.yml'
+
+permissions:
+  contents: write
+  packages: read
+
+jobs:
+  implement:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feature/247-workflow-history-search
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          server-id: github
+          server-username: GITHUB_ACTOR
+          server-password: GITHUB_TOKEN
+
+      - name: Add framework-independent search contracts
+        shell: python
+        run: |
+          from pathlib import Path
+          root = Path('audio-core/src/main/java/org/hammer/audio/workflow/history')
+          root.mkdir(parents=True, exist_ok=True)
+          (root / 'WorkflowHistorySearch.java').write_text('''package org.hammer.audio.workflow.history;
+
+import java.util.List;
+
+/** Application boundary for rebuildable workflow checkpoint history search. */
+public interface WorkflowHistorySearch {
+
+  /** Searches the derived history projection and returns exact commit identities. */
+  List<WorkflowHistorySearchResult> search(WorkflowHistorySearchQuery query);
+
+  /** Rebuilds projections for commits reachable from one branch head. */
+  int rebuild(String branch, int limit);
+}
+''')
+          (root / 'WorkflowHistorySearchQuery.java').write_text('''package org.hammer.audio.workflow.history;
+
+/** Free-text workflow history query with a bounded result count. */
+public record WorkflowHistorySearchQuery(String text, int limit) {
+
+  public WorkflowHistorySearchQuery {
+    text = text == null ? "" : text.trim();
+    if (limit <= 0 || limit > 200) {
+      throw new IllegalArgumentException("limit must be between 1 and 200");
+    }
+  }
+}
+''')
+          (root / 'WorkflowHistorySearchResult.java').write_text('''package org.hammer.audio.workflow.history;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.Objects;
+import org.hammer.audio.workflow.store.CommitId;
+
+/** One rebuildable search hit that can load the exact authoritative workflow commit. */
+public record WorkflowHistorySearchResult(
+    CommitId commitId,
+    String shortMessage,
+    String authorName,
+    String authorEmail,
+    Instant timestamp,
+    List<String> changedPaths) {
+
+  public WorkflowHistorySearchResult {
+    Objects.requireNonNull(commitId, "commitId");
+    shortMessage = shortMessage == null ? "" : shortMessage;
+    changedPaths = List.copyOf(Objects.requireNonNull(changedPaths, "changedPaths"));
+  }
+}
+''')
+
+      - name: Add shared Search dependency and persistence registration
+        shell: python
+        run: |
+          from pathlib import Path
+          pom = Path('audio-app/pom.xml')
+          text = pom.read_text()
+          marker = '''    <dependency>
+                <groupId>io.github.carstenartur</groupId>
+                <artifactId>jgit-storage-hibernate-core</artifactId>
+                <version>${jgit-storage-hibernate.version}</version>
+              </dependency>
+          '''
+          replacement = marker + '''    <dependency>
+                <groupId>io.github.carstenartur</groupId>
+                <artifactId>jgit-storage-hibernate-search</artifactId>
+                <version>${jgit-storage-hibernate.version}</version>
+              </dependency>
+          '''
+          if marker not in text:
+              raise SystemExit('core dependency marker not found')
+          pom.write_text(text.replace(marker, replacement, 1))
+
+          config = Path('audio-app/src/main/java/org/hammer/audio/app/WorkflowSearchPersistenceConfiguration.java')
+          config.write_text('''package org.hammer.audio.app;
+
+import io.github.carstenartur.jgit.storage.hibernate.search.SearchEntities;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+/** Registers the shared rebuildable Git history projection in the application persistence context. */
+@Configuration
+@ConditionalOnProperty(name = "workbench.persistence.mode", havingValue = "hibernate")
+public class WorkflowSearchPersistenceConfiguration {
+
+  /** Contributes generic search projection entities to the one shared SessionFactory. */
+  @Bean
+  public WorkflowPersistenceEntityContributor workflowSearchPersistenceEntities() {
+    return SearchEntities::annotatedClasses;
+  }
+}
+''')
+
+      - name: Configure shared Hibernate Search backend
+        shell: python
+        run: |
+          from pathlib import Path
+          path = Path('audio-app/src/main/java/org/hammer/audio/app/WorkflowPersistenceConfiguration.java')
+          text = path.read_text()
+          marker = '''    properties.setProperty("hibernate.show_sql", "false");
+              properties.setProperty("hibernate.format_sql", "false");
+          '''
+          replacement = marker + '''    properties.setProperty("hibernate.search.backend.type", "lucene");
+              properties.setProperty(
+                  "hibernate.search.backend.directory.type",
+                  environment.getProperty(
+                      "workbench.history-search.directory-type", "local-heap"));
+              String searchDirectoryRoot =
+                  environment.getProperty("workbench.history-search.directory-root");
+              if (searchDirectoryRoot != null && !searchDirectoryRoot.isBlank()) {
+                properties.setProperty(
+                    "hibernate.search.backend.directory.root", searchDirectoryRoot.trim());
+              }
+          '''
+          if marker not in text:
+              raise SystemExit('hibernate properties marker not found')
+          text = text.replace(marker, replacement, 1)
+          text = text.replace(
+              'public VersionedWorkflowStore hibernateVersionedWorkflowStore(',
+              'public HibernateJGitVersionedWorkflowStore hibernateVersionedWorkflowStore(',
+              1)
+          path.write_text(text)
+
+      - name: Add ordered Search migrations
+        shell: python
+        run: |
+          from pathlib import Path
+          result = Path('audio-app/src/main/java/org/hammer/audio/infrastructure/workflow/collaboration/schema/WorkflowSchemaMigrationResult.java')
+          result.write_text('''package org.hammer.audio.infrastructure.workflow.collaboration.schema;
+
+import java.util.Objects;
+
+/** Outcome and startup invariant for the ordered workflow schema migration phase. */
+public record WorkflowSchemaMigrationResult(
+    boolean applied,
+    int coreMigrationsExecuted,
+    int searchMigrationsExecuted,
+    int collaborationMigrationsExecuted) {
+
+  public WorkflowSchemaMigrationResult {
+    if (coreMigrationsExecuted < 0) {
+      throw new IllegalArgumentException("coreMigrationsExecuted must be >= 0");
+    }
+    if (searchMigrationsExecuted < 0) {
+      throw new IllegalArgumentException("searchMigrationsExecuted must be >= 0");
+    }
+    if (collaborationMigrationsExecuted < 0) {
+      throw new IllegalArgumentException("collaborationMigrationsExecuted must be >= 0");
+    }
+  }
+
+  /** Returns a marker for an explicitly disabled migration phase. */
+  public static WorkflowSchemaMigrationResult skipped() {
+    return new WorkflowSchemaMigrationResult(false, 0, 0, 0);
+  }
+
+  /** Prevents Hibernate DDL mutation after the versioned migration phase has run. */
+  public void requireValidateSchemaAction(String schemaAction) {
+    String requiredSchemaAction = Objects.requireNonNull(schemaAction, "schemaAction").trim();
+    if (applied && !"validate".equalsIgnoreCase(requiredSchemaAction)) {
+      throw new IllegalStateException(
+          "Versioned workflow migrations require workbench.persistence.schema-action=validate");
+    }
+  }
+}
+''')
+
+          migrator = Path('audio-app/src/main/java/org/hammer/audio/infrastructure/workflow/collaboration/schema/WorkflowSchemaMigrator.java')
+          migrator.write_text('''package org.hammer.audio.infrastructure.workflow.collaboration.schema;
+
+import io.github.carstenartur.jgit.storage.hibernate.schema.CoreSchemaMigrations;
+import io.github.carstenartur.jgit.storage.hibernate.search.schema.SearchSchemaMigrations;
+import java.sql.Connection;
+import java.sql.SQLException;
+import java.util.Locale;
+import java.util.Objects;
+import javax.sql.DataSource;
+import org.flywaydb.core.Flyway;
+import org.flywaydb.core.api.configuration.FluentConfiguration;
+
+/** Applies shared JGit Core and Search migrations before Audio Analyzer migrations. */
+public final class WorkflowSchemaMigrator {
+
+  private final DataSource dataSource;
+
+  /** Creates an ordered migrator over the application-owned shared data source. */
+  public WorkflowSchemaMigrator(DataSource dataSource) {
+    this.dataSource = Objects.requireNonNull(dataSource, "dataSource");
+  }
+
+  /** Migrates generic Core, generic Search and application collaboration state in that order. */
+  public WorkflowSchemaMigrationResult migrate(
+      boolean adoptLegacyCoreSchema,
+      boolean adoptLegacySearchSchema,
+      boolean adoptPreLeaseCollaborationSchema) {
+    DatabaseFamily databaseFamily = detectDatabaseFamily();
+    int coreMigrations = migrateCore(databaseFamily, adoptLegacyCoreSchema);
+    int searchMigrations = migrateSearch(databaseFamily, adoptLegacySearchSchema);
+    int collaborationMigrations =
+        migrateCollaboration(databaseFamily, adoptPreLeaseCollaborationSchema);
+    return new WorkflowSchemaMigrationResult(
+        true, coreMigrations, searchMigrations, collaborationMigrations);
+  }
+
+  private int migrateCore(DatabaseFamily family, boolean adoptLegacySchema) {
+    FluentConfiguration configuration =
+        Flyway.configure()
+            .dataSource(dataSource)
+            .locations(family.coreLocation)
+            .table(CoreSchemaMigrations.SCHEMA_HISTORY_TABLE)
+            .baselineOnMigrate(true);
+    applyBaseline(
+        configuration,
+        adoptLegacySchema,
+        CoreSchemaMigrations.LEGACY_SCHEMA_VERSION,
+        CoreSchemaMigrations.LEGACY_BASELINE_DESCRIPTION,
+        CoreSchemaMigrations.PRE_MIGRATION_BASELINE_VERSION,
+        CoreSchemaMigrations.PRE_MIGRATION_BASELINE_DESCRIPTION);
+    return configuration.load().migrate().migrationsExecuted;
+  }
+
+  private int migrateSearch(DatabaseFamily family, boolean adoptLegacySchema) {
+    FluentConfiguration configuration =
+        Flyway.configure()
+            .dataSource(dataSource)
+            .locations(family.searchLocation)
+            .table(SearchSchemaMigrations.SCHEMA_HISTORY_TABLE)
+            .baselineOnMigrate(true);
+    applyBaseline(
+        configuration,
+        adoptLegacySchema,
+        SearchSchemaMigrations.LEGACY_SCHEMA_VERSION,
+        SearchSchemaMigrations.LEGACY_BASELINE_DESCRIPTION,
+        SearchSchemaMigrations.PRE_MIGRATION_BASELINE_VERSION,
+        SearchSchemaMigrations.PRE_MIGRATION_BASELINE_DESCRIPTION);
+    return configuration.load().migrate().migrationsExecuted;
+  }
+
+  private int migrateCollaboration(
+      DatabaseFamily family, boolean adoptPreLeaseCollaborationSchema) {
+    FluentConfiguration configuration =
+        Flyway.configure()
+            .dataSource(dataSource)
+            .locations(family.collaborationLocation)
+            .table(CollaborationSchemaMigrations.SCHEMA_HISTORY_TABLE)
+            .baselineOnMigrate(true);
+    applyBaseline(
+        configuration,
+        adoptPreLeaseCollaborationSchema,
+        CollaborationSchemaMigrations.PRE_LEASE_SCHEMA_VERSION,
+        CollaborationSchemaMigrations.PRE_LEASE_BASELINE_DESCRIPTION,
+        CollaborationSchemaMigrations.PRE_MIGRATION_BASELINE_VERSION,
+        CollaborationSchemaMigrations.PRE_MIGRATION_BASELINE_DESCRIPTION);
+    return configuration.load().migrate().migrationsExecuted;
+  }
+
+  private static void applyBaseline(
+      FluentConfiguration configuration,
+      boolean legacy,
+      String legacyVersion,
+      String legacyDescription,
+      String initialVersion,
+      String initialDescription) {
+    if (legacy) {
+      configuration.baselineVersion(legacyVersion).baselineDescription(legacyDescription);
+    } else {
+      configuration.baselineVersion(initialVersion).baselineDescription(initialDescription);
+    }
+  }
+
+  private DatabaseFamily detectDatabaseFamily() {
+    try (Connection connection = dataSource.getConnection()) {
+      String productName =
+          connection.getMetaData().getDatabaseProductName().toLowerCase(Locale.ROOT);
+      if (productName.contains("h2")) {
+        return DatabaseFamily.H2;
+      }
+      if (productName.contains("postgresql")) {
+        return DatabaseFamily.POSTGRESQL;
+      }
+      throw new IllegalStateException(
+          "Unsupported workflow migration database: "
+              + connection.getMetaData().getDatabaseProductName());
+    } catch (SQLException failure) {
+      throw new IllegalStateException("Cannot inspect workflow migration database", failure);
+    }
+  }
+
+  private enum DatabaseFamily {
+    H2(
+        CoreSchemaMigrations.H2_LOCATION,
+        SearchSchemaMigrations.H2_LOCATION,
+        CollaborationSchemaMigrations.H2_LOCATION),
+    POSTGRESQL(
+        CoreSchemaMigrations.POSTGRESQL_LOCATION,
+        SearchSchemaMigrations.POSTGRESQL_LOCATION,
+        CollaborationSchemaMigrations.POSTGRESQL_LOCATION);
+
+    private final String coreLocation;
+    private final String searchLocation;
+    private final String collaborationLocation;
+
+    DatabaseFamily(String coreLocation, String searchLocation, String collaborationLocation) {
+      this.coreLocation = coreLocation;
+      this.searchLocation = searchLocation;
+      this.collaborationLocation = collaborationLocation;
+    }
+  }
+}
+''')
+
+          config = Path('audio-app/src/main/java/org/hammer/audio/app/WorkflowSchemaMigrationConfiguration.java')
+          text = config.read_text()
+          old = '''      @Value("${workbench.persistence.migrations.adopt-collaboration-pre-lease:false}")
+                    boolean adoptPreLeaseCollaborationSchema,
+          '''
+          new = '''      @Value("${workbench.persistence.migrations.adopt-search-0.1.4:false}")
+                    boolean adoptLegacySearchSchema,
+                @Value("${workbench.persistence.migrations.adopt-collaboration-pre-lease:false}")
+                    boolean adoptPreLeaseCollaborationSchema,
+          '''
+          if old not in text:
+              raise SystemExit('migration configuration parameter marker not found')
+          text = text.replace(old, new, 1)
+          text = text.replace(
+              '.migrate(adoptLegacyCoreSchema, adoptPreLeaseCollaborationSchema);',
+              '.migrate(\n            adoptLegacyCoreSchema,\n            adoptLegacySearchSchema,\n            adoptPreLeaseCollaborationSchema);',
+              1)
+          config.write_text(text)
+
+      - name: Add searchable Hibernate JGit adapter
+        run: |
+          cat > audio-app/src/main/java/org/hammer/audio/infrastructure/workflow/store/HibernateJGitVersionedWorkflowStore.java <<'JAVA'
+          package org.hammer.audio.infrastructure.workflow.store;
+
+          import io.github.carstenartur.jgit.storage.hibernate.DefaultHibernateRepositoryFactory;
+          import io.github.carstenartur.jgit.storage.hibernate.HibernateGitStorage;
+          import io.github.carstenartur.jgit.storage.hibernate.HibernateRepositoryFactory;
+          import io.github.carstenartur.jgit.storage.hibernate.RepositoryName;
+          import io.github.carstenartur.jgit.storage.hibernate.search.entity.GitCommitIndex;
+          import io.github.carstenartur.jgit.storage.hibernate.search.service.CommitIndexer;
+          import io.github.carstenartur.jgit.storage.hibernate.search.service.GitHistorySearchService;
+          import java.io.IOException;
+          import java.util.Arrays;
+          import java.util.List;
+          import java.util.NoSuchElementException;
+          import java.util.Objects;
+          import java.util.logging.Level;
+          import java.util.logging.Logger;
+          import org.eclipse.jgit.lib.Constants;
+          import org.eclipse.jgit.lib.ObjectId;
+          import org.hammer.audio.workflow.history.WorkflowHistorySearch;
+          import org.hammer.audio.workflow.history.WorkflowHistorySearchQuery;
+          import org.hammer.audio.workflow.history.WorkflowHistorySearchResult;
+          import org.hammer.audio.workflow.store.CommitId;
+          import org.hammer.audio.workflow.store.CommitInfo;
+          import org.hammer.audio.workflow.store.CommitMetadata;
+          import org.hammer.audio.workflow.store.RefUpdateResult;
+          import org.hammer.audio.workflow.store.VersionedWorkflowStore;
+          import org.hammer.audio.workflow.store.WorkflowSnapshot;
+          import org.hibernate.SessionFactory;
+
+          /** Production workflow store and rebuildable search adapter over one shared Hibernate context. */
+          public final class HibernateJGitVersionedWorkflowStore
+              implements VersionedWorkflowStore, WorkflowHistorySearch, AutoCloseable {
+
+            private static final Logger LOGGER =
+                Logger.getLogger(HibernateJGitVersionedWorkflowStore.class.getName());
+
+            private final HibernateGitStorage storage;
+            private final JGitRepositoryVersionedWorkflowStore delegate;
+            private final CommitIndexer commitIndexer;
+            private final GitHistorySearchService searchService;
+
+            /** Opens a logical repository using the application-managed Hibernate session factory. */
+            public HibernateJGitVersionedWorkflowStore(
+                SessionFactory sessionFactory, String repositoryName) {
+              this(openStorage(sessionFactory, repositoryName), sessionFactory, repositoryName);
+            }
+
+            /** Opens a storage-only adapter through a supplied shared repository factory. */
+            public HibernateJGitVersionedWorkflowStore(
+                HibernateRepositoryFactory repositoryFactory, RepositoryName repositoryName) {
+              this(
+                  Objects.requireNonNull(repositoryFactory, "repositoryFactory")
+                      .open(Objects.requireNonNull(repositoryName, "repositoryName")));
+            }
+
+            HibernateJGitVersionedWorkflowStore(HibernateGitStorage storage) {
+              this.storage = Objects.requireNonNull(storage, "storage");
+              this.delegate = new JGitRepositoryVersionedWorkflowStore(storage.repository());
+              this.commitIndexer = null;
+              this.searchService = null;
+            }
+
+            private HibernateJGitVersionedWorkflowStore(
+                HibernateGitStorage storage, SessionFactory sessionFactory, String repositoryName) {
+              this.storage = Objects.requireNonNull(storage, "storage");
+              this.delegate = new JGitRepositoryVersionedWorkflowStore(storage.repository());
+              this.commitIndexer =
+                  new CommitIndexer(
+                      Objects.requireNonNull(sessionFactory, "sessionFactory"), repositoryName);
+              this.searchService = new GitHistorySearchService(sessionFactory);
+            }
+
+            @Override
+            public CommitId commit(
+                String branch, WorkflowSnapshot snapshot, CommitMetadata metadata) {
+              CommitId commitId = delegate.commit(branch, snapshot, metadata);
+              indexBestEffort(commitId);
+              return commitId;
+            }
+
+            @Override
+            public WorkflowSnapshot loadAtCommit(CommitId commitId) {
+              return delegate.loadAtCommit(commitId);
+            }
+
+            @Override
+            public WorkflowSnapshot loadHead(String branch) {
+              return delegate.loadHead(branch);
+            }
+
+            @Override
+            public RefUpdateResult updateRef(
+                String refName, CommitId expectedOldCommit, CommitId newCommit) {
+              return delegate.updateRef(refName, expectedOldCommit, newCommit);
+            }
+
+            @Override
+            public List<CommitInfo> history(String refName, int limit) {
+              return delegate.history(refName, limit);
+            }
+
+            @Override
+            public List<WorkflowHistorySearchResult> search(WorkflowHistorySearchQuery query) {
+              requireSearchEnabled();
+              return searchService.searchCommitText(storage.repositoryName(), query.text(), query.limit())
+                  .stream()
+                  .map(HibernateJGitVersionedWorkflowStore::toResult)
+                  .toList();
+            }
+
+            @Override
+            public int rebuild(String branch, int limit) {
+              requireSearchEnabled();
+              try {
+                ObjectId head = storage.repository().resolve(branch);
+                if (head == null) {
+                  head = storage.repository().resolve(Constants.R_HEADS + branch);
+                }
+                if (head == null) {
+                  throw new NoSuchElementException("Unknown workflow branch: " + branch);
+                }
+                return commitIndexer.indexCommitsFrom(storage.repository(), head, limit);
+              } catch (IOException failure) {
+                throw new IllegalStateException(
+                    "Could not rebuild workflow history search for branch " + branch, failure);
+              }
+            }
+
+            @Override
+            public void close() {
+              storage.close();
+            }
+
+            private static HibernateGitStorage openStorage(
+                SessionFactory sessionFactory, String repositoryName) {
+              return new DefaultHibernateRepositoryFactory(
+                      Objects.requireNonNull(sessionFactory, "sessionFactory"))
+                  .open(new RepositoryName(repositoryName));
+            }
+
+            private void indexBestEffort(CommitId commitId) {
+              if (commitIndexer == null) {
+                return;
+              }
+              try {
+                commitIndexer.indexCommit(storage.repository(), ObjectId.fromString(commitId.value()));
+              } catch (IOException | RuntimeException failure) {
+                LOGGER.log(
+                    Level.WARNING,
+                    "Workflow commit "
+                        + commitId.value()
+                        + " remains authoritative but its search projection is stale",
+                    failure);
+              }
+            }
+
+            private void requireSearchEnabled() {
+              if (commitIndexer == null || searchService == null) {
+                throw new IllegalStateException(
+                    "Workflow history search requires the application-managed SessionFactory");
+              }
+            }
+
+            private static WorkflowHistorySearchResult toResult(GitCommitIndex hit) {
+              List<String> changedPaths =
+                  hit.getChangedPaths() == null || hit.getChangedPaths().isBlank()
+                      ? List.of()
+                      : Arrays.stream(hit.getChangedPaths().split("\\R"))
+                          .filter(value -> !value.isBlank())
+                          .toList();
+              return new WorkflowHistorySearchResult(
+                  new CommitId(hit.getObjectId()),
+                  hit.getShortMessage(),
+                  hit.getAuthorName(),
+                  hit.getAuthorEmail(),
+                  hit.getCommitTime(),
+                  changedPaths);
+            }
+          }
+          JAVA
+
+      - name: Add HTTP search and rebuild contract
+        run: |
+          cat > audio-app/src/main/java/org/hammer/audio/workflow/editor/http/WorkflowHistorySearchHttpAdapter.java <<'JAVA'
+          package org.hammer.audio.workflow.editor.http;
+
+          import java.time.Instant;
+          import java.util.List;
+          import org.hammer.audio.workflow.history.WorkflowHistorySearch;
+          import org.hammer.audio.workflow.history.WorkflowHistorySearchQuery;
+          import org.hammer.audio.workflow.history.WorkflowHistorySearchResult;
+          import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+          import org.springframework.web.bind.annotation.GetMapping;
+          import org.springframework.web.bind.annotation.PostMapping;
+          import org.springframework.web.bind.annotation.RequestMapping;
+          import org.springframework.web.bind.annotation.RequestParam;
+          import org.springframework.web.bind.annotation.RestController;
+
+          /** HTTP boundary for rebuildable checkpoint history search. */
+          @RestController
+          @RequestMapping("/workflow/history/search")
+          @ConditionalOnBean(WorkflowHistorySearch.class)
+          public final class WorkflowHistorySearchHttpAdapter {
+
+            private static final String DEFAULT_LIMIT = "20";
+            private final WorkflowHistorySearch search;
+
+            public WorkflowHistorySearchHttpAdapter(WorkflowHistorySearch search) {
+              this.search = java.util.Objects.requireNonNull(search, "search");
+            }
+
+            /** Searches messages, changed paths and changed workflow DSL content. */
+            @GetMapping
+            public List<SearchHitResponse> search(
+                @RequestParam(name = "q", defaultValue = "") String query,
+                @RequestParam(name = "limit", defaultValue = DEFAULT_LIMIT) int limit) {
+              return search.search(new WorkflowHistorySearchQuery(query, limit)).stream()
+                  .map(SearchHitResponse::from)
+                  .toList();
+            }
+
+            /** Rebuilds the derived projection from the authoritative branch history. */
+            @PostMapping("/rebuild")
+            public RebuildResponse rebuild(
+                @RequestParam(name = "branch", defaultValue = "main") String branch,
+                @RequestParam(name = "limit", defaultValue = "-1") int limit) {
+              return new RebuildResponse(search.rebuild(branch, limit));
+            }
+
+            public record SearchHitResponse(
+                String commitId,
+                String message,
+                String authorName,
+                String authorEmail,
+                Instant timestamp,
+                List<String> changedPaths) {
+
+              static SearchHitResponse from(WorkflowHistorySearchResult result) {
+                return new SearchHitResponse(
+                    result.commitId().value(),
+                    result.shortMessage(),
+                    result.authorName(),
+                    result.authorEmail(),
+                    result.timestamp(),
+                    result.changedPaths());
+              }
+            }
+
+            public record RebuildResponse(int indexedCommits) {}
+          }
+          JAVA
+
+      - name: Update migration tests and add exact-commit search test
+        shell: python
+        run: |
+          from pathlib import Path
+          config_test = Path('audio-app/src/test/java/org/hammer/audio/app/WorkflowSchemaMigrationConfigurationTest.java')
+          text = config_test.read_text()
+          text = text.replace(
+              'dataSource, new MockEnvironment(), false, false, false, "update"',
+              'dataSource, new MockEnvironment(), false, false, false, false, "update"')
+          text = text.replace(
+              'dataSource, environment, true, false, false, "update"',
+              'dataSource, environment, true, false, false, false, "update"')
+          config_test.write_text(text)
+
+          integration = Path('audio-app/src/test/java/org/hammer/audio/infrastructure/workflow/collaboration/store/CollaborationSchemaMigrationIntegrationTest.java')
+          text = integration.read_text()
+          text = text.replace(
+              'import io.github.carstenartur.jgit.storage.hibernate.schema.CoreSchemaMigrations;\n',
+              'import io.github.carstenartur.jgit.storage.hibernate.schema.CoreSchemaMigrations;\nimport io.github.carstenartur.jgit.storage.hibernate.search.SearchEntities;\nimport io.github.carstenartur.jgit.storage.hibernate.search.schema.SearchSchemaMigrations;\n',
+              1)
+          text = text.replace(
+              'assertEquals(3, migration.collaborationMigrationsExecuted());',
+              'assertEquals(1, migration.searchMigrationsExecuted());\n    assertEquals(3, migration.collaborationMigrationsExecuted());',
+              1)
+          text = text.replace(
+              'assertEquals(2, migration.collaborationMigrationsExecuted());',
+              'assertEquals(1, migration.searchMigrationsExecuted());\n    assertEquals(2, migration.collaborationMigrationsExecuted());',
+              1)
+          core_versions = '''    assertEquals(
+                    List.of("0.1.4", "0.1.5"),
+                    migrationVersions(database, CoreSchemaMigrations.SCHEMA_HISTORY_TABLE));
+          '''
+          search_versions = core_versions + '''    assertEquals(
+                    List.of("0.1.4"),
+                    migrationVersions(database, SearchSchemaMigrations.SCHEMA_HISTORY_TABLE));
+          '''
+          text = text.replace(core_versions, search_versions, 2)
+          text = text.replace(
+              '.migrate(false, adoptPreLeaseCollaborationSchema);',
+              '.migrate(false, false, adoptPreLeaseCollaborationSchema);',
+              1)
+          old_provider = '''    return new HibernateSessionFactoryProvider(
+                  properties, CollaborationPersistenceEntities.annotatedClasses());
+          '''
+          new_provider = '''    properties.put("hibernate.search.backend.type", "lucene");
+              properties.put("hibernate.search.backend.directory.type", "local-heap");
+              List<Class<?>> entities = new ArrayList<>();
+              entities.addAll(CollaborationPersistenceEntities.annotatedClasses());
+              entities.addAll(SearchEntities.annotatedClasses());
+              return new HibernateSessionFactoryProvider(properties, entities);
+          '''
+          if old_provider not in text:
+              raise SystemExit('migration integration provider marker not found')
+          integration.write_text(text.replace(old_provider, new_provider, 1))
+
+          search_test = Path('audio-app/src/test/java/org/hammer/audio/infrastructure/workflow/store/HibernateWorkflowHistorySearchTest.java')
+          search_test.write_text('''package org.hammer.audio.infrastructure.workflow.store;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import io.github.carstenartur.jgit.storage.hibernate.config.HibernateSessionFactoryProvider;
+import io.github.carstenartur.jgit.storage.hibernate.search.SearchEntities;
+import java.time.Instant;
+import java.util.Properties;
+import java.util.UUID;
+import org.hammer.audio.workflow.history.WorkflowHistorySearchQuery;
+import org.hammer.audio.workflow.history.WorkflowHistorySearchResult;
+import org.hammer.audio.workflow.store.CommitId;
+import org.hammer.audio.workflow.store.CommitMetadata;
+import org.hammer.audio.workflow.store.WorkflowSnapshot;
+import org.junit.jupiter.api.Test;
+
+class HibernateWorkflowHistorySearchTest {
+
+  @Test
+  void checkpointProjectionReturnsExactLoadableCommitAndRebuildIsIdempotent() {
+    Properties properties = new Properties();
+    properties.put(
+        "hibernate.connection.url", "jdbc:h2:mem:" + UUID.randomUUID() + ";DB_CLOSE_DELAY=-1");
+    properties.put("hibernate.connection.driver_class", "org.h2.Driver");
+    properties.put("hibernate.dialect", "org.hibernate.dialect.H2Dialect");
+    properties.put("hibernate.hbm2ddl.auto", "create-drop");
+    properties.put("hibernate.show_sql", "false");
+    properties.put("hibernate.search.backend.type", "lucene");
+    properties.put("hibernate.search.backend.directory.type", "local-heap");
+
+    try (HibernateSessionFactoryProvider provider =
+            new HibernateSessionFactoryProvider(properties, SearchEntities.annotatedClasses());
+        HibernateJGitVersionedWorkflowStore store =
+            new HibernateJGitVersionedWorkflowStore(provider.getSessionFactory(), "search-test")) {
+      WorkflowSnapshot baseline = new WorkflowSnapshot("workflow.search", "node baseline");
+      WorkflowSnapshot matching =
+          new WorkflowSnapshot("workflow.search", "node classifier label wingbeat-needle");
+      store.commit("main", baseline, metadata("Baseline checkpoint", 1));
+      CommitId matchingCommit =
+          store.commit("main", matching, metadata("Add wingbeat needle", 2));
+
+      var hits = store.search(new WorkflowHistorySearchQuery("wingbeat-needle", 10));
+      assertEquals(1, hits.size());
+      WorkflowHistorySearchResult hit = hits.getFirst();
+      assertEquals(matchingCommit, hit.commitId());
+      assertEquals(matching, store.loadAtCommit(hit.commitId()));
+      assertTrue(hit.changedPaths().contains("workflow.dsl"));
+
+      assertEquals(0, store.rebuild("main", -1));
+    }
+  }
+
+  private static CommitMetadata metadata(String message, long seconds) {
+    return new CommitMetadata(
+        "search-test",
+        message,
+        Instant.parse("2026-07-19T00:00:00Z").plusSeconds(seconds));
+  }
+}
+''')
+
+          http_test = Path('audio-app/src/test/java/org/hammer/audio/workflow/editor/http/WorkflowHistorySearchHttpAdapterTest.java')
+          http_test.write_text('''package org.hammer.audio.workflow.editor.http;
+
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import java.time.Instant;
+import java.util.List;
+import org.hammer.audio.workflow.history.WorkflowHistorySearch;
+import org.hammer.audio.workflow.history.WorkflowHistorySearchQuery;
+import org.hammer.audio.workflow.history.WorkflowHistorySearchResult;
+import org.hammer.audio.workflow.store.CommitId;
+import org.junit.jupiter.api.Test;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+
+class WorkflowHistorySearchHttpAdapterTest {
+
+  @Test
+  void searchReturnsExactCommitIdentityWithoutStorageTypes() throws Exception {
+    WorkflowHistorySearch search = mock(WorkflowHistorySearch.class);
+    WorkflowHistorySearchQuery query = new WorkflowHistorySearchQuery("wingbeat", 7);
+    when(search.search(query))
+        .thenReturn(
+            List.of(
+                new WorkflowHistorySearchResult(
+                    new CommitId("0123456789012345678901234567890123456789"),
+                    "Add classifier",
+                    "Researcher",
+                    "researcher@example.org",
+                    Instant.parse("2026-07-19T00:00:00Z"),
+                    List.of("workflow.dsl"))));
+    MockMvc mvc =
+        MockMvcBuilders.standaloneSetup(new WorkflowHistorySearchHttpAdapter(search)).build();
+
+    mvc.perform(get("/workflow/history/search").param("q", "wingbeat").param("limit", "7"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$[0].commitId").value("0123456789012345678901234567890123456789"))
+        .andExpect(jsonPath("$[0].changedPaths[0]").value("workflow.dsl"));
+
+    verify(search).search(query);
+  }
+}
+''')
+
+      - name: Document the vertical slice
+        run: |
+          cat > docs/features/workflow-history-search.md <<'MD'
+          # Workflow history search
+
+          Workflow checkpoint search is a rebuildable read model over the authoritative Hibernate-backed JGit repository.
+
+          The first vertical slice indexes each successful checkpoint and supports full-text search over commit messages, changed paths and the deterministic `workflow.dsl` content. Every result contains an exact commit identifier that can be loaded through the existing workflow load command.
+
+          ```text
+          checkpoint -> Hibernate-backed JGit commit/ref update
+                     -> best-effort CommitIndexer upsert
+
+          query      -> GitHistorySearchService / Lucene projection
+                     -> framework-neutral WorkflowHistorySearchResult
+                     -> exact CommitId -> VersionedWorkflowStore.loadAtCommit
+          ```
+
+          Git remains authoritative. A failed projection update never invalidates a successful checkpoint. The explicit rebuild operation traverses commits reachable from a selected branch and restores missing projection rows idempotently.
+
+          Search, Core and collaboration entities share the application-managed `SessionFactory`. Startup migrations run in this order:
+
+          1. `jgit-storage-hibernate-core`;
+          2. `jgit-storage-hibernate-search`;
+          3. Audio Analyzer collaboration migrations;
+          4. Hibernate schema validation.
+
+          The HTTP boundary is:
+
+          ```text
+          GET  /workflow/history/search?q=<text>&limit=<count>
+          POST /workflow/history/search/rebuild?branch=main&limit=-1
+          ```
+
+          The current slice intentionally exposes no Hibernate Search, Lucene, Hibernate or JGit type in `audio-core` or its HTTP response contract. Structured author/time/path filters, workflow-semantic projections and production UI remain subsequent parts of issue #247.
+          MD
+
+      - name: Format and verify implementation
+        run: |
+          mvn -B spotless:apply
+          mvn -B clean verify --file pom.xml
+
+      - name: Commit implementation and remove helper
+        run: |
+          rm .github/workflows/implement-247-search-slice-once.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "feat: add exact-commit workflow history search slice"
+          git push origin HEAD:feature/247-workflow-history-search
