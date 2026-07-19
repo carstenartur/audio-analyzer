@@ -12,6 +12,7 @@ import {
 const actor = { actorId: 'actor-a', userId: 'user-a', displayName: 'Alice' };
 const operation = {
   operationId: 'operation-1',
+  commandId: 'normal-1',
   revision: 1,
 };
 const capabilities = {
@@ -82,6 +83,34 @@ test('ambiguous transport failure preserves the exact pending command for retry'
   assert.equal(uncertain.pendingCommand.commandId, 'command-stable');
 });
 
+test('canonical history resolves an uncertain command only when its command id was accepted', () => {
+  const command = createHistoryCommandEnvelope({
+    kind: 'UNDO',
+    commandId: 'command-stable',
+    expectedRevision: 2,
+    targetOperationId: 'operation-2',
+  });
+  const uncertain = reduceHistoryState(
+    reduceHistoryState(emptyHistoryState(), { type: 'COMMAND_STARTED', command }),
+    { type: 'COMMAND_UNCERTAIN', problem: { detail: 'Connection closed' } },
+  );
+  const unresolved = reduceHistoryState(uncertain, { type: 'LOADED', capabilities, page });
+  const resolved = reduceHistoryState(uncertain, {
+    type: 'LOADED',
+    capabilities,
+    page: {
+      ...page,
+      operations: [{ operationId: 'undo-operation', commandId: 'command-stable', revision: 2 }],
+    },
+  });
+
+  assert.equal(unresolved.status, 'uncertain');
+  assert.strictEqual(unresolved.pendingCommand, command);
+  assert.equal(resolved.status, 'ready');
+  assert.equal(resolved.pendingCommand, null);
+  assert.equal(resolved.problem, null);
+});
+
 test('definitive rejection clears pending identity while acceptance requires reload', () => {
   const command = createHistoryCommandEnvelope({
     kind: 'REDO',
@@ -108,8 +137,8 @@ test('history pages replace then append without duplicates and remain newest-fir
     capabilities,
     page: {
       operations: [
-        { operationId: 'operation-3', revision: 3 },
-        { operationId: 'operation-2', revision: 2 },
+        { operationId: 'operation-3', commandId: 'normal-3', revision: 3 },
+        { operationId: 'operation-2', commandId: 'normal-2', revision: 2 },
       ],
       nextBeforeRevision: 2,
     },
@@ -118,8 +147,8 @@ test('history pages replace then append without duplicates and remain newest-fir
     type: 'PAGE_APPENDED',
     page: {
       operations: [
-        { operationId: 'operation-2', revision: 2 },
-        { operationId: 'operation-1', revision: 1 },
+        { operationId: 'operation-2', commandId: 'normal-2', revision: 2 },
+        { operationId: 'operation-1', commandId: 'normal-1', revision: 1 },
       ],
       nextBeforeRevision: null,
     },
@@ -134,8 +163,7 @@ test('history pages replace then append without duplicates and remain newest-fir
 test('loaded capabilities and history replace stale browser state', () => {
   const stale = {
     ...emptyHistoryState(),
-    operations: [{ operationId: 'stale', revision: 99 }],
-    pendingCommand: { commandId: 'old' },
+    operations: [{ operationId: 'stale', commandId: 'stale', revision: 99 }],
   };
   const loaded = reduceHistoryState(stale, { type: 'LOADED', capabilities, page });
 
