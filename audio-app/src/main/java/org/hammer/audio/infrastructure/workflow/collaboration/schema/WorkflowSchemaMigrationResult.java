@@ -2,7 +2,14 @@ package org.hammer.audio.infrastructure.workflow.collaboration.schema;
 
 import java.util.Objects;
 
-/** Outcome and startup invariant for ordered workflow schema migrations. */
+/**
+ * Outcome and startup invariant for ordered workflow schema migrations.
+ *
+ * @param applied whether versioned migrations were applied during this startup
+ * @param coreMigrationsExecuted number of shared JGit Core migrations executed
+ * @param searchMigrationsExecuted number of shared JGit Search migrations executed
+ * @param collaborationMigrationsExecuted number of Audio Analyzer collaboration migrations executed
+ */
 public record WorkflowSchemaMigrationResult(
     boolean applied,
     int coreMigrationsExecuted,
