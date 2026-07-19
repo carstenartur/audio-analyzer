@@ -133,8 +133,10 @@ class WorkbenchTwoBrowserCollaborationIT {
       bob.page().locator(GAIN_SELECTOR).first().waitFor();
       assertEquals(1, bob.page().locator(GENERATOR_SELECTOR).count());
       assertEquals(1, bob.page().locator(GAIN_SELECTOR).count());
-      assertEquals(
-          "ready", bob.page().locator("[data-testid='history-controller-state']").innerText());
+      Locator capabilityRevision =
+          bob.page().locator("[data-testid='history-capability-revision']");
+      capabilityRevision.waitFor();
+      assertEquals("Capability revision 4", capabilityRevision.innerText());
     } catch (Throwable failure) {
       harness.captureFailure(scenario, failure);
       throw failure;
