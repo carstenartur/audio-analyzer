@@ -170,7 +170,12 @@ public final class WorkflowApiExceptionHandler {
     return result.toString();
   }
 
-  /** Field-level validation detail included in invalid-request problem responses. */
+  /**
+   * Field-level validation detail included in invalid-request problem responses.
+   *
+   * @param field invalid request field
+   * @param message validation message
+   */
   public record FieldViolation(String field, String message) {
     public FieldViolation {
       field = Objects.requireNonNull(field, "field");
@@ -178,7 +183,13 @@ public final class WorkflowApiExceptionHandler {
     }
   }
 
-  /** Transport-safe blocker detail included in undo-conflict problem responses. */
+  /**
+   * Transport-safe blocker detail included in undo-conflict problem responses.
+   *
+   * @param operationId stable blocking-operation identifier
+   * @param actorId actor that authored the blocking operation
+   * @param conflictingObjectIds semantic objects shared with the requested inverse
+   */
   public record BlockingOperationDetail(
       String operationId, String actorId, List<String> conflictingObjectIds) {
     public BlockingOperationDetail {
