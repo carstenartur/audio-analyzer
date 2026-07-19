@@ -26,7 +26,7 @@ function capabilities(overrides = {}) {
   };
 }
 
-test('personal controls use only server-reported capabilities and live transport', () => {
+test('personal controls use only current server capabilities and live transport', () => {
   const ready = historyControlPolicy({
     capabilities: capabilities(),
     connectionState: 'live',
@@ -37,12 +37,19 @@ test('personal controls use only server-reported capabilities and live transport
     connectionState: 'reconnecting',
     historyStatus: 'ready',
   });
+  const stale = historyControlPolicy({
+    capabilities: capabilities(),
+    connectionState: 'live',
+    historyStatus: 'error',
+  });
 
   assert.equal(ready.personalUndoVisible, true);
   assert.equal(ready.personalUndoEnabled, true);
   assert.equal(ready.redoEnabled, true);
   assert.equal(reconnecting.personalUndoEnabled, false);
   assert.match(reconnecting.personalUndoReason, /stream is live/);
+  assert.equal(stale.personalUndoEnabled, false);
+  assert.match(stale.personalUndoReason, /must be reloaded/);
 });
 
 test('blocked and legacy targets stay visible but cannot execute', () => {
@@ -64,13 +71,13 @@ test('blocked and legacy targets stay visible but cannot execute', () => {
   assert.match(legacy.personalUndoReason, /predates reconstructible/);
 });
 
-test('shared mode hides personal controls and exposes target selection', () => {
+test('shared mode hides personal undo, exposes target selection and retains actor redo', () => {
   const policy = historyControlPolicy({
     capabilities: capabilities({
       mode: 'SHARED_SESSION_SHARED_UNDO',
       personalUndoPermitted: false,
       personalUndo: null,
-      redo: null,
+      redo: action(),
       sharedUndoPermitted: true,
     }),
     connectionState: 'live',
@@ -78,7 +85,8 @@ test('shared mode hides personal controls and exposes target selection', () => {
   });
 
   assert.equal(policy.personalUndoVisible, false);
-  assert.equal(policy.redoVisible, false);
+  assert.equal(policy.redoVisible, true);
+  assert.equal(policy.redoEnabled, true);
   assert.equal(policy.sharedUndoVisible, true);
   assert.equal(policy.sharedUndoEnabled, true);
 });
