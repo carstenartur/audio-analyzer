@@ -24,6 +24,7 @@ import org.hammer.audio.workflow.collaboration.WorkflowSessionPersistenceCoordin
 import org.hammer.audio.workflow.collaboration.store.WorkflowOperationBodyCodec;
 import org.hammer.audio.workflow.collaboration.store.WorkflowOperationCommandMetadata;
 import org.hammer.audio.workflow.collaboration.store.WorkflowOperationCommandMetadata.Kind;
+import org.hammer.audio.workflow.collaboration.store.WorkflowOperationPersistenceCodec;
 
 /** Owns the synchronized runtime state for one collaboration session. */
 final class WorkflowSessionEntry {
@@ -639,7 +640,11 @@ final class WorkflowSessionEntry {
 
   private WorkflowHistoryDescriptor describe(OperationIdentity operation) {
     List<String> affectedObjectIds =
-        operation.operation().map(WorkflowSessionEntry::sortedAffectedObjectIds).orElse(List.of());
+        operation
+            .operation()
+            .map(WorkflowSessionEntry::sortedAffectedObjectIds)
+            .orElseGet(
+                () -> WorkflowOperationPersistenceCodec.decodeAffectedObjectIds(operation.payload()));
     return new WorkflowHistoryDescriptor(
         operation.operationId(),
         operation.operationType(),
