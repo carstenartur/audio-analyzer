@@ -8,23 +8,28 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import org.hammer.audio.workflow.collaboration.outbox.WorkflowOutboxMessage;
 import org.hammer.audio.workflow.collaboration.outbox.WorkflowOutboxPublisher;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
+import org.springframework.context.support.GenericApplicationContext;
 import org.springframework.core.env.Environment;
 
-/** Test-only transport adapter used to observe durable outbox publication after process restart. */
-@Configuration(proxyBeanMethods = false)
-public class DurableRestartTestConfiguration {
+/** Test-only transport adapter registered before production conditional configuration is evaluated. */
+final class DurableRestartTestConfiguration {
 
+  private static final String PUBLISHER_ENABLED_PROPERTY = "test.outbox.publisher.enabled";
   private static final String PUBLICATIONS_PATH_PROPERTY = "test.outbox.publications.path";
 
-  /** Writes published envelopes to one append-only mounted file when explicitly enabled. */
-  @Bean
-  @ConditionalOnProperty(name = "test.outbox.publisher.enabled", havingValue = "true")
-  WorkflowOutboxPublisher durableRestartOutboxPublisher(Environment environment) {
+  private DurableRestartTestConfiguration() {}
+
+  /** Registers the observer early enough for the production outbox dispatcher conditions to see it. */
+  static void registerPublisher(GenericApplicationContext context) {
+    Environment environment = context.getEnvironment();
+    if (!environment.getProperty(PUBLISHER_ENABLED_PROPERTY, Boolean.class, false)) {
+      return;
+    }
     Path output = Path.of(environment.getRequiredProperty(PUBLICATIONS_PATH_PROPERTY));
-    return message -> append(output, message);
+    context.registerBean(
+        "durableRestartOutboxPublisher",
+        WorkflowOutboxPublisher.class,
+        () -> message -> append(output, message));
   }
 
   private static void append(Path output, WorkflowOutboxMessage message) {
