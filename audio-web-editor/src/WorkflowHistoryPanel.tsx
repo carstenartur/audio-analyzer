@@ -332,7 +332,14 @@ export function WorkflowHistoryPanel({
               </button>
             ) : null}
           </div>
-          <p className="help-text">Keyboard: Ctrl/⌘+Z · Ctrl/⌘+Shift+Z or Ctrl/⌘+Y</p>
+          <div aria-label="Keyboard shortcuts" className="history-shortcuts">
+          <span>
+            <kbd>Ctrl/⌘+Z</kbd> Undo
+          </span>
+          <span>
+            <kbd>Ctrl/⌘+Shift+Z</kbd> or <kbd>Ctrl/⌘+Y</kbd> Redo
+          </span>
+        </div>
         </>
       )}
 
