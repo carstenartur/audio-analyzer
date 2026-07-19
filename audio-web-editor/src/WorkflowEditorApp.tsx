@@ -170,6 +170,7 @@ export default function WorkflowEditorApp() {
   const [status, setStatus] = useState('Loading server projection…');
   const [error, setError] = useState<string | null>(null);
   const previouslyActive = useRef(false);
+  const sessionActiveRef = useRef(false);
 
   const selectedNode = useMemo(
     () => projection?.nodes.find((node) => node.id === selectedNodeId) ?? null,
@@ -197,6 +198,7 @@ export default function WorkflowEditorApp() {
     onError: setError,
     onStatus: setStatus,
   });
+  sessionActiveRef.current = collaboration.active;
 
   const canEdit =
     collaboration.active &&
@@ -218,7 +220,10 @@ export default function WorkflowEditorApp() {
 
   const refreshProjection = useCallback(async () => {
     try {
-      applyProjection(await getJson<WorkflowProjection>('/workflow/projection'));
+      const legacyProjection = await getJson<WorkflowProjection>('/workflow/projection');
+      if (!sessionActiveRef.current) {
+        applyProjection(legacyProjection);
+      }
     } catch (failure) {
       setError(failureMessage(failure));
     }
