@@ -14,12 +14,7 @@ class WorkflowHistoryTextQueryTest {
     WorkflowHistoryTextQuery legacy = new WorkflowHistoryTextQuery("  wingbeat  ", 20);
     WorkflowHistoryTextQuery structured =
         new WorkflowHistoryTextQuery(
-            "  ",
-            "  researcher@example.org  ",
-            "  workflows insect  ",
-            null,
-            null,
-            25);
+            "  ", "  researcher@example.org  ", "  workflows insect  ", null, null, 25);
 
     assertEquals("wingbeat", legacy.text());
     assertNull(legacy.authorEmail());
