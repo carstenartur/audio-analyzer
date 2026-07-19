@@ -464,7 +464,10 @@ public final class WorkflowOperationBodyCodec {
   }
 
   private static String readNullableString(DataInputStream input) throws IOException {
-    return input.readBoolean() ? readString(input) : null;
+    if (input.readBoolean()) {
+      return readString(input);
+    }
+    return null;
   }
 
   private static void writeString(DataOutputStream output, String value) throws IOException {
@@ -512,7 +515,12 @@ public final class WorkflowOperationBodyCodec {
     return value;
   }
 
-  /** Versioned durable operation body. */
+  /**
+   * Versioned durable operation body.
+   *
+   * @param version durable format version
+   * @param body encoded operation body
+   */
   public record EncodedBody(int version, String body) {
     public EncodedBody {
       if (version <= 0) {
@@ -522,5 +530,11 @@ public final class WorkflowOperationBodyCodec {
     }
   }
 
-  private record CommonFields(String operationId, Instant timestamp, String author) {}
+  private record CommonFields(String operationId, Instant timestamp, String author) {
+    private CommonFields {
+      Objects.requireNonNull(operationId, "operationId");
+      Objects.requireNonNull(timestamp, "timestamp");
+      Objects.requireNonNull(author, "author");
+    }
+  }
 }
