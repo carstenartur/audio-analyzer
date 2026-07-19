@@ -1,23 +1,24 @@
-# Development
+# Development and validation
 
-This guide explains how to build, validate and document Audio Analyzer from a clean checkout. The
-project is a Java 21 multi-module Maven build with a Swing application, stable audio/DSP modules and
-an optional experimental acoustic-localization plugin.
+This guide explains how to build, run, test and document Audio Analyzer from a clean checkout. User-facing first steps live in [Getting started](getting-started.md); plugin implementation has its own [development guide](development/plugin-development.md).
 
 ## Prerequisites
 
-Required:
+Required for the normal build:
 
 - Java 21 or newer;
 - the included Maven Wrapper (`mvnw` / `mvnw.cmd`);
 - a shell capable of running the commands below.
 
-The wrapper downloads the configured Maven version automatically. A system Maven installation can be
-used for local convenience, but CI uses the wrapper configuration.
+Optional:
+
+- Docker for Testcontainers integration tests;
+- Chromium installed through Playwright for packaged browser scenarios;
+- a PostgreSQL-capable Docker environment for production-oriented persistence tests.
 
 ## Build and validation
 
-Use the full verification command before opening or merging a PR:
+Run the complete default reactor before opening or merging a PR:
 
 ```bash
 ./mvnw clean verify
@@ -29,30 +30,36 @@ On Windows:
 mvnw.cmd clean verify
 ```
 
-The command compiles all modules, runs tests, checks formatting, executes static analysis, generates
-coverage reports and enforces architecture checks.
+The reactor compiles Java and TypeScript, runs unit and integration tests, checks formatting, executes static analysis, generates coverage and enforces architecture boundaries.
 
-For a faster package-only build while iterating locally:
+For a faster package-only iteration:
 
 ```bash
 ./mvnw clean package
 ```
 
-## Running the application
-
-After `package` or `verify`, run the desktop app from the generated JAR:
+## Run the desktop workbench
 
 ```bash
 java -jar audio-app/target/audio-app-*.jar
 ```
 
-If the shell does not expand `audio-app/target/audio-app-*.jar`, replace it with the concrete file
-name in `audio-app/target/`.
+If the shell does not expand the wildcard, substitute the concrete JAR name in `audio-app/target/`.
+
+## Run the web workbench
+
+```bash
+java -cp "audio-app/target/audio-app-*.jar:audio-app/target/lib/*" \
+  org.hammer.audio.app.WorkbenchApplication
+```
+
+The application serves the verified Vite production assets packaged by `audio-web-editor`. Do not use a separately mocked frontend as evidence for production behavior.
+
+Persistent Hibernate/JGit startup is documented in [Hibernate-backed workflow persistence](workbench-hibernate-persistence.md).
 
 ## Reproducible artifacts
 
-The build uses a fixed `project.build.outputTimestamp`. Rebuilding the same sources should produce the
-same app JAR checksum:
+The build uses a fixed `project.build.outputTimestamp`. Equivalent inputs should produce byte-equivalent packaged artifacts:
 
 ```bash
 ./mvnw clean package
@@ -62,63 +69,75 @@ sha256sum audio-app/target/audio-app-*.jar
 sha256sum audio-app/target/audio-app-*.jar
 ```
 
-Both checksums should match when inputs and build environment are unchanged.
+The web-editor build also verifies that its production asset output is reproducible.
 
 ## Code style and formatting
 
-Spotless formats Java, POM and Markdown files. The default `verify` phase checks formatting.
+Spotless formats Java, POM and Markdown files:
 
 ```bash
 ./mvnw spotless:apply
 ./mvnw spotless:check
 ```
 
-Use `spotless:apply` before committing documentation changes. Markdown tables are formatted by
-Spotless; for long QA matrices, prefer checklists or bullet lists when table readability becomes
-fragile.
+The optional browser-test module is activated by a profile and can be formatted explicitly:
 
-The repository also contains an `.editorconfig` file for UTF-8 encoding, LF line endings, indentation,
-trailing-whitespace removal and final newlines.
+```bash
+./mvnw -Pscreenshot-tests -pl workbench-screenshot-tests spotless:apply
+```
+
+The repository `.editorconfig` requires UTF-8, LF line endings, trailing-whitespace removal and final newlines.
 
 ## Continuous integration
 
-GitHub Actions runs the Maven build on pushes and pull requests to `master`.
+The maintained workflows have distinct responsibilities:
 
-Current CI expectations:
+- **Java CI with Maven** — complete default Maven reactor, reports, coverage and static analysis;
+- **CodeQL** — security-oriented source analysis using an explicit Maven build;
+- **Collaboration E2E** — packaged Spring Boot application, Chromium and two isolated browser contexts;
+- screenshot verification/update workflows — opt-in executable documentation for stable UI states.
 
-- Java 21 is required by Maven Enforcer;
-- Surefire tests run with `java.awt.headless=true`;
-- Spotless must pass for Java, POM and Markdown files;
-- Checkstyle, PMD and SpotBugs are baseline-gated;
-- JaCoCo generates reports and enforces the configured minimum line coverage;
-- architecture fitness tests protect package boundaries;
-- CodeQL uses an explicit Maven package build.
+The browser workflow uploads:
 
-Workflow artifacts include JUnit XML, raw Surefire output, HTML test reports when generated, JaCoCo
-coverage reports and static-analysis XML reports.
+- complete build, Playwright installation and test-session logs;
+- Failsafe XML and text reports;
+- screenshots, HTML, browser logs, Playwright traces and server logs on failure.
 
-## Headless Swing testing
+## Two-browser collaboration tests
 
-Tests run with `java.awt.headless=true`. Swing code that depends on resize events may need to dispatch
-the event explicitly:
+Build the packaged app and optional test reactor:
 
-```java
-SwingUtilities.invokeAndWait(() -> {
-    panel.setSize(300, 150);
-    panel.dispatchEvent(new ComponentEvent(panel, ComponentEvent.COMPONENT_RESIZED));
-});
+```bash
+./mvnw -B -Pscreenshot-tests -DskipTests install \
+  -pl workbench-screenshot-tests -am
 ```
 
-Guidelines:
+Install the pinned Chromium runtime:
 
-- use `SwingUtilities.invokeAndWait()` for UI mutations that must run on the EDT;
-- mock `AudioCaptureService` when testing UI logic;
-- assert model state and rendered output contracts rather than relying only on manual screenshots;
-- add targeted tests when controls introduce long labels, dynamic layout or resizing behavior.
+```bash
+./mvnw -B -Pscreenshot-tests -pl workbench-screenshot-tests \
+  org.codehaus.mojo:exec-maven-plugin:3.5.0:java \
+  -Dexec.mainClass=com.microsoft.playwright.CLI \
+  -Dexec.classpathScope=test \
+  -Dexec.args="install --with-deps chromium"
+```
+
+Run the collaboration suite:
+
+```bash
+./mvnw -B -Pscreenshot-tests -pl workbench-screenshot-tests \
+  -Dit.test=WorkbenchTwoBrowserCollaborationIT verify
+```
+
+The suite uses no `sleep`, `Thread.sleep` or `waitForTimeout`. Synchronization is tied to observable session ids, semantic revisions, SSE states, HTTP responses and DOM visibility. A timeout is only an upper failure bound.
+
+See [Two-browser collaboration end-to-end tests](collaboration-e2e.md).
 
 ## Documentation screenshots
 
-README and feature screenshots are generated headlessly by `DocImageRenderer`:
+### Swing images
+
+Desktop README and feature images are generated headlessly by `DocImageRenderer`:
 
 ```bash
 ./mvnw -pl audio-app -am package -DskipTests
@@ -126,43 +145,87 @@ java -cp "audio-app/target/classes:audio-app/target/lib/*" \
   org.hammer.tools.DocImageRenderer docs/images
 ```
 
-The command writes `docs/images/screenshot.png` and feature images under `docs/images/features/`.
-Use `;` instead of `:` in the classpath on Windows.
+### Packaged web images
 
-Screenshot changes require visual review. Follow:
+Web screenshots are generated by Java Playwright tests against the packaged Spring Boot application:
 
+```bash
+./mvnw -Pscreenshot-tests verify
+```
+
+To intentionally update baselines after a reviewed UI change:
+
+```bash
+./mvnw -Pscreenshot-tests verify -DupdateScreenshots=true
+```
+
+Current collaboration-history screenshots are owned by `WorkbenchHistoryScreenshotIT`. The scenario creates the session and operation history, asserts capability/preview state and then captures the viewport. Volatile timestamps are marked semantically in the application and normalized only inside the screenshot test.
+
+Never hand-edit a generated screenshot. Fix the UI, scenario or renderer and regenerate it.
+
+Follow:
+
+- [Workbench screenshot pipeline](workbench-screenshot-pipeline.md)
 - [Screenshot QA checklist](qa/screenshot-qa-checklist.md)
 - [Application and documentation QA plan](qa/application-documentation-qa-plan.md)
+
+## Headless Swing testing
+
+Tests run with `java.awt.headless=true`. Swing mutations that depend on the event-dispatch thread should use `SwingUtilities.invokeAndWait()`.
+
+Prefer assertions on model and rendered-output contracts. Add targeted layout tests when controls introduce dynamic or long labels.
+
+## Persistence integration
+
+Durable workbench tests must use the application-managed persistence path:
+
+- one DataSource;
+- one Hibernate `SessionFactory`;
+- shared JGit storage entities;
+- Audio Analyzer collaboration/outbox entities;
+- versioned migrations followed by Hibernate `validate`.
+
+Do not add raw JDBC, `JdbcTemplate`, handwritten CRUD or a second Hibernate bootstrap merely for integration testing.
+
+## Plugin development
+
+Plugin details intentionally live outside the project README. See [Developing an Audio Analyzer plugin](development/plugin-development.md) for:
+
+- `audio-plugin-api` boundaries;
+- ServiceLoader registration;
+- descriptor and contribution design;
+- failure isolation;
+- packaging and compatibility guidance.
 
 ## Documentation standards
 
 Public documentation should be accurate, testable and conservative:
 
-- separate stable application features from experimental research features;
-- avoid production claims for acoustic localization unless supported by calibration and benchmark
-  evidence;
-- keep command examples version-tolerant;
-- link to source files or docs rather than duplicating long explanations;
+- address audio-processing users before implementation specialists;
+- separate stable application features from experimental research;
+- avoid production claims unsupported by calibration and benchmark evidence;
+- use version-tolerant commands;
+- link detailed pages instead of duplicating API material in the README;
 - update screenshots and surrounding text together;
 - record known limitations in `docs/QA-FINDINGS.md` or a linked issue.
 
 ## Optional benchmarks
-
-An opt-in JMH profile benchmarks selected DSP paths on synthetic buffers. Benchmark sources live under
-`src/jmh/java`.
 
 ```bash
 ./mvnw clean verify -Pjmh
 ./mvnw exec:java -Pjmh
 ```
 
+Benchmark results are environment-sensitive. Record hardware, JVM and operating-system details when results are used as evidence.
+
 ## Contribution checklist
 
-Before opening a PR:
+Before opening or merging a PR:
 
-1. run `./mvnw spotless:apply`;
-2. run `./mvnw clean verify` when practical;
-3. review Checkstyle, PMD and SpotBugs output for new findings;
-4. update documentation and screenshots when behavior changes;
-5. document deferred warnings, missing QA or known limitations in the PR description.
-
+1. run the relevant formatter;
+2. run `./mvnw clean verify`;
+3. run the opt-in Docker/browser suite when its boundary changed;
+4. inspect new static-analysis findings rather than increasing baselines casually;
+5. update user and architecture documentation;
+6. regenerate and visually review affected screenshots;
+7. record deferred QA or known limitations in the PR description.
