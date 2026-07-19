@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer, useRef } from 'react';
+import { useCallback, useEffect, useReducer, useRef, type Reducer } from 'react';
 
 import {
   ApiError,
@@ -27,13 +27,14 @@ const HISTORY_PAGE_SIZE = 100;
 
 type HistoryStatus = 'idle' | 'loading' | 'ready' | 'pending' | 'uncertain' | 'error';
 type CommandKind = 'UNDO' | 'REDO';
+type HistoryEvent = Record<string, unknown> & { type: string };
 
 export interface PendingHistoryCommand {
-  kind: CommandKind;
-  commandId: string;
-  expectedRevision: number;
-  targetOperationId: string;
-  previewId: string | null;
+  readonly kind: CommandKind;
+  readonly commandId: string;
+  readonly expectedRevision: number;
+  readonly targetOperationId: string;
+  readonly previewId: string | null;
 }
 
 interface HistoryState {
@@ -103,10 +104,8 @@ export function useWorkflowHistory({
   onError,
   onStatus,
 }: WorkflowHistoryCallbacks): WorkflowHistoryController {
-  const [state, dispatch] = useReducer(reduceHistoryState, undefined, emptyHistoryState) as [
-    HistoryState,
-    React.Dispatch<Record<string, unknown>>,
-  ];
+  const historyReducer = reduceHistoryState as unknown as Reducer<HistoryState, HistoryEvent>;
+  const [state, dispatch] = useReducer(historyReducer, emptyHistoryState() as HistoryState);
   const stateRef = useRef(state);
   const loadGeneration = useRef(0);
   stateRef.current = state;
@@ -190,30 +189,38 @@ export function useWorkflowHistory({
     [collaboration.actor, collaboration.session],
   );
 
+  const recoverDefinitiveFailure = useCallback(
+    async (failure: ApiError) => {
+      const recovery = historyRecoveryForProblemCode(failure.code);
+      if (recovery === 'reconcile') {
+        await collaboration.reconcile(failure.code ?? 'history conflict').catch(() => undefined);
+        await reload(failure.code ?? 'history conflict').catch(() => undefined);
+      } else if (recovery === 'reload') {
+        await reload(failure.code ?? 'history rejection').catch(() => undefined);
+      } else if (recovery === 'reset') {
+        await collaboration.reconcile('session no longer exists').catch(() => undefined);
+      }
+    },
+    [collaboration, reload],
+  );
+
   const submitEnvelope = useCallback(
     async (envelope: PendingHistoryCommand) => {
       const session = collaboration.session;
       if (session === null) {
         throw new Error('Join a collaboration session before changing history');
       }
-      const request = historyCommandRequest(envelope, collaboration.actor) as {
-        endpoint: 'undo' | 'redo';
-        body: unknown;
-      };
+      const request = historyCommandRequest(envelope, collaboration.actor);
       dispatch({ type: 'COMMAND_STARTED', command: envelope });
       onError(null);
       onStatus(`Submitting: ${envelope.kind.toLowerCase()} ${envelope.commandId}`);
+
+      let response: HistoryCommandResponse;
       try {
-        const response = await postJson<HistoryCommandResponse>(
+        response = await postJson<HistoryCommandResponse>(
           `${encodedSessionPath(session.sessionId)}/${request.endpoint}`,
           request.body,
         );
-        dispatch({ type: 'COMMAND_ACCEPTED' });
-        onProjection(response.projection);
-        onStatus(`Loaded: accepted ${response.commandKind.toLowerCase()} at revision ${response.revision}`);
-        await collaboration.reconcile(`accepted ${response.commandKind.toLowerCase()}`);
-        await reload(`accepted ${response.commandKind.toLowerCase()}`);
-        return response;
       } catch (failure) {
         if (!(failure instanceof ApiError)) {
           dispatch({ type: 'COMMAND_UNCERTAIN', problem: problemFor(failure) });
@@ -227,22 +234,25 @@ export function useWorkflowHistory({
 
         dispatch({ type: 'COMMAND_REJECTED', problem: problemFor(failure) });
         onError(failureMessage(failure));
-        const recovery = historyRecoveryForProblemCode(failure.code) as
-          | 'reconcile'
-          | 'reload'
-          | 'reset'
-          | 'reject';
-        if (recovery === 'reconcile') {
-          await collaboration.reconcile(failure.code ?? 'history conflict').catch(() => undefined);
-          await reload(failure.code ?? 'history conflict').catch(() => undefined);
-        } else if (recovery === 'reload') {
-          await reload(failure.code ?? 'history rejection').catch(() => undefined);
-        } else if (recovery === 'reset') {
-          await collaboration.reconcile('session no longer exists').catch(() => undefined);
-        }
+        await recoverDefinitiveFailure(failure);
         throw failure;
       }
-    }, [collaboration, onError, onProjection, onStatus, reload],
+
+      dispatch({ type: 'COMMAND_ACCEPTED' });
+      onProjection(response.projection);
+      onStatus(
+        `Loaded: accepted ${response.commandKind.toLowerCase()} at revision ${response.revision}`,
+      );
+      try {
+        await collaboration.reconcile(`accepted ${response.commandKind.toLowerCase()}`);
+        await reload(`accepted ${response.commandKind.toLowerCase()}`);
+      } catch (failure) {
+        onError(
+          `The ${response.commandKind.toLowerCase()} was accepted, but the follow-up history reload failed: ${failureMessage(failure)}`,
+        );
+      }
+      return response;
+    }, [collaboration, onError, onProjection, onStatus, recoverDefinitiveFailure, reload],
   );
 
   const executeUndo = useCallback(
@@ -257,7 +267,7 @@ export function useWorkflowHistory({
             collaboration.session?.mode === 'SHARED_SESSION_SHARED_UNDO'
               ? preview.previewId
               : null,
-        }) as PendingHistoryCommand,
+        }),
       ),
     [collaboration.session?.mode, submitEnvelope],
   );
@@ -270,7 +280,7 @@ export function useWorkflowHistory({
           commandId: newCommandId('REDO'),
           expectedRevision: preview.revision,
           targetOperationId: preview.targetUndoOperationId,
-        }) as PendingHistoryCommand,
+        }),
       ),
     [submitEnvelope],
   );
