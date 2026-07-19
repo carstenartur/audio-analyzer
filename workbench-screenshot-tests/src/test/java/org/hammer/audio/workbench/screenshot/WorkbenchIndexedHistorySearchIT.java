@@ -23,10 +23,8 @@ class WorkbenchIndexedHistorySearchIT {
 
   private static final String HISTORICAL_TERM = "wingbeat-history-baseline";
   private static final String LATER_NODE_ID = "node.e2e.indexed-history.later-gain";
-  private static final String LATER_NODE_SELECTOR =
-      "[data-testid='node-" + LATER_NODE_ID + "']";
-  private static final String ACTIVE_SESSION_STORAGE_KEY =
-      "audio-analyzer.workflow.active-session";
+  private static final String LATER_NODE_SELECTOR = "[data-testid='node-" + LATER_NODE_ID + "']";
+  private static final String ACTIVE_SESSION_STORAGE_KEY = "audio-analyzer.workflow.active-session";
 
   @TempDir Path dataDirectory;
 
@@ -68,7 +66,9 @@ class WorkbenchIndexedHistorySearchIT {
       exactLoad.waitFor();
       assertEquals(1, exactLoad.count());
       assertTrue(
-          page.locator("[data-testid='indexed-history-results']").innerText().contains(historicalCommit.substring(0, 12)));
+          page.locator("[data-testid='indexed-history-results']")
+              .innerText()
+              .contains(historicalCommit.substring(0, 12)));
 
       page.evaluate(
           "input => sessionStorage.setItem(input.key, input.value)",
@@ -79,8 +79,7 @@ class WorkbenchIndexedHistorySearchIT {
       assertTrue(error.innerText().contains("Leave collaboration session remembered-live-session"));
       assertEquals(1, page.locator(LATER_NODE_SELECTOR).count());
 
-      page.evaluate(
-          "key => sessionStorage.removeItem(key)", ACTIVE_SESSION_STORAGE_KEY);
+      page.evaluate("key => sessionStorage.removeItem(key)", ACTIVE_SESSION_STORAGE_KEY);
       exactLoad.click();
       page.waitForCondition(() -> page.locator(LATER_NODE_SELECTOR).count() == 0);
       page.locator("[data-testid='workbench-title']").waitFor();
