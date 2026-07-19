@@ -20,10 +20,10 @@ import org.springframework.web.bind.annotation.RestController;
 public final class WorkflowHistoryIndexHttpAdapter {
 
   private static final String DEFAULT_LIMIT = "20";
-  private final IndexedWorkflowHistorySearch search;
+  private final IndexedWorkflowHistorySearch historySearch;
 
-  public WorkflowHistoryIndexHttpAdapter(IndexedWorkflowHistorySearch search) {
-    this.search = Objects.requireNonNull(search, "search");
+  public WorkflowHistoryIndexHttpAdapter(IndexedWorkflowHistorySearch historySearch) {
+    this.historySearch = Objects.requireNonNull(historySearch, "historySearch");
   }
 
   /** Searches messages, paths and deterministic workflow DSL content. */
@@ -31,7 +31,7 @@ public final class WorkflowHistoryIndexHttpAdapter {
   public List<SearchHitResponse> search(
       @RequestParam(name = "q", defaultValue = "") String query,
       @RequestParam(name = "limit", defaultValue = DEFAULT_LIMIT) int limit) {
-    return search.search(new WorkflowHistoryTextQuery(query, limit)).stream()
+    return historySearch.search(new WorkflowHistoryTextQuery(query, limit)).stream()
         .map(SearchHitResponse::from)
         .toList();
   }
@@ -41,7 +41,7 @@ public final class WorkflowHistoryIndexHttpAdapter {
   public RebuildResponse rebuild(
       @RequestParam(name = "branch", defaultValue = "main") String branch,
       @RequestParam(name = "limit", defaultValue = "-1") int limit) {
-    return new RebuildResponse(search.rebuild(branch, limit));
+    return new RebuildResponse(historySearch.rebuild(branch, limit));
   }
 
   /**
