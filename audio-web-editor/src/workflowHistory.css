@@ -46,9 +46,24 @@
   padding: 10px;
 }
 
+.history-dialog-backdrop {
+  align-items: center;
+  background: rgb(0 0 0 / 65%);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 20px;
+  position: fixed;
+  z-index: 1000;
+}
+
 .history-dialog {
   border-color: #7487aa;
   box-shadow: 0 8px 24px rgb(0 0 0 / 35%);
+  max-height: min(90vh, 760px);
+  max-width: 680px;
+  overflow: auto;
+  width: min(100%, 680px);
 }
 
 .history-warning {
@@ -66,6 +81,11 @@
   list-style: none;
   margin: 0;
   padding: 0;
+}
+
+.history-target-list {
+  max-height: 300px;
+  overflow: auto;
 }
 
 .history-target {
