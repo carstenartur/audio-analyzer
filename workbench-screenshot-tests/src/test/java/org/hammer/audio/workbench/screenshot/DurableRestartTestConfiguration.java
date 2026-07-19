@@ -8,6 +8,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import org.hammer.audio.workflow.collaboration.outbox.WorkflowOutboxMessage;
 import org.hammer.audio.workflow.collaboration.outbox.WorkflowOutboxPublisher;
+import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.support.GenericApplicationContext;
 import org.springframework.core.env.Environment;
 
@@ -20,13 +21,18 @@ final class DurableRestartTestConfiguration {
   private DurableRestartTestConfiguration() {}
 
   /** Registers the observer early enough for the production outbox dispatcher conditions to see it. */
-  static void registerPublisher(GenericApplicationContext context) {
-    Environment environment = context.getEnvironment();
+  static void registerPublisher(ConfigurableApplicationContext context) {
+    if (!(context instanceof GenericApplicationContext genericContext)) {
+      throw new IllegalStateException(
+          "Durable restart launcher requires a GenericApplicationContext but received "
+              + context.getClass().getName());
+    }
+    Environment environment = genericContext.getEnvironment();
     if (!environment.getProperty(PUBLISHER_ENABLED_PROPERTY, Boolean.class, false)) {
       return;
     }
     Path output = Path.of(environment.getRequiredProperty(PUBLICATIONS_PATH_PROPERTY));
-    context.registerBean(
+    genericContext.registerBean(
         "durableRestartOutboxPublisher",
         WorkflowOutboxPublisher.class,
         () -> message -> append(output, message));
