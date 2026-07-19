@@ -23,6 +23,7 @@ on:
 
 permissions:
   contents: read
+  packages: read
 
 concurrency:
   group: workbench-screenshots-${{ github.ref }}
@@ -34,6 +35,7 @@ jobs:
     timeout-minutes: 35
     env:
       JAVA_VERSION: '21'
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v7
 
@@ -43,6 +45,9 @@ jobs:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
           cache: maven
+          server-id: github
+          server-username: GITHUB_ACTOR
+          server-password: GITHUB_TOKEN
 
       - name: Build packaged application and screenshot-test reactor
         run: >-
