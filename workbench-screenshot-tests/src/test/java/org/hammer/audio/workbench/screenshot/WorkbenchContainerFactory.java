@@ -115,7 +115,8 @@ public final class WorkbenchContainerFactory {
     arguments.add("--workbench.persistence.repository-name=durable-restart-e2e");
     arguments.add("--workbench.persistence.migrations.enabled=true");
     arguments.add("--workbench.persistence.schema-action=validate");
-    arguments.add("--spring.datasource.url=jdbc:h2:file:/data/audio-analyzer;AUTO_SERVER=FALSE");
+    arguments.add(
+        "--spring.datasource.url=jdbc:h2:file:/data/audio-analyzer;AUTO_SERVER=FALSE;DB_CLOSE_ON_EXIT=FALSE;WRITE_DELAY=0");
     arguments.add("--spring.datasource.driver-class-name=org.h2.Driver");
     arguments.add("--spring.datasource.username=sa");
     arguments.add("--spring.datasource.password=");
