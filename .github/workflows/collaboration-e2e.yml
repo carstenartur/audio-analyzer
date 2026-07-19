@@ -23,6 +23,7 @@ on:
 
 permissions:
   contents: read
+  packages: read
 
 concurrency:
   group: collaboration-e2e-${{ github.ref }}
@@ -31,9 +32,10 @@ concurrency:
 jobs:
   two-browser-collaboration:
     runs-on: ubuntu-24.04
-    timeout-minutes: 35
+    timeout-minutes: 45
     env:
       JAVA_VERSION: '21'
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       E2E_LOG_DIR: workbench-screenshot-tests/target/collaboration-e2e-logs
     steps:
       - uses: actions/checkout@v7
@@ -44,6 +46,9 @@ jobs:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
           cache: maven
+          server-id: github
+          server-username: GITHUB_ACTOR
+          server-password: GITHUB_TOKEN
 
       - name: Prepare diagnostic log directory
         run: mkdir -p "$E2E_LOG_DIR"
@@ -67,13 +72,13 @@ jobs:
             -Dexec.args="install --with-deps chromium" \
             2>&1 | tee "$E2E_LOG_DIR/playwright-install.log"
 
-      # State-based conditions only: session/revision/SSE/DOM contracts, never fixed-delay sleeps.
-      - name: Run two-browser collaboration scenarios
+      # State, process, API and filesystem conditions only: never fixed-delay sleeps.
+      - name: Run collaboration and durable restart scenarios
         shell: bash
         run: |
           set -o pipefail
           mvn -B -Pscreenshot-tests -pl workbench-screenshot-tests \
-            -Dit.test=WorkbenchTwoBrowserCollaborationIT verify \
+            -Dit.test=WorkbenchTwoBrowserCollaborationIT,WorkbenchDurableRestartIT verify \
             2>&1 | tee "$E2E_LOG_DIR/test.log"
 
       - name: Upload collaboration workflow logs
@@ -94,11 +99,13 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
-      - name: Upload browser and server failure diagnostics
+      - name: Upload browser, server and durable restart diagnostics
         if: failure()
         uses: actions/upload-artifact@v7
         with:
           name: collaboration-e2e-failures
-          path: workbench-screenshot-tests/target/collaboration-e2e-failures/
+          path: |
+            workbench-screenshot-tests/target/collaboration-e2e-failures/
+            workbench-screenshot-tests/target/durable-restart-diagnostics/
           if-no-files-found: warn
           retention-days: 30

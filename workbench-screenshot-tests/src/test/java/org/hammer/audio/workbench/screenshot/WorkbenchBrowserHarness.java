@@ -49,15 +49,27 @@ final class WorkbenchBrowserHarness implements AutoCloseable {
   }
 
   static WorkbenchBrowserHarness start() throws IOException {
-    GenericContainer<?> container = WorkbenchContainerFactory.create();
-    container.start();
+    return start(WorkbenchContainerFactory.create());
+  }
+
+  static WorkbenchBrowserHarness start(GenericContainer<?> container) {
+    GenericContainer<?> requiredContainer = Objects.requireNonNull(container, "container");
+    requiredContainer.start();
     Playwright playwright = Playwright.create();
-    Browser browser =
-        playwright
-            .chromium()
-            .launch(new BrowserType.LaunchOptions().setHeadless(true).setTimeout(60_000));
-    return new WorkbenchBrowserHarness(
-        container, playwright, browser, configuredArtifactsDirectory());
+    try {
+      Browser browser =
+          playwright
+              .chromium()
+              .launch(new BrowserType.LaunchOptions().setHeadless(true).setTimeout(60_000));
+      return new WorkbenchBrowserHarness(
+          requiredContainer, playwright, browser, configuredArtifactsDirectory());
+    } catch (RuntimeException failure) {
+      playwright.close();
+      if (requiredContainer.isRunning()) {
+        requiredContainer.stop();
+      }
+      throw failure;
+    }
   }
 
   String baseUrl() {

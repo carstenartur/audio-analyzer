@@ -223,6 +223,23 @@ java -jar audio-app/target/audio-app-0.0.4-SNAPSHOT-workbench.jar \
 This mode is for tests and local demonstrations. It is never selected by the production persistent
 profile.
 
+## Executable restart evidence
+
+The opt-in `WorkbenchDurableRestartIT` scenario starts two independent packaged Spring Boot
+processes against the same mounted file-backed H2 database. Both processes run the released
+storage migrations followed by Hibernate `validate`.
+
+The scenario proves recovery of collaboration revision, operation identity and canonical
+projection; publication of a previously pending outbox row with the same stable event id; and
+exact load of two JGit checkpoints after restart. See
+[Durable collaboration restart evidence](durable-restart-e2e.md) for the complete topology,
+synchronization discipline and verified boundaries.
+
+Collaboration state and versioned workflow checkpoints remain separate application contexts.
+The restart test proves that both survive the same physical process boundary; it does not claim
+that a live-session append automatically creates a Git commit or that both commands share one
+cross-component transaction.
+
 ## Transaction boundary
 
 `jgit-storage-hibernate-core` owns generic JGit storage. Audio Analyzer owns collaboration session,

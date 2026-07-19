@@ -34,6 +34,7 @@
     <workbench.jar.path>${project.parent.basedir}/audio-app/target/audio-app-${project.version}.jar</workbench.jar.path>
     <workbench.lib.dir>${project.parent.basedir}/audio-app/target/lib</workbench.lib.dir>
     <workbench.static.dir>${project.parent.basedir}/audio-web-editor/target/frontend-dist</workbench.static.dir>
+    <workbench.test.classes.dir>${project.build.testOutputDirectory}</workbench.test.classes.dir>
     <!--
       Documentation screenshot output path. In verify mode screenshots are written to a temp
       directory and compared against this path. In update mode they are written here directly.
@@ -103,6 +104,7 @@
             <workbench.jar.path>${workbench.jar.path}</workbench.jar.path>
             <workbench.lib.dir>${workbench.lib.dir}</workbench.lib.dir>
             <workbench.static.dir>${workbench.static.dir}</workbench.static.dir>
+            <workbench.test.classes.dir>${workbench.test.classes.dir}</workbench.test.classes.dir>
             <docs.screenshots.dir>${docs.screenshots.dir}</docs.screenshots.dir>
             <updateScreenshots>${updateScreenshots}</updateScreenshots>
             <screenshot.tolerance.pct>${screenshot.tolerance.pct}</screenshot.tolerance.pct>
