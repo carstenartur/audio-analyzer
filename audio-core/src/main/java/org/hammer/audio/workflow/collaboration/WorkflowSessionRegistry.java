@@ -291,7 +291,19 @@ public final class WorkflowSessionRegistry {
     return value;
   }
 
-  /** Immutable transport-neutral session metadata. */
+  /**
+   * Immutable transport-neutral session metadata.
+   *
+   * @param sessionId stable collaboration-session identifier
+   * @param mode immutable collaboration mode
+   * @param owner actor that owns the session lifecycle
+   * @param createdAt session creation timestamp
+   * @param participants currently joined actors
+   * @param operationCount accepted semantic operation count
+   * @param workflowId canonical workflow identifier
+   * @param revision current semantic revision
+   * @param sequence current ordered event sequence
+   */
   public record SessionSnapshot(
       String sessionId,
       CollaborationMode mode,
