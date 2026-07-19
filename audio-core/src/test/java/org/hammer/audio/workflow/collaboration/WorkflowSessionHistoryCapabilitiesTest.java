@@ -25,6 +25,23 @@ class WorkflowSessionHistoryCapabilitiesTest {
   private static final Instant BASE_TIME = Instant.parse("2026-07-19T08:00:00Z");
 
   @Test
+  void emptyHistoryHasNoTargetsAndDoesNotAdvanceSessionState() {
+    WorkflowSessionRegistry registry = registry(CollaborationMode.PRIVATE_WORKSPACE);
+    WorkflowSessionRegistry.SessionSnapshot before = registry.inspect(SESSION_ID);
+
+    WorkflowHistoryPage history = registry.history(SESSION_ID, OWNER, null, 10);
+    WorkflowHistoryCapabilities capabilities = registry.capabilities(SESSION_ID, OWNER);
+
+    assertTrue(history.operations().isEmpty());
+    assertNull(history.nextBeforeRevision());
+    assertEquals(0, history.currentRevision());
+    assertTrue(capabilities.personalUndoPermitted());
+    assertNull(capabilities.personalUndo());
+    assertNull(capabilities.redo());
+    assertEquals(before, registry.inspect(SESSION_ID));
+  }
+
+  @Test
   void historyPagesAreStableNewestFirstAndReadOnly() {
     WorkflowSessionRegistry registry = registry(CollaborationMode.PRIVATE_WORKSPACE);
     createNode(registry, OWNER, "operation.one", "node.one", 0);
@@ -76,6 +93,25 @@ class WorkflowSessionHistoryCapabilitiesTest {
     assertNull(afterRedo.redo());
     assertEquals(ActionStatus.AVAILABLE, afterRedo.personalUndo().status());
     assertEquals(CommandKind.REDO, afterRedo.personalUndo().operation().commandKind());
+  }
+
+  @Test
+  void redoCapabilityReportsLaterSameActorBlocker() {
+    WorkflowSessionRegistry registry = registry(CollaborationMode.PRIVATE_WORKSPACE);
+    createNode(registry, OWNER, "operation.create", "node.same", 0);
+    WorkflowHistoryCommandResult undone =
+        registry.undo(SESSION_ID, new UndoWorkflowCommand("command.undo", OWNER, 1, null, null));
+    createNode(registry, OWNER, "operation.recreate", "node.same", 2);
+
+    WorkflowHistoryCapabilities capabilities = registry.capabilities(SESSION_ID, OWNER);
+
+    assertEquals(undone.operationId(), capabilities.redo().operation().operationId());
+    assertEquals(ActionStatus.BLOCKED, capabilities.redo().status());
+    assertEquals(
+        List.of("operation.recreate"),
+        capabilities.redo().blockingOperations().stream()
+            .map(WorkflowUndoPreview.BlockingOperation::operationId)
+            .toList());
   }
 
   @Test
