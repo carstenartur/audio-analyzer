@@ -1,0 +1,148 @@
+name: Stabilize PR 287 E2E once
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+
+jobs:
+  stabilize:
+    if: github.event.pull_request.head.ref == 'feature/249-two-browser-collaboration-e2e'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feature/249-two-browser-collaboration-e2e
+          fetch-depth: 0
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Stabilize disconnect proof and preserve failure diagnostics
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('workbench-screenshot-tests/src/test/java/org/hammer/audio/workbench/screenshot/WorkbenchTwoBrowserCollaborationIT.java')
+          text = path.read_text()
+
+          text = text.replace(
+              '  private static final String GENERATOR_SELECTOR =\n'
+              '      "[data-testid^=\'node-node.synthetic-signal-generator.\']";\n',
+              '  private static final String GENERATOR_SELECTOR =\n'
+              '      "[data-testid^=\'node-node.synthetic-signal-generator.\']";\n'
+              '  private static final String GAIN_SELECTOR = "[data-testid^=\'node-node.gain.\']";\n')
+
+          text = text.replace(
+              '    try (WorkbenchBrowserHarness.ActorBrowser alice =\n'
+              '            harness.openActor("actor-e2e-alice", "user-e2e-alice", "Alice E2E");\n'
+              '        WorkbenchBrowserHarness.ActorBrowser bob =\n'
+              '            harness.openActor("actor-e2e-bob", "user-e2e-bob", "Bob E2E")) {\n',
+              '    WorkbenchBrowserHarness.ActorBrowser alice =\n'
+              '        harness.openActor("actor-e2e-alice", "user-e2e-alice", "Alice E2E");\n'
+              '    WorkbenchBrowserHarness.ActorBrowser bob =\n'
+              '        harness.openActor("actor-e2e-bob", "user-e2e-bob", "Bob E2E");\n'
+              '    try {\n')
+
+          text = text.replace(
+              '      bob.context().setOffline(true);\n'
+              '      bob.page()\n'
+              '          .waitForCondition(\n'
+              '              () ->\n'
+              '                  !"live"\n'
+              '                      .equals(bob.page().locator("[data-testid=\'connection-state\']").innerText()));\n'
+              '      bob.context().setOffline(false);\n'
+              '      waitForLive(bob.page());\n'
+              '      assertRevision(bob.page(), 3);\n'
+              '      assertEquals(1, bob.page().locator(GENERATOR_SELECTOR).count());\n'
+              '\n'
+              '      bob.page().reload();\n'
+              '      waitForActiveSession(bob.page(), PERSONAL_SESSION_ID);\n'
+              '      waitForLive(bob.page());\n'
+              '      waitForRevision(bob.page(), 3);\n'
+              '      assertEquals(1, bob.page().locator(GENERATOR_SELECTOR).count());\n',
+              '      bob.context().setOffline(true);\n'
+              '      alice.page().locator("[data-testid=\'palette-node-gain\']").click();\n'
+              '      waitForRevision(alice.page(), 4);\n'
+              '      assertRevision(bob.page(), 3);\n'
+              '      assertEquals(0, bob.page().locator(GAIN_SELECTOR).count());\n'
+              '      bob.context().setOffline(false);\n'
+              '      waitForRevision(bob.page(), 4);\n'
+              '      waitForLive(bob.page());\n'
+              '      bob.page().locator(GAIN_SELECTOR).first().waitFor();\n'
+              '      assertEquals(1, bob.page().locator(GENERATOR_SELECTOR).count());\n'
+              '      assertEquals(1, bob.page().locator(GAIN_SELECTOR).count());\n'
+              '\n'
+              '      bob.page().reload();\n'
+              '      waitForActiveSession(bob.page(), PERSONAL_SESSION_ID);\n'
+              '      waitForLive(bob.page());\n'
+              '      waitForRevision(bob.page(), 4);\n'
+              '      assertEquals(1, bob.page().locator(GENERATOR_SELECTOR).count());\n'
+              '      assertEquals(1, bob.page().locator(GAIN_SELECTOR).count());\n')
+
+          text = text.replace(
+              '    } catch (Throwable failure) {\n'
+              '      harness.captureFailure(scenario, failure);\n'
+              '      throw failure;\n'
+              '    }\n'
+              '  }\n'
+              '\n'
+              '  @Test\n'
+              '  void sharedUndoRequiresExplicitTargetAndAcknowledgementBeforeBothClientsConverge()\n',
+              '    } catch (Throwable failure) {\n'
+              '      harness.captureFailure(scenario, failure);\n'
+              '      throw failure;\n'
+              '    } finally {\n'
+              '      bob.close();\n'
+              '      alice.close();\n'
+              '    }\n'
+              '  }\n'
+              '\n'
+              '  @Test\n'
+              '  void sharedUndoRequiresExplicitTargetAndAcknowledgementBeforeBothClientsConverge()\n',
+              1)
+
+          text = text.replace(
+              '    try (WorkbenchBrowserHarness.ActorBrowser owner =\n'
+              '            harness.openActor("actor-e2e-owner", "user-e2e-owner", "Owner E2E");\n'
+              '        WorkbenchBrowserHarness.ActorBrowser reviewer =\n'
+              '            harness.openActor("actor-e2e-reviewer", "user-e2e-reviewer", "Reviewer E2E")) {\n',
+              '    WorkbenchBrowserHarness.ActorBrowser owner =\n'
+              '        harness.openActor("actor-e2e-owner", "user-e2e-owner", "Owner E2E");\n'
+              '    WorkbenchBrowserHarness.ActorBrowser reviewer =\n'
+              '        harness.openActor("actor-e2e-reviewer", "user-e2e-reviewer", "Reviewer E2E");\n'
+              '    try {\n')
+
+          old = ('    } catch (Throwable failure) {\n'
+                 '      harness.captureFailure(scenario, failure);\n'
+                 '      throw failure;\n'
+                 '    }\n'
+                 '  }\n'
+                 '\n'
+                 '  private void open(Page page) {')
+          new = ('    } catch (Throwable failure) {\n'
+                 '      harness.captureFailure(scenario, failure);\n'
+                 '      throw failure;\n'
+                 '    } finally {\n'
+                 '      reviewer.close();\n'
+                 '      owner.close();\n'
+                 '    }\n'
+                 '  }\n'
+                 '\n'
+                 '  private void open(Page page) {')
+          text = text.replace(old, new, 1)
+
+          path.write_text(text)
+          PY
+          mvn -B -Pscreenshot-tests -pl workbench-screenshot-tests spotless:apply
+      - name: Commit stabilization and remove one-time workflow
+        run: |
+          rm .github/workflows/fix-pr-287-e2e-once.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Stabilize two-browser disconnect evidence"
+          git push origin HEAD:feature/249-two-browser-collaboration-e2e
