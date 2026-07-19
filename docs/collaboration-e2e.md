@@ -75,9 +75,21 @@ The normal Maven reactor remains Docker-free because `workbench-screenshot-tests
 
 A new actor context starts with empty session storage, so the harness only injects the stable actor identity. It deliberately does not clear the active-session key during later navigations. This lets a full reload exercise the production client's own session-restore path rather than an artificial test shortcut.
 
-The scenario code uses visible workbench selectors, semantic revision markers, ordered UI convergence and real HTTP problem responses. It does not use arbitrary sleeps or depend on browser-specific timing for transient connection-state labels.
-
 The stale-operation assertion intentionally submits a production semantic operation from the second browser with an old `expectedRevision`. This exercises the same REST parser, domain validation and durable append boundary as a real stale client while proving no optimistic graph residue appears.
+
+## Synchronization discipline
+
+The suite contains no `sleep`, `Thread.sleep`, `waitForTimeout` or equivalent fixed-delay synchronization. Every wait is tied to an observable contract:
+
+- session identity appears in the active-session view;
+- the ordered event transport reports `live` or `reconnecting`;
+- the semantic revision reaches the expected server revision;
+- an expected node becomes visible or disappears from the React Flow DOM;
+- a history button becomes enabled from server-reported capabilities;
+- a preview or confirmation dialog becomes visible;
+- an HTTP response returns the expected structured problem code.
+
+Playwright's configured timeout is only an upper bound that turns a missing condition into a diagnostic failure. It is not used as a delay and does not determine when the test proceeds.
 
 ## Failure diagnostics
 
@@ -118,4 +130,3 @@ It does not:
 - replace Hibernate restart tests;
 - treat presence as workflow DSL or checkpoint data;
 - close issue #249 until the durable process-restart stage and final milestone coverage are complete.
-
