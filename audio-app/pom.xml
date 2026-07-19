@@ -140,6 +140,11 @@
       <version>${jgit-storage-hibernate.version}</version>
     </dependency>
     <dependency>
+      <groupId>io.github.carstenartur</groupId>
+      <artifactId>jgit-storage-hibernate-search</artifactId>
+      <version>${jgit-storage-hibernate.version}</version>
+    </dependency>
+    <dependency>
       <groupId>org.hibernate.orm</groupId>
       <artifactId>hibernate-core</artifactId>
       <version>${hibernate.version}</version>

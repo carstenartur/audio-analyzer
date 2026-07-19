@@ -13,6 +13,7 @@ Audio Analyzer is both an audio-processing workbench and a platform for reproduc
 
 - [Recording and replay](features/recording-and-replay.md)
 - [A/B comparison reports](features/ab-comparison.md)
+- [Workflow history search](features/workflow-history-search.md)
 - [Oscilloscope-style waveform trigger](features/oscilloscope-trigger.md)
 - [Spectrum peak hold and averaging](features/peak-hold-and-averaging.md)
 - [Stereo-localization use case](use-cases/stereo-localization.md)

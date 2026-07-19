@@ -22,6 +22,8 @@ public class WorkflowSchemaMigrationConfiguration {
       @Value("${workbench.persistence.migrations.enabled:false}") boolean migrationsEnabled,
       @Value("${workbench.persistence.migrations.adopt-core-0.1.4:false}")
           boolean adoptLegacyCoreSchema,
+      @Value("${workbench.persistence.migrations.adopt-search-0.1.4:false}")
+          boolean adoptLegacySearchSchema,
       @Value("${workbench.persistence.migrations.adopt-collaboration-pre-lease:false}")
           boolean adoptPreLeaseCollaborationSchema,
       @Value("${workbench.persistence.schema-action:validate}") String schemaAction) {
@@ -31,7 +33,7 @@ public class WorkflowSchemaMigrationConfiguration {
     requireExplicitDataSource(environment);
     requireValidateSchemaAction(schemaAction);
     return new WorkflowSchemaMigrator(dataSource)
-        .migrate(adoptLegacyCoreSchema, adoptPreLeaseCollaborationSchema);
+        .migrate(adoptLegacyCoreSchema, adoptLegacySearchSchema, adoptPreLeaseCollaborationSchema);
   }
 
   private static void requireExplicitDataSource(Environment environment) {
