@@ -11,6 +11,7 @@ These pages explain user-visible behavior in more depth than the project README.
 
 - [Recording and replay](recording-and-replay.md) — capture produced `AudioBlock`s into a `.aar` file and replay them through the same analysis pipeline.
 - [A/B comparison](ab-comparison.md) — compare two recordings and render a Markdown report for QA, regression notes or experiment records.
+- [Workflow history search](workflow-history-search.md) — search indexed checkpoint messages, paths and workflow DSL, then load the exact matching commit.
 
 ## Design and share a processing workflow
 
