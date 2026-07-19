@@ -142,10 +142,10 @@ Build the plugin JAR and place it on the runtime classpath together with the app
 ```bash
 java -cp \
   "audio-app/target/audio-app-*.jar:audio-app/target/lib/*:path/to/measurement-plugin.jar" \
-  org.hammer.audio.AudioIn
+  org.hammer.AudioAnalyseFrame
 ```
 
-The exact desktop launcher class may differ between packaged distributions; use the launch command documented for that distribution. On Windows, use `;` as the classpath separator.
+`org.hammer.AudioAnalyseFrame` is the desktop main class configured in the current application JAR manifest. On Windows, use `;` as the classpath separator.
 
 ## Compatibility guidance
 
