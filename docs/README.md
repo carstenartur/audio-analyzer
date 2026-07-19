@@ -23,6 +23,7 @@ Audio Analyzer is both an audio-processing workbench and a platform for reproduc
 - [React Flow session client architecture](architecture/react-flow-session-client.md)
 - [Durable semantic undo and redo](architecture/semantic-undo-redo.md)
 - [Two-browser end-to-end evidence](collaboration-e2e.md)
+- [Durable full-process restart evidence](durable-restart-e2e.md)
 - [Hibernate-backed workflow persistence](workbench-hibernate-persistence.md)
 
 ## Extend the platform

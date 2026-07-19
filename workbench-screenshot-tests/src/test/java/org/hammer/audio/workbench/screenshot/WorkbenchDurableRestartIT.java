@@ -13,6 +13,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardWatchEventKinds;
 import java.nio.file.WatchKey;
 import java.nio.file.WatchService;
@@ -20,6 +21,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -62,29 +64,34 @@ class WorkbenchDurableRestartIT {
         WorkbenchBrowserHarness.ActorBrowser actor =
             first.openActor("actor-e2e-durable", "user-e2e-durable", "Durable E2E")) {
       Page page = actor.page();
-      open(first, page);
-      createSession(page);
-      prepareAcceptedEvent(page);
+      try {
+        open(first, page);
+        createSession(page);
+        prepareAcceptedEvent(page);
 
-      Map<?, ?> accepted = submitSessionOperation(page, 0);
-      assertEquals(200, number(accepted, "status"));
-      waitForRevision(page, 1);
-      page.locator(NODE_SELECTOR).waitFor();
-      Map<?, ?> event = awaitAcceptedEvent(page);
-      acceptedEventId = text(event, "eventId");
-      acceptedSequence = number(event, "sequence");
-      assertEquals(OPERATION_ID, text(event, "operationId"));
-      assertEquals(1, number(event, "revision"));
+        Map<?, ?> accepted = submitSessionOperation(page, 0);
+        assertEquals(200, number(accepted, "status"));
+        waitForRevision(page, 1);
+        page.locator(NODE_SELECTOR).waitFor();
+        Map<?, ?> event = awaitAcceptedEvent(page);
+        acceptedEventId = text(event, "eventId");
+        acceptedSequence = number(event, "sequence");
+        assertEquals(OPERATION_ID, text(event, "operationId"));
+        assertEquals(1, number(event, "revision"));
 
-      Map<?, ?> duplicate = submitSessionOperation(page, 0);
-      assertEquals(200, number(duplicate, "status"));
-      assertRevision(page, 1);
-      assertEquals(1, page.locator(NODE_SELECTOR).count());
+        Map<?, ?> duplicate = submitSessionOperation(page, 0);
+        assertEquals(200, number(duplicate, "status"));
+        assertRevision(page, 1);
+        assertEquals(1, page.locator(NODE_SELECTOR).count());
 
-      oldCommitId = checkpoint(page, "Durable E2E before legacy edit", "2026-07-19T12:00:00Z");
-      applyLegacyOperation(page);
-      newCommitId = checkpoint(page, "Durable E2E after legacy edit", "2026-07-19T12:01:00Z");
-      assertFalse(Files.exists(publications));
+        oldCommitId = checkpoint(page, "Durable E2E before legacy edit", "2026-07-19T12:00:00Z");
+        applyLegacyOperation(page);
+        newCommitId = checkpoint(page, "Durable E2E after legacy edit", "2026-07-19T12:01:00Z");
+        assertFalse(Files.exists(publications));
+      } catch (Throwable failure) {
+        captureDurableFailure("process-1", first, publications, failure);
+        throw failure;
+      }
     }
 
     assertFalse(Files.exists(publications));
@@ -97,40 +104,45 @@ class WorkbenchDurableRestartIT {
           WorkbenchBrowserHarness.ActorBrowser actor =
               second.openActor("actor-e2e-durable", "user-e2e-durable", "Durable E2E")) {
         Page page = actor.page();
-        open(second, page);
-        Map<String, Object> recoveredMetadata = inspectSession(page);
-        assertEquals(
-            1,
-            number(recoveredMetadata, "revision"),
-            "Recovered server session revision before browser join");
-        assertTrue(
-            projectionNodeIds(sessionProjection(page)).contains(NODE_ID),
-            "Recovered server projection must contain the durable node before browser join");
-        joinSession(page);
-        waitForRevision(page, 1);
-        page.locator(NODE_SELECTOR).waitFor();
-        assertEquals(1, page.locator(NODE_SELECTOR).count());
+        try {
+          open(second, page);
+          Map<String, Object> recoveredMetadata = inspectSession(page);
+          assertEquals(
+              1,
+              number(recoveredMetadata, "revision"),
+              "Recovered server session revision before browser join");
+          assertTrue(
+              projectionNodeIds(sessionProjection(page)).contains(NODE_ID),
+              "Recovered server projection must contain the durable node before browser join");
+          joinSession(page);
+          waitForRevision(page, 1);
+          page.locator(NODE_SELECTOR).waitFor();
+          assertEquals(1, page.locator(NODE_SELECTOR).count());
 
-        Map<?, ?> duplicate = submitSessionOperation(page, 0);
-        assertEquals(200, number(duplicate, "status"));
-        assertRevision(page, 1);
-        assertEquals(1, page.locator(NODE_SELECTOR).count());
+          Map<?, ?> duplicate = submitSessionOperation(page, 0);
+          assertEquals(200, number(duplicate, "status"));
+          assertRevision(page, 1);
+          assertEquals(1, page.locator(NODE_SELECTOR).count());
 
-        List<Map<String, Object>> history = checkpointHistory(page);
-        assertTrue(containsCommit(history, oldCommitId));
-        assertTrue(containsCommit(history, newCommitId));
-        assertFalse(projectionNodeIds(loadCommit(page, oldCommitId)).contains(LEGACY_NODE_ID));
-        assertTrue(projectionNodeIds(loadCommit(page, newCommitId)).contains(LEGACY_NODE_ID));
+          List<Map<String, Object>> history = checkpointHistory(page);
+          assertTrue(containsCommit(history, oldCommitId));
+          assertTrue(containsCommit(history, newCommitId));
+          assertFalse(projectionNodeIds(loadCommit(page, oldCommitId)).contains(LEGACY_NODE_ID));
+          assertTrue(projectionNodeIds(loadCommit(page, newCommitId)).contains(LEGACY_NODE_ID));
 
-        List<String> published = awaitPublication(watchService, publications, acceptedEventId);
-        List<String> matching =
-            published.stream().filter(line -> line.startsWith(acceptedEventId + "\t")).toList();
-        assertEquals(1, matching.size());
-        String[] fields = matching.getFirst().split("\t", 7);
-        assertEquals(SESSION_ID, fields[1]);
-        assertEquals(Long.toString(acceptedSequence), fields[2]);
-        assertEquals("1", fields[3]);
-        assertEquals("WORKFLOW_OPERATION_ACCEPTED", fields[4]);
+          List<String> published = awaitPublication(watchService, publications, acceptedEventId);
+          List<String> matching =
+              published.stream().filter(line -> line.startsWith(acceptedEventId + "\t")).toList();
+          assertEquals(1, matching.size());
+          String[] fields = matching.getFirst().split("\t", 7);
+          assertEquals(SESSION_ID, fields[1]);
+          assertEquals(Long.toString(acceptedSequence), fields[2]);
+          assertEquals("1", fields[3]);
+          assertEquals("WORKFLOW_OPERATION_ACCEPTED", fields[4]);
+        } catch (Throwable failure) {
+          captureDurableFailure("process-2", second, publications, failure);
+          throw failure;
+        }
       }
     }
   }
@@ -404,6 +416,39 @@ class WorkbenchDurableRestartIT {
     Object value = map.get(field);
     assertNotNull(value, "Missing field " + field);
     return value.toString();
+  }
+
+  private void captureDurableFailure(
+      String stage, WorkbenchBrowserHarness harness, Path publications, Throwable failure) {
+    harness.captureFailure("durable-restart-" + stage, failure);
+    Path diagnostics = Path.of("target", "durable-restart-diagnostics", stage).toAbsolutePath();
+    try {
+      Files.createDirectories(diagnostics);
+      try (Stream<Path> paths = Files.walk(dataDirectory)) {
+        List<String> inventory = paths.sorted().map(this::describeDurablePath).toList();
+        Files.write(diagnostics.resolve("durable-files.tsv"), inventory, StandardCharsets.UTF_8);
+      }
+      if (Files.exists(publications)) {
+        Files.copy(
+            publications,
+            diagnostics.resolve("published-outbox.tsv"),
+            StandardCopyOption.REPLACE_EXISTING);
+      }
+    } catch (IOException | RuntimeException diagnosticsFailure) {
+      failure.addSuppressed(diagnosticsFailure);
+    }
+  }
+
+  private String describeDurablePath(Path path) {
+    Path relative = dataDirectory.relativize(path);
+    try {
+      if (Files.isDirectory(path)) {
+        return relative + "	directory";
+      }
+      return relative + "	file	" + Files.size(path) + " bytes";
+    } catch (IOException exception) {
+      return relative + "	unreadable	" + exception.getMessage();
+    }
   }
 
   private static boolean isDockerAvailable() {

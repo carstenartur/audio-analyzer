@@ -145,3 +145,4 @@ It does not:
 - treat presence as workflow DSL or checkpoint data;
 - claim automatic Git commits for live collaboration operations;
 - claim cross-component atomicity that the application does not implement.
+
