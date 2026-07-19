@@ -150,10 +150,11 @@ function uniqueOperations(existing, incoming) {
  * @returns {boolean} whether the uncertain command is durably accepted
  */
 function acceptedPendingCommand(state, operations) {
-  if (state.pendingCommand === null) {
+  const pendingCommand = state.pendingCommand;
+  if (pendingCommand === null) {
     return false;
   }
-  return operations.some((operation) => operation.commandId === state.pendingCommand.commandId);
+  return operations.some((operation) => operation.commandId === pendingCommand.commandId);
 }
 
 /**

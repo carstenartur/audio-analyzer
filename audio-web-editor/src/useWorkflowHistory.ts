@@ -98,7 +98,7 @@ export function useWorkflowHistory({
   collaboration,
 }: WorkflowHistoryInput): WorkflowHistoryController {
   const historyReducer = reduceHistoryState as unknown as Reducer<HistoryState, HistoryEvent>;
-  const [state, dispatch] = useReducer(historyReducer, emptyHistoryState() as HistoryState);
+  const [state, dispatch] = useReducer(historyReducer, emptyHistoryState() as unknown as HistoryState);
   const stateRef = useRef(state);
   const loadGeneration = useRef(0);
   stateRef.current = state;

@@ -282,7 +282,7 @@ export function WorkflowHistoryPanel({
           className="action-button action-button--secondary"
           data-testid="history-reload-button"
           disabled={commandBusy || !collaboration.active}
-          onClick={() => void history.reload('manual history reload').catch(setLocalMessage)}
+          onClick={() => void history.reload('manual history reload').catch((failure: unknown) => setLocalMessage(message(failure)))}
           type="button"
         >
           Reload
@@ -302,8 +302,8 @@ export function WorkflowHistoryPanel({
           <p className="history-revision" data-testid="history-capability-revision">
             Capability revision {capabilities.revision}
           </p>
-          {policy.personalUndoVisible ? (
-            <div className="history-actions">
+          <div className="history-actions">
+            {policy.personalUndoVisible ? (
               <button
                 className="action-button"
                 data-testid="personal-undo-preview-button"
@@ -314,6 +314,8 @@ export function WorkflowHistoryPanel({
               >
                 Undo
               </button>
+            ) : null}
+            {policy.redoVisible ? (
               <button
                 className="action-button"
                 data-testid="redo-preview-button"
@@ -324,24 +326,24 @@ export function WorkflowHistoryPanel({
               >
                 Redo
               </button>
-            </div>
-          ) : null}
+            ) : null}
+          </div>
           <p className="help-text">Keyboard: Ctrl/⌘+Z · Ctrl/⌘+Shift+Z or Ctrl/⌘+Y</p>
         </>
       )}
 
-      {capabilities?.personalUndo !== null && !capabilities?.personalUndo.available ? (
+      {capabilities?.personalUndo != null && !capabilities.personalUndo.available ? (
         <div className="history-warning" data-testid="personal-undo-unavailable">
-          <strong>Undo unavailable: {capabilities?.personalUndo.status}</strong>
+          <strong>Undo unavailable: {capabilities.personalUndo.status}</strong>
           <p>{policy.personalUndoReason}</p>
-          <BlockingList blockers={capabilities?.personalUndo.blockingOperations ?? []} />
+          <BlockingList blockers={capabilities.personalUndo.blockingOperations} />
         </div>
       ) : null}
-      {capabilities?.redo !== null && !capabilities?.redo.available ? (
+      {capabilities?.redo != null && !capabilities.redo.available ? (
         <div className="history-warning" data-testid="redo-unavailable">
-          <strong>Redo unavailable: {capabilities?.redo.status}</strong>
+          <strong>Redo unavailable: {capabilities.redo.status}</strong>
           <p>{policy.redoReason}</p>
-          <BlockingList blockers={capabilities?.redo.blockingOperations ?? []} />
+          <BlockingList blockers={capabilities.redo.blockingOperations} />
         </div>
       ) : null}
 
@@ -397,7 +399,7 @@ export function WorkflowHistoryPanel({
                 className="action-button action-button--secondary"
                 data-testid="history-load-more-button"
                 disabled={commandBusy}
-                onClick={() => void history.loadMore().catch(setLocalMessage)}
+                onClick={() => void history.loadMore().catch((failure: unknown) => setLocalMessage(message(failure)))}
                 type="button"
               >
                 Load older operations
@@ -419,7 +421,7 @@ export function WorkflowHistoryPanel({
               className="action-button"
               data-testid="history-retry-button"
               disabled={actionPending || collaboration.connectionState !== 'live'}
-              onClick={() => void history.retryPending().catch(setLocalMessage)}
+              onClick={() => void history.retryPending().catch((failure: unknown) => setLocalMessage(message(failure)))}
               type="button"
             >
               Retry same command
@@ -427,7 +429,7 @@ export function WorkflowHistoryPanel({
             <button
               className="action-button action-button--secondary"
               onClick={() =>
-                void history.reload('uncertain command reconciliation').catch(setLocalMessage)
+                void history.reload('uncertain command reconciliation').catch((failure: unknown) => setLocalMessage(message(failure)))
               }
               type="button"
             >
