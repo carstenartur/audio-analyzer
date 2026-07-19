@@ -98,6 +98,14 @@ class WorkbenchDurableRestartIT {
               second.openActor("actor-e2e-durable", "user-e2e-durable", "Durable E2E")) {
         Page page = actor.page();
         open(second, page);
+        Map<String, Object> recoveredMetadata = inspectSession(page);
+        assertEquals(
+            1,
+            number(recoveredMetadata, "revision"),
+            "Recovered server session revision before browser join");
+        assertTrue(
+            projectionNodeIds(sessionProjection(page)).contains(NODE_ID),
+            "Recovered server projection must contain the durable node before browser join");
         joinSession(page);
         waitForRevision(page, 1);
         page.locator(NODE_SELECTOR).waitFor();
@@ -296,6 +304,30 @@ class WorkbenchDurableRestartIT {
                 """,
                 LEGACY_NODE_ID);
     assertEquals(200, status.intValue());
+  }
+
+  @SuppressWarnings("unchecked")
+  private static Map<String, Object> inspectSession(Page page) {
+    return (Map<String, Object>)
+        page.evaluate(
+            """
+            async sessionId => await (
+              await fetch(`/workflow/sessions/${encodeURIComponent(sessionId)}`)
+            ).json()
+            """,
+            SESSION_ID);
+  }
+
+  @SuppressWarnings("unchecked")
+  private static Map<String, Object> sessionProjection(Page page) {
+    return (Map<String, Object>)
+        page.evaluate(
+            """
+            async sessionId => await (
+              await fetch(`/workflow/sessions/${encodeURIComponent(sessionId)}/projection`)
+            ).json()
+            """,
+            SESSION_ID);
   }
 
   @SuppressWarnings("unchecked")
