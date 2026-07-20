@@ -5,13 +5,13 @@ import org.hammer.audio.workflow.collaboration.WorkflowSessionRegistry;
 import org.hammer.audio.workflow.history.WorkflowHistoryAccessPolicy;
 import org.hammer.audio.workflow.history.WorkflowHistoryCommandService;
 import org.hammer.audio.workflow.store.VersionedWorkflowStore;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-/** Wires explicit compare and restore commands when a versioned workflow store is available. */
+/** Wires explicit compare and restore commands when a persistence mode is selected. */
 @Configuration
-@ConditionalOnBean(VersionedWorkflowStore.class)
+@ConditionalOnProperty(name = "workbench.persistence.mode")
 public class WorkflowHistoryCommandConfiguration {
 
   /** Applies current collaboration membership as the restore access boundary. */
