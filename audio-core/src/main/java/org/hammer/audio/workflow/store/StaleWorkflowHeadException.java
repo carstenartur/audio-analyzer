@@ -3,9 +3,11 @@ package org.hammer.audio.workflow.store;
 /** Raised when a conditional workflow commit observes a different branch HEAD. */
 public final class StaleWorkflowHeadException extends RuntimeException {
 
+  private static final long serialVersionUID = 1L;
+
   private final String branch;
-  private final CommitId expectedHead;
-  private final CommitId actualHead;
+  private final String expectedHeadValue;
+  private final String actualHeadValue;
 
   /**
    * Creates a typed optimistic-concurrency conflict.
@@ -19,12 +21,12 @@ public final class StaleWorkflowHeadException extends RuntimeException {
         "Workflow branch '"
             + branch
             + "' no longer points to expected commit "
-            + value(expectedHead)
+            + displayValue(expectedHead)
             + "; current HEAD is "
-            + value(actualHead));
+            + displayValue(actualHead));
     this.branch = branch;
-    this.expectedHead = expectedHead;
-    this.actualHead = actualHead;
+    this.expectedHeadValue = storedValue(expectedHead);
+    this.actualHeadValue = storedValue(actualHead);
   }
 
   /** Returns the branch involved in the conflict. */
@@ -34,15 +36,23 @@ public final class StaleWorkflowHeadException extends RuntimeException {
 
   /** Returns the HEAD expected by the caller, or {@code null}. */
   public CommitId expectedHead() {
-    return expectedHead;
+    return commitId(expectedHeadValue);
   }
 
   /** Returns the HEAD observed by the store, or {@code null}. */
   public CommitId actualHead() {
-    return actualHead;
+    return commitId(actualHeadValue);
   }
 
-  private static String value(CommitId commitId) {
+  private static CommitId commitId(String value) {
+    return value == null ? null : new CommitId(value);
+  }
+
+  private static String storedValue(CommitId commitId) {
+    return commitId == null ? null : commitId.value();
+  }
+
+  private static String displayValue(CommitId commitId) {
     return commitId == null ? "<missing>" : commitId.value();
   }
 }
