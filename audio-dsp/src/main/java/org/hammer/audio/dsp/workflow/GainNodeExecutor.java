@@ -31,8 +31,7 @@ final class GainNodeExecutor implements DeterministicAudioNodeExecutor {
       violations.add(
           new Violation(
               DeterministicAudioDiagnostics.INVALID_TOPOLOGY,
-              "Gain nodes require exactly one incoming audio edge, found "
-                  + incomingEdges.size(),
+              "Gain nodes require exactly one incoming audio edge, found " + incomingEdges.size(),
               node.id()));
     }
     try {
@@ -40,9 +39,7 @@ final class GainNodeExecutor implements DeterministicAudioNodeExecutor {
     } catch (IllegalArgumentException exception) {
       violations.add(
           new Violation(
-              DeterministicAudioDiagnostics.INVALID_PARAMETER,
-              exception.getMessage(),
-              node.id()));
+              DeterministicAudioDiagnostics.INVALID_PARAMETER, exception.getMessage(), node.id()));
     }
     return List.copyOf(violations);
   }
