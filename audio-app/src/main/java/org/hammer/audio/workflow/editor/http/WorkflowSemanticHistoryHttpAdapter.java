@@ -53,16 +53,23 @@ public final class WorkflowSemanticHistoryHttpAdapter {
       String label,
       String propertyKey,
       String propertyValue,
-      Integer limit) {
+      String limit) {
 
     public SemanticSearchRequest {
       branch = branch == null || branch.isBlank() ? "main" : branch.trim();
-      limit = limit == null ? DEFAULT_LIMIT : limit;
+      limit = limit == null || limit.isBlank() ? Integer.toString(DEFAULT_LIMIT) : limit.trim();
     }
 
     WorkflowSemanticHistoryQuery toQuery() {
       return new WorkflowSemanticHistoryQuery(
-          branch, workflow, node, type, label, propertyKey, propertyValue, limit);
+          branch,
+          workflow,
+          node,
+          type,
+          label,
+          propertyKey,
+          propertyValue,
+          Integer.parseInt(limit));
     }
   }
 
