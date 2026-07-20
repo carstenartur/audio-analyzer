@@ -8,8 +8,8 @@ import org.hammer.audio.workflow.history.WorkflowSemanticHistoryResult;
 import org.hammer.audio.workflow.history.WorkflowSemanticProperty;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /** HTTP boundary for branch-aware semantic workflow-history queries. */
@@ -18,7 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 @ConditionalOnBean(IndexedWorkflowSemanticHistorySearch.class)
 public final class WorkflowSemanticHistoryHttpAdapter {
 
-  private static final String DEFAULT_LIMIT = "20";
+  private static final int DEFAULT_LIMIT = 20;
   private final IndexedWorkflowSemanticHistorySearch semanticSearch;
 
   public WorkflowSemanticHistoryHttpAdapter(IndexedWorkflowSemanticHistorySearch semanticSearch) {
@@ -27,25 +27,57 @@ public final class WorkflowSemanticHistoryHttpAdapter {
 
   /** Searches exact workflow semantics derived from commits reachable on one branch. */
   @GetMapping
-  public List<SemanticHitResponse> search(
-      @RequestParam(name = "branch", defaultValue = "main") String branch,
-      @RequestParam(name = "workflow", required = false) String workflowId,
-      @RequestParam(name = "node", required = false) String nodeId,
-      @RequestParam(name = "type", required = false) String nodeType,
-      @RequestParam(name = "label", required = false) String labelText,
-      @RequestParam(name = "propertyKey", required = false) String propertyKey,
-      @RequestParam(name = "propertyValue", required = false) String propertyValue,
-      @RequestParam(name = "limit", defaultValue = DEFAULT_LIMIT) int limit) {
-    return semanticSearch
-        .searchSemantic(
-            new WorkflowSemanticHistoryQuery(
-                branch, workflowId, nodeId, nodeType, labelText, propertyKey, propertyValue, limit))
-        .stream()
+  public List<SemanticHitResponse> search(@ModelAttribute SemanticSearchRequest request) {
+    return semanticSearch.searchSemantic(request.toQuery()).stream()
         .map(SemanticHitResponse::from)
         .toList();
   }
 
-  /** Domain-semantic evidence tied to one exact authoritative Git commit. */
+  /**
+   * Bindable semantic-history query parameters.
+   *
+   * @param branch branch whose reachable commits are searched; defaults to {@code main}
+   * @param workflow exact workflow identifier
+   * @param node exact node identifier
+   * @param type exact node type
+   * @param label workflow-name or node-label full-text expression
+   * @param propertyKey exact metadata key
+   * @param propertyValue exact metadata value
+   * @param limit bounded result count; defaults to 20
+   */
+  public record SemanticSearchRequest(
+      String branch,
+      String workflow,
+      String node,
+      String type,
+      String label,
+      String propertyKey,
+      String propertyValue,
+      Integer limit) {
+
+    public SemanticSearchRequest {
+      branch = branch == null || branch.isBlank() ? "main" : branch.trim();
+      limit = limit == null ? DEFAULT_LIMIT : limit;
+    }
+
+    WorkflowSemanticHistoryQuery toQuery() {
+      return new WorkflowSemanticHistoryQuery(
+          branch, workflow, node, type, label, propertyKey, propertyValue, limit);
+    }
+  }
+
+  /**
+   * Domain-semantic evidence tied to one exact authoritative Git commit.
+   *
+   * @param commitId exact Git commit identity
+   * @param branch branch for which the commit is reachable
+   * @param workflowId stable workflow identifier
+   * @param workflowName human-readable workflow name
+   * @param nodeIds stable node identifiers contained in the workflow
+   * @param nodeTypes logical node types contained in the workflow
+   * @param nodeLabels human-readable node labels contained in the workflow
+   * @param properties exact workflow and node metadata entries
+   */
   public record SemanticHitResponse(
       String commitId,
       String branch,
