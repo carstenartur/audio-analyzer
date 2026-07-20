@@ -1,6 +1,8 @@
 package org.hammer.audio.infrastructure.workflow.search;
 
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -8,6 +10,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import org.hammer.audio.workflow.dsl.WorkflowDslParser;
+import org.hammer.audio.workflow.history.WorkflowSemanticHistoryFilter;
 import org.hammer.audio.workflow.history.WorkflowSemanticHistoryQuery;
 import org.hammer.audio.workflow.history.WorkflowSemanticHistoryResult;
 import org.hammer.audio.workflow.store.CommitId;
@@ -146,45 +149,103 @@ public final class WorkflowSemanticIndexService {
       SearchSession searchSession = Search.session(session);
       return searchSession
           .search(WorkflowSemanticIndexEntity.class)
-          .where(
-              f -> {
-                BooleanPredicateClausesStep<?, ?> predicate =
-                    f.bool()
-                        .filter(f.match().field("repositoryName").matching(repositoryName))
-                        .filter(
-                            f.match()
-                                .field("branchName")
-                                .matching(normalizeBranch(query.branch())));
-                if (query.workflowId() != null) {
-                  predicate.filter(f.match().field("workflowId").matching(query.workflowId()));
-                }
-                if (query.nodeId() != null) {
-                  predicate.filter(
-                      f.match()
-                          .field(WorkflowSemanticIndexEntity.NODE_IDS_FIELD)
-                          .matching(query.nodeId()));
-                }
-                if (query.nodeType() != null) {
-                  predicate.filter(
-                      f.match()
-                          .field(WorkflowSemanticIndexEntity.NODE_TYPES_FIELD)
-                          .matching(query.nodeType()));
-                }
-                if (query.labelText() != null) {
-                  predicate.must(
-                      f.simpleQueryString()
-                          .fields("workflowName", "nodeLabelText")
-                          .matching(query.labelText()));
-                }
-                addPropertyPredicates(f, predicate, query);
-                return predicate;
-              })
+          .where(f -> semanticPredicate(f, query.filter()))
           .sort(f -> f.field("branchPosition").asc())
           .fetchHits(query.limit())
           .stream()
           .map(WorkflowSemanticIndexService::toResult)
           .toList();
     }
+  }
+
+  /**
+   * Returns every exact commit candidate matching one branch and its domain-semantic predicates.
+   *
+   * @param filter unbounded semantic filter
+   * @return candidate commit identities ordered by branch position
+   */
+  public List<CommitId> findCandidateCommitIds(WorkflowSemanticHistoryFilter filter) {
+    Objects.requireNonNull(filter, "filter");
+    try (Session session = sessionFactory.openSession()) {
+      SearchSession searchSession = Search.session(session);
+      return searchSession
+          .search(WorkflowSemanticIndexEntity.class)
+          .where(f -> semanticPredicate(f, filter))
+          .sort(f -> f.field("branchPosition").asc())
+          .fetchAllHits()
+          .stream()
+          .map(row -> new CommitId(row.getObjectId()))
+          .toList();
+    }
+  }
+
+  /**
+   * Loads branch-specific semantic evidence for an exact final commit set.
+   *
+   * @param branch branch that owns the reachability rows
+   * @param commits exact commits selected by the generic query
+   * @return evidence keyed by object ID
+   */
+  public Map<String, WorkflowSemanticHistoryResult> findEvidence(
+      String branch, Collection<CommitId> commits) {
+    String normalizedBranch = normalizeBranch(branch);
+    Objects.requireNonNull(commits, "commits");
+    List<String> objectIds = commits.stream().map(CommitId::value).distinct().toList();
+    if (objectIds.isEmpty()) {
+      return Map.of();
+    }
+    try (Session session = sessionFactory.openSession()) {
+      List<WorkflowSemanticIndexEntity> rows =
+          session
+              .createQuery(
+                  "FROM WorkflowSemanticIndexEntity s "
+                      + "WHERE s.repositoryName = :repository "
+                      + "AND s.branchName = :branch AND s.objectId IN :objectIds",
+                  WorkflowSemanticIndexEntity.class)
+              .setParameter("repository", repositoryName)
+              .setParameter("branch", normalizedBranch)
+              .setParameter("objectIds", objectIds)
+              .getResultList();
+      Map<String, WorkflowSemanticHistoryResult> evidence = new LinkedHashMap<>();
+      for (WorkflowSemanticIndexEntity row : rows) {
+        evidence.put(row.getObjectId(), toResult(row));
+      }
+      return Map.copyOf(evidence);
+    }
+  }
+
+  private BooleanPredicateClausesStep<?, ?> semanticPredicate(
+      SearchPredicateFactory f, WorkflowSemanticHistoryFilter filter) {
+    BooleanPredicateClausesStep<?, ?> predicate =
+        f.bool()
+            .filter(f.match().field("repositoryName").matching(repositoryName))
+            .filter(
+                f.match()
+                    .field("branchName")
+                    .matching(normalizeBranch(filter.branch())));
+    if (filter.workflowId() != null) {
+      predicate.filter(f.match().field("workflowId").matching(filter.workflowId()));
+    }
+    if (filter.nodeId() != null) {
+      predicate.filter(
+          f.match()
+              .field(WorkflowSemanticIndexEntity.NODE_IDS_FIELD)
+              .matching(filter.nodeId()));
+    }
+    if (filter.nodeType() != null) {
+      predicate.filter(
+          f.match()
+              .field(WorkflowSemanticIndexEntity.NODE_TYPES_FIELD)
+              .matching(filter.nodeType()));
+    }
+    if (filter.labelText() != null) {
+      predicate.must(
+          f.simpleQueryString()
+              .fields("workflowName", "nodeLabelText")
+              .matching(filter.labelText()));
+    }
+    addPropertyPredicates(f, predicate, filter);
+    return predicate;
   }
 
   private List<WorkflowSemanticIndexEntity> branchRows(
@@ -204,27 +265,27 @@ public final class WorkflowSemanticIndexService {
   private static void addPropertyPredicates(
       SearchPredicateFactory f,
       BooleanPredicateClausesStep<?, ?> predicate,
-      WorkflowSemanticHistoryQuery query) {
-    if (query.propertyKey() != null && query.propertyValue() != null) {
+      WorkflowSemanticHistoryFilter filter) {
+    if (filter.propertyKey() != null && filter.propertyValue() != null) {
       predicate.filter(
           f.match()
               .field(WorkflowSemanticIndexEntity.PROPERTY_PAIRS_FIELD)
               .matching(
                   WorkflowSemanticProjectionValues.encodePair(
-                      query.propertyKey(), query.propertyValue())));
+                      filter.propertyKey(), filter.propertyValue())));
       return;
     }
-    if (query.propertyKey() != null) {
+    if (filter.propertyKey() != null) {
       predicate.filter(
           f.match()
               .field(WorkflowSemanticIndexEntity.PROPERTY_KEYS_FIELD)
-              .matching(query.propertyKey()));
+              .matching(filter.propertyKey()));
     }
-    if (query.propertyValue() != null) {
+    if (filter.propertyValue() != null) {
       predicate.filter(
           f.match()
               .field(WorkflowSemanticIndexEntity.PROPERTY_VALUES_FIELD)
-              .matching(query.propertyValue()));
+              .matching(filter.propertyValue()));
     }
   }
 
