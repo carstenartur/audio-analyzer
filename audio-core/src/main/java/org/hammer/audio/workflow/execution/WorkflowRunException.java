@@ -25,11 +25,7 @@ public final class WorkflowRunException extends RuntimeException {
 
   /** Creates a typed failure without nested cause. */
   public WorkflowRunException(
-      Code code,
-      String message,
-      String runId,
-      String startCommandId,
-      List<Violation> violations) {
+      Code code, String message, String runId, String startCommandId, List<Violation> violations) {
     this(code, message, runId, startCommandId, violations, null);
   }
 
