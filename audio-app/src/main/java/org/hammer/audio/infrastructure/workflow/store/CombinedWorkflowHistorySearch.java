@@ -25,8 +25,7 @@ final class CombinedWorkflowHistorySearch {
 
   List<WorkflowCombinedHistoryResult> search(WorkflowCombinedHistoryQuery query) {
     Objects.requireNonNull(query, "query");
-    List<CommitId> candidates =
-        semanticProjection.candidateCommitIds(query.semanticFilter());
+    List<CommitId> candidates = semanticProjection.candidateCommitIds(query.semanticFilter());
     List<WorkflowHistoryTextResult> commits =
         genericProjection.searchWithinCandidates(query.genericQuery(), candidates);
     Map<String, WorkflowSemanticHistoryResult> evidence =
