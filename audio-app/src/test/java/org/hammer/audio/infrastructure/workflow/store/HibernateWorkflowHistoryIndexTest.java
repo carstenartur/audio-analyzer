@@ -43,7 +43,8 @@ class HibernateWorkflowHistoryIndexTest {
             new HibernateSessionFactoryProvider(properties, entities);
         HibernateJGitVersionedWorkflowStore store =
             new HibernateJGitVersionedWorkflowStore(provider.getSessionFactory(), "search-test")) {
-      WorkflowSnapshot baseline = snapshot("Baseline", "node.baseline", "source", "Baseline source");
+      WorkflowSnapshot baseline =
+          snapshot("Baseline", "node.baseline", "source", "Baseline source");
       WorkflowSnapshot matching =
           snapshot("Classifier", "node.classifier", "classifier", "wingbeatneedle");
       store.commit("main", baseline, metadata("Baseline checkpoint", 1));
@@ -83,8 +84,7 @@ class HibernateWorkflowHistoryIndexTest {
             name,
             List.of(new Node(nodeId, nodeType, label, List.of(), List.of())),
             List.of());
-    return new WorkflowSnapshot(
-        workflow.id(), new WorkflowDslSerializer().serialize(workflow));
+    return new WorkflowSnapshot(workflow.id(), new WorkflowDslSerializer().serialize(workflow));
   }
 
   private static CommitMetadata metadata(String message, long seconds) {
