@@ -203,7 +203,7 @@ public final class WorkflowSemanticIndexService {
 
   private static void addPropertyPredicates(
       SearchPredicateFactory f,
-      BooleanPredicateClausesStep<?> predicate,
+      BooleanPredicateClausesStep<?, ?> predicate,
       WorkflowSemanticHistoryQuery query) {
     if (query.propertyKey() != null && query.propertyValue() != null) {
       predicate.filter(
