@@ -4,6 +4,7 @@ package org.hammer.audio.dsp.workflow;
 public interface DeterministicAudioArtifacts {
 
   String BACKEND_MODE = "backendMode";
+  String BACKEND_VERSION = "backendVersion";
   String OUTPUT_NODE_ID = "output.nodeId";
   String OUTPUT_PORT_ID = "output.portId";
   String OUTPUT_DIGEST_ALGORITHM = "output.digest.algorithm";
@@ -18,4 +19,9 @@ public interface DeterministicAudioArtifacts {
   String OUTPUT_RMS = "output.rms";
   String OUTPUT_CHANNEL_ZERO_PREVIEW = "output.preview.channel0.hex";
   String CANCELLED_AT_NODE = "cancelledAtNode";
+  String FAILED_NODE_ID = "failure.nodeId";
+  String FAILED_NODE_TYPE = "failure.nodeType";
+  String FAILURE_CLASS = "failure.class";
+  String FAILURE_MESSAGE = "failure.message";
+  String SKIPPED_NODE_IDS = "failure.skippedNodeIds";
 }
