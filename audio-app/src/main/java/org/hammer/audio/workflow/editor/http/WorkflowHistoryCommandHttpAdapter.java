@@ -23,7 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 /** HTTP boundary for explicit branch-scoped workflow comparison and non-destructive restore. */
 @RestController
 @RequestMapping("/workflow/history")
-@ConditionalOnProperty(name = "workbench.persistence.mode")
+@ConditionalOnProperty(name = "workbench.persistence.mode", havingValue = "hibernate")
 public final class WorkflowHistoryCommandHttpAdapter {
 
   private final WorkflowHistoryCommandService commandService;
