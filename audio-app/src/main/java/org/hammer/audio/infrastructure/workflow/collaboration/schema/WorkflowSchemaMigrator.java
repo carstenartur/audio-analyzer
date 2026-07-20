@@ -9,8 +9,9 @@ import java.util.Objects;
 import javax.sql.DataSource;
 import org.flywaydb.core.Flyway;
 import org.flywaydb.core.api.configuration.FluentConfiguration;
+import org.hammer.audio.infrastructure.workflow.search.WorkflowSemanticSchemaMigrations;
 
-/** Applies shared Core and Search migrations before Audio Analyzer collaboration migrations. */
+/** Applies shared and application-owned migrations before Hibernate schema validation. */
 public final class WorkflowSchemaMigrator {
 
   private final DataSource dataSource;
@@ -30,7 +31,9 @@ public final class WorkflowSchemaMigrator {
     return migrate(adoptLegacyCoreSchema, false, adoptPreLeaseCollaborationSchema);
   }
 
-  /** Migrates generic Core, generic Search and application collaboration state in that order. */
+  /**
+   * Migrates Core, generic Search, application semantic Search and collaboration state in order.
+   */
   public WorkflowSchemaMigrationResult migrate(
       boolean adoptLegacyCoreSchema,
       boolean adoptLegacySearchSchema,
@@ -38,8 +41,9 @@ public final class WorkflowSchemaMigrator {
     DatabaseFamily family = detectDatabaseFamily();
     int core = migrateCore(family, adoptLegacyCoreSchema);
     int search = migrateSearch(family, adoptLegacySearchSchema);
+    int semantic = migrateSemantic(family);
     int collaboration = migrateCollaboration(family, adoptPreLeaseCollaborationSchema);
-    return new WorkflowSchemaMigrationResult(true, core, search, collaboration);
+    return new WorkflowSchemaMigrationResult(true, core, search, semantic, collaboration);
   }
 
   private int migrateCore(DatabaseFamily family, boolean legacy) {
@@ -74,6 +78,19 @@ public final class WorkflowSchemaMigrator {
         SearchSchemaMigrations.PRE_MIGRATION_BASELINE_VERSION,
         SearchSchemaMigrations.PRE_MIGRATION_BASELINE_DESCRIPTION);
     return configuration.load().migrate().migrationsExecuted;
+  }
+
+  private int migrateSemantic(DatabaseFamily family) {
+    return Flyway.configure()
+        .dataSource(dataSource)
+        .locations(family.semanticLocation)
+        .table(WorkflowSemanticSchemaMigrations.SCHEMA_HISTORY_TABLE)
+        .baselineOnMigrate(true)
+        .baselineVersion(WorkflowSemanticSchemaMigrations.PRE_MIGRATION_BASELINE_VERSION)
+        .baselineDescription(WorkflowSemanticSchemaMigrations.PRE_MIGRATION_BASELINE_DESCRIPTION)
+        .load()
+        .migrate()
+        .migrationsExecuted;
   }
 
   private int migrateCollaboration(DatabaseFamily family, boolean legacy) {
@@ -128,19 +145,27 @@ public final class WorkflowSchemaMigrator {
     H2(
         CoreSchemaMigrations.H2_LOCATION,
         SearchSchemaMigrations.H2_LOCATION,
+        WorkflowSemanticSchemaMigrations.H2_LOCATION,
         CollaborationSchemaMigrations.H2_LOCATION),
     POSTGRESQL(
         CoreSchemaMigrations.POSTGRESQL_LOCATION,
         SearchSchemaMigrations.POSTGRESQL_LOCATION,
+        WorkflowSemanticSchemaMigrations.POSTGRESQL_LOCATION,
         CollaborationSchemaMigrations.POSTGRESQL_LOCATION);
 
     private final String coreLocation;
     private final String searchLocation;
+    private final String semanticLocation;
     private final String collaborationLocation;
 
-    DatabaseFamily(String coreLocation, String searchLocation, String collaborationLocation) {
+    DatabaseFamily(
+        String coreLocation,
+        String searchLocation,
+        String semanticLocation,
+        String collaborationLocation) {
       this.coreLocation = coreLocation;
       this.searchLocation = searchLocation;
+      this.semanticLocation = semanticLocation;
       this.collaborationLocation = collaborationLocation;
     }
   }
