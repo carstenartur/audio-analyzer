@@ -29,11 +29,6 @@ public final class GainProcessor implements DSPProcessor {
   }
 
   @Override
-  public String name() {
-    return "Gain";
-  }
-
-  @Override
   public AudioBlock process(AudioBlock input) {
     Objects.requireNonNull(input, "input");
     float[][] output = new float[input.channels()][input.frames()];
