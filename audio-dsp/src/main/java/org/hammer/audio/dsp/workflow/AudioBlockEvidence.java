@@ -77,10 +77,7 @@ final class AudioBlockEvidence {
       }
     }
     return new Summary(
-        minimum,
-        maximum,
-        sum / sampleCount,
-        Math.sqrt(sumOfSquares / sampleCount));
+        minimum, maximum, sum / sampleCount, Math.sqrt(sumOfSquares / sampleCount));
   }
 
   private static String channelZeroPreview(AudioBlock block) {
