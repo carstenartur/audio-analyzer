@@ -163,7 +163,7 @@ public final class WorkflowCombinedHistoryHttpAdapter {
     static CommitEvidence from(WorkflowCombinedHistoryResult result) {
       return new CommitEvidence(
           result.commit().commitId().value(),
-          result.commit().message(),
+          result.commit().shortMessage(),
           result.commit().authorName(),
           result.commit().authorEmail(),
           result.commit().timestamp(),
