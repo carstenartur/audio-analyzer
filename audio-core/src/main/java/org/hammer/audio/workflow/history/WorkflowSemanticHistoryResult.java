@@ -37,6 +37,16 @@ public record WorkflowSemanticHistoryResult(
     properties = List.copyOf(Objects.requireNonNull(properties, "properties"));
   }
 
+  /** Returns distinct metadata keys as convenience evidence without losing {@link #properties()}. */
+  public List<String> propertyKeys() {
+    return properties.stream().map(WorkflowSemanticProperty::key).distinct().sorted().toList();
+  }
+
+  /** Returns distinct metadata values as convenience evidence without losing key/value pairs. */
+  public List<String> propertyValues() {
+    return properties.stream().map(WorkflowSemanticProperty::value).distinct().sorted().toList();
+  }
+
   private static String requireNotBlank(String value, String name) {
     Objects.requireNonNull(value, name);
     String normalized = value.trim();
