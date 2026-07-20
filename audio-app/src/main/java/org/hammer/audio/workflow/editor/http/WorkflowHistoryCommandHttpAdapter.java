@@ -5,6 +5,8 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import java.time.Instant;
 import java.util.List;
+import java.util.Objects;
+import org.hammer.audio.workflow.editor.WorkflowProjection;
 import org.hammer.audio.workflow.history.RestoreWorkflowVersionCommand;
 import org.hammer.audio.workflow.history.WorkflowChange;
 import org.hammer.audio.workflow.history.WorkflowHistoryCommandService;
@@ -26,12 +28,21 @@ public final class WorkflowHistoryCommandHttpAdapter {
 
   private final WorkflowHistoryCommandService commandService;
 
-  /** Creates the history-command controller. */
+  /**
+   * Creates the history-command controller.
+   *
+   * @param commandService compare and restore application service
+   */
   public WorkflowHistoryCommandHttpAdapter(WorkflowHistoryCommandService commandService) {
-    this.commandService = commandService;
+    this.commandService = Objects.requireNonNull(commandService, "commandService");
   }
 
-  /** Compares two exact commits reachable from one branch. */
+  /**
+   * Compares two exact commits reachable from one branch.
+   *
+   * @param request validated branch and commit identities
+   * @return both graph states and ordered semantic change atoms
+   */
   @PostMapping("/compare")
   public ComparisonResponse compare(@Valid @RequestBody CompareRequest request) {
     return ComparisonResponse.from(
@@ -41,7 +52,12 @@ public final class WorkflowHistoryCommandHttpAdapter {
             new CommitId(request.afterCommitId())));
   }
 
-  /** Restores a historical snapshot as a new audit commit on the expected current HEAD. */
+  /**
+   * Restores a historical snapshot as a new audit commit on the expected current HEAD.
+   *
+   * @param request validated target, expected HEAD and audit metadata
+   * @return source, previous HEAD and newly created restore commit identities
+   */
   @PostMapping("/restore")
   public RestoreResponse restore(@Valid @RequestBody RestoreRequest request) {
     WorkflowRestoreResult result =
