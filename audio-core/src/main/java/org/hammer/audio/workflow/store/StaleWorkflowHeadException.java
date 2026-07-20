@@ -5,7 +5,7 @@ public final class StaleWorkflowHeadException extends RuntimeException {
 
   private static final long serialVersionUID = 1L;
 
-  private final String branch;
+  private final String storedBranch;
   private final String expectedHeadValue;
   private final String actualHeadValue;
 
@@ -24,14 +24,14 @@ public final class StaleWorkflowHeadException extends RuntimeException {
             + displayValue(expectedHead)
             + "; current HEAD is "
             + displayValue(actualHead));
-    this.branch = branch;
+    this.storedBranch = branch;
     this.expectedHeadValue = storedValue(expectedHead);
     this.actualHeadValue = storedValue(actualHead);
   }
 
   /** Returns the branch involved in the conflict. */
   public String branch() {
-    return branch;
+    return storedBranch;
   }
 
   /** Returns the HEAD expected by the caller, or {@code null}. */
