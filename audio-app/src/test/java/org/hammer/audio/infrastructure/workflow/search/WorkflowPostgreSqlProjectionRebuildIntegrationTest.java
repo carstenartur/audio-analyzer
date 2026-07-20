@@ -177,8 +177,7 @@ class WorkflowPostgreSqlProjectionRebuildIntegrationTest {
                     new Metadata(Map.of("mode", mode)))),
             List.of(),
             Metadata.empty());
-    return new WorkflowSnapshot(
-        workflow.id(), new WorkflowDslSerializer().serialize(workflow));
+    return new WorkflowSnapshot(workflow.id(), new WorkflowDslSerializer().serialize(workflow));
   }
 
   private static CommitMetadata metadata(String message, long seconds) {
@@ -186,7 +185,8 @@ class WorkflowPostgreSqlProjectionRebuildIntegrationTest {
   }
 
   private record PostgreSqlSchema(
-      String baseUrl, String schemaName, String username, String password) implements AutoCloseable {
+      String baseUrl, String schemaName, String username, String password)
+      implements AutoCloseable {
 
     static PostgreSqlSchema create() throws SQLException {
       String baseUrl = POSTGRESQL.getJdbcUrl();
