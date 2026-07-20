@@ -1,6 +1,7 @@
 package org.hammer.audio.dsp.workflow;
 
 import java.util.Map;
+import java.util.Objects;
 import org.hammer.audio.dsp.GainProcessor;
 import org.hammer.audio.workflow.Metadata;
 import org.hammer.audio.workflow.Node;
@@ -139,7 +140,25 @@ final class DeterministicAudioParameters {
       float amplitude,
       float sampleRateHz,
       int channels,
-      int frameCount) {}
+      int frameCount) {
+    SyntheticSignal {
+      Objects.requireNonNull(waveform, "waveform");
+      if (!Float.isFinite(frequencyHz)
+          || !Double.isFinite(phaseRadians)
+          || !Float.isFinite(amplitude)
+          || !Float.isFinite(sampleRateHz)
+          || channels < 1
+          || frameCount < 1) {
+        throw new IllegalArgumentException("Synthetic signal parameters must remain valid");
+      }
+    }
+  }
 
-  record Gain(float factor) {}
+  record Gain(float factor) {
+    Gain {
+      if (!Float.isFinite(factor) || factor < 0.0f || factor > GainProcessor.MAX_GAIN) {
+        throw new IllegalArgumentException("Gain factor must remain within the supported range");
+      }
+    }
+  }
 }
