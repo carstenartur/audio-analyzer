@@ -14,8 +14,7 @@ import org.hammer.audio.workflow.store.CommitId;
  * @param nodeIds stable node identifiers contained in the workflow
  * @param nodeTypes logical node types contained in the workflow
  * @param nodeLabels human-readable node labels contained in the workflow
- * @param propertyKeys workflow/node metadata keys contained in the workflow
- * @param propertyValues workflow/node metadata values contained in the workflow
+ * @param properties exact workflow/node metadata entries contained in the workflow
  */
 public record WorkflowSemanticHistoryResult(
     CommitId commitId,
@@ -25,8 +24,7 @@ public record WorkflowSemanticHistoryResult(
     List<String> nodeIds,
     List<String> nodeTypes,
     List<String> nodeLabels,
-    List<String> propertyKeys,
-    List<String> propertyValues) {
+    List<WorkflowSemanticProperty> properties) {
 
   public WorkflowSemanticHistoryResult {
     Objects.requireNonNull(commitId, "commitId");
@@ -36,8 +34,7 @@ public record WorkflowSemanticHistoryResult(
     nodeIds = List.copyOf(Objects.requireNonNull(nodeIds, "nodeIds"));
     nodeTypes = List.copyOf(Objects.requireNonNull(nodeTypes, "nodeTypes"));
     nodeLabels = List.copyOf(Objects.requireNonNull(nodeLabels, "nodeLabels"));
-    propertyKeys = List.copyOf(Objects.requireNonNull(propertyKeys, "propertyKeys"));
-    propertyValues = List.copyOf(Objects.requireNonNull(propertyValues, "propertyValues"));
+    properties = List.copyOf(Objects.requireNonNull(properties, "properties"));
   }
 
   private static String requireNotBlank(String value, String name) {
