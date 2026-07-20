@@ -49,8 +49,7 @@ public final class WorkflowRunModels {
                 || target == CANCELLED
                 || target == COMPLETED
                 || target == FAILED;
-        case CANCEL_REQUESTED ->
-            target == CANCELLED || target == COMPLETED || target == FAILED;
+        case CANCEL_REQUESTED -> target == CANCELLED || target == COMPLETED || target == FAILED;
         case CANCELLED, COMPLETED, FAILED -> false;
       };
     }
