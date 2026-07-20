@@ -37,8 +37,7 @@ final class WorkflowSemanticHistoryProjection {
     return indexService.search(Objects.requireNonNull(query, "query"));
   }
 
-  void indexBestEffort(
-      String branch, CommitId commitId, WorkflowSnapshot authoritativeSnapshot) {
+  void indexBestEffort(String branch, CommitId commitId, WorkflowSnapshot authoritativeSnapshot) {
     try {
       indexService.indexCheckpoint(branch, commitId, authoritativeSnapshot);
     } catch (RuntimeException failure) {
@@ -70,7 +69,8 @@ final class WorkflowSemanticHistoryProjection {
     List<WorkflowSemanticProjectionEntry> entries = new ArrayList<>(commits.size());
     for (int position = 0; position < commits.size(); position++) {
       CommitId commitId = commits.get(position).commitId();
-      entries.add(new WorkflowSemanticProjectionEntry(commitId, position, store.loadAtCommit(commitId)));
+      entries.add(
+          new WorkflowSemanticProjectionEntry(commitId, position, store.loadAtCommit(commitId)));
     }
     indexService.replaceBranch(branch, entries);
   }
