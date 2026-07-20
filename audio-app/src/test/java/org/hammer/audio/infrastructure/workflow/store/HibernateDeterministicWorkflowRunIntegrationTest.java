@@ -22,6 +22,8 @@ import org.hammer.audio.workflow.dsl.WorkflowDslSerializer;
 import org.hammer.audio.workflow.execution.ExecutionStatus;
 import org.hammer.audio.workflow.execution.WorkflowRunModels.Command;
 import org.hammer.audio.workflow.execution.WorkflowRunModels.Mode;
+import org.hammer.audio.workflow.execution.WorkflowRunModels.Result;
+import org.hammer.audio.workflow.execution.WorkflowRunModels.Snapshot;
 import org.hammer.audio.workflow.execution.WorkflowRunModels.State;
 import org.hammer.audio.workflow.execution.WorkflowRunModels.StoredCommitSource;
 import org.hammer.audio.workflow.execution.WorkflowRunService;
@@ -56,8 +58,9 @@ class HibernateDeterministicWorkflowRunIntegrationTest {
               new DeterministicAudioWorkflowExecutionBackend(),
               Runnable::run);
 
-      var run = service.start(new Command("command.history", new StoredCommitSource(commitId)));
-      var result = service.result(run.runId());
+      Snapshot run =
+          service.start(new Command("command.history", new StoredCommitSource(commitId)));
+      Result result = service.result(run.runId());
 
       assertEquals(State.COMPLETED, run.state());
       assertEquals(Mode.COMPUTATION, run.mode());
