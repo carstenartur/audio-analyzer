@@ -9,6 +9,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.stream.Collectors;
 import org.hammer.audio.workflow.Node;
 import org.hammer.audio.workflow.Workflow;
 import org.hammer.audio.workflow.dsl.WorkflowDslParser;
@@ -25,6 +26,7 @@ record WorkflowSemanticProjectionValues(
     List<String> propertyValues,
     List<String> propertyPairs) {
 
+  private static final String ENCODING_PREFIX = "v1_";
   private static final Base64.Encoder ENCODER = Base64.getUrlEncoder().withoutPadding();
   private static final Base64.Decoder DECODER = Base64.getUrlDecoder();
 
@@ -74,21 +76,23 @@ record WorkflowSemanticProjectionValues(
   static String encodeValues(Collection<String> values) {
     return normalizedValues(values).stream()
         .map(WorkflowSemanticProjectionValues::encodeValue)
-        .reduce((left, right) -> left + "\n" + right)
-        .orElse("");
+        .collect(Collectors.joining("\n"));
   }
 
   static List<String> decodeValues(String encodedValues) {
     if (encodedValues == null || encodedValues.isBlank()) {
       return List.of();
     }
-    return encodedValues.lines().filter(value -> !value.isBlank()).map(WorkflowSemanticProjectionValues::decodeValue).toList();
+    return encodedValues.lines()
+        .filter(value -> !value.isBlank())
+        .map(WorkflowSemanticProjectionValues::decodeValue)
+        .toList();
   }
 
   static String encodePair(String key, String value) {
     return encodeValue(requireNotBlank(key, "propertyKey"))
         + "."
-        + encodeValue(requireNotBlank(value, "propertyValue"));
+        + encodeValue(Objects.requireNonNull(value, "propertyValue"));
   }
 
   private static void addMetadata(
@@ -101,7 +105,7 @@ record WorkflowSemanticProjectionValues(
         .forEach(
             entry -> {
               String key = requireNotBlank(entry.getKey(), "propertyKey");
-              String value = Objects.toString(entry.getValue(), "");
+              String value = Objects.requireNonNull(entry.getValue(), "propertyValue");
               keys.add(key);
               values.add(value);
               pairs.add(encodePair(key, value));
@@ -111,16 +115,25 @@ record WorkflowSemanticProjectionValues(
   private static List<String> normalizedValues(Collection<String> values) {
     Objects.requireNonNull(values, "values");
     LinkedHashSet<String> normalized = new LinkedHashSet<>();
-    values.stream().map(value -> Objects.requireNonNull(value, "value")).sorted().forEach(normalized::add);
+    values.stream()
+        .map(value -> Objects.requireNonNull(value, "value"))
+        .sorted()
+        .forEach(normalized::add);
     return List.copyOf(normalized);
   }
 
   private static String encodeValue(String value) {
-    return ENCODER.encodeToString(value.getBytes(StandardCharsets.UTF_8));
+    return ENCODING_PREFIX
+        + ENCODER.encodeToString(value.getBytes(StandardCharsets.UTF_8));
   }
 
-  private static String decodeValue(String value) {
-    return new String(DECODER.decode(value), StandardCharsets.UTF_8);
+  private static String decodeValue(String encodedValue) {
+    if (!encodedValue.startsWith(ENCODING_PREFIX)) {
+      throw new IllegalArgumentException("Unsupported semantic projection value encoding");
+    }
+    return new String(
+        DECODER.decode(encodedValue.substring(ENCODING_PREFIX.length())),
+        StandardCharsets.UTF_8);
   }
 
   private static String requireNotBlank(String value, String name) {
