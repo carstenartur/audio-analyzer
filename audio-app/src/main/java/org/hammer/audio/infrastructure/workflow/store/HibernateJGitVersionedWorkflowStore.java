@@ -38,7 +38,10 @@ public final class HibernateJGitVersionedWorkflowStore
 
   /** Opens a searchable logical repository using the application-managed SessionFactory. */
   public HibernateJGitVersionedWorkflowStore(SessionFactory sessionFactory, String repositoryName) {
-    this(HibernateWorkflowGitStorage.open(sessionFactory, repositoryName), sessionFactory, repositoryName);
+    this(
+        HibernateWorkflowGitStorage.open(sessionFactory, repositoryName),
+        sessionFactory,
+        repositoryName);
   }
 
   /** Opens a storage-only adapter through a supplied shared repository factory. */
