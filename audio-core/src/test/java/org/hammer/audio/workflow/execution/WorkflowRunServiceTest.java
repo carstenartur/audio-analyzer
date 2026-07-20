@@ -237,8 +237,7 @@ class WorkflowRunServiceTest {
     assertSame(
         OWNER,
         sessions
-            .create(
-                "session.test", CollaborationMode.PRIVATE_WORKSPACE, OWNER, emptyWorkflow())
+            .create("session.test", CollaborationMode.PRIVATE_WORKSPACE, OWNER, emptyWorkflow())
             .owner());
     return sessions;
   }
