@@ -9,6 +9,7 @@ import io.github.carstenartur.jgit.storage.hibernate.search.service.CommitHistor
 import io.github.carstenartur.jgit.storage.hibernate.search.service.CommitIndexer;
 import io.github.carstenartur.jgit.storage.hibernate.search.service.GitHistorySearchService;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.NoSuchElementException;
@@ -17,9 +18,14 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import org.eclipse.jgit.lib.Constants;
 import org.eclipse.jgit.lib.ObjectId;
+import org.hammer.audio.infrastructure.workflow.search.WorkflowSemanticIndexService;
+import org.hammer.audio.infrastructure.workflow.search.WorkflowSemanticProjectionEntry;
 import org.hammer.audio.workflow.history.IndexedWorkflowHistorySearch;
+import org.hammer.audio.workflow.history.IndexedWorkflowSemanticHistorySearch;
 import org.hammer.audio.workflow.history.WorkflowHistoryTextQuery;
 import org.hammer.audio.workflow.history.WorkflowHistoryTextResult;
+import org.hammer.audio.workflow.history.WorkflowSemanticHistoryQuery;
+import org.hammer.audio.workflow.history.WorkflowSemanticHistoryResult;
 import org.hammer.audio.workflow.store.CommitId;
 import org.hammer.audio.workflow.store.CommitInfo;
 import org.hammer.audio.workflow.store.CommitMetadata;
@@ -30,7 +36,10 @@ import org.hibernate.SessionFactory;
 
 /** Production workflow store and indexed search adapter over one shared Hibernate context. */
 public final class HibernateJGitVersionedWorkflowStore
-    implements VersionedWorkflowStore, IndexedWorkflowHistorySearch, AutoCloseable {
+    implements VersionedWorkflowStore,
+        IndexedWorkflowHistorySearch,
+        IndexedWorkflowSemanticHistorySearch,
+        AutoCloseable {
 
   private static final Logger LOGGER =
       Logger.getLogger(HibernateJGitVersionedWorkflowStore.class.getName());
@@ -40,6 +49,7 @@ public final class HibernateJGitVersionedWorkflowStore
   private final String repositoryName;
   private final CommitIndexer commitIndexer;
   private final GitHistorySearchService searchService;
+  private final WorkflowSemanticIndexService semanticIndexService;
 
   /** Opens a searchable logical repository using the application-managed SessionFactory. */
   public HibernateJGitVersionedWorkflowStore(SessionFactory sessionFactory, String repositoryName) {
@@ -60,6 +70,7 @@ public final class HibernateJGitVersionedWorkflowStore
     this.repositoryName = null;
     this.commitIndexer = null;
     this.searchService = null;
+    this.semanticIndexService = null;
   }
 
   private HibernateJGitVersionedWorkflowStore(
@@ -67,16 +78,19 @@ public final class HibernateJGitVersionedWorkflowStore
     this.storage = Objects.requireNonNull(storage, "storage");
     this.delegate = new JGitRepositoryVersionedWorkflowStore(storage.repository());
     this.repositoryName = requireNotBlank(repositoryName, "repositoryName");
-    this.commitIndexer =
-        new CommitIndexer(
-            Objects.requireNonNull(sessionFactory, "sessionFactory"), this.repositoryName);
-    this.searchService = new GitHistorySearchService(sessionFactory);
+    SessionFactory requiredSessionFactory =
+        Objects.requireNonNull(sessionFactory, "sessionFactory");
+    this.commitIndexer = new CommitIndexer(requiredSessionFactory, this.repositoryName);
+    this.searchService = new GitHistorySearchService(requiredSessionFactory);
+    this.semanticIndexService =
+        new WorkflowSemanticIndexService(requiredSessionFactory, this.repositoryName);
   }
 
   @Override
   public CommitId commit(String branch, WorkflowSnapshot snapshot, CommitMetadata metadata) {
     CommitId commitId = delegate.commit(branch, snapshot, metadata);
     indexBestEffort(commitId);
+    rebuildSemanticBestEffort(branch);
     return commitId;
   }
 
@@ -92,7 +106,11 @@ public final class HibernateJGitVersionedWorkflowStore
 
   @Override
   public RefUpdateResult updateRef(String refName, CommitId expectedOldCommit, CommitId newCommit) {
-    return delegate.updateRef(refName, expectedOldCommit, newCommit);
+    RefUpdateResult result = delegate.updateRef(refName, expectedOldCommit, newCommit);
+    if (result == RefUpdateResult.SUCCESS) {
+      rebuildSemanticBestEffort(refName);
+    }
+    return result;
   }
 
   @Override
@@ -122,9 +140,19 @@ public final class HibernateJGitVersionedWorkflowStore
   }
 
   @Override
+  public List<WorkflowSemanticHistoryResult> searchSemantic(WorkflowSemanticHistoryQuery query) {
+    requireSemanticSearchEnabled();
+    return semanticIndexService.search(Objects.requireNonNull(query, "query"));
+  }
+
+  @Override
   public int rebuild(String branch, int limit) {
     requireSearchEnabled();
+    requireSemanticSearchEnabled();
     String requiredBranch = requireNotBlank(branch, "branch");
+    if (limit == 0) {
+      return 0;
+    }
     try {
       ObjectId head = storage.repository().resolve(requiredBranch);
       if (head == null) {
@@ -133,7 +161,9 @@ public final class HibernateJGitVersionedWorkflowStore
       if (head == null) {
         throw new NoSuchElementException("Unknown workflow branch: " + requiredBranch);
       }
-      return commitIndexer.indexCommitsFrom(storage.repository(), head, limit);
+      int newlyIndexed = commitIndexer.indexCommitsFrom(storage.repository(), head, limit);
+      rebuildSemanticBranch(requiredBranch, limit);
+      return newlyIndexed;
     } catch (IOException failure) {
       throw new IllegalStateException(
           "Could not rebuild workflow history search for branch " + requiredBranch, failure);
@@ -163,15 +193,51 @@ public final class HibernateJGitVersionedWorkflowStore
           Level.WARNING,
           "Workflow commit "
               + commitId.value()
-              + " remains authoritative but its search projection is stale",
+              + " remains authoritative but its generic search projection is stale",
           failure);
     }
+  }
+
+  private void rebuildSemanticBestEffort(String branch) {
+    if (semanticIndexService == null) {
+      return;
+    }
+    try {
+      rebuildSemanticBranch(branch, -1);
+    } catch (RuntimeException failure) {
+      LOGGER.log(
+          Level.WARNING,
+          "Workflow branch "
+              + branch
+              + " remains authoritative but its semantic search projection is stale",
+          failure);
+    }
+  }
+
+  private void rebuildSemanticBranch(String branch, int limit) {
+    int historyLimit = limit < 0 ? Integer.MAX_VALUE : limit;
+    List<CommitInfo> commits = delegate.history(branch, historyLimit);
+    List<WorkflowSemanticProjectionEntry> entries = new ArrayList<>(commits.size());
+    for (int position = 0; position < commits.size(); position++) {
+      CommitId commitId = commits.get(position).commitId();
+      entries.add(
+          new WorkflowSemanticProjectionEntry(
+              commitId, position, delegate.loadAtCommit(commitId)));
+    }
+    semanticIndexService.replaceBranch(branch, entries);
   }
 
   private void requireSearchEnabled() {
     if (repositoryName == null || commitIndexer == null || searchService == null) {
       throw new IllegalStateException(
           "Indexed workflow history search requires the application-managed SessionFactory");
+    }
+  }
+
+  private void requireSemanticSearchEnabled() {
+    if (repositoryName == null || semanticIndexService == null) {
+      throw new IllegalStateException(
+          "Semantic workflow history search requires the application-managed SessionFactory");
     }
   }
 
