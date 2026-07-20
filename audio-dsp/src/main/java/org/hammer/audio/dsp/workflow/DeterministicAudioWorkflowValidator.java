@@ -117,8 +117,7 @@ final class DeterministicAudioWorkflowValidator {
     }
   }
 
-  private static void validateSourcePort(
-      Edge edge, Node source, List<Violation> violations) {
+  private static void validateSourcePort(Edge edge, Node source, List<Violation> violations) {
     String expectedSourcePort =
         ExperimentNodeProtocol.TYPE_SYNTHETIC_SIGNAL_GENERATOR.equals(source.type())
             ? ExperimentNodeProtocol.SIGNAL_OUTPUT_PORT
@@ -132,8 +131,7 @@ final class DeterministicAudioWorkflowValidator {
     }
   }
 
-  private static void validateTargetPort(
-      Edge edge, Node target, List<Violation> violations) {
+  private static void validateTargetPort(Edge edge, Node target, List<Violation> violations) {
     if (!ExperimentNodeProtocol.TYPE_GAIN.equals(target.type())
         || !ExperimentNodeProtocol.AUDIO_INPUT_PORT.equals(edge.targetPortId())) {
       violations.add(

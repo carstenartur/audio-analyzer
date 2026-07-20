@@ -94,8 +94,7 @@ public final class DeterministicAudioWorkflowExecutionBackend implements Executi
     AudioBlock terminalOutput = outputs.get(terminalNodeId);
     Map<String, String> artifacts = baseArtifacts();
     artifacts.putAll(
-        AudioBlockEvidence.artifacts(
-            terminalOutput, terminalNodeId, graph.terminalOutputPortId()));
+        AudioBlockEvidence.artifacts(terminalOutput, terminalNodeId, graph.terminalOutputPortId()));
     return result(input, context, artifacts);
   }
 

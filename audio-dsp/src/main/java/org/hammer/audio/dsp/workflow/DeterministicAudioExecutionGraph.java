@@ -43,7 +43,8 @@ final class DeterministicAudioExecutionGraph {
             .map(Node::id)
             .filter(nodeId -> !sourceNodeIds.contains(nodeId))
             .findFirst()
-            .orElseThrow(() -> new IllegalStateException("Validated workflow has no terminal node"));
+            .orElseThrow(
+                () -> new IllegalStateException("Validated workflow has no terminal node"));
     return new DeterministicAudioExecutionGraph(nodes, incoming, terminal);
   }
 
