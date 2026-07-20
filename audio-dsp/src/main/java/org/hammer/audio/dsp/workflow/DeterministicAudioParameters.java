@@ -43,10 +43,7 @@ final class DeterministicAudioParameters {
     if (sampleCount > MAX_TOTAL_SAMPLES) {
       throw invalid(
           ExperimentNodeParameters.SIGNAL_FRAME_COUNT,
-          "channels * frame-count must be <= "
-              + MAX_TOTAL_SAMPLES
-              + ", was "
-              + sampleCount);
+          "channels * frame-count must be <= " + MAX_TOTAL_SAMPLES + ", was " + sampleCount);
     }
     float frequency = finiteFloat(entries, ExperimentNodeParameters.SIGNAL_FREQUENCY_HZ);
     if (!(frequency > 0.0f) || frequency >= sampleRate / 2.0f) {
@@ -58,8 +55,7 @@ final class DeterministicAudioParameters {
     float amplitude = finiteFloat(entries, ExperimentNodeParameters.SIGNAL_AMPLITUDE);
     if (amplitude < 0.0f || amplitude > 1.0f) {
       throw invalid(
-          ExperimentNodeParameters.SIGNAL_AMPLITUDE,
-          "must be in [0, 1], was " + amplitude);
+          ExperimentNodeParameters.SIGNAL_AMPLITUDE, "must be in [0, 1], was " + amplitude);
     }
     return new SyntheticSignal(
         waveform, frequency, phase, amplitude, sampleRate, channels, frameCount);
