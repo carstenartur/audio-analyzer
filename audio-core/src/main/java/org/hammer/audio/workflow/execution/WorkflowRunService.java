@@ -64,13 +64,7 @@ public final class WorkflowRunService {
       VersionedWorkflowStore store,
       ExecutionBackend backend,
       Executor executor) {
-    this(
-        sessions,
-        store,
-        backend,
-        executor,
-        Clock.systemUTC(),
-        () -> "run-" + UUID.randomUUID());
+    this(sessions, store, backend, executor, Clock.systemUTC(), () -> "run-" + UUID.randomUUID());
   }
 
   WorkflowRunService(
