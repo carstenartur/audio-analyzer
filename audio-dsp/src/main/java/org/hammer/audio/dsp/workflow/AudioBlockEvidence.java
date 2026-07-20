@@ -2,10 +2,10 @@ package org.hammer.audio.dsp.workflow;
 
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.StringJoiner;
+import java.util.concurrent.ConcurrentHashMap;
 import org.hammer.audio.core.AudioBlock;
 import org.hammer.audio.core.AudioFormatDescriptor;
 
@@ -22,7 +22,7 @@ final class AudioBlockEvidence {
 
   static Map<String, String> artifacts(AudioBlock block, String outputNodeId, String outputPortId) {
     Objects.requireNonNull(block, "block");
-    Map<String, String> artifacts = new LinkedHashMap<>();
+    Map<String, String> artifacts = new ConcurrentHashMap<>();
     artifacts.put(DeterministicAudioArtifacts.OUTPUT_NODE_ID, outputNodeId);
     artifacts.put(DeterministicAudioArtifacts.OUTPUT_PORT_ID, outputPortId);
     artifacts.put(DeterministicAudioArtifacts.OUTPUT_DIGEST_ALGORITHM, DIGEST_ALGORITHM);
@@ -107,8 +107,8 @@ final class AudioBlockEvidence {
   private static String hex(byte[] bytes) {
     StringBuilder text = new StringBuilder(bytes.length * 2);
     for (byte value : bytes) {
-      text.append(Character.forDigit((value >>> 4) & 0x0f, 16));
-      text.append(Character.forDigit(value & 0x0f, 16));
+      text.append(Character.forDigit((value >>> 4) & 0x0f, 16))
+          .append(Character.forDigit(value & 0x0f, 16));
     }
     return text.toString();
   }
