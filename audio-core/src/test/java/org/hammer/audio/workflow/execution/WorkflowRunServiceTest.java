@@ -13,12 +13,10 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.hammer.audio.workflow.Workflow;
-import org.hammer.audio.workflow.WorkflowValidator;
 import org.hammer.audio.workflow.collaboration.CollaborationMode;
 import org.hammer.audio.workflow.collaboration.OperationActor;
 import org.hammer.audio.workflow.collaboration.WorkflowSessionRegistry;
 import org.hammer.audio.workflow.collaboration.store.WorkflowSessionRevisionConflictException;
-import org.hammer.audio.workflow.dsl.WorkflowDslParser;
 import org.hammer.audio.workflow.dsl.WorkflowDslSerializer;
 import org.hammer.audio.workflow.execution.WorkflowRunException.Code;
 import org.hammer.audio.workflow.execution.WorkflowRunModels.Command;
@@ -219,9 +217,6 @@ class WorkflowRunServiceTest {
         store,
         backend,
         executor,
-        new WorkflowDslParser(),
-        new WorkflowDslSerializer(),
-        new WorkflowValidator(),
         clock,
         () -> "run.test." + sequence.incrementAndGet());
   }
