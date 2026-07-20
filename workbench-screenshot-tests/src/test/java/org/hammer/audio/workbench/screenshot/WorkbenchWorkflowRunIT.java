@@ -2,7 +2,6 @@ package org.hammer.audio.workbench.screenshot;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
@@ -183,8 +182,15 @@ class WorkbenchWorkflowRunIT {
 
   private static void updateGain(
       Page page, int revision, String previous, String value, String operationId) {
-    updateProperty(page, BOB, revision, "node.run.gain", "gain.factor", previous, value, revision);
-    assertNotNull(operationId);
+    Map<String, Object> operation = new LinkedHashMap<>();
+    operation.put("type", "UpdateProperty");
+    operation.put("operationId", operationId);
+    operation.put("target", "NODE");
+    operation.put("targetId", "node.run.gain");
+    operation.put("propertyKey", "gain.factor");
+    operation.put("previousValue", previous);
+    operation.put("newValue", value);
+    submitOperation(page, BOB, revision, operation);
   }
 
   private static void updateProperty(
