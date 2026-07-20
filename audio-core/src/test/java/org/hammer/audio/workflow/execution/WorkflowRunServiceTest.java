@@ -213,12 +213,7 @@ class WorkflowRunServiceTest {
     Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
     AtomicInteger sequence = new AtomicInteger();
     return new WorkflowRunService(
-        sessions,
-        store,
-        backend,
-        executor,
-        clock,
-        () -> "run.test." + sequence.incrementAndGet());
+        sessions, store, backend, executor, clock, () -> "run.test." + sequence.incrementAndGet());
   }
 
   private static WorkflowSessionRegistry sessionsWithEmptyWorkflow() {
