@@ -9,6 +9,7 @@ import {
   normalizeHistorySearchLimit,
   visibleChangedPaths,
 } from './indexedHistorySearch.mjs';
+import { WorkflowHistoryCommands } from './WorkflowHistoryCommands';
 
 interface IndexedHistoryHit {
   commitId: string;
@@ -291,7 +292,7 @@ export function IndexedWorkflowHistoryPanel() {
 
           <div className="indexed-history__maintenance">
             <label className="field">
-              Authoritative branch to rebuild
+              Authoritative branch to rebuild and operate on
               <input
                 data-testid="indexed-history-branch"
                 value={branch}
@@ -317,6 +318,14 @@ export function IndexedWorkflowHistoryPanel() {
               {error}
             </p>
           )}
+
+          <WorkflowHistoryCommands
+            branch={branch}
+            disabled={searching || rebuilding || loadingCommitId !== null}
+            hits={hits}
+            onError={setError}
+            onStatus={setStatus}
+          />
 
           <ol className="indexed-history__results" data-testid="indexed-history-results">
             {hits.map((hit) => {
@@ -345,7 +354,9 @@ export function IndexedWorkflowHistoryPanel() {
                     onClick={() => void loadExactCommit(hit.commitId)}
                     type="button"
                   >
-                    {loadingCommitId === hit.commitId ? 'Loading exact version…' : 'Load exact version'}
+                    {loadingCommitId === hit.commitId
+                      ? 'Loading exact version…'
+                      : 'Load exact version'}
                   </button>
                 </li>
               );
