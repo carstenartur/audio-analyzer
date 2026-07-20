@@ -1,12 +1,12 @@
 package org.hammer.audio.infrastructure.workflow.search;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import org.hammer.audio.workflow.dsl.WorkflowDslParser;
 import org.hammer.audio.workflow.history.WorkflowSemanticHistoryQuery;
 import org.hammer.audio.workflow.history.WorkflowSemanticHistoryResult;
@@ -104,7 +104,7 @@ public final class WorkflowSemanticIndexService {
       Transaction transaction = session.beginTransaction();
       boolean committed = false;
       try {
-        Map<String, WorkflowSemanticIndexEntity> existingByObjectId = new LinkedHashMap<>();
+        Map<String, WorkflowSemanticIndexEntity> existingByObjectId = new ConcurrentHashMap<>();
         for (WorkflowSemanticIndexEntity row : branchRows(session, normalizedBranch, false)) {
           existingByObjectId.put(row.getObjectId(), row);
         }
