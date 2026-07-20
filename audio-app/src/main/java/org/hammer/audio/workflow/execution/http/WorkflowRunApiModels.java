@@ -7,6 +7,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import org.hammer.audio.workflow.execution.ExecutionResult;
 import org.hammer.audio.workflow.execution.ExecutionStatus;
 import org.hammer.audio.workflow.execution.WorkflowRunModels.Command;
 import org.hammer.audio.workflow.execution.WorkflowRunModels.LiveSessionSource;
@@ -19,11 +20,7 @@ import org.hammer.audio.workflow.execution.WorkflowRunModels.Violation;
 import org.hammer.audio.workflow.store.CommitId;
 
 /** Request and response values for the immutable workflow-run REST API. */
-public final class WorkflowRunApiModels {
-
-  private WorkflowRunApiModels() {
-    throw new UnsupportedOperationException("Utility class");
-  }
+public interface WorkflowRunApiModels {
 
   /**
    * Request selecting either an exact session revision or stored commit.
@@ -34,7 +31,7 @@ public final class WorkflowRunApiModels {
    * @param expectedRevision exact live semantic revision, otherwise {@code null}
    * @param commitId exact stored workflow commit, otherwise {@code null}
    */
-  public record StartRunRequest(
+  record StartRunRequest(
       @NotBlank String startCommandId,
       @NotNull SourceKind sourceKind,
       String sessionId,
@@ -81,7 +78,7 @@ public final class WorkflowRunApiModels {
    * @param semanticRevision captured live semantic revision, otherwise {@code null}
    * @param commitId captured stored commit identifier, otherwise {@code null}
    */
-  public record RunSourceResponse(
+  record RunSourceResponse(
       SourceKind kind, String sessionId, Long semanticRevision, String commitId) {
 
     static RunSourceResponse from(Snapshot snapshot) {
@@ -113,7 +110,7 @@ public final class WorkflowRunApiModels {
    * @param statusMessage current human-readable status
    * @param violations machine-readable diagnostics
    */
-  public record RunResponse(
+  record RunResponse(
       String runId,
       String startCommandId,
       String state,
@@ -161,7 +158,7 @@ public final class WorkflowRunApiModels {
    * @param message human-readable detail
    * @param nodeId optional affected workflow node
    */
-  public record ViolationResponse(String code, String message, String nodeId) {
+  record ViolationResponse(String code, String message, String nodeId) {
     static ViolationResponse from(Violation violation) {
       return new ViolationResponse(violation.code(), violation.message(), violation.nodeId());
     }
@@ -178,7 +175,7 @@ public final class WorkflowRunApiModels {
    * @param commitId stored source commit, if applicable
    * @param artifacts backend-specific immutable textual artifacts
    */
-  public record RunResultResponse(
+  record RunResultResponse(
       RunResponse run,
       String overallStatus,
       Map<String, ExecutionStatus> nodeStatuses,
@@ -193,7 +190,7 @@ public final class WorkflowRunApiModels {
     }
 
     static RunResultResponse from(Snapshot snapshot, Result result) {
-      var executionResult = result.reproducibilityBundle().result();
+      ExecutionResult executionResult = result.reproducibilityBundle().result();
       CommitId commitId = result.reproducibilityBundle().commitId();
       return new RunResultResponse(
           RunResponse.from(snapshot),
