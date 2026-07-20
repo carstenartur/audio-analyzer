@@ -20,9 +20,16 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 class WorkflowHistoryIndexHttpAdapterTest {
 
   @Test
-  void searchReturnsExactCommitIdentityWithoutStorageTypes() throws Exception {
+  void searchReturnsExactCommitIdentityAndForwardsStructuredFilters() throws Exception {
     IndexedWorkflowHistorySearch search = mock(IndexedWorkflowHistorySearch.class);
-    WorkflowHistoryTextQuery query = new WorkflowHistoryTextQuery("wingbeat", 7);
+    WorkflowHistoryTextQuery query =
+        new WorkflowHistoryTextQuery(
+            "wingbeat",
+            "researcher@example.org",
+            "workflows insect",
+            Instant.parse("2026-07-01T00:00:00Z"),
+            Instant.parse("2026-07-19T23:59:59Z"),
+            7);
     when(search.search(query))
         .thenReturn(
             List.of(
@@ -32,14 +39,21 @@ class WorkflowHistoryIndexHttpAdapterTest {
                     "Researcher",
                     "researcher@example.org",
                     Instant.parse("2026-07-19T00:00:00Z"),
-                    List.of("workflow.dsl"))));
+                    List.of("workflows/insect/workflow.dsl"))));
     MockMvc mvc =
         MockMvcBuilders.standaloneSetup(new WorkflowHistoryIndexHttpAdapter(search)).build();
 
-    mvc.perform(get("/workflow/history/index").param("q", "wingbeat").param("limit", "7"))
+    mvc.perform(
+            get("/workflow/history/index")
+                .param("q", "wingbeat")
+                .param("author", "researcher@example.org")
+                .param("path", "workflows insect")
+                .param("from", "2026-07-01T00:00:00Z")
+                .param("to", "2026-07-19T23:59:59Z")
+                .param("limit", "7"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$[0].commitId").value("0123456789012345678901234567890123456789"))
-        .andExpect(jsonPath("$[0].changedPaths[0]").value("workflow.dsl"));
+        .andExpect(jsonPath("$[0].changedPaths[0]").value("workflows/insect/workflow.dsl"));
 
     verify(search).search(query);
   }

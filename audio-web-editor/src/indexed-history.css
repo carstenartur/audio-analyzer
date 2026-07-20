@@ -80,6 +80,21 @@
   gap: 8px;
 }
 
+.indexed-history__filters {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 10px;
+  background: #181825;
+  border: 1px solid #313244;
+  border-radius: 7px;
+}
+
+.indexed-history__filters input {
+  min-width: 0;
+}
+
 .indexed-history__search .action-button {
   grid-column: 1 / -1;
 }
@@ -167,6 +182,7 @@
   }
 
   .indexed-history__search,
+  .indexed-history__filters,
   .indexed-history__maintenance {
     grid-template-columns: 1fr;
   }

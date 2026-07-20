@@ -5,6 +5,7 @@ import {
   historyHitLabel,
   indexedHistoryRebuildUrl,
   indexedHistorySearchUrl,
+  localHistoryTimeToInstant,
   normalizeHistorySearchLimit,
   visibleChangedPaths,
 } from './indexedHistorySearch.mjs';
@@ -56,6 +57,10 @@ export function IndexedWorkflowHistoryPanel() {
   const [availability, setAvailability] = useState<Availability>('probing');
   const [expanded, setExpanded] = useState(false);
   const [query, setQuery] = useState('');
+  const [authorEmail, setAuthorEmail] = useState('');
+  const [pathText, setPathText] = useState('');
+  const [fromTime, setFromTime] = useState('');
+  const [toTime, setToTime] = useState('');
   const [branch, setBranch] = useState('main');
   const [limit, setLimit] = useState(20);
   const [hits, setHits] = useState<IndexedHistoryHit[]>([]);
@@ -92,14 +97,36 @@ export function IndexedWorkflowHistoryPanel() {
   }, []);
 
   const search = useCallback(async () => {
+    const from = localHistoryTimeToInstant(fromTime);
+    const to = localHistoryTimeToInstant(toTime);
+    if (fromTime.trim().length > 0 && from === null) {
+      setError('The lower time bound is not a valid date and time.');
+      return;
+    }
+    if (toTime.trim().length > 0 && to === null) {
+      setError('The upper time bound is not a valid date and time.');
+      return;
+    }
+    if (from !== null && to !== null && from > to) {
+      setError('The lower time bound must not be after the upper time bound.');
+      return;
+    }
+
     setSearching(true);
     setError(null);
     try {
-      const nextHits = await getJson<IndexedHistoryHit[]>(indexedHistorySearchUrl(query, limit));
+      const nextHits = await getJson<IndexedHistoryHit[]>(
+        indexedHistorySearchUrl(query, limit, {
+          authorEmail,
+          pathText,
+          from,
+          to,
+        }),
+      );
       setHits(nextHits);
       setStatus(
         nextHits.length === 0
-          ? 'No indexed checkpoints match this query.'
+          ? 'No indexed checkpoints match these filters.'
           : `${nextHits.length} indexed checkpoint${nextHits.length === 1 ? '' : 's'} found.`,
       );
     } catch (failure) {
@@ -111,7 +138,7 @@ export function IndexedWorkflowHistoryPanel() {
     } finally {
       setSearching(false);
     }
-  }, [limit, query]);
+  }, [authorEmail, fromTime, limit, pathText, query, toTime]);
 
   const rebuild = useCallback(async () => {
     setRebuilding(true);
@@ -173,7 +200,7 @@ export function IndexedWorkflowHistoryPanel() {
           <header className="indexed-history__header">
             <div>
               <h2>Indexed version history</h2>
-              <p>Search commit messages, changed paths and deterministic workflow DSL content.</p>
+              <p>Combine content, author, changed-path and inclusive time filters.</p>
             </div>
             <button
               aria-label="Close indexed version history"
@@ -212,6 +239,46 @@ export function IndexedWorkflowHistoryPanel() {
                 onChange={(event) => setLimit(normalizeHistorySearchLimit(event.target.value))}
               />
             </label>
+            <div className="indexed-history__filters">
+              <label className="field">
+                Exact author email
+                <input
+                  autoComplete="off"
+                  data-testid="indexed-history-author"
+                  placeholder="researcher@example.org"
+                  type="email"
+                  value={authorEmail}
+                  onChange={(event) => setAuthorEmail(event.target.value)}
+                />
+              </label>
+              <label className="field">
+                Changed-path terms
+                <input
+                  data-testid="indexed-history-path"
+                  placeholder="workflows insect"
+                  value={pathText}
+                  onChange={(event) => setPathText(event.target.value)}
+                />
+              </label>
+              <label className="field">
+                From, inclusive
+                <input
+                  data-testid="indexed-history-from"
+                  type="datetime-local"
+                  value={fromTime}
+                  onChange={(event) => setFromTime(event.target.value)}
+                />
+              </label>
+              <label className="field">
+                To, inclusive
+                <input
+                  data-testid="indexed-history-to"
+                  type="datetime-local"
+                  value={toTime}
+                  onChange={(event) => setToTime(event.target.value)}
+                />
+              </label>
+            </div>
             <button
               className="action-button"
               data-testid="indexed-history-search"
@@ -224,7 +291,7 @@ export function IndexedWorkflowHistoryPanel() {
 
           <div className="indexed-history__maintenance">
             <label className="field">
-              Authoritative branch
+              Authoritative branch to rebuild
               <input
                 data-testid="indexed-history-branch"
                 value={branch}

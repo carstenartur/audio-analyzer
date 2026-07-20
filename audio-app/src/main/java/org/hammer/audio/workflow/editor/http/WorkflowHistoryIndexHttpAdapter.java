@@ -26,12 +26,20 @@ public final class WorkflowHistoryIndexHttpAdapter {
     this.historySearch = Objects.requireNonNull(historySearch, "historySearch");
   }
 
-  /** Searches messages, paths and deterministic workflow DSL content. */
+  /**
+   * Searches messages, paths and deterministic workflow DSL content with optional metadata filters.
+   */
   @GetMapping
   public List<SearchHitResponse> search(
       @RequestParam(name = "q", defaultValue = "") String query,
+      @RequestParam(name = "author", required = false) String authorEmail,
+      @RequestParam(name = "path", required = false) String pathText,
+      @RequestParam(name = "from", required = false) Instant from,
+      @RequestParam(name = "to", required = false) Instant to,
       @RequestParam(name = "limit", defaultValue = DEFAULT_LIMIT) int limit) {
-    return historySearch.search(new WorkflowHistoryTextQuery(query, limit)).stream()
+    return historySearch
+        .search(new WorkflowHistoryTextQuery(query, authorEmail, pathText, from, to, limit))
+        .stream()
         .map(SearchHitResponse::from)
         .toList();
   }

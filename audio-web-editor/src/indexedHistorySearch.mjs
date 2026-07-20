@@ -14,16 +14,39 @@ export function normalizeHistorySearchLimit(value) {
 }
 
 /**
+ * @typedef IndexedHistoryFilters
+ * @property {unknown} [authorEmail]
+ * @property {unknown} [pathText]
+ * @property {unknown} [from]
+ * @property {unknown} [to]
+ */
+
+/**
+ * @param {unknown} value
+ * @returns {string | null}
+ */
+export function localHistoryTimeToInstant(value) {
+  const normalized = String(value ?? '').trim();
+  if (normalized.length === 0) {
+    return null;
+  }
+  const parsed = new Date(normalized);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
+/**
  * @param {unknown} query
  * @param {unknown} [limit]
+ * @param {IndexedHistoryFilters} [filters]
  * @returns {string}
  */
-export function indexedHistorySearchUrl(query, limit = DEFAULT_LIMIT) {
+export function indexedHistorySearchUrl(query, limit = DEFAULT_LIMIT, filters = {}) {
   const parameters = new URLSearchParams();
-  const normalizedQuery = String(query ?? '').trim();
-  if (normalizedQuery.length > 0) {
-    parameters.set('q', normalizedQuery);
-  }
+  setOptional(parameters, 'q', query);
+  setOptional(parameters, 'author', filters.authorEmail);
+  setOptional(parameters, 'path', filters.pathText);
+  setOptional(parameters, 'from', filters.from);
+  setOptional(parameters, 'to', filters.to);
   parameters.set('limit', String(normalizeHistorySearchLimit(limit)));
   return `/workflow/history/index?${parameters.toString()}`;
 }
@@ -67,4 +90,16 @@ export function visibleChangedPaths(paths, maximum = 3) {
     return [];
   }
   return paths.slice(0, maximum).map((path) => String(path));
+}
+
+/**
+ * @param {URLSearchParams} parameters
+ * @param {string} name
+ * @param {unknown} value
+ */
+function setOptional(parameters, name, value) {
+  const normalized = String(value ?? '').trim();
+  if (normalized.length > 0) {
+    parameters.set(name, normalized);
+  }
 }

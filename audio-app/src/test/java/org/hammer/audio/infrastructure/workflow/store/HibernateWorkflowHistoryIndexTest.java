@@ -17,8 +17,10 @@ import org.junit.jupiter.api.Test;
 
 class HibernateWorkflowHistoryIndexTest {
 
+  private static final Instant BASE_TIME = Instant.parse("2026-07-19T00:00:00Z");
+
   @Test
-  void checkpointProjectionReturnsExactLoadableCommitAndRebuildIsIdempotent() {
+  void compoundProjectionQueryReturnsExactLoadableCommitAndRebuildIsIdempotent() {
     Properties properties = new Properties();
     properties.put(
         "hibernate.connection.url", "jdbc:h2:mem:" + UUID.randomUUID() + ";DB_CLOSE_DELAY=-1");
@@ -35,22 +37,37 @@ class HibernateWorkflowHistoryIndexTest {
             new HibernateJGitVersionedWorkflowStore(provider.getSessionFactory(), "search-test")) {
       WorkflowSnapshot baseline = new WorkflowSnapshot("workflow.search", "node baseline");
       WorkflowSnapshot matching =
-          new WorkflowSnapshot("workflow.search", "node classifier label wingbeat-needle");
+          new WorkflowSnapshot("workflow.search", "node classifier label wingbeatneedle");
       store.commit("main", baseline, metadata("Baseline checkpoint", 1));
       CommitId matchingCommit = store.commit("main", matching, metadata("Add wingbeat needle", 2));
+      Instant matchingTime = BASE_TIME.plusSeconds(2);
 
-      var hits = store.search(new WorkflowHistoryTextQuery("wingbeat-needle", 10));
+      var hits =
+          store.search(
+              new WorkflowHistoryTextQuery(
+                  "wingbeatneedle",
+                  "search-test@audio-analyzer.invalid",
+                  "workflow",
+                  matchingTime,
+                  matchingTime,
+                  10));
       assertEquals(1, hits.size());
       WorkflowHistoryTextResult hit = hits.getFirst();
       assertEquals(matchingCommit, hit.commitId());
       assertEquals(matching, store.loadAtCommit(hit.commitId()));
       assertTrue(hit.changedPaths().contains("workflow.dsl"));
+      assertEquals(
+          0,
+          store
+              .search(
+                  new WorkflowHistoryTextQuery(
+                      "wingbeatneedle", "nobody@example.org", "workflow", null, null, 10))
+              .size());
       assertEquals(0, store.rebuild("main", -1));
     }
   }
 
   private static CommitMetadata metadata(String message, long seconds) {
-    return new CommitMetadata(
-        "search-test", message, Instant.parse("2026-07-19T00:00:00Z").plusSeconds(seconds));
+    return new CommitMetadata("search-test", message, BASE_TIME.plusSeconds(seconds));
   }
 }
