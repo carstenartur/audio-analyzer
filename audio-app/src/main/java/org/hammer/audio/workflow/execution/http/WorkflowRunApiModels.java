@@ -25,7 +25,15 @@ public final class WorkflowRunApiModels {
     throw new UnsupportedOperationException("Utility class");
   }
 
-  /** Request selecting either an exact session revision or stored commit. */
+  /**
+   * Request selecting either an exact session revision or stored commit.
+   *
+   * @param startCommandId stable idempotency identity supplied by the client
+   * @param sourceKind discriminator for live-session or stored-commit execution
+   * @param sessionId live collaboration-session identifier, otherwise {@code null}
+   * @param expectedRevision exact live semantic revision, otherwise {@code null}
+   * @param commitId exact stored workflow commit, otherwise {@code null}
+   */
   public record StartRunRequest(
       @NotBlank String startCommandId,
       @NotNull SourceKind sourceKind,
@@ -65,7 +73,14 @@ public final class WorkflowRunApiModels {
     }
   }
 
-  /** Stable transport representation of one workflow-run source. */
+  /**
+   * Stable transport representation of one workflow-run source.
+   *
+   * @param kind source discriminator
+   * @param sessionId live collaboration-session identifier, otherwise {@code null}
+   * @param semanticRevision captured live semantic revision, otherwise {@code null}
+   * @param commitId captured stored commit identifier, otherwise {@code null}
+   */
   public record RunSourceResponse(
       SourceKind kind, String sessionId, Long semanticRevision, String commitId) {
 
@@ -79,7 +94,25 @@ public final class WorkflowRunApiModels {
     }
   }
 
-  /** Stable run lifecycle response without executor or persistence implementation types. */
+  /**
+   * Stable run lifecycle response without executor or persistence implementation types.
+   *
+   * @param runId stable run identifier
+   * @param startCommandId client idempotency identity
+   * @param state current lifecycle state
+   * @param mode truthful backend capability mode
+   * @param source exact immutable source provenance
+   * @param workflowId stable workflow identifier
+   * @param snapshotId immutable snapshot identifier
+   * @param planId immutable execution-plan identifier
+   * @param fingerprint SHA-256 fingerprint of the captured canonical DSL
+   * @param capturedAt source capture instant
+   * @param startedAt backend start instant, if started
+   * @param finishedAt terminal instant, if finished
+   * @param progressPercent bounded progress percentage
+   * @param statusMessage current human-readable status
+   * @param violations machine-readable diagnostics
+   */
   public record RunResponse(
       String runId,
       String startCommandId,
@@ -117,14 +150,30 @@ public final class WorkflowRunApiModels {
     }
   }
 
-  /** Machine-readable validation or backend failure detail. */
+  /**
+   * Machine-readable validation or backend failure detail.
+   *
+   * @param code stable diagnostic code
+   * @param message human-readable detail
+   * @param nodeId optional affected workflow node
+   */
   public record ViolationResponse(String code, String message, String nodeId) {
     static ViolationResponse from(Violation violation) {
       return new ViolationResponse(violation.code(), violation.message(), violation.nodeId());
     }
   }
 
-  /** Terminal result with reproducibility provenance and backend artifacts. */
+  /**
+   * Terminal result with reproducibility provenance and backend artifacts.
+   *
+   * @param run terminal run metadata
+   * @param overallStatus aggregate execution status
+   * @param nodeStatuses terminal status by node identifier
+   * @param executionStartedAt execution start instant
+   * @param executionCompletedAt execution completion instant
+   * @param commitId stored source commit, if applicable
+   * @param artifacts backend-specific immutable textual artifacts
+   */
   public record RunResultResponse(
       RunResponse run,
       String overallStatus,
