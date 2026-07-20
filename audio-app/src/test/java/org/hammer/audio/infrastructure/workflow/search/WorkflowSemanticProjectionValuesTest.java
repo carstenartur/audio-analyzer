@@ -15,7 +15,8 @@ class WorkflowSemanticProjectionValuesTest {
     String encoded = WorkflowSemanticProjectionValues.encodeValues(values);
 
     assertFalse(encoded.lines().anyMatch(String::isEmpty));
-    assertEquals(values.stream().sorted().toList(), WorkflowSemanticProjectionValues.decodeValues(encoded));
+    assertEquals(
+        values.stream().sorted().toList(), WorkflowSemanticProjectionValues.decodeValues(encoded));
   }
 
   @Test
