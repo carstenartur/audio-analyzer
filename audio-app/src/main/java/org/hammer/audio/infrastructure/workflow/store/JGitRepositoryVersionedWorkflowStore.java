@@ -24,6 +24,7 @@ import org.hammer.audio.workflow.store.CommitId;
 import org.hammer.audio.workflow.store.CommitInfo;
 import org.hammer.audio.workflow.store.CommitMetadata;
 import org.hammer.audio.workflow.store.RefUpdateResult;
+import org.hammer.audio.workflow.store.StaleWorkflowHeadException;
 import org.hammer.audio.workflow.store.VersionedWorkflowStore;
 import org.hammer.audio.workflow.store.WorkflowSnapshot;
 
@@ -47,6 +48,24 @@ final class JGitRepositoryVersionedWorkflowStore implements VersionedWorkflowSto
 
   @Override
   public CommitId commit(String branch, WorkflowSnapshot snapshot, CommitMetadata metadata) {
+    return commit(branch, null, snapshot, metadata, false);
+  }
+
+  @Override
+  public CommitId commitIfHead(
+      String branch,
+      CommitId expectedHead,
+      WorkflowSnapshot snapshot,
+      CommitMetadata metadata) {
+    return commit(branch, expectedHead, snapshot, metadata, true);
+  }
+
+  private CommitId commit(
+      String branch,
+      CommitId expectedHead,
+      WorkflowSnapshot snapshot,
+      CommitMetadata metadata,
+      boolean conditional) {
     if (branch == null || branch.isBlank()) {
       throw new IllegalArgumentException("branch must not be blank");
     }
@@ -55,6 +74,11 @@ final class JGitRepositoryVersionedWorkflowStore implements VersionedWorkflowSto
     String refName = toRefName(branch);
 
     try (ObjectInserter inserter = repository.newObjectInserter()) {
+      ObjectId parent = repository.resolve(refName);
+      if (conditional) {
+        assertExpectedHead(branch, expectedHead, parent);
+      }
+
       ObjectId blobDsl =
           inserter.insert(Constants.OBJ_BLOB, snapshot.dslText().getBytes(StandardCharsets.UTF_8));
       ObjectId blobWorkflowId =
@@ -66,7 +90,6 @@ final class JGitRepositoryVersionedWorkflowStore implements VersionedWorkflowSto
       formatter.append(WORKFLOW_ID_PATH, FileMode.REGULAR_FILE, blobWorkflowId);
       ObjectId treeId = inserter.insert(formatter);
 
-      ObjectId parent = repository.resolve(refName);
       CommitBuilder commit = new CommitBuilder();
       commit.setTreeId(treeId);
       if (parent != null) {
@@ -86,6 +109,10 @@ final class JGitRepositoryVersionedWorkflowStore implements VersionedWorkflowSto
       update.setRefLogMessage("workflow checkpoint", false);
       RefUpdate.Result result = update.update();
       if (!isSuccessfulRefUpdate(result)) {
+        if (conditional) {
+          throw new StaleWorkflowHeadException(
+              branch, expectedHead, toCommitId(repository.resolve(refName)));
+        }
         throw new IllegalStateException("Failed to update ref '" + refName + "': " + result);
       }
       return new CommitId(commitId.name());
@@ -195,6 +222,18 @@ final class JGitRepositoryVersionedWorkflowStore implements VersionedWorkflowSto
     } catch (IOException ex) {
       throw new IllegalStateException("Failed to load history for ref: " + refName, ex);
     }
+  }
+
+  private static void assertExpectedHead(
+      String branch, CommitId expectedHead, ObjectId actualHead) {
+    ObjectId expectedObjectId = expectedHead == null ? null : parseObjectId(expectedHead);
+    if (!Objects.equals(expectedObjectId, actualHead)) {
+      throw new StaleWorkflowHeadException(branch, expectedHead, toCommitId(actualHead));
+    }
+  }
+
+  private static CommitId toCommitId(ObjectId objectId) {
+    return objectId == null ? null : new CommitId(objectId.name());
   }
 
   private static String toRefName(String branchOrRef) {
