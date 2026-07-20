@@ -28,6 +28,8 @@ public interface WorkflowHistoryAccessPolicy {
    * @return policy that permits every compare and restore command
    */
   static WorkflowHistoryAccessPolicy allowAll() {
-    return (branch, workflowId) -> { };
+    return (branch, workflowId) -> {
+      // Intentionally unrestricted.
+    };
   }
 }
