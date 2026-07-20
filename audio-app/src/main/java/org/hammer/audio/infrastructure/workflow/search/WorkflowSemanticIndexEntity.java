@@ -184,21 +184,24 @@ public class WorkflowSemanticIndexEntity {
 
   @Transient
   @KeywordField(name = PROPERTY_KEYS_FIELD)
-  @IndexingDependency(derivedFrom = @ObjectPath(@PropertyValue(propertyName = "encodedPropertyKeys")))
+  @IndexingDependency(
+      derivedFrom = @ObjectPath(@PropertyValue(propertyName = "encodedPropertyKeys")))
   public List<String> getPropertyKeys() {
     return WorkflowSemanticProjectionValues.decodeValues(encodedPropertyKeys);
   }
 
   @Transient
   @KeywordField(name = PROPERTY_VALUES_FIELD)
-  @IndexingDependency(derivedFrom = @ObjectPath(@PropertyValue(propertyName = "encodedPropertyValues")))
+  @IndexingDependency(
+      derivedFrom = @ObjectPath(@PropertyValue(propertyName = "encodedPropertyValues")))
   public List<String> getPropertyValues() {
     return WorkflowSemanticProjectionValues.decodeValues(encodedPropertyValues);
   }
 
   @Transient
   @KeywordField(name = PROPERTY_PAIRS_FIELD)
-  @IndexingDependency(derivedFrom = @ObjectPath(@PropertyValue(propertyName = "encodedPropertyPairs")))
+  @IndexingDependency(
+      derivedFrom = @ObjectPath(@PropertyValue(propertyName = "encodedPropertyPairs")))
   public List<String> getPropertyPairs() {
     return encodedPropertyPairs == null || encodedPropertyPairs.isBlank()
         ? List.of()
