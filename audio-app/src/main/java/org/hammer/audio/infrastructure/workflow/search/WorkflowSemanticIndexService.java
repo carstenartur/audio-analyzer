@@ -2,7 +2,6 @@ package org.hammer.audio.infrastructure.workflow.search;
 
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -18,10 +17,6 @@ import org.hammer.audio.workflow.store.WorkflowSnapshot;
 import org.hibernate.Session;
 import org.hibernate.SessionFactory;
 import org.hibernate.Transaction;
-import org.hibernate.search.engine.search.predicate.dsl.BooleanPredicateClausesStep;
-import org.hibernate.search.engine.search.predicate.dsl.SearchPredicateFactory;
-import org.hibernate.search.mapper.orm.Search;
-import org.hibernate.search.mapper.orm.session.SearchSession;
 
 /** Maintains and queries Audio Analyzer-owned semantic workflow history. */
 public final class WorkflowSemanticIndexService {
@@ -29,12 +24,14 @@ public final class WorkflowSemanticIndexService {
   private final SessionFactory sessionFactory;
   private final String repositoryName;
   private final WorkflowDslParser parser;
+  private final WorkflowSemanticQueryService queryService;
 
   /** Creates a semantic projection service over the shared application persistence context. */
   public WorkflowSemanticIndexService(SessionFactory sessionFactory, String repositoryName) {
     this.sessionFactory = Objects.requireNonNull(sessionFactory, "sessionFactory");
     this.repositoryName = requireNotBlank(repositoryName, "repositoryName");
     this.parser = new WorkflowDslParser();
+    this.queryService = new WorkflowSemanticQueryService(this.sessionFactory, this.repositoryName);
   }
 
   /**
@@ -144,103 +141,18 @@ public final class WorkflowSemanticIndexService {
 
   /** Searches one branch-specific semantic projection with exact domain filters. */
   public List<WorkflowSemanticHistoryResult> search(WorkflowSemanticHistoryQuery query) {
-    Objects.requireNonNull(query, "query");
-    try (Session session = sessionFactory.openSession()) {
-      SearchSession searchSession = Search.session(session);
-      return searchSession
-          .search(WorkflowSemanticIndexEntity.class)
-          .where(f -> semanticPredicate(f, query.filter()))
-          .sort(f -> f.field("branchPosition").asc())
-          .fetchHits(query.limit())
-          .stream()
-          .map(WorkflowSemanticIndexService::toResult)
-          .toList();
-    }
+    return queryService.search(query);
   }
 
-  /**
-   * Returns every exact commit candidate matching one branch and its domain-semantic predicates.
-   *
-   * @param filter unbounded semantic filter
-   * @return candidate commit identities ordered by branch position
-   */
+  /** Returns every exact commit candidate matching one branch and its semantic predicates. */
   public List<CommitId> findCandidateCommitIds(WorkflowSemanticHistoryFilter filter) {
-    Objects.requireNonNull(filter, "filter");
-    try (Session session = sessionFactory.openSession()) {
-      SearchSession searchSession = Search.session(session);
-      return searchSession
-          .search(WorkflowSemanticIndexEntity.class)
-          .where(f -> semanticPredicate(f, filter))
-          .sort(f -> f.field("branchPosition").asc())
-          .fetchAllHits()
-          .stream()
-          .map(row -> new CommitId(row.getObjectId()))
-          .toList();
-    }
+    return queryService.findCandidateCommitIds(filter);
   }
 
-  /**
-   * Loads branch-specific semantic evidence for an exact final commit set.
-   *
-   * @param branch branch that owns the reachability rows
-   * @param commits exact commits selected by the generic query
-   * @return evidence keyed by object ID
-   */
+  /** Loads branch-specific semantic evidence for an exact final commit set. */
   public Map<String, WorkflowSemanticHistoryResult> findEvidence(
       String branch, Collection<CommitId> commits) {
-    String normalizedBranch = normalizeBranch(branch);
-    Objects.requireNonNull(commits, "commits");
-    List<String> objectIds = commits.stream().map(CommitId::value).distinct().toList();
-    if (objectIds.isEmpty()) {
-      return Map.of();
-    }
-    try (Session session = sessionFactory.openSession()) {
-      List<WorkflowSemanticIndexEntity> rows =
-          session
-              .createQuery(
-                  "FROM WorkflowSemanticIndexEntity s "
-                      + "WHERE s.repositoryName = :repository "
-                      + "AND s.branchName = :branch AND s.objectId IN :objectIds",
-                  WorkflowSemanticIndexEntity.class)
-              .setParameter("repository", repositoryName)
-              .setParameter("branch", normalizedBranch)
-              .setParameter("objectIds", objectIds)
-              .getResultList();
-      Map<String, WorkflowSemanticHistoryResult> evidence = new LinkedHashMap<>();
-      for (WorkflowSemanticIndexEntity row : rows) {
-        evidence.put(row.getObjectId(), toResult(row));
-      }
-      return Map.copyOf(evidence);
-    }
-  }
-
-  private BooleanPredicateClausesStep<?, ?> semanticPredicate(
-      SearchPredicateFactory f, WorkflowSemanticHistoryFilter filter) {
-    BooleanPredicateClausesStep<?, ?> predicate =
-        f.bool()
-            .filter(f.match().field("repositoryName").matching(repositoryName))
-            .filter(f.match().field("branchName").matching(normalizeBranch(filter.branch())));
-    if (filter.workflowId() != null) {
-      predicate.filter(f.match().field("workflowId").matching(filter.workflowId()));
-    }
-    if (filter.nodeId() != null) {
-      predicate.filter(
-          f.match().field(WorkflowSemanticIndexEntity.NODE_IDS_FIELD).matching(filter.nodeId()));
-    }
-    if (filter.nodeType() != null) {
-      predicate.filter(
-          f.match()
-              .field(WorkflowSemanticIndexEntity.NODE_TYPES_FIELD)
-              .matching(filter.nodeType()));
-    }
-    if (filter.labelText() != null) {
-      predicate.must(
-          f.simpleQueryString()
-              .fields("workflowName", "nodeLabelText")
-              .matching(filter.labelText()));
-    }
-    addPropertyPredicates(f, predicate, filter);
-    return predicate;
+    return queryService.findEvidence(branch, commits);
   }
 
   private List<WorkflowSemanticIndexEntity> branchRows(
@@ -255,45 +167,6 @@ public final class WorkflowSemanticIndexService {
         .setParameter("repository", repositoryName)
         .setParameter("branch", normalizedBranch)
         .getResultList();
-  }
-
-  private static void addPropertyPredicates(
-      SearchPredicateFactory f,
-      BooleanPredicateClausesStep<?, ?> predicate,
-      WorkflowSemanticHistoryFilter filter) {
-    if (filter.propertyKey() != null && filter.propertyValue() != null) {
-      predicate.filter(
-          f.match()
-              .field(WorkflowSemanticIndexEntity.PROPERTY_PAIRS_FIELD)
-              .matching(
-                  WorkflowSemanticProjectionValues.encodePair(
-                      filter.propertyKey(), filter.propertyValue())));
-      return;
-    }
-    if (filter.propertyKey() != null) {
-      predicate.filter(
-          f.match()
-              .field(WorkflowSemanticIndexEntity.PROPERTY_KEYS_FIELD)
-              .matching(filter.propertyKey()));
-    }
-    if (filter.propertyValue() != null) {
-      predicate.filter(
-          f.match()
-              .field(WorkflowSemanticIndexEntity.PROPERTY_VALUES_FIELD)
-              .matching(filter.propertyValue()));
-    }
-  }
-
-  private static WorkflowSemanticHistoryResult toResult(WorkflowSemanticIndexEntity row) {
-    return new WorkflowSemanticHistoryResult(
-        new CommitId(row.getObjectId()),
-        row.getBranchName(),
-        row.getWorkflowId(),
-        row.getWorkflowName(),
-        row.getNodeIds(),
-        row.getNodeTypes(),
-        row.getNodeLabels(),
-        WorkflowSemanticProjectionValues.decodePairs(row.getPropertyPairs()));
   }
 
   private static void rollbackIfNecessary(Transaction transaction, boolean committed) {
