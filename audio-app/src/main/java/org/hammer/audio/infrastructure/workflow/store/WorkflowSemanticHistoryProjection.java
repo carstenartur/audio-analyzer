@@ -44,8 +44,7 @@ final class WorkflowSemanticHistoryProjection {
     return indexService.findCandidateCommitIds(Objects.requireNonNull(filter, "filter"));
   }
 
-  Map<String, WorkflowSemanticHistoryResult> evidence(
-      String branch, Collection<CommitId> commits) {
+  Map<String, WorkflowSemanticHistoryResult> evidence(String branch, Collection<CommitId> commits) {
     return indexService.findEvidence(branch, commits);
   }
 

@@ -219,18 +219,13 @@ public final class WorkflowSemanticIndexService {
     BooleanPredicateClausesStep<?, ?> predicate =
         f.bool()
             .filter(f.match().field("repositoryName").matching(repositoryName))
-            .filter(
-                f.match()
-                    .field("branchName")
-                    .matching(normalizeBranch(filter.branch())));
+            .filter(f.match().field("branchName").matching(normalizeBranch(filter.branch())));
     if (filter.workflowId() != null) {
       predicate.filter(f.match().field("workflowId").matching(filter.workflowId()));
     }
     if (filter.nodeId() != null) {
       predicate.filter(
-          f.match()
-              .field(WorkflowSemanticIndexEntity.NODE_IDS_FIELD)
-              .matching(filter.nodeId()));
+          f.match().field(WorkflowSemanticIndexEntity.NODE_IDS_FIELD).matching(filter.nodeId()));
     }
     if (filter.nodeType() != null) {
       predicate.filter(

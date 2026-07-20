@@ -132,8 +132,7 @@ public final class WorkflowCombinedHistoryHttpAdapter {
     }
 
     static CombinedHitResponse from(WorkflowCombinedHistoryResult result) {
-      return new CombinedHitResponse(
-          CommitEvidence.from(result), SemanticEvidence.from(result));
+      return new CombinedHitResponse(CommitEvidence.from(result), SemanticEvidence.from(result));
     }
   }
 

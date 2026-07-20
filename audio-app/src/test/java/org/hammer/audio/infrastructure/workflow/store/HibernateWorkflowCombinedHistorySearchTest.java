@@ -58,23 +58,14 @@ class HibernateWorkflowCombinedHistorySearchTest {
           store.commit(
               "main", snapshot("classifier", "safe"), metadata("Wingbeat candidate final", 3));
       store.commit(
-          "main",
-          snapshot("source", "unsafe"),
-          metadata("Wingbeat newer nonsemantic result", 4));
+          "main", snapshot("source", "unsafe"), metadata("Wingbeat newer nonsemantic result", 4));
       store.commit(
-          "experiment",
-          snapshot("classifier", "safe"),
-          metadata("Wingbeat other branch", 5));
+          "experiment", snapshot("classifier", "safe"), metadata("Wingbeat other branch", 5));
 
       WorkflowCombinedHistoryQuery query =
           new WorkflowCombinedHistoryQuery(
               new WorkflowHistoryTextQuery(
-                  "",
-                  "combined-test@audio-analyzer.invalid",
-                  "workflow",
-                  null,
-                  null,
-                  1),
+                  "", "combined-test@audio-analyzer.invalid", "workflow", null, null, 1),
               new WorkflowSemanticHistoryFilter(
                   "main", WORKFLOW_ID, null, "classifier", null, "mode", "safe"));
 
@@ -125,8 +116,7 @@ class HibernateWorkflowCombinedHistorySearchTest {
             new Metadata(Map.of("mode", mode)));
     Workflow workflow =
         new Workflow(WORKFLOW_ID, "Combined history workflow", List.of(node), List.of());
-    return new WorkflowSnapshot(
-        workflow.id(), new WorkflowDslSerializer().serialize(workflow));
+    return new WorkflowSnapshot(workflow.id(), new WorkflowDslSerializer().serialize(workflow));
   }
 
   private static CommitMetadata metadata(String message, long seconds) {

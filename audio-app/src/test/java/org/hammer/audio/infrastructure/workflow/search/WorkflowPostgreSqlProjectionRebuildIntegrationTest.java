@@ -102,13 +102,7 @@ class WorkflowPostgreSqlProjectionRebuildIntegrationTest {
 
         WorkflowSemanticHistoryFilter semanticFilter =
             new WorkflowSemanticHistoryFilter(
-                "main",
-                WORKFLOW_ID,
-                "node.classifier",
-                "classifier",
-                "wingbeat",
-                "mode",
-                "safe");
+                "main", WORKFLOW_ID, "node.classifier", "classifier", "wingbeat", "mode", "safe");
         List<WorkflowSemanticHistoryResult> semanticHits =
             store.searchSemantic(
                 new WorkflowSemanticHistoryQuery(

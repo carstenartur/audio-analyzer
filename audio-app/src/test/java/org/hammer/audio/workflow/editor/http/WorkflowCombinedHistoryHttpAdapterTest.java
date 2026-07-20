@@ -27,18 +27,12 @@ class WorkflowCombinedHistoryHttpAdapterTest {
 
   @Test
   void forwardsNestedFiltersAndReturnsGenericAndSemanticEvidence() throws Exception {
-    IndexedWorkflowCombinedHistorySearch search =
-        mock(IndexedWorkflowCombinedHistorySearch.class);
+    IndexedWorkflowCombinedHistorySearch search = mock(IndexedWorkflowCombinedHistorySearch.class);
     Instant timestamp = Instant.parse("2026-07-20T10:00:00Z");
     WorkflowCombinedHistoryQuery query =
         new WorkflowCombinedHistoryQuery(
             new WorkflowHistoryTextQuery(
-                "wingbeat",
-                "researcher@example.org",
-                "workflow",
-                timestamp,
-                timestamp,
-                7),
+                "wingbeat", "researcher@example.org", "workflow", timestamp, timestamp, 7),
             new WorkflowSemanticHistoryFilter(
                 "experiment",
                 "workflow.insect",
@@ -98,8 +92,7 @@ class WorkflowCombinedHistoryHttpAdapterTest {
                     """))
         .andExpect(status().isOk())
         .andExpect(
-            jsonPath("$[0].commit.commitId")
-                .value("0123456789012345678901234567890123456789"))
+            jsonPath("$[0].commit.commitId").value("0123456789012345678901234567890123456789"))
         .andExpect(jsonPath("$[0].commit.changedPaths[0]").value("workflow.dsl"))
         .andExpect(jsonPath("$[0].semantics.branch").value("experiment"))
         .andExpect(jsonPath("$[0].semantics.workflowId").value("workflow.insect"))
