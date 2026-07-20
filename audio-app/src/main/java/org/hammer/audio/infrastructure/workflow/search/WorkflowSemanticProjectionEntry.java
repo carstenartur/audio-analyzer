@@ -4,7 +4,13 @@ import java.util.Objects;
 import org.hammer.audio.workflow.store.CommitId;
 import org.hammer.audio.workflow.store.WorkflowSnapshot;
 
-/** One branch position and authoritative snapshot supplied to the semantic projector. */
+/**
+ * One branch position and authoritative snapshot supplied to the semantic projector.
+ *
+ * @param commitId exact authoritative Git commit
+ * @param branchPosition zero-based newest-first position on the branch
+ * @param snapshot authoritative workflow snapshot loaded from the commit
+ */
 public record WorkflowSemanticProjectionEntry(
     CommitId commitId, int branchPosition, WorkflowSnapshot snapshot) {
 
