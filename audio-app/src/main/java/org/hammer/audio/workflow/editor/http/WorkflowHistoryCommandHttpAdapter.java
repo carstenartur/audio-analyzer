@@ -124,6 +124,14 @@ public final class WorkflowHistoryCommandHttpAdapter {
       WorkflowProjection after,
       List<ChangeResponse> changes) {
 
+    public ComparisonResponse {
+      beforeCommitId = Objects.requireNonNull(beforeCommitId, "beforeCommitId");
+      afterCommitId = Objects.requireNonNull(afterCommitId, "afterCommitId");
+      before = Objects.requireNonNull(before, "before");
+      after = Objects.requireNonNull(after, "after");
+      changes = List.copyOf(Objects.requireNonNull(changes, "changes"));
+    }
+
     static ComparisonResponse from(WorkflowHistoryComparison comparison) {
       return new ComparisonResponse(
           comparison.beforeCommit().value(),
