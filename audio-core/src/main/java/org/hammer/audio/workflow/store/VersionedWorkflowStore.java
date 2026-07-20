@@ -44,10 +44,7 @@ public interface VersionedWorkflowStore {
    * @throws StaleWorkflowHeadException when the observed HEAD differs
    */
   default CommitId commitIfHead(
-      String branch,
-      CommitId expectedHead,
-      WorkflowSnapshot snapshot,
-      CommitMetadata metadata) {
+      String branch, CommitId expectedHead, WorkflowSnapshot snapshot, CommitMetadata metadata) {
     List<CommitInfo> current = history(branch, 1);
     CommitId actualHead = current.isEmpty() ? null : current.getFirst().commitId();
     if (!Objects.equals(expectedHead, actualHead)) {

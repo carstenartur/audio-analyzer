@@ -25,12 +25,9 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 class WorkflowHistoryCommandHttpAdapterTest {
 
-  private static final CommitId BEFORE =
-      new CommitId("1111111111111111111111111111111111111111");
-  private static final CommitId AFTER =
-      new CommitId("2222222222222222222222222222222222222222");
-  private static final CommitId RESTORED =
-      new CommitId("3333333333333333333333333333333333333333");
+  private static final CommitId BEFORE = new CommitId("1111111111111111111111111111111111111111");
+  private static final CommitId AFTER = new CommitId("2222222222222222222222222222222222222222");
+  private static final CommitId RESTORED = new CommitId("3333333333333333333333333333333333333333");
   private static final Instant RESTORE_TIME = Instant.parse("2026-07-20T08:00:00Z");
 
   @Test

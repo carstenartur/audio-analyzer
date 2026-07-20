@@ -26,16 +26,13 @@ class WorkflowHistoryCommandServiceTest {
     InMemoryVersionedWorkflowStore store = new InMemoryVersionedWorkflowStore();
     Workflow baseline = workflow("Baseline", List.of());
     Workflow changed =
-        workflow(
-            "Changed",
-            List.of(new Node("node.gain", "gain", "Gain", List.of(), List.of())));
+        workflow("Changed", List.of(new Node("node.gain", "gain", "Gain", List.of(), List.of())));
     CommitId baselineCommit = store.commit("main", snapshot(baseline), metadata("baseline", 1));
     CommitId changedCommit = store.commit("main", snapshot(changed), metadata("changed", 2));
     WorkflowHistoryCommandService service =
         new WorkflowHistoryCommandService(store, WorkflowHistoryAccessPolicy.allowAll());
 
-    WorkflowHistoryComparison comparison =
-        service.compare("main", baselineCommit, changedCommit);
+    WorkflowHistoryComparison comparison = service.compare("main", baselineCommit, changedCommit);
     assertEquals(baseline, comparison.beforeWorkflow());
     assertEquals(changed, comparison.afterWorkflow());
     assertEquals(1, comparison.diff().changes().size());
@@ -63,8 +60,7 @@ class WorkflowHistoryCommandServiceTest {
         new WorkflowHistoryCommandService(store, WorkflowHistoryAccessPolicy.allowAll());
 
     assertThrows(
-        IllegalArgumentException.class,
-        () -> allowed.compare("main", mainCommit, otherCommit));
+        IllegalArgumentException.class, () -> allowed.compare("main", mainCommit, otherCommit));
     assertThrows(
         StaleWorkflowHeadException.class,
         () ->

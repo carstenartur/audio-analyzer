@@ -21,11 +21,7 @@ public final class WorkflowHistoryCommandExceptionHandler {
   public ProblemDetail handleStaleHead(
       StaleWorkflowHeadException exception, HttpServletRequest request) {
     ProblemDetail problem =
-        problem(
-            "stale-workflow-head",
-            "Stale workflow head",
-            exception.getMessage(),
-            request);
+        problem("stale-workflow-head", "Stale workflow head", exception.getMessage(), request);
     problem.setProperty("code", "STALE_WORKFLOW_HEAD");
     problem.setProperty("branch", exception.branch());
     problem.setProperty("expectedHeadCommitId", value(exception.expectedHead()));

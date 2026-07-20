@@ -62,9 +62,7 @@ public final class WorkflowHistoryCommandHttpAdapter {
    * @param afterCommitId exact later commit
    */
   public record CompareRequest(
-      @NotBlank String branch,
-      @NotBlank String beforeCommitId,
-      @NotBlank String afterCommitId) {}
+      @NotBlank String branch, @NotBlank String beforeCommitId, @NotBlank String afterCommitId) {}
 
   /**
    * Non-destructive restore request.
@@ -153,10 +151,7 @@ public final class WorkflowHistoryCommandHttpAdapter {
    * @param restoredCommitId newly created audit commit
    */
   public record RestoreResponse(
-      String branch,
-      String targetCommitId,
-      String previousHeadCommitId,
-      String restoredCommitId) {
+      String branch, String targetCommitId, String previousHeadCommitId, String restoredCommitId) {
 
     static RestoreResponse from(WorkflowRestoreResult result) {
       return new RestoreResponse(

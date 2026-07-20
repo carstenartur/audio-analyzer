@@ -53,10 +53,7 @@ final class JGitRepositoryVersionedWorkflowStore implements VersionedWorkflowSto
 
   @Override
   public CommitId commitIfHead(
-      String branch,
-      CommitId expectedHead,
-      WorkflowSnapshot snapshot,
-      CommitMetadata metadata) {
+      String branch, CommitId expectedHead, WorkflowSnapshot snapshot, CommitMetadata metadata) {
     return commit(branch, expectedHead, snapshot, metadata, true);
   }
 

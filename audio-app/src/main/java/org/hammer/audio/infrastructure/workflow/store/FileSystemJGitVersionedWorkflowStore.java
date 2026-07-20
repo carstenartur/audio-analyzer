@@ -40,10 +40,7 @@ public final class FileSystemJGitVersionedWorkflowStore
 
   @Override
   public CommitId commitIfHead(
-      String branch,
-      CommitId expectedHead,
-      WorkflowSnapshot snapshot,
-      CommitMetadata metadata) {
+      String branch, CommitId expectedHead, WorkflowSnapshot snapshot, CommitMetadata metadata) {
     return delegate.commitIfHead(branch, expectedHead, snapshot, metadata);
   }
 

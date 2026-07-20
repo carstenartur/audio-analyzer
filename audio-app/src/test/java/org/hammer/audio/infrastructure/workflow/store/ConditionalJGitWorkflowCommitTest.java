@@ -33,7 +33,9 @@ class ConditionalJGitWorkflowCommitTest {
       assertThrows(
           StaleWorkflowHeadException.class,
           () -> store.commitIfHead("main", first, baseline, metadata("stale", 3)));
-      assertEquals(List.of(second, first), store.history("main", 10).stream().map(info -> info.commitId()).toList());
+      assertEquals(
+          List.of(second, first),
+          store.history("main", 10).stream().map(info -> info.commitId()).toList());
 
       CommitId restored =
           store.commitIfHead("main", second, baseline, metadata("restore baseline", 4));

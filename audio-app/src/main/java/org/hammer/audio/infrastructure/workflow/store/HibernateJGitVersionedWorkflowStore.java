@@ -76,10 +76,7 @@ public final class HibernateJGitVersionedWorkflowStore
 
   @Override
   public CommitId commitIfHead(
-      String branch,
-      CommitId expectedHead,
-      WorkflowSnapshot snapshot,
-      CommitMetadata metadata) {
+      String branch, CommitId expectedHead, WorkflowSnapshot snapshot, CommitMetadata metadata) {
     CommitId commitId = delegate.commitIfHead(branch, expectedHead, snapshot, metadata);
     indexBestEffort(branch, commitId, snapshot);
     return commitId;
