@@ -48,6 +48,7 @@ public final class WorkflowSemanticIndexService {
 
     try (Session session = sessionFactory.openSession()) {
       Transaction transaction = session.beginTransaction();
+      boolean committed = false;
       try {
         List<WorkflowSemanticIndexEntity> existingRows =
             branchRows(session, normalizedBranch, true);
@@ -75,10 +76,10 @@ public final class WorkflowSemanticIndexService {
           olderRows.get(position).setBranchPosition(position + 1);
         }
         transaction.commit();
+        committed = true;
         return created;
-      } catch (RuntimeException failure) {
-        transaction.rollback();
-        throw failure;
+      } finally {
+        rollbackIfNecessary(transaction, committed);
       }
     }
   }
@@ -101,6 +102,7 @@ public final class WorkflowSemanticIndexService {
 
     try (Session session = sessionFactory.openSession()) {
       Transaction transaction = session.beginTransaction();
+      boolean committed = false;
       try {
         Map<String, WorkflowSemanticIndexEntity> existingByObjectId = new HashMap<>();
         for (WorkflowSemanticIndexEntity row : branchRows(session, normalizedBranch, false)) {
@@ -129,10 +131,10 @@ public final class WorkflowSemanticIndexService {
         }
         existingByObjectId.values().forEach(session::remove);
         transaction.commit();
+        committed = true;
         return created;
-      } catch (RuntimeException failure) {
-        transaction.rollback();
-        throw failure;
+      } finally {
+        rollbackIfNecessary(transaction, committed);
       }
     }
   }
@@ -236,6 +238,12 @@ public final class WorkflowSemanticIndexService {
         row.getNodeTypes(),
         row.getNodeLabels(),
         WorkflowSemanticProjectionValues.decodePairs(row.getPropertyPairs()));
+  }
+
+  private static void rollbackIfNecessary(Transaction transaction, boolean committed) {
+    if (!committed && transaction.isActive()) {
+      transaction.rollback();
+    }
   }
 
   static String normalizeBranch(String branch) {
