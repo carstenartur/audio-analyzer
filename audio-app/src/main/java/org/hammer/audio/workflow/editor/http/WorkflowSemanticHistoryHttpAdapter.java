@@ -28,9 +28,7 @@ public final class WorkflowSemanticHistoryHttpAdapter {
   /** Searches exact workflow semantics derived from commits reachable on one branch. */
   @GetMapping
   public List<SemanticHitResponse> search(@ModelAttribute SemanticSearchRequest request) {
-    return semanticSearch
-        .searchSemantic(request.toQuery())
-        .stream()
+    return semanticSearch.searchSemantic(request.toQuery()).stream()
         .map(SemanticHitResponse::from)
         .toList();
   }
