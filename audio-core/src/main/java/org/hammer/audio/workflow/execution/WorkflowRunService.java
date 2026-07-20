@@ -266,7 +266,7 @@ public final class WorkflowRunService {
     } catch (InterruptedException exception) {
       Thread.currentThread().interrupt();
       record.fail(exception);
-    } catch (Exception exception) {
+    } catch (WorkflowExecutionBackendException | RuntimeException exception) {
       record.fail(exception);
     }
   }
@@ -407,6 +407,10 @@ public final class WorkflowRunService {
       }
     }
 
+    private synchronized boolean isCancellationRequested() {
+      return cancellationRequested;
+    }
+
     private synchronized void complete(Result result) {
       terminalResult = result;
       ExecutionStatus overall = result.reproducibilityBundle().result().overallStatus();
@@ -452,9 +456,7 @@ public final class WorkflowRunService {
       return new Control() {
         @Override
         public boolean cancellationRequested() {
-          synchronized (RunRecord.this) {
-            return RunRecord.this.cancellationRequested;
-          }
+          return RunRecord.this.isCancellationRequested();
         }
 
         @Override
