@@ -37,7 +37,9 @@ public record WorkflowSemanticHistoryResult(
     properties = List.copyOf(Objects.requireNonNull(properties, "properties"));
   }
 
-  /** Returns distinct metadata keys as convenience evidence without losing {@link #properties()}. */
+  /**
+   * Returns distinct metadata keys as convenience evidence without losing {@link #properties()}.
+   */
   public List<String> propertyKeys() {
     return properties.stream().map(WorkflowSemanticProperty::key).distinct().sorted().toList();
   }
