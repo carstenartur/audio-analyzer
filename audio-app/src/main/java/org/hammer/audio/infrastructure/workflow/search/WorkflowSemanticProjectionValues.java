@@ -13,6 +13,7 @@ import java.util.stream.Collectors;
 import org.hammer.audio.workflow.Node;
 import org.hammer.audio.workflow.Workflow;
 import org.hammer.audio.workflow.dsl.WorkflowDslParser;
+import org.hammer.audio.workflow.history.WorkflowSemanticProperty;
 import org.hammer.audio.workflow.store.WorkflowSnapshot;
 
 /** Deterministically extracted workflow-domain values used by the disposable semantic index. */
@@ -93,6 +94,26 @@ record WorkflowSemanticProjectionValues(
     return encodeValue(requireNotBlank(key, "propertyKey"))
         + "."
         + encodeValue(Objects.requireNonNull(value, "propertyValue"));
+  }
+
+  static List<WorkflowSemanticProperty> decodePairs(Collection<String> encodedPairs) {
+    Objects.requireNonNull(encodedPairs, "encodedPairs");
+    return encodedPairs.stream()
+        .map(WorkflowSemanticProjectionValues::decodePair)
+        .sorted(
+            Comparator.comparing(WorkflowSemanticProperty::key)
+                .thenComparing(WorkflowSemanticProperty::value))
+        .toList();
+  }
+
+  private static WorkflowSemanticProperty decodePair(String encodedPair) {
+    int separator = Objects.requireNonNull(encodedPair, "encodedPair").indexOf('.');
+    if (separator <= 0 || separator == encodedPair.length() - 1) {
+      throw new IllegalArgumentException("Invalid semantic property-pair encoding");
+    }
+    return new WorkflowSemanticProperty(
+        decodeValue(encodedPair.substring(0, separator)),
+        decodeValue(encodedPair.substring(separator + 1)));
   }
 
   private static void addMetadata(
