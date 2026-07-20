@@ -9,14 +9,10 @@ import java.util.Objects;
 import org.hammer.audio.workflow.store.CommitId;
 
 /** Framework-independent command, lifecycle and backend contracts for immutable workflow runs. */
-public final class WorkflowRunModels {
-
-  private WorkflowRunModels() {
-    throw new UnsupportedOperationException("Utility class");
-  }
+public interface WorkflowRunModels {
 
   /** Truthful execution capability exposed to clients. */
-  public enum Mode {
+  enum Mode {
     /** Topological lifecycle simulation without audio computation. */
     SIMULATION,
     /** A backend that performs real workflow computation. */
@@ -24,7 +20,7 @@ public final class WorkflowRunModels {
   }
 
   /** Process-local lifecycle of one immutable run. */
-  public enum State {
+  enum State {
     QUEUED,
     RUNNING,
     CANCEL_REQUESTED,
@@ -58,13 +54,13 @@ public final class WorkflowRunModels {
   }
 
   /** Kind of immutable source captured before dispatch. */
-  public enum SourceKind {
+  enum SourceKind {
     LIVE_SESSION,
     STORED_COMMIT
   }
 
   /** Transport-neutral selector for the workflow version to execute. */
-  public sealed interface Source permits LiveSessionSource, StoredCommitSource {
+  sealed interface Source permits LiveSessionSource, StoredCommitSource {
     /** Returns the source discriminator. */
     SourceKind kind();
   }
@@ -75,7 +71,7 @@ public final class WorkflowRunModels {
    * @param sessionId stable collaboration-session identifier
    * @param expectedRevision exact semantic revision required by the caller
    */
-  public record LiveSessionSource(String sessionId, long expectedRevision) implements Source {
+  record LiveSessionSource(String sessionId, long expectedRevision) implements Source {
     public LiveSessionSource {
       requireNotBlank(sessionId, "sessionId");
       if (expectedRevision < 0) {
@@ -94,7 +90,7 @@ public final class WorkflowRunModels {
    *
    * @param commitId immutable version-control identifier
    */
-  public record StoredCommitSource(CommitId commitId) implements Source {
+  record StoredCommitSource(CommitId commitId) implements Source {
     public StoredCommitSource {
       Objects.requireNonNull(commitId, "commitId");
     }
@@ -111,7 +107,7 @@ public final class WorkflowRunModels {
    * @param startCommandId stable transport-retry identity
    * @param source exact workflow source to capture
    */
-  public record Command(String startCommandId, Source source) {
+  record Command(String startCommandId, Source source) {
     public Command {
       StableExecutionIds.requireStable(startCommandId, "startCommandId");
       Objects.requireNonNull(source, "source");
@@ -125,9 +121,9 @@ public final class WorkflowRunModels {
    * @param message human-readable diagnostic
    * @param nodeId optional affected node identifier
    */
-  public record Violation(String code, String message, String nodeId) implements Serializable {
+  record Violation(String code, String message, String nodeId) implements Serializable {
 
-    @Serial private static final long serialVersionUID = 1L;
+    @Serial long serialVersionUID = 1L;
 
     public Violation {
       requireNotBlank(code, "code");
@@ -152,7 +148,7 @@ public final class WorkflowRunModels {
    * @param commitId stored source commit, otherwise {@code null}
    * @param capturedAt instant at which the immutable input was captured
    */
-  public record Input(
+  record Input(
       String runId,
       String startCommandId,
       Source source,
@@ -193,7 +189,7 @@ public final class WorkflowRunModels {
    * @param reproducibilityBundle terminal execution evidence
    * @param artifacts backend-specific immutable textual artifacts
    */
-  public record Result(ReproducibilityBundle reproducibilityBundle, Map<String, String> artifacts) {
+  record Result(ReproducibilityBundle reproducibilityBundle, Map<String, String> artifacts) {
     public Result {
       Objects.requireNonNull(reproducibilityBundle, "reproducibilityBundle");
       artifacts = Map.copyOf(Objects.requireNonNull(artifacts, "artifacts"));
@@ -221,7 +217,7 @@ public final class WorkflowRunModels {
    * @param statusMessage current human-readable status
    * @param violations immutable diagnostics accumulated by the run
    */
-  public record Snapshot(
+  record Snapshot(
       String runId,
       String startCommandId,
       State state,
@@ -259,7 +255,7 @@ public final class WorkflowRunModels {
   }
 
   /** Replaceable execution adapter. */
-  public interface ExecutionBackend {
+  interface ExecutionBackend {
     /** Returns whether the adapter simulates or performs computation. */
     Mode mode();
 
@@ -272,7 +268,7 @@ public final class WorkflowRunModels {
   }
 
   /** Cooperative cancellation and progress channel supplied to a backend. */
-  public interface Control {
+  interface Control {
     /** Returns whether cancellation has been requested. */
     boolean cancellationRequested();
 
