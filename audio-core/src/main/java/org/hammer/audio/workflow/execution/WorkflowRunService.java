@@ -69,9 +69,6 @@ public final class WorkflowRunService {
         store,
         backend,
         executor,
-        new WorkflowDslParser(),
-        new WorkflowDslSerializer(),
-        new WorkflowValidator(),
         Clock.systemUTC(),
         () -> "run-" + UUID.randomUUID());
   }
@@ -81,18 +78,15 @@ public final class WorkflowRunService {
       VersionedWorkflowStore store,
       ExecutionBackend backend,
       Executor executor,
-      WorkflowDslParser parser,
-      WorkflowDslSerializer serializer,
-      WorkflowValidator validator,
       Clock clock,
       Supplier<String> runIdSupplier) {
     this.sessions = Objects.requireNonNull(sessions, "sessions");
     this.store = store;
     this.backend = Objects.requireNonNull(backend, "backend");
     this.executor = Objects.requireNonNull(executor, "executor");
-    this.parser = Objects.requireNonNull(parser, "parser");
-    this.serializer = Objects.requireNonNull(serializer, "serializer");
-    this.validator = Objects.requireNonNull(validator, "validator");
+    this.parser = new WorkflowDslParser();
+    this.serializer = new WorkflowDslSerializer();
+    this.validator = new WorkflowValidator();
     this.clock = Objects.requireNonNull(clock, "clock");
     this.runIdSupplier = Objects.requireNonNull(runIdSupplier, "runIdSupplier");
   }
@@ -338,7 +332,20 @@ public final class WorkflowRunService {
       Workflow workflow,
       String dslText,
       Long semanticRevision,
-      CommitId commitId) {}
+      CommitId commitId) {
+    private CapturedSource {
+      StableExecutionIds.requireStable(workflowId, "workflowId");
+      Objects.requireNonNull(workflow, "workflow");
+      Objects.requireNonNull(dslText, "dslText");
+      if (semanticRevision != null && semanticRevision < 0) {
+        throw new IllegalArgumentException("semanticRevision must be null or >= 0");
+      }
+      if ((semanticRevision == null) == (commitId == null)) {
+        throw new IllegalArgumentException(
+            "Captured source requires exactly one of semanticRevision or commitId");
+      }
+    }
+  }
 
   private final class RunRecord {
     private final Input input;
