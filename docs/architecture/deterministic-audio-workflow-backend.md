@@ -2,7 +2,7 @@
 
 Issue #274 introduces the first workflow backend that performs real offline audio computation. It
 replaces the production simulation adapter without changing the run REST contract introduced by issue
-#273.
+273.
 
 ## Supported vertical slice
 
