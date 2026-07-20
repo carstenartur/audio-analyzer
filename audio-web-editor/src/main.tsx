@@ -5,6 +5,7 @@ import { IndexedWorkflowHistoryPanel } from './IndexedWorkflowHistoryPanel';
 import WorkflowEditorApp from './WorkflowEditorApp';
 import './styles.css';
 import './indexed-history.css';
+import './workflow-run.css';
 
 const ACTOR_STORAGE_KEY = 'audio-analyzer.workflow.actor';
 
