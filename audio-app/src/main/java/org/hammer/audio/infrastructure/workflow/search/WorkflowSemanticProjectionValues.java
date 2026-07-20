@@ -84,7 +84,8 @@ record WorkflowSemanticProjectionValues(
     if (encodedValues == null || encodedValues.isBlank()) {
       return List.of();
     }
-    return encodedValues.lines()
+    return encodedValues
+        .lines()
         .filter(value -> !value.isBlank())
         .map(WorkflowSemanticProjectionValues::decodeValue)
         .toList();
@@ -117,10 +118,7 @@ record WorkflowSemanticProjectionValues(
   }
 
   private static void addMetadata(
-      Map<String, String> entries,
-      List<String> keys,
-      List<String> values,
-      List<String> pairs) {
+      Map<String, String> entries, List<String> keys, List<String> values, List<String> pairs) {
     entries.entrySet().stream()
         .sorted(Map.Entry.comparingByKey())
         .forEach(
@@ -144,8 +142,7 @@ record WorkflowSemanticProjectionValues(
   }
 
   private static String encodeValue(String value) {
-    return ENCODING_PREFIX
-        + ENCODER.encodeToString(value.getBytes(StandardCharsets.UTF_8));
+    return ENCODING_PREFIX + ENCODER.encodeToString(value.getBytes(StandardCharsets.UTF_8));
   }
 
   private static String decodeValue(String encodedValue) {
@@ -153,8 +150,7 @@ record WorkflowSemanticProjectionValues(
       throw new IllegalArgumentException("Unsupported semantic projection value encoding");
     }
     return new String(
-        DECODER.decode(encodedValue.substring(ENCODING_PREFIX.length())),
-        StandardCharsets.UTF_8);
+        DECODER.decode(encodedValue.substring(ENCODING_PREFIX.length())), StandardCharsets.UTF_8);
   }
 
   private static String requireNotBlank(String value, String name) {
