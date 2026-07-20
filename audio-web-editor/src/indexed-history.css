@@ -5,12 +5,13 @@
   z-index: 1000;
   display: grid;
   justify-items: end;
-  width: min(480px, calc(100vw - 32px));
+  width: min(520px, calc(100vw - 32px));
   pointer-events: none;
 }
 
 .indexed-history button,
 .indexed-history input,
+.indexed-history select,
 .indexed-history__drawer {
   pointer-events: auto;
 }
@@ -32,7 +33,7 @@
 
 .indexed-history__drawer {
   width: 100%;
-  max-height: min(720px, calc(100vh - 92px));
+  max-height: min(760px, calc(100vh - 92px));
   margin-bottom: 10px;
   padding: 16px;
   overflow: auto;
@@ -58,7 +59,8 @@
 
 .indexed-history__header p,
 .indexed-history__status,
-.indexed-history__hit p {
+.indexed-history__hit p,
+.indexed-history__commands p {
   margin: 0;
   color: #a6adc8;
   font-size: 11px;
@@ -91,7 +93,8 @@
   border-radius: 7px;
 }
 
-.indexed-history__filters input {
+.indexed-history__filters input,
+.indexed-history__commands select {
   min-width: 0;
 }
 
@@ -121,6 +124,62 @@
   margin: 8px 0 0;
   color: #f38ba8;
   font-size: 11px;
+}
+
+.indexed-history__commands {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 12px;
+  background: #181825;
+  border: 1px solid #45475a;
+  border-radius: 7px;
+}
+
+.indexed-history__commands h3 {
+  margin: 0;
+  font-size: 13px;
+}
+
+.indexed-history__command-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.indexed-history__command-grid .action-button {
+  grid-column: 1 / -1;
+}
+
+.indexed-history__commands select {
+  width: 100%;
+  padding: 7px;
+  color: #cdd6f4;
+  background: #11111b;
+  border: 1px solid #45475a;
+  border-radius: 5px;
+}
+
+.indexed-history__comparison {
+  padding: 10px;
+  background: #11111b;
+  border: 1px solid #313244;
+  border-radius: 6px;
+}
+
+.indexed-history__comparison strong {
+  font-size: 11px;
+}
+
+.indexed-history__comparison ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: #bac2de;
+  font-size: 10px;
+}
+
+.indexed-history__comparison code {
+  color: #89b4fa;
 }
 
 .indexed-history__results {
@@ -183,11 +242,13 @@
 
   .indexed-history__search,
   .indexed-history__filters,
-  .indexed-history__maintenance {
+  .indexed-history__maintenance,
+  .indexed-history__command-grid {
     grid-template-columns: 1fr;
   }
 
-  .indexed-history__search .action-button {
+  .indexed-history__search .action-button,
+  .indexed-history__command-grid .action-button {
     grid-column: auto;
   }
 }
