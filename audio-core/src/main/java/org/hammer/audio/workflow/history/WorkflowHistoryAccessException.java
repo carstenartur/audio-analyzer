@@ -3,8 +3,10 @@ package org.hammer.audio.workflow.history;
 /** Raised when an explicit history command conflicts with active application access state. */
 public final class WorkflowHistoryAccessException extends RuntimeException {
 
-  private final String branch;
-  private final String workflowId;
+  private static final long serialVersionUID = 1L;
+
+  private final String storedBranch;
+  private final String storedWorkflowId;
 
   /**
    * Creates a typed history-command access conflict.
@@ -15,17 +17,17 @@ public final class WorkflowHistoryAccessException extends RuntimeException {
    */
   public WorkflowHistoryAccessException(String branch, String workflowId, String message) {
     super(message);
-    this.branch = branch;
-    this.workflowId = workflowId;
+    this.storedBranch = branch;
+    this.storedWorkflowId = workflowId;
   }
 
   /** Returns the branch targeted by the blocked command. */
   public String branch() {
-    return branch;
+    return storedBranch;
   }
 
   /** Returns the workflow whose active state blocked the command. */
   public String workflowId() {
-    return workflowId;
+    return storedWorkflowId;
   }
 }
