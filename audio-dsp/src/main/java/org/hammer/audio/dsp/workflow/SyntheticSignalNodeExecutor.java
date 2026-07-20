@@ -41,9 +41,7 @@ final class SyntheticSignalNodeExecutor implements DeterministicAudioNodeExecuto
     } catch (IllegalArgumentException exception) {
       violations.add(
           new Violation(
-              DeterministicAudioDiagnostics.INVALID_PARAMETER,
-              exception.getMessage(),
-              node.id()));
+              DeterministicAudioDiagnostics.INVALID_PARAMETER, exception.getMessage(), node.id()));
     }
     return List.copyOf(violations);
   }
