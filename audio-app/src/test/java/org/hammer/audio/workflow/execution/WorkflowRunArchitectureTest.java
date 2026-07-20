@@ -16,7 +16,7 @@ class WorkflowRunArchitectureTest {
           .importPackages("org.hammer.audio");
 
   @Test
-  void runCoreDoesNotDependOnFrameworkOrStorageImplementations() {
+  void runCoreDoesNotDependOnFrameworkDspOrStorageImplementations() {
     noClasses()
         .that()
         .resideInAPackage("org.hammer.audio.workflow.execution")
@@ -28,6 +28,7 @@ class WorkflowRunArchitectureTest {
             "org.hibernate..",
             "javax.swing..",
             "java.awt..",
+            "org.hammer.audio.dsp..",
             "org.hammer.audio.infrastructure..")
         .check(CLASSES);
   }
