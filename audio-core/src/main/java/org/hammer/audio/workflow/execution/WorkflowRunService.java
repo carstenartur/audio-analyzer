@@ -309,11 +309,7 @@ public final class WorkflowRunService {
   }
 
   private static WorkflowRunException failure(
-      Code code,
-      String message,
-      String runId,
-      String startCommandId,
-      List<Violation> violations) {
+      Code code, String message, String runId, String startCommandId, List<Violation> violations) {
     return new WorkflowRunException(code, message, runId, startCommandId, violations);
   }
 
