@@ -17,7 +17,9 @@ import org.hammer.audio.workflow.execution.WorkflowRunModels.Input;
 import org.hammer.audio.workflow.execution.WorkflowRunModels.Violation;
 import org.hammer.audio.workflow.execution.WorkflowRunSourceResolver.ResolvedWorkflow;
 
-/** Compiles a resolved immutable workflow source into validated snapshot and execution plan input. */
+/**
+ * Compiles a resolved immutable workflow source into validated snapshot and execution plan input.
+ */
 final class WorkflowRunInputFactory {
 
   private static final String VALIDATION_CODE = "WORKFLOW_VALIDATION";
