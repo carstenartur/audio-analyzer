@@ -48,7 +48,6 @@ class WorkflowCombinedHistoryQueryTest {
             List.of());
 
     assertThrows(
-        IllegalArgumentException.class,
-        () -> new WorkflowCombinedHistoryResult(generic, semantic));
+        IllegalArgumentException.class, () -> new WorkflowCombinedHistoryResult(generic, semantic));
   }
 }
