@@ -90,7 +90,7 @@ public final class HibernateJGitVersionedWorkflowStore
   public CommitId commit(String branch, WorkflowSnapshot snapshot, CommitMetadata metadata) {
     CommitId commitId = delegate.commit(branch, snapshot, metadata);
     indexBestEffort(commitId);
-    rebuildSemanticBestEffort(branch);
+    indexSemanticBestEffort(branch, commitId, snapshot);
     return commitId;
   }
 
@@ -194,6 +194,23 @@ public final class HibernateJGitVersionedWorkflowStore
           "Workflow commit "
               + commitId.value()
               + " remains authoritative but its generic search projection is stale",
+          failure);
+    }
+  }
+
+  private void indexSemanticBestEffort(
+      String branch, CommitId commitId, WorkflowSnapshot authoritativeSnapshot) {
+    if (semanticIndexService == null) {
+      return;
+    }
+    try {
+      semanticIndexService.indexCheckpoint(branch, commitId, authoritativeSnapshot);
+    } catch (RuntimeException failure) {
+      LOGGER.log(
+          Level.WARNING,
+          "Workflow commit "
+              + commitId.value()
+              + " remains authoritative but its semantic search projection is stale",
           failure);
     }
   }
