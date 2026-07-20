@@ -1,12 +1,13 @@
 package org.hammer.audio.signal;
 
+import java.util.Objects;
 import org.hammer.audio.core.AudioBlock;
 import org.hammer.audio.core.AudioFormatDescriptor;
 
 /**
  * Deterministic mono sine-wave generator.
  *
- * <p>Produces {@code amplitude * sin(2π * frequency * t)} samples, sampled at {@code
+ * <p>Produces {@code amplitude * sin(2π * frequency * t + initialPhase)} samples, sampled at {@code
  * format.sampleRate()}. Phase is tracked across calls in double precision to avoid drift over long
  * runs.
  *
@@ -17,29 +18,56 @@ import org.hammer.audio.core.AudioFormatDescriptor;
  */
 public final class SineGenerator implements SignalGenerator {
 
+  private static final double TWO_PI = 2.0d * Math.PI;
+
   private final AudioFormatDescriptor format;
   private final double frequencyHz;
   private final float amplitude;
   private final double phaseStep;
+  private final double initialPhase;
   private double phase;
   private long frameIndex;
 
   /**
-   * Create a new sine generator.
+   * Create a new sine generator with zero initial phase.
    *
    * @param format output format descriptor
-   * @param frequencyHz oscillator frequency in Hz; must be {@code > 0}
-   * @param amplitude peak amplitude in normalized units (typically in {@code (0, 1]})
+   * @param frequencyHz oscillator frequency in Hz; must be finite and {@code > 0}
+   * @param amplitude peak amplitude in normalized units
    */
   public SineGenerator(AudioFormatDescriptor format, double frequencyHz, float amplitude) {
-    if (!(frequencyHz > 0.0)) {
-      throw new IllegalArgumentException("frequencyHz must be > 0, was " + frequencyHz);
+    this(format, frequencyHz, amplitude, 0.0d);
+  }
+
+  /**
+   * Create a new sine generator with an explicit initial phase.
+   *
+   * @param format output format descriptor
+   * @param frequencyHz oscillator frequency in Hz; must be finite and {@code > 0}
+   * @param amplitude peak amplitude in normalized units
+   * @param initialPhaseRadians finite initial phase in radians
+   */
+  public SineGenerator(
+      AudioFormatDescriptor format,
+      double frequencyHz,
+      float amplitude,
+      double initialPhaseRadians) {
+    this.format = Objects.requireNonNull(format, "format");
+    if (!Double.isFinite(frequencyHz) || !(frequencyHz > 0.0d)) {
+      throw new IllegalArgumentException("frequencyHz must be finite and > 0, was " + frequencyHz);
     }
-    this.format = format;
+    if (!Float.isFinite(amplitude)) {
+      throw new IllegalArgumentException("amplitude must be finite, was " + amplitude);
+    }
+    if (!Double.isFinite(initialPhaseRadians)) {
+      throw new IllegalArgumentException(
+          "initialPhaseRadians must be finite, was " + initialPhaseRadians);
+    }
     this.frequencyHz = frequencyHz;
     this.amplitude = amplitude;
-    this.phaseStep = 2.0 * Math.PI * frequencyHz / format.sampleRate();
-    this.phase = 0.0;
+    this.phaseStep = TWO_PI * frequencyHz / format.sampleRate();
+    this.initialPhase = normalizePhase(initialPhaseRadians);
+    this.phase = initialPhase;
     this.frameIndex = 0L;
   }
 
@@ -55,39 +83,43 @@ public final class SineGenerator implements SignalGenerator {
     }
     int channels = format.channels();
     float[][] samples = new float[channels][frames];
-    double p = phase;
-    for (int i = 0; i < frames; i++) {
-      float v = (float) (Math.sin(p) * amplitude);
-      for (int c = 0; c < channels; c++) {
-        samples[c][i] = v;
+    double currentPhase = phase;
+    for (int frame = 0; frame < frames; frame++) {
+      float value = (float) (Math.sin(currentPhase) * amplitude);
+      for (int channel = 0; channel < channels; channel++) {
+        samples[channel][frame] = value;
       }
-      p += phaseStep;
+      currentPhase += phaseStep;
     }
-    // Wrap phase to keep precision over long generations.
-    p = p % (2.0 * Math.PI);
     long index = frameIndex;
-    phase = p;
+    phase = normalizePhase(currentPhase);
     frameIndex += frames;
     return AudioBlock.wrap(format, samples, index, System.nanoTime());
   }
 
   @Override
   public void reset() {
-    phase = 0.0;
+    phase = initialPhase;
     frameIndex = 0L;
   }
 
-  /**
-   * @return frequency of the oscillator in Hz
-   */
+  /** Returns the oscillator frequency in hertz. */
   public double frequencyHz() {
     return frequencyHz;
   }
 
-  /**
-   * @return peak amplitude
-   */
+  /** Returns the peak amplitude. */
   public float amplitude() {
     return amplitude;
+  }
+
+  /** Returns the normalized initial phase in radians. */
+  public double initialPhaseRadians() {
+    return initialPhase;
+  }
+
+  private static double normalizePhase(double value) {
+    double normalized = value % TWO_PI;
+    return normalized < 0.0d ? normalized + TWO_PI : normalized;
   }
 }
