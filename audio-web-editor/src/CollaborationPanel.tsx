@@ -4,6 +4,7 @@ import type { ActorIdentity, CollaborationMode } from './api';
 import { useWorkflowHistory } from './useWorkflowHistory';
 import type { WorkflowSessionController } from './useWorkflowSession';
 import { WorkflowHistoryPanel } from './WorkflowHistoryPanel';
+import { WorkflowRunPanel } from './WorkflowRunPanel';
 
 interface CollaborationPanelProps {
   controller: WorkflowSessionController;
@@ -127,6 +128,14 @@ export function CollaborationPanel({ controller }: CollaborationPanelProps) {
 
   const session = controller.session;
   const isOwner = session?.owner.actorId === controller.actor.actorId;
+  const currentRunSource =
+    session === null
+      ? null
+      : {
+          sessionId: session.sessionId,
+          revision: controller.revision,
+          workflowId: session.workflowId,
+        };
 
   return (
     <section className="collaboration" data-testid="collaboration-panel">
@@ -238,8 +247,8 @@ export function CollaborationPanel({ controller }: CollaborationPanelProps) {
             <div>
               <dt>Mode</dt>
               <dd data-mode={session.mode} data-testid="active-session-mode">
-              {MODE_LABELS[session.mode]}
-            </dd>
+                {MODE_LABELS[session.mode]}
+              </dd>
             </div>
             <div>
               <dt>Connection</dt>
@@ -314,6 +323,7 @@ export function CollaborationPanel({ controller }: CollaborationPanelProps) {
           )}
         </>
       )}
+      <WorkflowRunPanel currentSource={currentRunSource} />
       {actionError === null ? null : (
         <p className="workbench__error" data-testid="collaboration-error">
           {actionError}
