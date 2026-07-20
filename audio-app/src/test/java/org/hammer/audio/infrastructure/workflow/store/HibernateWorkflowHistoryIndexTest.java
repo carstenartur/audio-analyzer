@@ -6,8 +6,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import io.github.carstenartur.jgit.storage.hibernate.config.HibernateSessionFactoryProvider;
 import io.github.carstenartur.jgit.storage.hibernate.search.SearchEntities;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Properties;
 import java.util.UUID;
+import org.hammer.audio.infrastructure.workflow.search.WorkflowSemanticPersistenceEntities;
+import org.hammer.audio.workflow.Node;
+import org.hammer.audio.workflow.Workflow;
+import org.hammer.audio.workflow.dsl.WorkflowDslSerializer;
 import org.hammer.audio.workflow.history.WorkflowHistoryTextQuery;
 import org.hammer.audio.workflow.history.WorkflowHistoryTextResult;
 import org.hammer.audio.workflow.store.CommitId;
@@ -30,14 +36,17 @@ class HibernateWorkflowHistoryIndexTest {
     properties.put("hibernate.show_sql", "false");
     properties.put("hibernate.search.backend.type", "lucene");
     properties.put("hibernate.search.backend.directory.type", "local-heap");
+    List<Class<?>> entities = new ArrayList<>(SearchEntities.annotatedClasses());
+    entities.addAll(WorkflowSemanticPersistenceEntities.annotatedClasses());
 
     try (HibernateSessionFactoryProvider provider =
-            new HibernateSessionFactoryProvider(properties, SearchEntities.annotatedClasses());
+            new HibernateSessionFactoryProvider(properties, entities);
         HibernateJGitVersionedWorkflowStore store =
             new HibernateJGitVersionedWorkflowStore(provider.getSessionFactory(), "search-test")) {
-      WorkflowSnapshot baseline = new WorkflowSnapshot("workflow.search", "node baseline");
+      WorkflowSnapshot baseline =
+          snapshot("Baseline", "node.baseline", "source", "Baseline source");
       WorkflowSnapshot matching =
-          new WorkflowSnapshot("workflow.search", "node classifier label wingbeatneedle");
+          snapshot("Classifier", "node.classifier", "classifier", "wingbeatneedle");
       store.commit("main", baseline, metadata("Baseline checkpoint", 1));
       CommitId matchingCommit = store.commit("main", matching, metadata("Add wingbeat needle", 2));
       Instant matchingTime = BASE_TIME.plusSeconds(2);
@@ -65,6 +74,17 @@ class HibernateWorkflowHistoryIndexTest {
               .size());
       assertEquals(0, store.rebuild("main", -1));
     }
+  }
+
+  private static WorkflowSnapshot snapshot(
+      String name, String nodeId, String nodeType, String label) {
+    Workflow workflow =
+        new Workflow(
+            "workflow.search",
+            name,
+            List.of(new Node(nodeId, nodeType, label, List.of(), List.of())),
+            List.of());
+    return new WorkflowSnapshot(workflow.id(), new WorkflowDslSerializer().serialize(workflow));
   }
 
   private static CommitMetadata metadata(String message, long seconds) {
