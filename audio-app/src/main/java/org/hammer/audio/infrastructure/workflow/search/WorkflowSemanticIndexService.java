@@ -237,8 +237,7 @@ public final class WorkflowSemanticIndexService {
         row.getNodeIds(),
         row.getNodeTypes(),
         row.getNodeLabels(),
-        row.getPropertyKeys(),
-        row.getPropertyValues());
+        WorkflowSemanticProjectionValues.decodePairs(row.getPropertyPairs()));
   }
 
   static String normalizeBranch(String branch) {
