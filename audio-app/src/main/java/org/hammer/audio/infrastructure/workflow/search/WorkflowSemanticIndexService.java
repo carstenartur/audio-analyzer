@@ -1,5 +1,6 @@
 package org.hammer.audio.infrastructure.workflow.search;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -10,9 +11,12 @@ import org.hammer.audio.workflow.dsl.WorkflowDslParser;
 import org.hammer.audio.workflow.history.WorkflowSemanticHistoryQuery;
 import org.hammer.audio.workflow.history.WorkflowSemanticHistoryResult;
 import org.hammer.audio.workflow.store.CommitId;
+import org.hammer.audio.workflow.store.WorkflowSnapshot;
 import org.hibernate.Session;
 import org.hibernate.SessionFactory;
 import org.hibernate.Transaction;
+import org.hibernate.search.engine.search.predicate.dsl.BooleanPredicateClausesStep;
+import org.hibernate.search.engine.search.predicate.dsl.SearchPredicateFactory;
 import org.hibernate.search.mapper.orm.Search;
 import org.hibernate.search.mapper.orm.session.SearchSession;
 
@@ -28,6 +32,55 @@ public final class WorkflowSemanticIndexService {
     this.sessionFactory = Objects.requireNonNull(sessionFactory, "sessionFactory");
     this.repositoryName = requireNotBlank(repositoryName, "repositoryName");
     this.parser = new WorkflowDslParser();
+  }
+
+  /**
+   * Adds or refreshes the new head commit without reparsing the rest of the linear branch history.
+   *
+   * @return whether a new projection row was created
+   */
+  public boolean indexCheckpoint(
+      String branch, CommitId commitId, WorkflowSnapshot authoritativeSnapshot) {
+    String normalizedBranch = normalizeBranch(branch);
+    Objects.requireNonNull(commitId, "commitId");
+    WorkflowSemanticProjectionValues values =
+        WorkflowSemanticProjectionValues.from(authoritativeSnapshot, parser);
+
+    try (Session session = sessionFactory.openSession()) {
+      Transaction transaction = session.beginTransaction();
+      try {
+        List<WorkflowSemanticIndexEntity> existingRows =
+            branchRows(session, normalizedBranch, true);
+        WorkflowSemanticIndexEntity head = null;
+        List<WorkflowSemanticIndexEntity> olderRows = new ArrayList<>(existingRows.size());
+        for (WorkflowSemanticIndexEntity row : existingRows) {
+          if (row.objectId().equals(commitId.value())) {
+            head = row;
+          } else {
+            olderRows.add(row);
+          }
+        }
+
+        boolean created = head == null;
+        if (created) {
+          head =
+              WorkflowSemanticIndexEntity.create(
+                  repositoryName, normalizedBranch, commitId.value(), 0, values);
+          session.persist(head);
+        } else {
+          head.apply(values);
+          head.setBranchPosition(0);
+        }
+        for (int position = 0; position < olderRows.size(); position++) {
+          olderRows.get(position).setBranchPosition(position + 1);
+        }
+        transaction.commit();
+        return created;
+      } catch (RuntimeException failure) {
+        transaction.rollback();
+        throw failure;
+      }
+    }
   }
 
   /**
@@ -49,17 +102,8 @@ public final class WorkflowSemanticIndexService {
     try (Session session = sessionFactory.openSession()) {
       Transaction transaction = session.beginTransaction();
       try {
-        List<WorkflowSemanticIndexEntity> existingRows =
-            session
-                .createQuery(
-                    "FROM WorkflowSemanticIndexEntity s "
-                        + "WHERE s.repositoryName = :repository AND s.branchName = :branch",
-                    WorkflowSemanticIndexEntity.class)
-                .setParameter("repository", repositoryName)
-                .setParameter("branch", normalizedBranch)
-                .getResultList();
         Map<String, WorkflowSemanticIndexEntity> existingByObjectId = new HashMap<>();
-        for (WorkflowSemanticIndexEntity row : existingRows) {
+        for (WorkflowSemanticIndexEntity row : branchRows(session, normalizedBranch, false)) {
           existingByObjectId.put(row.objectId(), row);
         }
 
@@ -143,9 +187,23 @@ public final class WorkflowSemanticIndexService {
     }
   }
 
+  private List<WorkflowSemanticIndexEntity> branchRows(
+      Session session, String normalizedBranch, boolean ordered) {
+    String orderBy = ordered ? " ORDER BY s.branchPosition" : "";
+    return session
+        .createQuery(
+            "FROM WorkflowSemanticIndexEntity s "
+                + "WHERE s.repositoryName = :repository AND s.branchName = :branch"
+                + orderBy,
+            WorkflowSemanticIndexEntity.class)
+        .setParameter("repository", repositoryName)
+        .setParameter("branch", normalizedBranch)
+        .getResultList();
+  }
+
   private static void addPropertyPredicates(
-      org.hibernate.search.engine.search.predicate.dsl.SearchPredicateFactory f,
-      org.hibernate.search.engine.search.predicate.dsl.BooleanPredicateClausesStep<?> predicate,
+      SearchPredicateFactory f,
+      BooleanPredicateClausesStep<?> predicate,
       WorkflowSemanticHistoryQuery query) {
     if (query.propertyKey() != null && query.propertyValue() != null) {
       predicate.filter(
