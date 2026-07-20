@@ -73,7 +73,9 @@ public interface WorkflowRunModels {
    */
   record LiveSessionSource(String sessionId, long expectedRevision) implements Source {
     public LiveSessionSource {
-      requireNotBlank(sessionId, "sessionId");
+      if (sessionId == null || sessionId.isBlank()) {
+        throw new IllegalArgumentException("sessionId must not be blank");
+      }
       if (expectedRevision < 0) {
         throw new IllegalArgumentException("expectedRevision must be >= 0");
       }
@@ -126,8 +128,12 @@ public interface WorkflowRunModels {
     @Serial private static final long serialVersionUID = 1L;
 
     public Violation {
-      requireNotBlank(code, "code");
-      requireNotBlank(message, "message");
+      if (code == null || code.isBlank()) {
+        throw new IllegalArgumentException("code must not be blank");
+      }
+      if (message == null || message.isBlank()) {
+        throw new IllegalArgumentException("message must not be blank");
+      }
       if (nodeId != null && nodeId.isBlank()) {
         throw new IllegalArgumentException("nodeId must be null or non-blank");
       }
@@ -164,7 +170,9 @@ public interface WorkflowRunModels {
       StableExecutionIds.requireStable(startCommandId, "startCommandId");
       Objects.requireNonNull(source, "source");
       Objects.requireNonNull(dslText, "dslText");
-      requireNotBlank(fingerprint, "fingerprint");
+      if (fingerprint == null || fingerprint.isBlank()) {
+        throw new IllegalArgumentException("fingerprint must not be blank");
+      }
       Objects.requireNonNull(snapshot, "snapshot");
       Objects.requireNonNull(plan, "plan");
       Objects.requireNonNull(capturedAt, "capturedAt");
@@ -244,7 +252,9 @@ public interface WorkflowRunModels {
       StableExecutionIds.requireStable(workflowId, "workflowId");
       StableExecutionIds.requireStable(snapshotId, "snapshotId");
       StableExecutionIds.requireStable(planId, "planId");
-      requireNotBlank(fingerprint, "fingerprint");
+      if (fingerprint == null || fingerprint.isBlank()) {
+        throw new IllegalArgumentException("fingerprint must not be blank");
+      }
       Objects.requireNonNull(capturedAt, "capturedAt");
       if (progressPercent < 0 || progressPercent > 100) {
         throw new IllegalArgumentException("progressPercent must be between 0 and 100");
@@ -274,12 +284,5 @@ public interface WorkflowRunModels {
 
     /** Publishes bounded progress without changing the semantic input. */
     void progress(int percentage, String message);
-  }
-
-  private static String requireNotBlank(String value, String field) {
-    if (value == null || value.isBlank()) {
-      throw new IllegalArgumentException(field + " must not be blank");
-    }
-    return value;
   }
 }
