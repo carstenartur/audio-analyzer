@@ -1,6 +1,7 @@
 package org.hammer.audio.workflow.execution;
 
 import java.io.Serial;
+import java.util.ArrayList;
 import java.util.List;
 import org.hammer.audio.workflow.execution.WorkflowRunModels.Violation;
 
@@ -24,7 +25,7 @@ public final class WorkflowRunException extends RuntimeException {
   private final Code code;
   private final String runId;
   private final String startCommandId;
-  private final transient List<Violation> violations;
+  private final ArrayList<Violation> violations;
 
   /** Creates a typed failure without nested cause. */
   public WorkflowRunException(
@@ -44,7 +45,7 @@ public final class WorkflowRunException extends RuntimeException {
     this.code = java.util.Objects.requireNonNull(code, "code");
     this.runId = runId;
     this.startCommandId = startCommandId;
-    this.violations = List.copyOf(violations == null ? List.of() : violations);
+    this.violations = new ArrayList<>(violations == null ? List.of() : violations);
   }
 
   public Code code() {
@@ -60,6 +61,6 @@ public final class WorkflowRunException extends RuntimeException {
   }
 
   public List<Violation> violations() {
-    return violations == null ? List.of() : violations;
+    return List.copyOf(violations);
   }
 }
