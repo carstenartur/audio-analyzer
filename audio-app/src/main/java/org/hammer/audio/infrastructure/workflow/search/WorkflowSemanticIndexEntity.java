@@ -137,27 +137,27 @@ public class WorkflowSemanticIndexEntity {
     this.branchPosition = branchPosition;
   }
 
-  String repositoryName() {
+  String getRepositoryName() {
     return repositoryName;
   }
 
-  String branchName() {
+  String getBranchName() {
     return branchName;
   }
 
-  String objectId() {
+  String getObjectId() {
     return objectId;
   }
 
-  int branchPosition() {
+  int getBranchPosition() {
     return branchPosition;
   }
 
-  String workflowId() {
+  String getWorkflowId() {
     return workflowId;
   }
 
-  String workflowName() {
+  String getWorkflowName() {
     return workflowName;
   }
 
