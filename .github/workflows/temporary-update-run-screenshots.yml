@@ -9,6 +9,10 @@ permissions:
   contents: write
   packages: read
 
+concurrency:
+  group: temporary-update-run-screenshots-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   update:
     if: github.actor != 'github-actions[bot]'
