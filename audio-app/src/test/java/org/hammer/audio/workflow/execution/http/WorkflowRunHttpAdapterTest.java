@@ -1,5 +1,6 @@
 package org.hammer.audio.workflow.execution.http;
 
+import static org.hamcrest.Matchers.matchesPattern;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -69,7 +70,7 @@ class WorkflowRunHttpAdapterTest {
         .andExpect(jsonPath("$.mode").value("SIMULATION"))
         .andExpect(jsonPath("$.source.kind").value("LIVE_SESSION"))
         .andExpect(jsonPath("$.source.semanticRevision").value(0))
-        .andExpect(jsonPath("$.fingerprint.length()").value(64));
+        .andExpect(jsonPath("$.fingerprint").value(matchesPattern("[0-9a-f]{64}")));
 
     String runId = runs.runs().getFirst().runId();
     mvc.perform(get("/workflow/runs"))
