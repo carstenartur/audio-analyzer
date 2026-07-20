@@ -4,7 +4,15 @@ import java.util.Objects;
 import org.hammer.audio.workflow.Workflow;
 import org.hammer.audio.workflow.store.CommitId;
 
-/** Exact branch-scoped comparison between two authoritative workflow commits. */
+/**
+ * Exact branch-scoped comparison between two authoritative workflow commits.
+ *
+ * @param beforeCommit exact before commit
+ * @param afterCommit exact after commit
+ * @param beforeWorkflow authoritative before workflow
+ * @param afterWorkflow authoritative after workflow
+ * @param diff ordered semantic difference between both workflows
+ */
 public record WorkflowHistoryComparison(
     CommitId beforeCommit,
     CommitId afterCommit,
