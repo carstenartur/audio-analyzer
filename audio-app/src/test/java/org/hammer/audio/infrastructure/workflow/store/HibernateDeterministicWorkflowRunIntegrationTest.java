@@ -3,8 +3,6 @@ package org.hammer.audio.infrastructure.workflow.store;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import io.github.carstenartur.jgit.storage.hibernate.config.HibernateSessionFactoryProvider;
-import io.github.carstenartur.jgit.storage.hibernate.entity.GitPackEntity;
-import io.github.carstenartur.jgit.storage.hibernate.entity.GitRefEntity;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -42,8 +40,7 @@ class HibernateDeterministicWorkflowRunIntegrationTest {
   void exactHibernateBackedCommitRunsThroughRealComputationBackend() {
     Properties properties = h2Properties();
     try (HibernateSessionFactoryProvider provider =
-            new HibernateSessionFactoryProvider(
-                properties, List.of(GitPackEntity.class, GitRefEntity.class));
+            new HibernateSessionFactoryProvider(properties);
         HibernateJGitVersionedWorkflowStore store =
             new HibernateJGitVersionedWorkflowStore(
                 provider.getSessionFactory(), "deterministic-workflow-runs")) {
@@ -123,9 +120,7 @@ class HibernateDeterministicWorkflowRunIntegrationTest {
     Properties properties = new Properties();
     properties.put(
         "hibernate.connection.url",
-        "jdbc:h2:mem:deterministic-run-"
-            + UUID.randomUUID()
-            + ";DB_CLOSE_DELAY=-1;MODE=PostgreSQL");
+        "jdbc:h2:mem:deterministic-run-" + UUID.randomUUID() + ";DB_CLOSE_DELAY=-1");
     properties.put("hibernate.connection.driver_class", "org.h2.Driver");
     properties.put("hibernate.dialect", "org.hibernate.dialect.H2Dialect");
     properties.put("hibernate.hbm2ddl.auto", "create-drop");
