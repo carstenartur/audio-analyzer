@@ -11,7 +11,7 @@ public final class GainProcessor implements DSPProcessor {
   /** Conservative upper bound that prevents accidental extreme amplification. */
   public static final float MAX_GAIN = 16.0f;
 
-  private final float gain;
+  private final float linearFactor;
 
   /**
    * Creates a processor with one stable linear multiplier.
@@ -22,12 +22,12 @@ public final class GainProcessor implements DSPProcessor {
     if (!Float.isFinite(gain) || gain < 0.0f || gain > MAX_GAIN) {
       throw new IllegalArgumentException("gain must be finite and in [0, 16], was " + gain);
     }
-    this.gain = gain;
+    this.linearFactor = gain;
   }
 
   /** Returns the configured linear multiplier. */
   public float gain() {
-    return gain;
+    return linearFactor;
   }
 
   @Override
@@ -38,7 +38,7 @@ public final class GainProcessor implements DSPProcessor {
       float[] source = input.channelView(channel);
       float[] target = output[channel];
       for (int frame = 0; frame < input.frames(); frame++) {
-        target[frame] = clamp(source[frame] * gain);
+        target[frame] = clamp(source[frame] * linearFactor);
       }
     }
     return AudioBlock.wrap(input.format(), output, input.frameIndex(), input.timestampNanos());
