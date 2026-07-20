@@ -2,17 +2,12 @@ package org.hammer.audio.dsp.workflow;
 
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.function.Function;
-import java.util.stream.Collectors;
+import java.util.concurrent.ConcurrentHashMap;
 import org.hammer.audio.core.AudioBlock;
-import org.hammer.audio.workflow.Edge;
 import org.hammer.audio.workflow.Node;
-import org.hammer.audio.workflow.catalog.ExperimentNodeProtocol;
 import org.hammer.audio.workflow.execution.ExecutionContext;
 import org.hammer.audio.workflow.execution.ExecutionStatus;
 import org.hammer.audio.workflow.execution.ReproducibilityBundle;
@@ -31,6 +26,7 @@ public final class DeterministicAudioWorkflowExecutionBackend implements Executi
   public static final String BACKEND_VERSION = "deterministic-audio-v1";
 
   private final DeterministicAudioNodeExecutorRegistry executorRegistry;
+  private final DeterministicAudioWorkflowValidator workflowValidator;
 
   /** Creates the production backend with the standard synthetic-source and gain executors. */
   public DeterministicAudioWorkflowExecutionBackend() {
@@ -40,6 +36,7 @@ public final class DeterministicAudioWorkflowExecutionBackend implements Executi
   DeterministicAudioWorkflowExecutionBackend(
       DeterministicAudioNodeExecutorRegistry executorRegistry) {
     this.executorRegistry = Objects.requireNonNull(executorRegistry, "executorRegistry");
+    this.workflowValidator = new DeterministicAudioWorkflowValidator(executorRegistry);
   }
 
   @Override
@@ -49,40 +46,7 @@ public final class DeterministicAudioWorkflowExecutionBackend implements Executi
 
   @Override
   public List<Violation> validate(Input input) {
-    Objects.requireNonNull(input, "input");
-    List<Violation> violations = new ArrayList<>();
-    Map<String, Node> nodes = indexNodes(input);
-    Map<String, List<Edge>> incoming = incomingEdges(input);
-    Map<String, List<Edge>> outgoing = outgoingEdges(input);
-    int generatorCount = 0;
-    int gainCount = 0;
-    for (Node node : input.snapshot().nodes()) {
-      if (ExperimentNodeProtocol.TYPE_SYNTHETIC_SIGNAL_GENERATOR.equals(node.type())) {
-        generatorCount++;
-      }
-      if (ExperimentNodeProtocol.TYPE_GAIN.equals(node.type())) {
-        gainCount++;
-      }
-      executorRegistry
-          .find(node.type())
-          .ifPresentOrElse(
-              executor ->
-                  violations.addAll(
-                      executor.validate(node, incoming.getOrDefault(node.id(), List.of()))),
-              () ->
-                  violations.add(
-                      new Violation(
-                          DeterministicAudioDiagnostics.UNSUPPORTED_NODE,
-                          "No deterministic audio executor is registered for node type '"
-                              + node.type()
-                              + "'",
-                          node.id())));
-    }
-    validateNodeCounts(generatorCount, gainCount, violations);
-    validateLinearEdgeCount(input, violations);
-    validateEdges(input.snapshot().edges(), nodes, violations);
-    validateTerminalNode(nodes, outgoing, violations);
-    return List.copyOf(violations);
+    return workflowValidator.validate(input);
   }
 
   @Override
@@ -93,15 +57,14 @@ public final class DeterministicAudioWorkflowExecutionBackend implements Executi
     if (!violations.isEmpty()) {
       throw new WorkflowExecutionBackendException(
           "Deterministic audio preflight rejected " + violations.size() + " violation(s)",
-          new IllegalArgumentException(formatViolations(violations)));
+          new IllegalArgumentException(DeterministicAudioWorkflowValidator.format(violations)));
     }
     return executeValidated(input, control);
   }
 
   private Result executeValidated(Input input, Control control) {
-    Map<String, Node> nodes = indexNodes(input);
-    Map<String, Edge> incoming = singleIncomingEdge(input);
-    Map<String, AudioBlock> outputs = new HashMap<>();
+    DeterministicAudioExecutionGraph graph = DeterministicAudioExecutionGraph.from(input);
+    Map<String, AudioBlock> outputs = new ConcurrentHashMap<>();
     ExecutionContext context =
         new ExecutionContext(input.runId() + ":audio-execution", input.plan(), input.capturedAt());
     List<String> orderedNodeIds = input.plan().orderedNodeIds();
@@ -111,19 +74,12 @@ public final class DeterministicAudioWorkflowExecutionBackend implements Executi
         cancelRemaining(context, orderedNodeIds, index);
         return cancellationResult(input, context, nodeId);
       }
-      Node node = nodes.get(nodeId);
+      Node node = graph.node(nodeId);
       context.updateNodeStatus(nodeId, ExecutionStatus.RUNNING);
       control.progress(progressBefore(index, orderedNodeIds.size()), "Starting " + nodeId);
       try {
-        DeterministicAudioNodeExecutor executor =
-            executorRegistry
-                .find(node.type())
-                .orElseThrow(
-                    () ->
-                        new IllegalStateException(
-                            "Validated node has no executor: " + node.type()));
-        AudioBlock output =
-            executor.execute(node, upstreamInput(incoming.get(nodeId), outputs), control);
+        DeterministicAudioNodeExecutor executor = requiredExecutor(node);
+        AudioBlock output = executor.execute(node, graph.upstreamInput(nodeId, outputs), control);
         outputs.put(nodeId, output);
         context.updateNodeStatus(nodeId, ExecutionStatus.COMPLETED);
         control.progress(progressAfter(index, orderedNodeIds.size()), "Computed " + nodeId);
@@ -134,25 +90,20 @@ public final class DeterministicAudioWorkflowExecutionBackend implements Executi
         return failureResult(input, context, orderedNodeIds, index, node, failure);
       }
     }
-    String terminalNodeId = terminalNodeId(input);
+    String terminalNodeId = graph.terminalNodeId();
     AudioBlock terminalOutput = outputs.get(terminalNodeId);
     Map<String, String> artifacts = baseArtifacts();
     artifacts.putAll(
         AudioBlockEvidence.artifacts(
-            terminalOutput, terminalNodeId, ExperimentNodeProtocol.AUDIO_OUTPUT_PORT));
+            terminalOutput, terminalNodeId, graph.terminalOutputPortId()));
     return result(input, context, artifacts);
   }
 
-  private static AudioBlock upstreamInput(Edge incoming, Map<String, AudioBlock> outputs) {
-    if (incoming == null) {
-      return null;
-    }
-    AudioBlock source = outputs.get(incoming.sourceNodeId());
-    if (source == null) {
-      throw new IllegalStateException(
-          "Source node '" + incoming.sourceNodeId() + "' has no computed audio block");
-    }
-    return source;
+  private DeterministicAudioNodeExecutor requiredExecutor(Node node) {
+    return executorRegistry
+        .find(node.type())
+        .orElseThrow(
+            () -> new IllegalStateException("Validated node has no executor: " + node.type()));
   }
 
   private static Result cancellationResult(
@@ -188,7 +139,7 @@ public final class DeterministicAudioWorkflowExecutionBackend implements Executi
   }
 
   private static Map<String, String> baseArtifacts() {
-    Map<String, String> artifacts = new LinkedHashMap<>();
+    Map<String, String> artifacts = new ConcurrentHashMap<>();
     artifacts.put(DeterministicAudioArtifacts.BACKEND_MODE, Mode.COMPUTATION.name());
     artifacts.put(DeterministicAudioArtifacts.BACKEND_VERSION, BACKEND_VERSION);
     return artifacts;
@@ -201,126 +152,6 @@ public final class DeterministicAudioWorkflowExecutionBackend implements Executi
         new ReproducibilityBundle(
             input.snapshot(), context.toResult(completedAt), input.commitId(), null);
     return new Result(bundle, artifacts);
-  }
-
-  private static void validateNodeCounts(
-      int generatorCount, int gainCount, List<Violation> violations) {
-    if (generatorCount != 1) {
-      violations.add(
-          new Violation(
-              DeterministicAudioDiagnostics.INVALID_TOPOLOGY,
-              "Deterministic audio workflows require exactly one synthetic signal generator, found "
-                  + generatorCount,
-              null));
-    }
-    if (gainCount < 1) {
-      violations.add(
-          new Violation(
-              DeterministicAudioDiagnostics.INVALID_TOPOLOGY,
-              "Deterministic audio workflows require at least one gain node",
-              null));
-    }
-  }
-
-  private static void validateLinearEdgeCount(Input input, List<Violation> violations) {
-    int expectedEdges = Math.max(0, input.snapshot().nodes().size() - 1);
-    if (input.snapshot().edges().size() != expectedEdges) {
-      violations.add(
-          new Violation(
-              DeterministicAudioDiagnostics.INVALID_TOPOLOGY,
-              "Deterministic audio workflows must form one linear chain with "
-                  + expectedEdges
-                  + " edge(s), found "
-                  + input.snapshot().edges().size(),
-              null));
-    }
-  }
-
-  private static void validateEdges(
-      List<Edge> edges, Map<String, Node> nodes, List<Violation> violations) {
-    for (Edge edge : edges) {
-      Node source = nodes.get(edge.sourceNodeId());
-      Node target = nodes.get(edge.targetNodeId());
-      if (source == null || target == null) {
-        violations.add(
-            new Violation(
-                DeterministicAudioDiagnostics.INVALID_TOPOLOGY,
-                "Edge '" + edge.id() + "' references an unknown node",
-                null));
-        continue;
-      }
-      String expectedSourcePort =
-          ExperimentNodeProtocol.TYPE_SYNTHETIC_SIGNAL_GENERATOR.equals(source.type())
-              ? ExperimentNodeProtocol.SIGNAL_OUTPUT_PORT
-              : ExperimentNodeProtocol.AUDIO_OUTPUT_PORT;
-      if (!expectedSourcePort.equals(edge.sourcePortId())) {
-        violations.add(
-            new Violation(
-                DeterministicAudioDiagnostics.INVALID_TOPOLOGY,
-                "Edge '" + edge.id() + "' must use source port '" + expectedSourcePort + "'",
-                source.id()));
-      }
-      if (!ExperimentNodeProtocol.TYPE_GAIN.equals(target.type())
-          || !ExperimentNodeProtocol.AUDIO_INPUT_PORT.equals(edge.targetPortId())) {
-        violations.add(
-            new Violation(
-                DeterministicAudioDiagnostics.INVALID_TOPOLOGY,
-                "Edge '" + edge.id() + "' must target a gain node's audio input",
-                target.id()));
-      }
-    }
-  }
-
-  private static void validateTerminalNode(
-      Map<String, Node> nodes, Map<String, List<Edge>> outgoing, List<Violation> violations) {
-    List<Node> terminalNodes =
-        nodes.values().stream()
-            .filter(node -> outgoing.getOrDefault(node.id(), List.of()).isEmpty())
-            .toList();
-    if (terminalNodes.size() != 1) {
-      violations.add(
-          new Violation(
-              DeterministicAudioDiagnostics.INVALID_TOPOLOGY,
-              "Deterministic audio workflows require exactly one terminal node, found "
-                  + terminalNodes.size(),
-              null));
-      return;
-    }
-    Node terminal = terminalNodes.getFirst();
-    if (!ExperimentNodeProtocol.TYPE_GAIN.equals(terminal.type())) {
-      violations.add(
-          new Violation(
-              DeterministicAudioDiagnostics.INVALID_TOPOLOGY,
-              "The terminal deterministic audio node must be a gain node",
-              terminal.id()));
-    }
-  }
-
-  private static Map<String, Node> indexNodes(Input input) {
-    return input.snapshot().nodes().stream()
-        .collect(Collectors.toUnmodifiableMap(Node::id, Function.identity()));
-  }
-
-  private static Map<String, List<Edge>> incomingEdges(Input input) {
-    return input.snapshot().edges().stream().collect(Collectors.groupingBy(Edge::targetNodeId));
-  }
-
-  private static Map<String, List<Edge>> outgoingEdges(Input input) {
-    return input.snapshot().edges().stream().collect(Collectors.groupingBy(Edge::sourceNodeId));
-  }
-
-  private static Map<String, Edge> singleIncomingEdge(Input input) {
-    return input.snapshot().edges().stream()
-        .collect(Collectors.toUnmodifiableMap(Edge::targetNodeId, Function.identity()));
-  }
-
-  private static String terminalNodeId(Input input) {
-    Map<String, List<Edge>> outgoing = outgoingEdges(input);
-    return input.snapshot().nodes().stream()
-        .filter(node -> outgoing.getOrDefault(node.id(), List.of()).isEmpty())
-        .findFirst()
-        .orElseThrow(() -> new IllegalStateException("Validated workflow has no terminal node"))
-        .id();
   }
 
   private static void cancelRemaining(
@@ -336,11 +167,5 @@ public final class DeterministicAudioWorkflowExecutionBackend implements Executi
 
   private static int progressAfter(int index, int nodeCount) {
     return Math.multiplyExact(index + 1, 100) / nodeCount;
-  }
-
-  private static String formatViolations(List<Violation> violations) {
-    return violations.stream()
-        .map(violation -> violation.code() + ": " + violation.message())
-        .collect(Collectors.joining("; "));
   }
 }
