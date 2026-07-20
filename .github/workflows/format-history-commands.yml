@@ -33,13 +33,18 @@ jobs:
           server-password: GITHUB_TOKEN
 
       - name: Apply configured Java formatter
-        run: mvn -B -pl audio-core,audio-app spotless:apply -DskipTests
+        run: |
+          mvn -B -pl audio-core,audio-app spotless:apply -DskipTests
+          git diff --name-only > formatted-files.txt
+          git diff > formatted.patch
 
       - name: Upload formatted history sources
         uses: actions/upload-artifact@v7
         with:
           name: formatted-history-command-sources
           path: |
+            formatted-files.txt
+            formatted.patch
             audio-core/src/main/java/org/hammer/audio/workflow/history/
             audio-core/src/main/java/org/hammer/audio/workflow/store/
             audio-core/src/test/java/org/hammer/audio/workflow/history/
