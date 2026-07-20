@@ -1,7 +1,7 @@
 package org.hammer.audio.infrastructure.workflow.search;
 
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -55,7 +55,7 @@ public final class WorkflowSemanticIndexService {
         WorkflowSemanticIndexEntity head = null;
         List<WorkflowSemanticIndexEntity> olderRows = new ArrayList<>(existingRows.size());
         for (WorkflowSemanticIndexEntity row : existingRows) {
-          if (row.objectId().equals(commitId.value())) {
+          if (row.getObjectId().equals(commitId.value())) {
             head = row;
           } else {
             olderRows.add(row);
@@ -104,9 +104,9 @@ public final class WorkflowSemanticIndexService {
       Transaction transaction = session.beginTransaction();
       boolean committed = false;
       try {
-        Map<String, WorkflowSemanticIndexEntity> existingByObjectId = new HashMap<>();
+        Map<String, WorkflowSemanticIndexEntity> existingByObjectId = new LinkedHashMap<>();
         for (WorkflowSemanticIndexEntity row : branchRows(session, normalizedBranch, false)) {
-          existingByObjectId.put(row.objectId(), row);
+          existingByObjectId.put(row.getObjectId(), row);
         }
 
         int created = 0;
@@ -148,7 +148,7 @@ public final class WorkflowSemanticIndexService {
           .search(WorkflowSemanticIndexEntity.class)
           .where(
               f -> {
-                var predicate =
+                BooleanPredicateClausesStep<?, ?> predicate =
                     f.bool()
                         .filter(f.match().field("repositoryName").matching(repositoryName))
                         .filter(
@@ -230,10 +230,10 @@ public final class WorkflowSemanticIndexService {
 
   private static WorkflowSemanticHistoryResult toResult(WorkflowSemanticIndexEntity row) {
     return new WorkflowSemanticHistoryResult(
-        new CommitId(row.objectId()),
-        row.branchName(),
-        row.workflowId(),
-        row.workflowName(),
+        new CommitId(row.getObjectId()),
+        row.getBranchName(),
+        row.getWorkflowId(),
+        row.getWorkflowName(),
         row.getNodeIds(),
         row.getNodeTypes(),
         row.getNodeLabels(),
