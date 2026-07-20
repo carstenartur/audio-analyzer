@@ -1,10 +1,13 @@
 package org.hammer.audio.workflow.execution;
 
+import java.io.Serial;
 import java.util.List;
 import org.hammer.audio.workflow.execution.WorkflowRunModels.Violation;
 
 /** Typed workflow-run failure suitable for stable HTTP problem mapping. */
 public final class WorkflowRunException extends RuntimeException {
+
+  @Serial private static final long serialVersionUID = 1L;
 
   /** Stable machine-readable failure code. */
   public enum Code {
@@ -21,7 +24,7 @@ public final class WorkflowRunException extends RuntimeException {
   private final Code code;
   private final String runId;
   private final String startCommandId;
-  private final List<Violation> violations;
+  private final transient List<Violation> violations;
 
   /** Creates a typed failure without nested cause. */
   public WorkflowRunException(
@@ -57,6 +60,6 @@ public final class WorkflowRunException extends RuntimeException {
   }
 
   public List<Violation> violations() {
-    return violations;
+    return violations == null ? List.of() : violations;
   }
 }
