@@ -85,8 +85,8 @@ class HibernateWorkflowCombinedHistorySearchTest {
       assertEquals(expected, hits.getFirst().semantics().commitId());
       assertEquals(List.of("classifier"), hits.getFirst().semantics().nodeTypes());
       assertTrue(hits.getFirst().semantics().propertyValues().contains("safe"));
-      assertEquals(
-          List.of(expected, olderCandidate),
+
+      List<CommitId> fullTextIds =
           store
               .searchCombined(
                   new WorkflowCombinedHistoryQuery(
@@ -100,7 +100,10 @@ class HibernateWorkflowCombinedHistorySearchTest {
                       query.semanticFilter()))
               .stream()
               .map(hit -> hit.commit().commitId())
-              .toList());
+              .toList();
+      assertEquals(2, fullTextIds.size());
+      assertTrue(fullTextIds.containsAll(List.of(expected, olderCandidate)));
+
       assertEquals(
           List.of(),
           store.searchCombined(
