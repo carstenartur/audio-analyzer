@@ -23,8 +23,7 @@ import org.springframework.mock.env.MockEnvironment;
 class WorkflowSearchSchemaMigrationTest {
 
   @Test
-  void installsSemanticProjectionBetweenGenericSearchAndCollaborationMigrations()
-      throws Exception {
+  void installsSemanticProjectionBetweenGenericSearchAndCollaborationMigrations() throws Exception {
     DataSource dataSource = dataSource();
 
     WorkflowSchemaMigrationResult result =
@@ -37,8 +36,7 @@ class WorkflowSearchSchemaMigrationTest {
     assertEquals(1, tableCount(dataSource, "git_commit_index"));
     assertEquals(1, tableCount(dataSource, "workflow_semantic_index"));
     assertEquals(1, tableCount(dataSource, "jgit_storage_hibernate_search_schema_history"));
-    assertEquals(
-        1, tableCount(dataSource, "audio_analyzer_workflow_semantic_schema_history"));
+    assertEquals(1, tableCount(dataSource, "audio_analyzer_workflow_semantic_schema_history"));
   }
 
   @Test
