@@ -1,0 +1,51 @@
+name: Format history commands
+
+on:
+  push:
+    branches:
+      - feature/247-history-compare-restore
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    env:
+      JAVA_VERSION: '21'
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v5
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: temurin
+          cache: maven
+          server-id: github
+          server-username: GITHUB_ACTOR
+          server-password: GITHUB_TOKEN
+
+      - name: Apply configured Java formatter
+        run: mvn -B -pl audio-core,audio-app spotless:apply -DskipTests
+
+      - name: Upload formatted history sources
+        uses: actions/upload-artifact@v7
+        with:
+          name: formatted-history-command-sources
+          path: |
+            audio-core/src/main/java/org/hammer/audio/workflow/history/
+            audio-core/src/main/java/org/hammer/audio/workflow/store/
+            audio-core/src/test/java/org/hammer/audio/workflow/history/
+            audio-app/src/main/java/org/hammer/audio/app/WorkflowHistoryCommandConfiguration.java
+            audio-app/src/main/java/org/hammer/audio/infrastructure/workflow/history/
+            audio-app/src/main/java/org/hammer/audio/infrastructure/workflow/store/
+            audio-app/src/main/java/org/hammer/audio/workflow/editor/http/WorkflowHistoryCommand*.java
+            audio-app/src/test/java/org/hammer/audio/infrastructure/workflow/history/
+            audio-app/src/test/java/org/hammer/audio/infrastructure/workflow/store/ConditionalJGitWorkflowCommitTest.java
+            audio-app/src/test/java/org/hammer/audio/workflow/editor/http/WorkflowHistoryCommandHttpAdapterTest.java
+          if-no-files-found: error
+          retention-days: 1
