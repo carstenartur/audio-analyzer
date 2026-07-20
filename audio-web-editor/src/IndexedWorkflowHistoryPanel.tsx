@@ -1,15 +1,41 @@
 import { useCallback, useEffect, useState } from 'react';
 
-import { ApiError, getJson, postJson, type WorkflowProjection } from './api';
+import { ApiError, postJson, type WorkflowProjection } from './api';
 import {
   historyHitLabel,
   indexedHistoryRebuildUrl,
-  indexedHistorySearchUrl,
   localHistoryTimeToInstant,
   normalizeHistorySearchLimit,
   visibleChangedPaths,
 } from './indexedHistorySearch.mjs';
 import { WorkflowHistoryCommands } from './WorkflowHistoryCommands';
+
+interface SemanticProperty {
+  key: string;
+  value: string;
+}
+
+interface SemanticEvidence {
+  branch: string;
+  workflowId: string;
+  workflowName: string;
+  nodeIds: string[];
+  nodeTypes: string[];
+  nodeLabels: string[];
+  properties: SemanticProperty[];
+}
+
+interface CombinedHistoryResponse {
+  commit: {
+    commitId: string;
+    message: string;
+    authorName: string | null;
+    authorEmail: string | null;
+    timestamp: string | null;
+    changedPaths: string[];
+  };
+  semantics: SemanticEvidence;
+}
 
 interface IndexedHistoryHit {
   commitId: string;
@@ -18,6 +44,7 @@ interface IndexedHistoryHit {
   authorEmail: string | null;
   timestamp: string | null;
   changedPaths: string[];
+  semantics: SemanticEvidence;
 }
 
 interface RebuildResponse {
@@ -27,6 +54,7 @@ interface RebuildResponse {
 type Availability = 'probing' | 'available' | 'unavailable';
 
 const ACTIVE_SESSION_STORAGE_KEY = 'audio-analyzer.workflow.active-session';
+const COMBINED_HISTORY_URL = '/workflow/history/combined/query';
 
 function failureMessage(failure: unknown): string {
   return failure instanceof Error ? failure.message : String(failure);
@@ -53,7 +81,22 @@ function isUnavailable(failure: unknown): boolean {
   return failure instanceof ApiError && failure.status === 404;
 }
 
-/** Optional version-history UI, rendered only when the indexed search endpoint is available. */
+function toHistoryHits(responses: CombinedHistoryResponse[]): IndexedHistoryHit[] {
+  return responses.map((response) => ({
+    ...response.commit,
+    semantics: response.semantics,
+  }));
+}
+
+function shortSemanticValues(values: string[]): string {
+  if (values.length === 0) {
+    return 'none';
+  }
+  const visible = values.slice(0, 3).join(', ');
+  return values.length > 3 ? `${visible}, …` : visible;
+}
+
+/** Optional version-history UI, rendered only when combined indexed search is available. */
 export function IndexedWorkflowHistoryPanel() {
   const [availability, setAvailability] = useState<Availability>('probing');
   const [expanded, setExpanded] = useState(false);
@@ -63,22 +106,31 @@ export function IndexedWorkflowHistoryPanel() {
   const [fromTime, setFromTime] = useState('');
   const [toTime, setToTime] = useState('');
   const [branch, setBranch] = useState('main');
+  const [workflowId, setWorkflowId] = useState('');
+  const [nodeId, setNodeId] = useState('');
+  const [nodeType, setNodeType] = useState('');
+  const [labelText, setLabelText] = useState('');
+  const [propertyKey, setPropertyKey] = useState('');
+  const [propertyValue, setPropertyValue] = useState('');
   const [limit, setLimit] = useState(20);
   const [hits, setHits] = useState<IndexedHistoryHit[]>([]);
   const [searching, setSearching] = useState(false);
   const [rebuilding, setRebuilding] = useState(false);
   const [loadingCommitId, setLoadingCommitId] = useState<string | null>(null);
-  const [status, setStatus] = useState('Derived index ready. Git remains authoritative.');
+  const [status, setStatus] = useState('Derived indexes ready. Git remains authoritative.');
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
-    void getJson<IndexedHistoryHit[]>(indexedHistorySearchUrl('', 1))
+    void postJson<CombinedHistoryResponse[]>(COMBINED_HISTORY_URL, {
+      generic: { text: '', limit: 1 },
+      semantic: { branch: 'main' },
+    })
       .then((initialHits) => {
         if (!mounted) {
           return;
         }
-        setHits(initialHits);
+        setHits(toHistoryHits(initialHits));
         setAvailability('available');
       })
       .catch((failure: unknown) => {
@@ -90,7 +142,7 @@ export function IndexedWorkflowHistoryPanel() {
           return;
         }
         setAvailability('available');
-        setError(`History index probe failed: ${failureMessage(failure)}`);
+        setError(`Combined history probe failed: ${failureMessage(failure)}`);
       });
     return () => {
       mounted = false;
@@ -100,6 +152,10 @@ export function IndexedWorkflowHistoryPanel() {
   const search = useCallback(async () => {
     const from = localHistoryTimeToInstant(fromTime);
     const to = localHistoryTimeToInstant(toTime);
+    if (branch.trim().length === 0) {
+      setError('The branch reachability boundary is required.');
+      return;
+    }
     if (fromTime.trim().length > 0 && from === null) {
       setError('The lower time bound is not a valid date and time.');
       return;
@@ -116,19 +172,31 @@ export function IndexedWorkflowHistoryPanel() {
     setSearching(true);
     setError(null);
     try {
-      const nextHits = await getJson<IndexedHistoryHit[]>(
-        indexedHistorySearchUrl(query, limit, {
+      const responses = await postJson<CombinedHistoryResponse[]>(COMBINED_HISTORY_URL, {
+        generic: {
+          text: query,
           authorEmail,
           pathText,
           from,
           to,
-        }),
-      );
+          limit,
+        },
+        semantic: {
+          branch,
+          workflowId,
+          nodeId,
+          nodeType,
+          labelText,
+          propertyKey,
+          propertyValue,
+        },
+      });
+      const nextHits = toHistoryHits(responses);
       setHits(nextHits);
       setStatus(
         nextHits.length === 0
-          ? 'No indexed checkpoints match these filters.'
-          : `${nextHits.length} indexed checkpoint${nextHits.length === 1 ? '' : 's'} found.`,
+          ? 'No branch-reachable checkpoints match all generic and semantic filters.'
+          : `${nextHits.length} combined checkpoint${nextHits.length === 1 ? '' : 's'} found.`,
       );
     } catch (failure) {
       if (isUnavailable(failure)) {
@@ -139,7 +207,21 @@ export function IndexedWorkflowHistoryPanel() {
     } finally {
       setSearching(false);
     }
-  }, [authorEmail, fromTime, limit, pathText, query, toTime]);
+  }, [
+    authorEmail,
+    branch,
+    fromTime,
+    labelText,
+    limit,
+    nodeId,
+    nodeType,
+    pathText,
+    propertyKey,
+    propertyValue,
+    query,
+    toTime,
+    workflowId,
+  ]);
 
   const rebuild = useCallback(async () => {
     setRebuilding(true);
@@ -148,7 +230,7 @@ export function IndexedWorkflowHistoryPanel() {
       const response = await postJson<RebuildResponse>(indexedHistoryRebuildUrl(branch), undefined);
       setStatus(
         response.indexedCommits === 0
-          ? 'Index already matches authoritative branch history.'
+          ? 'Indexes already match authoritative branch history.'
           : `Indexed ${response.indexedCommits} missing checkpoint${response.indexedCommits === 1 ? '' : 's'}.`,
       );
       await search();
@@ -200,8 +282,8 @@ export function IndexedWorkflowHistoryPanel() {
         <div className="indexed-history__drawer">
           <header className="indexed-history__header">
             <div>
-              <h2>Indexed version history</h2>
-              <p>Combine content, author, changed-path and inclusive time filters.</p>
+              <h2>Combined version history</h2>
+              <p>Apply branch and workflow semantics before generic ranking and the final limit.</p>
             </div>
             <button
               aria-label="Close indexed version history"
@@ -280,19 +362,75 @@ export function IndexedWorkflowHistoryPanel() {
                 />
               </label>
             </div>
+            <div className="indexed-history__filters indexed-history__semantic-filters">
+              <label className="field">
+                Exact workflow ID
+                <input
+                  data-testid="indexed-history-workflow"
+                  placeholder="workflow.insect-observer"
+                  value={workflowId}
+                  onChange={(event) => setWorkflowId(event.target.value)}
+                />
+              </label>
+              <label className="field">
+                Exact node ID
+                <input
+                  data-testid="indexed-history-node"
+                  placeholder="node.classifier"
+                  value={nodeId}
+                  onChange={(event) => setNodeId(event.target.value)}
+                />
+              </label>
+              <label className="field">
+                Exact node type
+                <input
+                  data-testid="indexed-history-type"
+                  placeholder="classifier"
+                  value={nodeType}
+                  onChange={(event) => setNodeType(event.target.value)}
+                />
+              </label>
+              <label className="field">
+                Workflow name or node label
+                <input
+                  data-testid="indexed-history-label"
+                  placeholder="wingbeat"
+                  value={labelText}
+                  onChange={(event) => setLabelText(event.target.value)}
+                />
+              </label>
+              <label className="field">
+                Exact property key
+                <input
+                  data-testid="indexed-history-property-key"
+                  placeholder="mode"
+                  value={propertyKey}
+                  onChange={(event) => setPropertyKey(event.target.value)}
+                />
+              </label>
+              <label className="field">
+                Exact property value
+                <input
+                  data-testid="indexed-history-property-value"
+                  placeholder="safe"
+                  value={propertyValue}
+                  onChange={(event) => setPropertyValue(event.target.value)}
+                />
+              </label>
+            </div>
             <button
               className="action-button"
               data-testid="indexed-history-search"
               disabled={searching || rebuilding}
               type="submit"
             >
-              {searching ? 'Searching…' : 'Search index'}
+              {searching ? 'Searching…' : 'Search combined indexes'}
             </button>
           </form>
 
           <div className="indexed-history__maintenance">
             <label className="field">
-              Authoritative branch to rebuild and operate on
+              Authoritative branch to search, rebuild and operate on
               <input
                 data-testid="indexed-history-branch"
                 value={branch}
@@ -339,6 +477,10 @@ export function IndexedWorkflowHistoryPanel() {
                   <p>
                     {hit.authorName || hit.authorEmail || 'Unknown author'} ·{' '}
                     {formattedTimestamp(hit.timestamp)}
+                  </p>
+                  <p className="indexed-history__semantic-summary">
+                    {hit.semantics.workflowName} · {hit.semantics.workflowId} · node types:{' '}
+                    {shortSemanticValues(hit.semantics.nodeTypes)}
                   </p>
                   {paths.length === 0 ? null : (
                     <ul>

@@ -1,12 +1,15 @@
 package org.hammer.audio.infrastructure.workflow.store;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import org.hammer.audio.infrastructure.workflow.search.WorkflowSemanticIndexService;
 import org.hammer.audio.infrastructure.workflow.search.WorkflowSemanticProjectionEntry;
+import org.hammer.audio.workflow.history.WorkflowSemanticHistoryFilter;
 import org.hammer.audio.workflow.history.WorkflowSemanticHistoryQuery;
 import org.hammer.audio.workflow.history.WorkflowSemanticHistoryResult;
 import org.hammer.audio.workflow.store.CommitId;
@@ -35,6 +38,14 @@ final class WorkflowSemanticHistoryProjection {
 
   List<WorkflowSemanticHistoryResult> search(WorkflowSemanticHistoryQuery query) {
     return indexService.search(Objects.requireNonNull(query, "query"));
+  }
+
+  List<CommitId> candidateCommitIds(WorkflowSemanticHistoryFilter filter) {
+    return indexService.findCandidateCommitIds(Objects.requireNonNull(filter, "filter"));
+  }
+
+  Map<String, WorkflowSemanticHistoryResult> evidence(String branch, Collection<CommitId> commits) {
+    return indexService.findEvidence(branch, commits);
   }
 
   void indexBestEffort(String branch, CommitId commitId, WorkflowSnapshot authoritativeSnapshot) {

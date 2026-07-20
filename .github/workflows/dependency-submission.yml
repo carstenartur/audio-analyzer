@@ -1,0 +1,50 @@
+name: Maven Dependency Submission
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+    paths:
+      - '.github/workflows/dependency-submission.yml'
+      - 'pom.xml'
+      - '**/pom.xml'
+  pull_request:
+    branches:
+      - master
+    paths:
+      - '.github/workflows/dependency-submission.yml'
+      - 'pom.xml'
+      - '**/pom.xml'
+
+permissions:
+  contents: write
+  packages: read
+
+jobs:
+  submit-maven:
+    runs-on: ubuntu-latest
+    env:
+      JAVA_VERSION: '21'
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up JDK and authenticated Maven registry
+        uses: actions/setup-java@v5
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: temurin
+          cache: maven
+          server-id: github
+          server-username: GITHUB_ACTOR
+          server-password: GITHUB_TOKEN
+
+      - name: Validate dependency resolution
+        run: mvn -B validate --file pom.xml
+
+      - name: Submit resolved dependency graph
+        if: github.event_name != 'pull_request'
+        uses: advanced-security/maven-dependency-submission-action@c7818038197dfab7dc48236d43a81d439a84a5f7

@@ -6,6 +6,7 @@ import io.github.carstenartur.jgit.storage.hibernate.search.service.CommitIndexe
 import io.github.carstenartur.jgit.storage.hibernate.search.service.GitHistorySearchService;
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Objects;
@@ -41,6 +42,16 @@ final class GenericWorkflowHistoryProjection {
   }
 
   List<WorkflowHistoryTextResult> search(WorkflowHistoryTextQuery query) {
+    return search(query, null);
+  }
+
+  List<WorkflowHistoryTextResult> searchWithinCandidates(
+      WorkflowHistoryTextQuery query, Collection<CommitId> candidates) {
+    return search(query, Objects.requireNonNull(candidates, "candidates"));
+  }
+
+  private List<WorkflowHistoryTextResult> search(
+      WorkflowHistoryTextQuery query, Collection<CommitId> candidates) {
     Objects.requireNonNull(query, "query");
     CommitHistoryQuery.Builder sharedQuery =
         CommitHistoryQuery.forRepository(repositoryName)
@@ -48,6 +59,9 @@ final class GenericWorkflowHistoryProjection {
             .authoredBy(query.authorEmail())
             .touchingPath(query.pathText())
             .limit(query.limit());
+    if (candidates != null) {
+      sharedQuery.restrictedToObjectIds(candidates.stream().map(CommitId::value).toList());
+    }
     if (query.from() != null) {
       sharedQuery.from(query.from());
     }

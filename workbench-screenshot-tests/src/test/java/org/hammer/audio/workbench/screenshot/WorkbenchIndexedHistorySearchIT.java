@@ -17,7 +17,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.testcontainers.DockerClientFactory;
 
-/** Packaged-browser evidence for indexed search, compare and non-destructive restore. */
+/** Packaged-browser evidence for combined search, compare and non-destructive restore. */
 @Tag("collaboration-e2e")
 class WorkbenchIndexedHistorySearchIT {
 
@@ -64,21 +64,32 @@ class WorkbenchIndexedHistorySearchIT {
       page.locator("[data-testid='indexed-history-path']").fill("workflow");
       page.locator("[data-testid='indexed-history-from']").fill("2026-07-19T12:59");
       page.locator("[data-testid='indexed-history-to']").fill("2026-07-19T13:00");
+      page.locator("[data-testid='indexed-history-workflow']").fill("seed.workflow");
+      page.locator("[data-testid='indexed-history-node']").fill("seed.gain");
       page.locator("[data-testid='indexed-history-search']").click();
-      waitForStatus(page, "No indexed checkpoints match these filters.");
+      waitForStatus(
+          page, "No branch-reachable checkpoints match all generic and semantic filters.");
       assertEquals(0, page.locator("[data-testid^='indexed-history-load-']").count());
 
       page.locator("[data-testid='indexed-history-author']").fill(AUTHOR_EMAIL);
+      page.locator("[data-testid='indexed-history-node']").fill(LATER_NODE_ID);
       page.locator("[data-testid='indexed-history-search']").click();
+      waitForStatus(
+          page, "No branch-reachable checkpoints match all generic and semantic filters.");
+
+      page.locator("[data-testid='indexed-history-node']").fill("seed.gain");
+      page.locator("[data-testid='indexed-history-type']").fill("gain");
+      page.locator("[data-testid='indexed-history-search']").click();
+      waitForStatus(page, "1 combined checkpoint found.");
 
       Locator exactLoad =
           page.locator("[data-testid='indexed-history-load-" + historicalCommit + "']");
       exactLoad.waitFor();
       assertEquals(1, exactLoad.count());
-      assertTrue(
-          page.locator("[data-testid='indexed-history-results']")
-              .innerText()
-              .contains(historicalCommit.substring(0, 12)));
+      String resultText = page.locator("[data-testid='indexed-history-results']").innerText();
+      assertTrue(resultText.contains(historicalCommit.substring(0, 12)));
+      assertTrue(resultText.contains("seed.workflow"));
+      assertTrue(resultText.contains("gain"));
 
       page.evaluate(
           "input => sessionStorage.setItem(input.key, input.value)",
@@ -124,8 +135,14 @@ class WorkbenchIndexedHistorySearchIT {
     page.locator("[data-testid='indexed-history-path']").fill("");
     page.locator("[data-testid='indexed-history-from']").fill("");
     page.locator("[data-testid='indexed-history-to']").fill("");
+    page.locator("[data-testid='indexed-history-workflow']").fill("");
+    page.locator("[data-testid='indexed-history-node']").fill("");
+    page.locator("[data-testid='indexed-history-type']").fill("");
+    page.locator("[data-testid='indexed-history-label']").fill("");
+    page.locator("[data-testid='indexed-history-property-key']").fill("");
+    page.locator("[data-testid='indexed-history-property-value']").fill("");
     page.locator("[data-testid='indexed-history-search']").click();
-    waitForStatus(page, "2 indexed checkpoints found.");
+    waitForStatus(page, "2 combined checkpoints found.");
   }
 
   private static void waitForStatus(Page page, String expected) {

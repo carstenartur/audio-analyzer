@@ -25,8 +25,11 @@ import org.hammer.audio.workflow.Metadata;
 import org.hammer.audio.workflow.Node;
 import org.hammer.audio.workflow.Workflow;
 import org.hammer.audio.workflow.dsl.WorkflowDslSerializer;
+import org.hammer.audio.workflow.history.WorkflowCombinedHistoryQuery;
+import org.hammer.audio.workflow.history.WorkflowCombinedHistoryResult;
 import org.hammer.audio.workflow.history.WorkflowHistoryTextQuery;
 import org.hammer.audio.workflow.history.WorkflowHistoryTextResult;
+import org.hammer.audio.workflow.history.WorkflowSemanticHistoryFilter;
 import org.hammer.audio.workflow.history.WorkflowSemanticHistoryQuery;
 import org.hammer.audio.workflow.history.WorkflowSemanticHistoryResult;
 import org.hammer.audio.workflow.store.CommitId;
@@ -57,7 +60,7 @@ class WorkflowPostgreSqlProjectionRebuildIntegrationTest {
           .withPassword("postgres");
 
   @Test
-  void migratesValidatesRebuildsAndQueriesGenericAndSemanticHistory() throws Exception {
+  void migratesValidatesRebuildsAndQueriesGenericSemanticAndCombinedHistory() throws Exception {
     try (PostgreSqlSchema schema = PostgreSqlSchema.create()) {
       DataSource dataSource = schema.dataSource();
       WorkflowSchemaMigrationResult migration =
@@ -84,33 +87,42 @@ class WorkflowPostgreSqlProjectionRebuildIntegrationTest {
                   provider.getSessionFactory(), REPOSITORY_NAME)) {
         assertEquals(2, store.rebuild("main", -1));
 
-        List<WorkflowHistoryTextResult> genericHits =
-            store.search(
-                new WorkflowHistoryTextQuery(
-                    "wingbeatneedle",
-                    "postgres-test@audio-analyzer.invalid",
-                    "workflow",
-                    null,
-                    null,
-                    10));
+        WorkflowHistoryTextQuery genericQuery =
+            new WorkflowHistoryTextQuery(
+                "wingbeatneedle",
+                "postgres-test@audio-analyzer.invalid",
+                "workflow",
+                null,
+                null,
+                10);
+        List<WorkflowHistoryTextResult> genericHits = store.search(genericQuery);
         assertEquals(
             List.of(matchingCommit),
             genericHits.stream().map(WorkflowHistoryTextResult::commitId).toList());
 
+        WorkflowSemanticHistoryFilter semanticFilter =
+            new WorkflowSemanticHistoryFilter(
+                "main", WORKFLOW_ID, "node.classifier", "classifier", "wingbeat", "mode", "safe");
         List<WorkflowSemanticHistoryResult> semanticHits =
             store.searchSemantic(
                 new WorkflowSemanticHistoryQuery(
-                    "main",
-                    WORKFLOW_ID,
-                    "node.classifier",
-                    "classifier",
-                    "wingbeat",
-                    "mode",
-                    "safe",
+                    semanticFilter.branch(),
+                    semanticFilter.workflowId(),
+                    semanticFilter.nodeId(),
+                    semanticFilter.nodeType(),
+                    semanticFilter.labelText(),
+                    semanticFilter.propertyKey(),
+                    semanticFilter.propertyValue(),
                     10));
         assertEquals(
             List.of(matchingCommit),
             semanticHits.stream().map(WorkflowSemanticHistoryResult::commitId).toList());
+
+        List<WorkflowCombinedHistoryResult> combinedHits =
+            store.searchCombined(new WorkflowCombinedHistoryQuery(genericQuery, semanticFilter));
+        assertEquals(1, combinedHits.size());
+        assertEquals(matchingCommit, combinedHits.getFirst().commit().commitId());
+        assertEquals(matchingCommit, combinedHits.getFirst().semantics().commitId());
         assertEquals(matchingSnapshot, store.loadAtCommit(matchingCommit));
       }
     }

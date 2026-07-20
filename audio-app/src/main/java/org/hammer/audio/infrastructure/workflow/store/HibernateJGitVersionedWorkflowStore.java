@@ -1,13 +1,15 @@
 package org.hammer.audio.infrastructure.workflow.store;
 
-import io.github.carstenartur.jgit.storage.hibernate.DefaultHibernateRepositoryFactory;
 import io.github.carstenartur.jgit.storage.hibernate.HibernateGitStorage;
 import io.github.carstenartur.jgit.storage.hibernate.HibernateRepositoryFactory;
 import io.github.carstenartur.jgit.storage.hibernate.RepositoryName;
 import java.util.List;
 import java.util.Objects;
+import org.hammer.audio.workflow.history.IndexedWorkflowCombinedHistorySearch;
 import org.hammer.audio.workflow.history.IndexedWorkflowHistorySearch;
 import org.hammer.audio.workflow.history.IndexedWorkflowSemanticHistorySearch;
+import org.hammer.audio.workflow.history.WorkflowCombinedHistoryQuery;
+import org.hammer.audio.workflow.history.WorkflowCombinedHistoryResult;
 import org.hammer.audio.workflow.history.WorkflowHistoryTextQuery;
 import org.hammer.audio.workflow.history.WorkflowHistoryTextResult;
 import org.hammer.audio.workflow.history.WorkflowSemanticHistoryQuery;
@@ -25,16 +27,21 @@ public final class HibernateJGitVersionedWorkflowStore
     implements VersionedWorkflowStore,
         IndexedWorkflowHistorySearch,
         IndexedWorkflowSemanticHistorySearch,
+        IndexedWorkflowCombinedHistorySearch,
         AutoCloseable {
 
   private final HibernateGitStorage storage;
   private final JGitRepositoryVersionedWorkflowStore delegate;
   private final GenericWorkflowHistoryProjection genericHistoryProjection;
   private final WorkflowSemanticHistoryProjection semanticHistoryProjection;
+  private final CombinedWorkflowHistorySearch combinedHistorySearch;
 
   /** Opens a searchable logical repository using the application-managed SessionFactory. */
   public HibernateJGitVersionedWorkflowStore(SessionFactory sessionFactory, String repositoryName) {
-    this(openStorage(sessionFactory, repositoryName), sessionFactory, repositoryName);
+    this(
+        HibernateWorkflowGitStorage.open(sessionFactory, repositoryName),
+        sessionFactory,
+        repositoryName);
   }
 
   /** Opens a storage-only adapter through a supplied shared repository factory. */
@@ -50,6 +57,7 @@ public final class HibernateJGitVersionedWorkflowStore
     this.delegate = new JGitRepositoryVersionedWorkflowStore(storage.repository());
     this.genericHistoryProjection = null;
     this.semanticHistoryProjection = null;
+    this.combinedHistorySearch = null;
   }
 
   private HibernateJGitVersionedWorkflowStore(
@@ -65,6 +73,8 @@ public final class HibernateJGitVersionedWorkflowStore
     this.semanticHistoryProjection =
         new WorkflowSemanticHistoryProjection(
             delegate, requiredSessionFactory, requiredRepositoryName);
+    this.combinedHistorySearch =
+        new CombinedWorkflowHistorySearch(genericHistoryProjection, semanticHistoryProjection);
   }
 
   @Override
@@ -119,6 +129,12 @@ public final class HibernateJGitVersionedWorkflowStore
   }
 
   @Override
+  public List<WorkflowCombinedHistoryResult> searchCombined(WorkflowCombinedHistoryQuery query) {
+    requireCombinedSearchEnabled();
+    return combinedHistorySearch.search(query);
+  }
+
+  @Override
   public int rebuild(String branch, int limit) {
     requireSearchEnabled();
     requireSemanticSearchEnabled();
@@ -133,13 +149,6 @@ public final class HibernateJGitVersionedWorkflowStore
   @Override
   public void close() {
     storage.close();
-  }
-
-  private static HibernateGitStorage openStorage(
-      SessionFactory sessionFactory, String repositoryName) {
-    return new DefaultHibernateRepositoryFactory(
-            Objects.requireNonNull(sessionFactory, "sessionFactory"))
-        .open(new RepositoryName(repositoryName));
   }
 
   private void indexBestEffort(
@@ -163,6 +172,13 @@ public final class HibernateJGitVersionedWorkflowStore
     if (semanticHistoryProjection == null) {
       throw new IllegalStateException(
           "Semantic workflow history search requires the application-managed SessionFactory");
+    }
+  }
+
+  private void requireCombinedSearchEnabled() {
+    if (combinedHistorySearch == null) {
+      throw new IllegalStateException(
+          "Combined workflow history search requires the application-managed SessionFactory");
     }
   }
 

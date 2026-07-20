@@ -1,9 +1,7 @@
 package org.hammer.audio.workflow.history;
 
-import java.util.Objects;
-
 /**
- * Exact domain-semantic filters for one workflow branch.
+ * Bounded semantic-history query for one workflow branch.
  *
  * @param branch required branch whose reachable semantic projection is searched
  * @param workflowId optional exact workflow identifier
@@ -25,28 +23,24 @@ public record WorkflowSemanticHistoryQuery(
     int limit) {
 
   public WorkflowSemanticHistoryQuery {
-    branch = requireNotBlank(branch, "branch");
-    workflowId = normalize(workflowId);
-    nodeId = normalize(nodeId);
-    nodeType = normalize(nodeType);
-    labelText = normalize(labelText);
-    propertyKey = normalize(propertyKey);
-    propertyValue = normalize(propertyValue);
+    WorkflowSemanticHistoryFilter filter =
+        new WorkflowSemanticHistoryFilter(
+            branch, workflowId, nodeId, nodeType, labelText, propertyKey, propertyValue);
+    branch = filter.branch();
+    workflowId = filter.workflowId();
+    nodeId = filter.nodeId();
+    nodeType = filter.nodeType();
+    labelText = filter.labelText();
+    propertyKey = filter.propertyKey();
+    propertyValue = filter.propertyValue();
     if (limit <= 0 || limit > 200) {
       throw new IllegalArgumentException("limit must be between 1 and 200");
     }
   }
 
-  private static String normalize(String value) {
-    return value == null || value.isBlank() ? null : value.trim();
-  }
-
-  private static String requireNotBlank(String value, String name) {
-    Objects.requireNonNull(value, name);
-    String normalized = value.trim();
-    if (normalized.isEmpty()) {
-      throw new IllegalArgumentException(name + " must not be blank");
-    }
-    return normalized;
+  /** Returns the unbounded semantic filter represented by this bounded query. */
+  public WorkflowSemanticHistoryFilter filter() {
+    return new WorkflowSemanticHistoryFilter(
+        branch, workflowId, nodeId, nodeType, labelText, propertyKey, propertyValue);
   }
 }
