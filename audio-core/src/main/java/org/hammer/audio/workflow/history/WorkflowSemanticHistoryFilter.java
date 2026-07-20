@@ -32,7 +32,9 @@ public record WorkflowSemanticHistoryFilter(
     propertyValue = normalize(propertyValue);
   }
 
-  /** Returns whether at least one domain-specific predicate is present beside branch reachability. */
+  /**
+   * Returns whether at least one domain-specific predicate is present beside branch reachability.
+   */
   public boolean hasDomainPredicates() {
     return workflowId != null
         || nodeId != null
