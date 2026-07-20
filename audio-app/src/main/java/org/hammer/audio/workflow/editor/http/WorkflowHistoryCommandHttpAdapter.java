@@ -78,7 +78,12 @@ public final class WorkflowHistoryCommandHttpAdapter {
    * @param afterCommitId exact later commit
    */
   public record CompareRequest(
-      @NotBlank String branch, @NotBlank String beforeCommitId, @NotBlank String afterCommitId) {}
+      @NotBlank String branch, @NotBlank String beforeCommitId, @NotBlank String afterCommitId) {
+
+    public CompareRequest {
+      // Bean validation owns request-contract checks at the HTTP boundary.
+    }
+  }
 
   /**
    * Non-destructive restore request.
@@ -96,7 +101,12 @@ public final class WorkflowHistoryCommandHttpAdapter {
       @NotBlank String expectedHeadCommitId,
       @NotBlank String author,
       @NotBlank String message,
-      @NotNull Instant timestamp) {}
+      @NotNull Instant timestamp) {
+
+    public RestoreRequest {
+      // Bean validation owns request-contract checks at the HTTP boundary.
+    }
+  }
 
   /**
    * Transport-safe comparison including both graph states and semantic change atoms.
