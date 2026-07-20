@@ -2,7 +2,12 @@ package org.hammer.audio.workflow.history;
 
 import java.util.Objects;
 
-/** Exact workflow or node metadata evidence from one historical commit. */
+/**
+ * Exact workflow or node metadata evidence from one historical commit.
+ *
+ * @param key exact metadata key
+ * @param value exact metadata value, including an empty value
+ */
 public record WorkflowSemanticProperty(String key, String value) {
 
   public WorkflowSemanticProperty {
