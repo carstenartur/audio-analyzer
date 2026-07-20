@@ -115,8 +115,7 @@ class WorkflowRunServiceTest {
             WorkflowRunException.class,
             () ->
                 service.start(
-                    new Command(
-                        "command.conflict", new LiveSessionSource("session.other", 0))));
+                    new Command("command.conflict", new LiveSessionSource("session.other", 0))));
 
     assertEquals(Code.DUPLICATE_START_COMMAND, exception.code());
   }
