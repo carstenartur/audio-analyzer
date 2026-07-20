@@ -4,15 +4,26 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import org.hammer.audio.workflow.Node;
 import org.hammer.audio.workflow.Workflow;
+import org.hammer.audio.workflow.WorkflowOperation.RenameNode;
 import org.hammer.audio.workflow.collaboration.CollaborationMode;
 import org.hammer.audio.workflow.collaboration.OperationActor;
 import org.hammer.audio.workflow.collaboration.WorkflowSessionRegistry;
@@ -96,6 +107,79 @@ class WorkflowRunServiceTest {
 
     assertEquals(first.runId(), retry.runId());
     assertEquals(1, service.runs().size());
+  }
+
+  @org.junit.jupiter.api.Test
+  void concurrentIdenticalStartCommandsShareSingleRun() throws Exception {
+    AtomicReference<Runnable> queued = new AtomicReference<>();
+    WorkflowRunService service =
+        service(
+            sessionsWithEmptyWorkflow(),
+            null,
+            new SimulationWorkflowExecutionBackend(),
+            queued::set);
+    Command command = new Command("command.concurrent", new LiveSessionSource("session.test", 0));
+    int callerCount = 8;
+    CountDownLatch ready = new CountDownLatch(callerCount);
+    CountDownLatch release = new CountDownLatch(1);
+    ExecutorService callers = Executors.newFixedThreadPool(callerCount);
+    try {
+      List<Future<Snapshot>> attempts = new ArrayList<>();
+      for (int index = 0; index < callerCount; index++) {
+        attempts.add(
+            callers.submit(
+                () -> {
+                  ready.countDown();
+                  release.await();
+                  return service.start(command);
+                }));
+      }
+      assertTrue(ready.await(5, TimeUnit.SECONDS));
+      release.countDown();
+      Set<String> runIds = new HashSet<>();
+      for (Future<Snapshot> attempt : attempts) {
+        runIds.add(attempt.get(5, TimeUnit.SECONDS).runId());
+      }
+      assertEquals(Set.of("run.test.1"), runIds);
+    } finally {
+      callers.shutdownNow();
+    }
+    assertEquals(1, service.runs().size());
+    assertNotNull(queued.get());
+  }
+
+  @org.junit.jupiter.api.Test
+  void laterSessionEditDoesNotMutateCapturedRun() {
+    Node node = new Node("node.test", "test", "Before", List.of(), List.of());
+    WorkflowSessionRegistry sessions =
+        sessionsWithWorkflow(
+            new Workflow("workflow.test", "Test Workflow", List.of(node), List.of()));
+    WorkflowRunService service =
+        service(sessions, null, new SimulationWorkflowExecutionBackend(), Runnable::run);
+
+    Snapshot captured =
+        service.start(new Command("command.immutable", new LiveSessionSource("session.test", 0)));
+    sessions.applyOperation(
+        "session.test",
+        CollaborationMode.PRIVATE_WORKSPACE,
+        OWNER,
+        0,
+        new RenameNode(
+            "operation.rename", NOW.plusSeconds(1), OWNER.actorId(), "node.test", "Before", "After"));
+    Snapshot afterEdit = service.inspect(captured.runId());
+
+    assertEquals(captured.fingerprint(), afterEdit.fingerprint());
+    assertEquals(0L, afterEdit.semanticRevision());
+    assertEquals(
+        "Before",
+        service
+            .result(captured.runId())
+            .reproducibilityBundle()
+            .snapshot()
+            .nodes()
+            .getFirst()
+            .label());
+    assertEquals("After", sessions.workflow("session.test").nodes().getFirst().label());
   }
 
   @org.junit.jupiter.api.Test
@@ -217,11 +301,15 @@ class WorkflowRunServiceTest {
   }
 
   private static WorkflowSessionRegistry sessionsWithEmptyWorkflow() {
+    return sessionsWithWorkflow(emptyWorkflow());
+  }
+
+  private static WorkflowSessionRegistry sessionsWithWorkflow(Workflow workflow) {
     WorkflowSessionRegistry sessions = new WorkflowSessionRegistry();
     assertSame(
         OWNER,
         sessions
-            .create("session.test", CollaborationMode.PRIVATE_WORKSPACE, OWNER, emptyWorkflow())
+            .create("session.test", CollaborationMode.PRIVATE_WORKSPACE, OWNER, workflow)
             .owner());
     return sessions;
   }
