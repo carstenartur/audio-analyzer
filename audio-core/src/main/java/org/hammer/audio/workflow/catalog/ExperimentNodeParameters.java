@@ -12,6 +12,9 @@ public interface ExperimentNodeParameters {
   /** Oscillator frequency in hertz. */
   String SIGNAL_FREQUENCY_HZ = "signal.frequency-hz";
 
+  /** Initial oscillator phase in radians. */
+  String SIGNAL_PHASE_RADIANS = "signal.phase-radians";
+
   /** Peak normalized oscillator amplitude. */
   String SIGNAL_AMPLITUDE = "signal.amplitude";
 
