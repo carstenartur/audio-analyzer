@@ -48,8 +48,7 @@ class HibernateDeterministicWorkflowRunIntegrationTest {
       CommitId commitId =
           store.commit(
               "main",
-              new WorkflowSnapshot(
-                  workflow.id(), new WorkflowDslSerializer().serialize(workflow)),
+              new WorkflowSnapshot(workflow.id(), new WorkflowDslSerializer().serialize(workflow)),
               new CommitMetadata("tester", "deterministic checkpoint", NOW));
       WorkflowRunService service =
           new WorkflowRunService(
@@ -67,8 +66,7 @@ class HibernateDeterministicWorkflowRunIntegrationTest {
       assertEquals(commitId, run.commitId());
       assertEquals(commitId, result.reproducibilityBundle().commitId());
       assertEquals(
-          ExecutionStatus.COMPLETED,
-          result.reproducibilityBundle().result().overallStatus());
+          ExecutionStatus.COMPLETED, result.reproducibilityBundle().result().overallStatus());
       assertEquals(
           64, result.artifacts().get(DeterministicAudioArtifacts.OUTPUT_DIGEST_SHA256).length());
     }

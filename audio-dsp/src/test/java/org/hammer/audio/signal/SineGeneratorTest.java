@@ -31,11 +31,9 @@ class SineGeneratorTest {
     AudioFormatDescriptor format = new AudioFormatDescriptor(48_000.0f, 1, 32);
 
     assertThrows(
-        IllegalArgumentException.class,
-        () -> new SineGenerator(format, Double.NaN, 0.5f, 0.0d));
+        IllegalArgumentException.class, () -> new SineGenerator(format, Double.NaN, 0.5f, 0.0d));
     assertThrows(
-        IllegalArgumentException.class,
-        () -> new SineGenerator(format, 1_000.0d, Float.NaN, 0.0d));
+        IllegalArgumentException.class, () -> new SineGenerator(format, 1_000.0d, Float.NaN, 0.0d));
     assertThrows(
         IllegalArgumentException.class,
         () -> new SineGenerator(format, 1_000.0d, 0.5f, Double.POSITIVE_INFINITY));

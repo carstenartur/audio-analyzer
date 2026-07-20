@@ -59,10 +59,7 @@ final class SyntheticSignalNodeExecutor implements DeterministicAudioNodeExecuto
             parameters.sampleRateHz(), parameters.channels(), SOURCE_SAMPLE_SIZE_BITS);
     SineGenerator generator =
         new SineGenerator(
-            format,
-            parameters.frequencyHz(),
-            parameters.amplitude(),
-            parameters.phaseRadians());
+            format, parameters.frequencyHz(), parameters.amplitude(), parameters.phaseRadians());
     float[][] samples = new float[parameters.channels()][parameters.frameCount()];
     int offset = 0;
     while (offset < parameters.frameCount()) {

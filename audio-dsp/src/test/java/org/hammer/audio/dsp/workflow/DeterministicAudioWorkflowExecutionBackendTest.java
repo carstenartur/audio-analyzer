@@ -38,11 +38,13 @@ class DeterministicAudioWorkflowExecutionBackendTest {
 
     Result result = backend.execute(input, neverCancelled());
 
-    assertEquals(ExecutionStatus.COMPLETED, result.reproducibilityBundle().result().overallStatus());
+    assertEquals(
+        ExecutionStatus.COMPLETED, result.reproducibilityBundle().result().overallStatus());
     assertEquals(
         DeterministicAudioWorkflowExecutionBackend.BACKEND_VERSION,
         result.artifacts().get(DeterministicAudioArtifacts.BACKEND_VERSION));
-    assertEquals(64, result.artifacts().get(DeterministicAudioArtifacts.OUTPUT_DIGEST_SHA256).length());
+    assertEquals(
+        64, result.artifacts().get(DeterministicAudioArtifacts.OUTPUT_DIGEST_SHA256).length());
     float[] expected = {
       0.0f,
       (float) Math.sqrt(0.5d),
@@ -93,7 +95,8 @@ class DeterministicAudioWorkflowExecutionBackendTest {
     Result result =
         new DeterministicAudioWorkflowExecutionBackend().execute(input, cancelDuringGenerator);
 
-    assertEquals(ExecutionStatus.CANCELLED, result.reproducibilityBundle().result().overallStatus());
+    assertEquals(
+        ExecutionStatus.CANCELLED, result.reproducibilityBundle().result().overallStatus());
     assertEquals(
         ExecutionStatus.CANCELLED,
         result.reproducibilityBundle().result().nodeStatuses().get("node.generator"));
@@ -142,8 +145,7 @@ class DeterministicAudioWorkflowExecutionBackendTest {
     assertEquals(
         ExecutionStatus.SKIPPED,
         result.reproducibilityBundle().result().nodeStatuses().get("node.gain.2"));
-    assertEquals(
-        "node.gain.1", result.artifacts().get(DeterministicAudioArtifacts.FAILED_NODE_ID));
+    assertEquals("node.gain.1", result.artifacts().get(DeterministicAudioArtifacts.FAILED_NODE_ID));
     assertEquals(
         ExperimentNodeProtocol.TYPE_GAIN,
         result.artifacts().get(DeterministicAudioArtifacts.FAILED_NODE_TYPE));
@@ -155,8 +157,7 @@ class DeterministicAudioWorkflowExecutionBackendTest {
 
   @Test
   void unsupportedAndInvalidNodesFailPreflightWithNodeSpecificViolations() {
-    Node unsupported =
-        new Node("node.unsupported", "fft", "Unsupported", List.of(), List.of());
+    Node unsupported = new Node("node.unsupported", "fft", "Unsupported", List.of(), List.of());
     Input unsupportedInput =
         input(new Workflow("workflow.unsupported", "Unsupported", List.of(unsupported), List.of()));
     Node invalidGenerator = configuredGenerator(8);
@@ -164,8 +165,7 @@ class DeterministicAudioWorkflowExecutionBackendTest {
         withMetadata(
             invalidGenerator,
             Map.of(
-                ExperimentNodeParameters.SIGNAL_WAVEFORM,
-                ExperimentNodeParameters.WAVEFORM_SINE));
+                ExperimentNodeParameters.SIGNAL_WAVEFORM, ExperimentNodeParameters.WAVEFORM_SINE));
     Input invalidInput =
         input(new Workflow("workflow.invalid", "Invalid", List.of(invalidGenerator), List.of()));
     DeterministicAudioWorkflowExecutionBackend backend =

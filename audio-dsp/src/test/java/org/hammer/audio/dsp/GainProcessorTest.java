@@ -10,8 +10,7 @@ import org.junit.jupiter.api.Test;
 
 class GainProcessorTest {
 
-  private static final AudioFormatDescriptor FORMAT =
-      new AudioFormatDescriptor(48_000.0f, 1, 32);
+  private static final AudioFormatDescriptor FORMAT = new AudioFormatDescriptor(48_000.0f, 1, 32);
 
   @Test
   void appliesLinearGainWithoutMutatingInput() {
