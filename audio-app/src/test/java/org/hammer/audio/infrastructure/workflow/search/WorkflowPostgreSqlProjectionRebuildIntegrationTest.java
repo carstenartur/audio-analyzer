@@ -26,7 +26,9 @@ import org.hammer.audio.workflow.Node;
 import org.hammer.audio.workflow.Workflow;
 import org.hammer.audio.workflow.dsl.WorkflowDslSerializer;
 import org.hammer.audio.workflow.history.WorkflowHistoryTextQuery;
+import org.hammer.audio.workflow.history.WorkflowHistoryTextResult;
 import org.hammer.audio.workflow.history.WorkflowSemanticHistoryQuery;
+import org.hammer.audio.workflow.history.WorkflowSemanticHistoryResult;
 import org.hammer.audio.workflow.store.CommitId;
 import org.hammer.audio.workflow.store.CommitMetadata;
 import org.hammer.audio.workflow.store.WorkflowSnapshot;
@@ -65,7 +67,8 @@ class WorkflowPostgreSqlProjectionRebuildIntegrationTest {
 
       CommitId matchingCommit;
       WorkflowSnapshot matchingSnapshot = matchingSnapshot();
-      try (HibernateSessionFactoryProvider provider = provider(dataSource, migration);
+      try (HibernateSessionFactoryProvider provider =
+              provider(dataSource, schema.jdbcUrl(), migration);
           HibernateJGitVersionedWorkflowStore store =
               new HibernateJGitVersionedWorkflowStore(
                   provider.getSessionFactory(), REPOSITORY_NAME)) {
@@ -74,13 +77,14 @@ class WorkflowPostgreSqlProjectionRebuildIntegrationTest {
         removeDerivedRows(provider);
       }
 
-      try (HibernateSessionFactoryProvider provider = provider(dataSource, migration);
+      try (HibernateSessionFactoryProvider provider =
+              provider(dataSource, schema.jdbcUrl(), migration);
           HibernateJGitVersionedWorkflowStore store =
               new HibernateJGitVersionedWorkflowStore(
                   provider.getSessionFactory(), REPOSITORY_NAME)) {
         assertEquals(2, store.rebuild("main", -1));
 
-        var genericHits =
+        List<WorkflowHistoryTextResult> genericHits =
             store.search(
                 new WorkflowHistoryTextQuery(
                     "wingbeatneedle",
@@ -89,9 +93,11 @@ class WorkflowPostgreSqlProjectionRebuildIntegrationTest {
                     null,
                     null,
                     10));
-        assertEquals(List.of(matchingCommit), genericHits.stream().map(hit -> hit.commitId()).toList());
+        assertEquals(
+            List.of(matchingCommit),
+            genericHits.stream().map(WorkflowHistoryTextResult::commitId).toList());
 
-        var semanticHits =
+        List<WorkflowSemanticHistoryResult> semanticHits =
             store.searchSemantic(
                 new WorkflowSemanticHistoryQuery(
                     "main",
@@ -103,16 +109,17 @@ class WorkflowPostgreSqlProjectionRebuildIntegrationTest {
                     "safe",
                     10));
         assertEquals(
-            List.of(matchingCommit), semanticHits.stream().map(hit -> hit.commitId()).toList());
+            List.of(matchingCommit),
+            semanticHits.stream().map(WorkflowSemanticHistoryResult::commitId).toList());
         assertEquals(matchingSnapshot, store.loadAtCommit(matchingCommit));
       }
     }
   }
 
   private static HibernateSessionFactoryProvider provider(
-      DataSource dataSource, WorkflowSchemaMigrationResult migration) {
+      DataSource dataSource, String jdbcUrl, WorkflowSchemaMigrationResult migration) {
     MockEnvironment environment =
-        new MockEnvironment().withProperty("spring.datasource.url", dataSourceUrl(dataSource));
+        new MockEnvironment().withProperty("spring.datasource.url", jdbcUrl);
     return new WorkflowPersistenceConfiguration()
         .workflowHibernateSessionFactoryProvider(
             dataSource,
@@ -129,7 +136,10 @@ class WorkflowPostgreSqlProjectionRebuildIntegrationTest {
   private static void removeDerivedRows(HibernateSessionFactoryProvider provider) {
     try (Session session = provider.getSessionFactory().openSession()) {
       session.beginTransaction();
-      session.createQuery("FROM GitCommitIndex", GitCommitIndex.class).getResultList().forEach(session::remove);
+      session
+          .createQuery("FROM GitCommitIndex", GitCommitIndex.class)
+          .getResultList()
+          .forEach(session::remove);
       session
           .createQuery("FROM WorkflowSemanticIndexEntity", WorkflowSemanticIndexEntity.class)
           .getResultList()
@@ -175,13 +185,6 @@ class WorkflowPostgreSqlProjectionRebuildIntegrationTest {
     return new CommitMetadata("postgres-test", message, BASE_TIME.plusSeconds(seconds));
   }
 
-  private static String dataSourceUrl(DataSource dataSource) {
-    if (dataSource instanceof DriverManagerDataSource driverManagerDataSource) {
-      return driverManagerDataSource.getUrl();
-    }
-    throw new IllegalArgumentException("Expected DriverManagerDataSource");
-  }
-
   private record PostgreSqlSchema(
       String baseUrl, String schemaName, String username, String password) implements AutoCloseable {
 
@@ -197,10 +200,14 @@ class WorkflowPostgreSqlProjectionRebuildIntegrationTest {
       return new PostgreSqlSchema(baseUrl, schemaName, username, password);
     }
 
+    String jdbcUrl() {
+      return baseUrl + "?currentSchema=" + schemaName;
+    }
+
     DataSource dataSource() {
       DriverManagerDataSource dataSource = new DriverManagerDataSource();
       dataSource.setDriverClassName("org.postgresql.Driver");
-      dataSource.setUrl(baseUrl + "?currentSchema=" + schemaName);
+      dataSource.setUrl(jdbcUrl());
       dataSource.setUsername(username);
       dataSource.setPassword(password);
       return dataSource;
