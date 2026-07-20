@@ -14,7 +14,7 @@ import org.hammer.audio.workflow.history.WorkflowHistoryComparison;
 import org.hammer.audio.workflow.history.WorkflowRestoreResult;
 import org.hammer.audio.workflow.store.CommitId;
 import org.hammer.audio.workflow.store.CommitMetadata;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -23,7 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 /** HTTP boundary for explicit branch-scoped workflow comparison and non-destructive restore. */
 @RestController
 @RequestMapping("/workflow/history")
-@ConditionalOnBean(WorkflowHistoryCommandService.class)
+@ConditionalOnProperty(name = "workbench.persistence.mode")
 public final class WorkflowHistoryCommandHttpAdapter {
 
   private final WorkflowHistoryCommandService commandService;
