@@ -5,6 +5,7 @@ import java.util.Objects;
 import org.hammer.audio.workflow.history.IndexedWorkflowSemanticHistorySearch;
 import org.hammer.audio.workflow.history.WorkflowSemanticHistoryQuery;
 import org.hammer.audio.workflow.history.WorkflowSemanticHistoryResult;
+import org.hammer.audio.workflow.history.WorkflowSemanticProperty;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -61,8 +62,7 @@ public final class WorkflowSemanticHistoryHttpAdapter {
       List<String> nodeIds,
       List<String> nodeTypes,
       List<String> nodeLabels,
-      List<String> propertyKeys,
-      List<String> propertyValues) {
+      List<WorkflowSemanticProperty> properties) {
 
     public SemanticHitResponse {
       commitId = Objects.requireNonNull(commitId, "commitId");
@@ -72,8 +72,7 @@ public final class WorkflowSemanticHistoryHttpAdapter {
       nodeIds = List.copyOf(Objects.requireNonNull(nodeIds, "nodeIds"));
       nodeTypes = List.copyOf(Objects.requireNonNull(nodeTypes, "nodeTypes"));
       nodeLabels = List.copyOf(Objects.requireNonNull(nodeLabels, "nodeLabels"));
-      propertyKeys = List.copyOf(Objects.requireNonNull(propertyKeys, "propertyKeys"));
-      propertyValues = List.copyOf(Objects.requireNonNull(propertyValues, "propertyValues"));
+      properties = List.copyOf(Objects.requireNonNull(properties, "properties"));
     }
 
     static SemanticHitResponse from(WorkflowSemanticHistoryResult result) {
@@ -85,8 +84,7 @@ public final class WorkflowSemanticHistoryHttpAdapter {
           result.nodeIds(),
           result.nodeTypes(),
           result.nodeLabels(),
-          result.propertyKeys(),
-          result.propertyValues());
+          result.properties());
     }
   }
 }
