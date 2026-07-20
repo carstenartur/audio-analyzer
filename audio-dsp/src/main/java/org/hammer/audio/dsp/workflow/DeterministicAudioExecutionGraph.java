@@ -4,8 +4,10 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import org.hammer.audio.core.AudioBlock;
 import org.hammer.audio.workflow.Edge;
 import org.hammer.audio.workflow.Node;
+import org.hammer.audio.workflow.catalog.ExperimentNodeProtocol;
 import org.hammer.audio.workflow.execution.WorkflowRunModels.Input;
 
 /** Compiled immutable node and edge lookup for one validated deterministic workflow input. */
@@ -53,11 +55,24 @@ final class DeterministicAudioExecutionGraph {
     return node;
   }
 
-  Edge incomingEdge(String nodeId) {
-    return incomingByTargetNodeId.get(nodeId);
+  AudioBlock upstreamInput(String nodeId, Map<String, AudioBlock> outputs) {
+    Edge incoming = incomingByTargetNodeId.get(nodeId);
+    if (incoming == null) {
+      return null;
+    }
+    AudioBlock source = outputs.get(incoming.sourceNodeId());
+    if (source == null) {
+      throw new IllegalStateException(
+          "Source node '" + incoming.sourceNodeId() + "' has no computed audio block");
+    }
+    return source;
   }
 
   String terminalNodeId() {
     return terminalNodeId;
+  }
+
+  String terminalOutputPortId() {
+    return ExperimentNodeProtocol.AUDIO_OUTPUT_PORT;
   }
 }
