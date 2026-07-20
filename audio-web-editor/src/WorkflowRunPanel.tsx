@@ -1,6 +1,14 @@
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+  type Dispatch,
+} from 'react';
 
-import { ApiError, type ApiProblem } from './api';
+import { ApiError, getJson, type ApiProblem } from './api';
 import {
   cancelWorkflowRun,
   inspectWorkflowRun,
@@ -31,9 +39,10 @@ interface CurrentWorkflowRunSource {
 
 interface WorkflowRunPanelProps {
   currentSource: CurrentWorkflowRunSource | null;
-  history: HistoricalWorkflowRunSource[];
-  onError: (message: string | null) => void;
-  onStatus: (message: string) => void;
+}
+
+interface HistoryEntry extends HistoricalWorkflowRunSource {
+  author: string;
 }
 
 function problemFor(failure: unknown): ApiProblem {
@@ -74,19 +83,35 @@ function downloadResult(runId: string, result: unknown): void {
   URL.revokeObjectURL(url);
 }
 
-export function WorkflowRunPanel({
-  currentSource,
-  history,
-  onError,
-  onStatus,
-}: WorkflowRunPanelProps) {
+export function WorkflowRunPanel({ currentSource }: WorkflowRunPanelProps) {
   const [state, dispatch] = useReducer(
     reduceWorkflowRunState,
     undefined,
     emptyWorkflowRunState,
-  ) as [WorkflowRunState, React.Dispatch<Record<string, unknown>>];
+  ) as [WorkflowRunState, Dispatch<Record<string, unknown>>];
+  const [branch, setBranch] = useState('main');
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [selectedCommitId, setSelectedCommitId] = useState('');
+  const [status, setStatus] = useState('Ready to capture an immutable run');
+  const [localError, setLocalError] = useState<string | null>(null);
   const resultRequests = useRef(new Set<string>());
+
+  const refreshHistory = useCallback(async () => {
+    setLocalError(null);
+    try {
+      const entries = await getJson<HistoryEntry[]>(
+        `/workflow/history?branch=${encodeURIComponent(branch)}&limit=20`,
+      );
+      setHistory(entries);
+      setStatus(`Loaded ${entries.length} historical run source${entries.length === 1 ? '' : 's'}`);
+    } catch (failure) {
+      setLocalError(problemFor(failure).detail ?? 'Could not load workflow history');
+    }
+  }, [branch]);
+
+  useEffect(() => {
+    void refreshHistory();
+  }, [refreshHistory]);
 
   useEffect(() => {
     if (selectedCommitId !== '' && history.some((entry) => entry.commitId === selectedCommitId)) {
@@ -100,31 +125,28 @@ export function WorkflowRunPanel({
     [history, selectedCommitId],
   );
 
-  const submitCommand = useCallback(
-    async (command: WorkflowRunCommand, retry: boolean) => {
-      if (!retry) {
-        dispatch({ type: 'START_SUBMITTED', command });
+  const submitCommand = useCallback(async (command: WorkflowRunCommand, retry: boolean) => {
+    if (!retry) {
+      dispatch({ type: 'START_SUBMITTED', command });
+    }
+    setLocalError(null);
+    setStatus(retry ? 'Retrying immutable workflow run…' : 'Capturing immutable workflow run…');
+    try {
+      const run = await startWorkflowRun(runStartRequest(command));
+      dispatch({ type: 'START_ACCEPTED', run });
+      setStatus(`Run ${run.runId} accepted as ${run.mode}`);
+    } catch (failure) {
+      const problem = problemFor(failure);
+      if (failure instanceof ApiError) {
+        dispatch({ type: 'START_REJECTED', problem });
+        setStatus('Workflow run preflight rejected');
+      } else {
+        dispatch({ type: 'START_UNCERTAIN', problem });
+        setStatus('Transport outcome uncertain; retry preserves the start command id');
       }
-      onError(null);
-      onStatus(retry ? 'Retrying immutable workflow run…' : 'Capturing immutable workflow run…');
-      try {
-        const run = await startWorkflowRun(runStartRequest(command));
-        dispatch({ type: 'START_ACCEPTED', run });
-        onStatus(`Run ${run.runId} accepted as ${run.mode}`);
-      } catch (failure) {
-        const problem = problemFor(failure);
-        if (failure instanceof ApiError) {
-          dispatch({ type: 'START_REJECTED', problem });
-          onStatus('Workflow run preflight rejected');
-        } else {
-          dispatch({ type: 'START_UNCERTAIN', problem });
-          onStatus('Workflow run transport outcome is uncertain; retry uses the same command id');
-        }
-        onError(runProblemMessages(problem).join(' · '));
-      }
-    },
-    [onError, onStatus],
-  );
+      setLocalError(runProblemMessages(problem).join(' · '));
+    }
+  }, []);
 
   const startCurrent = useCallback(() => {
     if (currentSource === null) {
@@ -159,13 +181,13 @@ export function WorkflowRunPanel({
     try {
       const run = await cancelWorkflowRun(state.run.runId);
       dispatch({ type: 'SNAPSHOT_RECEIVED', run });
-      onStatus(`Cancellation requested for ${run.runId}`);
+      setStatus(`Cancellation requested for ${run.runId}`);
     } catch (failure) {
       const problem = problemFor(failure);
       dispatch({ type: 'POLL_FAILED', problem });
-      onError(runProblemMessages(problem).join(' · '));
+      setLocalError(runProblemMessages(problem).join(' · '));
     }
-  }, [onError, onStatus, state.run]);
+  }, [state.run]);
 
   useEffect(() => {
     const run = state.run;
@@ -218,20 +240,20 @@ export function WorkflowRunPanel({
     void loadWorkflowRunResult(run.runId)
       .then((result) => {
         dispatch({ type: 'RESULT_LOADED', result });
-        onStatus(`Run ${run.runId} finished as ${result.overallStatus}`);
+        setStatus(`Run ${run.runId} finished as ${result.overallStatus}`);
       })
       .catch((failure: unknown) => {
         const problem = problemFor(failure);
         dispatch({ type: 'RESULT_UNAVAILABLE', problem });
-        onError(runProblemMessages(problem).join(' · '));
+        setLocalError(runProblemMessages(problem).join(' · '));
       });
-  }, [onError, onStatus, state.result, state.run]);
+  }, [state.result, state.run]);
 
   const reset = useCallback(() => {
     dispatch({ type: 'RESET' });
-    onError(null);
-    onStatus('Ready to capture another immutable workflow run');
-  }, [onError, onStatus]);
+    setLocalError(null);
+    setStatus('Ready to capture another immutable workflow run');
+  }, []);
 
   const busy = state.phase === 'starting' || state.phase === 'active';
   const problemMessages = runProblemMessages(state.problem);
@@ -243,6 +265,14 @@ export function WorkflowRunPanel({
         The server captures an exact revision or commit. Editing remains enabled and affects only
         future runs.
       </p>
+      <p className="workflow-run__status" data-testid="run-status-message">
+        {status}
+      </p>
+      {localError === null ? null : (
+        <p className="workbench__error" data-testid="run-error">
+          {localError}
+        </p>
+      )}
 
       <div className="workflow-run__source" data-testid="run-current-source">
         <strong>Current session</strong>
@@ -265,6 +295,19 @@ export function WorkflowRunPanel({
       </div>
 
       <label className="field">
+        History branch
+        <input value={branch} onChange={(event) => setBranch(event.target.value)} />
+      </label>
+      <button
+        className="action-button"
+        data-testid="run-refresh-history"
+        disabled={busy}
+        onClick={() => void refreshHistory()}
+        type="button"
+      >
+        Refresh run sources
+      </button>
+      <label className="field">
         Historical commit
         <select
           data-testid="run-history-commit"
@@ -272,7 +315,7 @@ export function WorkflowRunPanel({
           value={selectedCommitId}
           onChange={(event) => setSelectedCommitId(event.target.value)}
         >
-          {history.length === 0 ? <option value="">Refresh checkpoint history first</option> : null}
+          {history.length === 0 ? <option value="">No commits on this branch</option> : null}
           {history.map((entry) => (
             <option key={entry.commitId} value={entry.commitId}>
               {entry.message || entry.commitId.slice(0, 10)} · {entry.commitId.slice(0, 10)}
@@ -335,12 +378,10 @@ export function WorkflowRunPanel({
               <dd>{formatInstant(state.run.finishedAt)}</dd>
             </div>
           </dl>
-          <progress
-            data-testid="run-progress"
-            max={100}
-            value={state.run.progressPercent}
-          />
-          <p className="help-text">{state.run.progressPercent}% · {state.run.statusMessage}</p>
+          <progress data-testid="run-progress" max={100} value={state.run.progressPercent} />
+          <p className="help-text">
+            {state.run.progressPercent}% · {state.run.statusMessage}
+          </p>
           {!isTerminalRunState(state.run.state) ? (
             <button
               className="action-button"
@@ -355,7 +396,8 @@ export function WorkflowRunPanel({
             <ul className="validation-list" data-testid="run-violations">
               {state.run.violations.map((violation) => (
                 <li key={`${violation.code}:${violation.nodeId ?? ''}:${violation.message}`}>
-                  {violation.code}{violation.nodeId === null ? '' : ` [${violation.nodeId}]`}: {violation.message}
+                  {violation.code}
+                  {violation.nodeId === null ? '' : ` [${violation.nodeId}]`}: {violation.message}
                 </li>
               ))}
             </ul>
