@@ -262,7 +262,8 @@ public final class WorkflowRunModels {
     List<Violation> validate(Input input);
 
     /** Executes the immutable input and returns terminal evidence. */
-    Result execute(Input input, Control control) throws Exception;
+    Result execute(Input input, Control control)
+        throws WorkflowExecutionBackendException, InterruptedException;
   }
 
   /** Cooperative cancellation and progress channel supplied to a backend. */
