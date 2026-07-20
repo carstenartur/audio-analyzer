@@ -48,6 +48,8 @@ The production panel supports:
 
 All supplied generic search predicates execute in one bounded server-side query. The client does not intersect independently truncated result lists.
 
+Changed paths use a dedicated, language-neutral analyzer in the shared projection. It splits path punctuation and lowercases components, so a user can enter `workflow` to match `workflow.dsl` or `services payments` to match a path below `services/payments/`. This is intentionally not language stemming: language-specific stemmers are suitable for selected natural-language fields, not generic paths, source identifiers or multilingual commit data. An analyzer mapping change affects only derived index data, so existing indexes must be recreated or rebuilt after such an upgrade.
+
 Historical loading is blocked while the browser is attached to a collaboration session. The user must leave the session first, preventing a legacy history load from competing with a server-authoritative live projection. The rebuild action remains safe because it only recreates disposable search projections.
 
 ## HTTP API
