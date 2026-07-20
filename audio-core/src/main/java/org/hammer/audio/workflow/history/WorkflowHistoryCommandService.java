@@ -17,7 +17,12 @@ public final class WorkflowHistoryCommandService {
   private final WorkflowHistoryAccessPolicy accessPolicy;
   private final WorkflowDslParser parser;
 
-  /** Creates a command service over one repository-scoped workflow store. */
+  /**
+   * Creates a command service over one repository-scoped workflow store.
+   *
+   * @param store authoritative workflow history store
+   * @param accessPolicy application access policy for history commands
+   */
   public WorkflowHistoryCommandService(
       VersionedWorkflowStore store, WorkflowHistoryAccessPolicy accessPolicy) {
     this.store = Objects.requireNonNull(store, "store");
@@ -25,7 +30,14 @@ public final class WorkflowHistoryCommandService {
     this.parser = new WorkflowDslParser();
   }
 
-  /** Compares two exact commits that are reachable from the requested branch. */
+  /**
+   * Compares two exact commits that are reachable from the requested branch.
+   *
+   * @param branch branch used as reachability boundary
+   * @param beforeCommit exact before commit
+   * @param afterCommit exact after commit
+   * @return both authoritative workflows and their semantic diff
+   */
   public WorkflowHistoryComparison compare(
       String branch, CommitId beforeCommit, CommitId afterCommit) {
     String requiredBranch = requireNotBlank(branch, "branch");
@@ -53,7 +65,12 @@ public final class WorkflowHistoryCommandService {
         WorkflowDiff.compute(beforeWorkflow, afterWorkflow));
   }
 
-  /** Restores a reachable historical snapshot as a new commit on the current branch HEAD. */
+  /**
+   * Restores a reachable historical snapshot as a new commit on the current branch HEAD.
+   *
+   * @param command explicit target, expected HEAD and audit metadata
+   * @return historical source, previous HEAD and new restore commit evidence
+   */
   public WorkflowRestoreResult restore(RestoreWorkflowVersionCommand command) {
     Objects.requireNonNull(command, "command");
     List<CommitInfo> reachable = store.history(command.branch(), Integer.MAX_VALUE);
