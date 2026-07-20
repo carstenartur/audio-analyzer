@@ -58,7 +58,9 @@ class HibernateWorkflowCombinedHistorySearchTest {
           store.commit(
               "main", snapshot("classifier", "safe"), metadata("Wingbeat candidate final", 3));
       store.commit(
-          "main", snapshot("source", "different"), metadata("Wingbeat newer nonsemantic result", 4));
+          "main",
+          snapshot("source", "different"),
+          metadata("Wingbeat newer nonsemantic result", 4));
       store.commit(
           "experiment", snapshot("classifier", "safe"), metadata("Wingbeat other branch", 5));
 
