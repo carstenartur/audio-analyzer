@@ -7,7 +7,13 @@ public final class StaleWorkflowHeadException extends RuntimeException {
   private final CommitId expectedHead;
   private final CommitId actualHead;
 
-  /** Creates a typed optimistic-concurrency conflict. */
+  /**
+   * Creates a typed optimistic-concurrency conflict.
+   *
+   * @param branch branch whose HEAD changed
+   * @param expectedHead HEAD observed by the caller, or {@code null} for a missing branch
+   * @param actualHead current HEAD, or {@code null} when the branch is missing
+   */
   public StaleWorkflowHeadException(String branch, CommitId expectedHead, CommitId actualHead) {
     super(
         "Workflow branch '"
@@ -21,14 +27,17 @@ public final class StaleWorkflowHeadException extends RuntimeException {
     this.actualHead = actualHead;
   }
 
+  /** Returns the branch involved in the conflict. */
   public String branch() {
     return branch;
   }
 
+  /** Returns the HEAD expected by the caller, or {@code null}. */
   public CommitId expectedHead() {
     return expectedHead;
   }
 
+  /** Returns the HEAD observed by the store, or {@code null}. */
   public CommitId actualHead() {
     return actualHead;
   }
