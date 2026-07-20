@@ -14,7 +14,6 @@ import org.hammer.audio.workflow.history.WorkflowCombinedHistoryResult;
 import org.hammer.audio.workflow.history.WorkflowHistoryTextQuery;
 import org.hammer.audio.workflow.history.WorkflowSemanticHistoryFilter;
 import org.hammer.audio.workflow.history.WorkflowSemanticProperty;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -25,7 +24,6 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/workflow/history/combined")
 @ConditionalOnProperty(name = "workbench.persistence.mode", havingValue = "hibernate")
-@ConditionalOnBean(IndexedWorkflowCombinedHistorySearch.class)
 public final class WorkflowCombinedHistoryHttpAdapter {
 
   private static final int DEFAULT_LIMIT = 20;
