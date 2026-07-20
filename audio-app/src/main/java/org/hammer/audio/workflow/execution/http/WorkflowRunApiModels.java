@@ -45,8 +45,7 @@ public final class WorkflowRunApiModels {
 
     private LiveSessionSource liveSource() {
       if (sessionId == null || sessionId.isBlank() || expectedRevision == null) {
-        throw new IllegalArgumentException(
-            "LIVE_SESSION requires sessionId and expectedRevision");
+        throw new IllegalArgumentException("LIVE_SESSION requires sessionId and expectedRevision");
       }
       if (commitId != null && !commitId.isBlank()) {
         throw new IllegalArgumentException("LIVE_SESSION must not include commitId");
