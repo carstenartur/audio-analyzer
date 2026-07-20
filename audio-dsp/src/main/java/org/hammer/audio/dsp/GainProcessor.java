@@ -3,7 +3,9 @@ package org.hammer.audio.dsp;
 import java.util.Objects;
 import org.hammer.audio.core.AudioBlock;
 
-/** Applies a finite non-negative linear gain and saturates samples to the normalized audio range. */
+/**
+ * Applies a finite non-negative linear gain and saturates samples to the normalized audio range.
+ */
 public final class GainProcessor implements DSPProcessor {
 
   /** Conservative upper bound that prevents accidental extreme amplification. */
@@ -39,8 +41,7 @@ public final class GainProcessor implements DSPProcessor {
         target[frame] = clamp(source[frame] * gain);
       }
     }
-    return AudioBlock.wrap(
-        input.format(), output, input.frameIndex(), input.timestampNanos());
+    return AudioBlock.wrap(input.format(), output, input.frameIndex(), input.timestampNanos());
   }
 
   private static float clamp(float sample) {
