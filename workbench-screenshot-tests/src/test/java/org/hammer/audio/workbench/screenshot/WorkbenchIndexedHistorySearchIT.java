@@ -67,13 +67,15 @@ class WorkbenchIndexedHistorySearchIT {
       page.locator("[data-testid='indexed-history-workflow']").fill("seed.workflow");
       page.locator("[data-testid='indexed-history-node']").fill("seed.gain");
       page.locator("[data-testid='indexed-history-search']").click();
-      waitForStatus(page, "No branch-reachable checkpoints match all generic and semantic filters.");
+      waitForStatus(
+          page, "No branch-reachable checkpoints match all generic and semantic filters.");
       assertEquals(0, page.locator("[data-testid^='indexed-history-load-']").count());
 
       page.locator("[data-testid='indexed-history-author']").fill(AUTHOR_EMAIL);
       page.locator("[data-testid='indexed-history-node']").fill(LATER_NODE_ID);
       page.locator("[data-testid='indexed-history-search']").click();
-      waitForStatus(page, "No branch-reachable checkpoints match all generic and semantic filters.");
+      waitForStatus(
+          page, "No branch-reachable checkpoints match all generic and semantic filters.");
 
       page.locator("[data-testid='indexed-history-node']").fill("seed.gain");
       page.locator("[data-testid='indexed-history-type']").fill("gain");
