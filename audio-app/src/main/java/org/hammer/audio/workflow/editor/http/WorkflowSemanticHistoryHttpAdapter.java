@@ -21,8 +21,7 @@ public final class WorkflowSemanticHistoryHttpAdapter {
   private static final String DEFAULT_LIMIT = "20";
   private final IndexedWorkflowSemanticHistorySearch semanticSearch;
 
-  public WorkflowSemanticHistoryHttpAdapter(
-      IndexedWorkflowSemanticHistorySearch semanticSearch) {
+  public WorkflowSemanticHistoryHttpAdapter(IndexedWorkflowSemanticHistorySearch semanticSearch) {
     this.semanticSearch = Objects.requireNonNull(semanticSearch, "semanticSearch");
   }
 
@@ -40,14 +39,7 @@ public final class WorkflowSemanticHistoryHttpAdapter {
     return semanticSearch
         .searchSemantic(
             new WorkflowSemanticHistoryQuery(
-                branch,
-                workflowId,
-                nodeId,
-                nodeType,
-                labelText,
-                propertyKey,
-                propertyValue,
-                limit))
+                branch, workflowId, nodeId, nodeType, labelText, propertyKey, propertyValue, limit))
         .stream()
         .map(SemanticHitResponse::from)
         .toList();
