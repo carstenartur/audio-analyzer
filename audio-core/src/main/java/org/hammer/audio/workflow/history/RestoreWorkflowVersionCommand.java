@@ -4,7 +4,14 @@ import java.util.Objects;
 import org.hammer.audio.workflow.store.CommitId;
 import org.hammer.audio.workflow.store.CommitMetadata;
 
-/** Explicit non-destructive command that restores a historical snapshot as a new branch commit. */
+/**
+ * Explicit non-destructive command that restores a historical snapshot as a new branch commit.
+ *
+ * @param branch branch receiving the restore commit
+ * @param targetCommit reachable historical commit whose snapshot is restored
+ * @param expectedHead optimistic-concurrency branch HEAD
+ * @param metadata author, message and timestamp for the new audit commit
+ */
 public record RestoreWorkflowVersionCommand(
     String branch, CommitId targetCommit, CommitId expectedHead, CommitMetadata metadata) {
 
