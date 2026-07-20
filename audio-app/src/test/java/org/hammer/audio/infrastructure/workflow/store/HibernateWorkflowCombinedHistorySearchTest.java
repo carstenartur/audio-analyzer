@@ -32,7 +32,7 @@ class HibernateWorkflowCombinedHistorySearchTest {
   private static final Instant BASE_TIME = Instant.parse("2026-07-20T00:00:00Z");
 
   @Test
-  void appliesSemanticCandidatesBeforeGenericNewestFirstLimit() {
+  void appliesSemanticCandidatesBeforeTheGenericFinalLimit() {
     Properties properties = new Properties();
     properties.put(
         "hibernate.connection.url", "jdbc:h2:mem:" + UUID.randomUUID() + ";DB_CLOSE_DELAY=-1");
@@ -53,12 +53,12 @@ class HibernateWorkflowCombinedHistorySearchTest {
       store.commit("main", snapshot("source", "observe"), metadata("Baseline", 1));
       CommitId olderCandidate =
           store.commit(
-              "main", snapshot("classifier", "safe"), metadata("Wingbeat candidate old", 2));
+              "main", snapshot("classifier", "legacy"), metadata("Wingbeat candidate old", 2));
       CommitId expected =
           store.commit(
               "main", snapshot("classifier", "safe"), metadata("Wingbeat candidate final", 3));
       store.commit(
-          "main", snapshot("source", "unsafe"), metadata("Wingbeat newer nonsemantic result", 4));
+          "main", snapshot("source", "different"), metadata("Wingbeat newer nonsemantic result", 4));
       store.commit(
           "experiment", snapshot("classifier", "safe"), metadata("Wingbeat other branch", 5));
 
@@ -77,6 +77,9 @@ class HibernateWorkflowCombinedHistorySearchTest {
       assertEquals(List.of("classifier"), hits.getFirst().semantics().nodeTypes());
       assertTrue(hits.getFirst().semantics().propertyValues().contains("safe"));
 
+      WorkflowSemanticHistoryFilter allClassifierCandidates =
+          new WorkflowSemanticHistoryFilter(
+              "main", WORKFLOW_ID, null, "classifier", null, null, null);
       List<CommitId> fullTextIds =
           store
               .searchCombined(
@@ -88,7 +91,7 @@ class HibernateWorkflowCombinedHistorySearchTest {
                           null,
                           null,
                           10),
-                      query.semanticFilter()))
+                      allClassifierCandidates))
               .stream()
               .map(hit -> hit.commit().commitId())
               .toList();
