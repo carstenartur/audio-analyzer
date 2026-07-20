@@ -2,8 +2,8 @@ package org.hammer.audio.app;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import org.hammer.audio.dsp.workflow.DeterministicAudioWorkflowExecutionBackend;
 import org.hammer.audio.workflow.collaboration.WorkflowSessionRegistry;
-import org.hammer.audio.workflow.execution.SimulationWorkflowExecutionBackend;
 import org.hammer.audio.workflow.execution.WorkflowRunModels.ExecutionBackend;
 import org.hammer.audio.workflow.execution.WorkflowRunService;
 import org.hammer.audio.workflow.store.VersionedWorkflowStore;
@@ -22,10 +22,10 @@ public class WorkflowRunConfiguration {
     return Executors.newVirtualThreadPerTaskExecutor();
   }
 
-  /** Registers the truthful dry-run backend until issue #274 provides computation. */
+  /** Registers the first real deterministic offline audio-computation backend. */
   @Bean
   public ExecutionBackend workflowExecutionBackend() {
-    return new SimulationWorkflowExecutionBackend();
+    return new DeterministicAudioWorkflowExecutionBackend();
   }
 
   /** Creates immutable run orchestration over collaboration and optional version history. */
