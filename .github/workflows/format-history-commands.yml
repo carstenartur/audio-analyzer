@@ -1,6 +1,9 @@
 name: Format history commands
 
 on:
+  pull_request:
+    branches:
+      - master
   push:
     branches:
       - feature/247-history-compare-restore
