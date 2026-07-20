@@ -130,6 +130,10 @@ public final class WorkflowRunApiModels {
       String statusMessage,
       List<ViolationResponse> violations) {
 
+    public RunResponse {
+      violations = List.copyOf(Objects.requireNonNull(violations, "violations"));
+    }
+
     static RunResponse from(Snapshot snapshot) {
       return new RunResponse(
           snapshot.runId(),
@@ -182,6 +186,11 @@ public final class WorkflowRunApiModels {
       Instant executionCompletedAt,
       String commitId,
       Map<String, String> artifacts) {
+
+    public RunResultResponse {
+      nodeStatuses = Map.copyOf(Objects.requireNonNull(nodeStatuses, "nodeStatuses"));
+      artifacts = Map.copyOf(Objects.requireNonNull(artifacts, "artifacts"));
+    }
 
     static RunResultResponse from(Snapshot snapshot, Result result) {
       var executionResult = result.reproducibilityBundle().result();
