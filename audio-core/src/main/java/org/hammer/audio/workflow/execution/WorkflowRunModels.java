@@ -123,7 +123,7 @@ public interface WorkflowRunModels {
    */
   record Violation(String code, String message, String nodeId) implements Serializable {
 
-    @Serial long serialVersionUID = 1L;
+    @Serial private static final long serialVersionUID = 1L;
 
     public Violation {
       requireNotBlank(code, "code");
