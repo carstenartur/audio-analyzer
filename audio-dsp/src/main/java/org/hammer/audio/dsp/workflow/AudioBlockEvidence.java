@@ -113,5 +113,14 @@ final class AudioBlockEvidence {
     return text.toString();
   }
 
-  private record Summary(float minimum, float maximum, double mean, double rms) {}
+  private record Summary(float minimum, float maximum, double mean, double rms) {
+    Summary {
+      if (!Float.isFinite(minimum)
+          || !Float.isFinite(maximum)
+          || !Double.isFinite(mean)
+          || !Double.isFinite(rms)) {
+        throw new IllegalArgumentException("Audio evidence summary must remain finite");
+      }
+    }
+  }
 }
