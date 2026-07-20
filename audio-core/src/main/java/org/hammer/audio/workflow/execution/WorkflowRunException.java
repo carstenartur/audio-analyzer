@@ -1,7 +1,6 @@
 package org.hammer.audio.workflow.execution;
 
 import java.io.Serial;
-import java.util.ArrayList;
 import java.util.List;
 import org.hammer.audio.workflow.execution.WorkflowRunModels.Violation;
 
@@ -22,10 +21,10 @@ public final class WorkflowRunException extends RuntimeException {
     BACKEND_FAILURE
   }
 
-  private final Code code;
-  private final String runId;
-  private final String startCommandId;
-  private final ArrayList<Violation> violations;
+  private final Code errorCode;
+  private final String affectedRunId;
+  private final String commandId;
+  private final Violation[] violationDetails;
 
   /** Creates a typed failure without nested cause. */
   public WorkflowRunException(
@@ -42,25 +41,26 @@ public final class WorkflowRunException extends RuntimeException {
       List<Violation> violations,
       Throwable cause) {
     super(message, cause);
-    this.code = java.util.Objects.requireNonNull(code, "code");
-    this.runId = runId;
-    this.startCommandId = startCommandId;
-    this.violations = new ArrayList<>(violations == null ? List.of() : violations);
+    this.errorCode = java.util.Objects.requireNonNull(code, "code");
+    this.affectedRunId = runId;
+    this.commandId = startCommandId;
+    this.violationDetails =
+        (violations == null ? List.<Violation>of() : violations).toArray(Violation[]::new);
   }
 
   public Code code() {
-    return code;
+    return errorCode;
   }
 
   public String runId() {
-    return runId;
+    return affectedRunId;
   }
 
   public String startCommandId() {
-    return startCommandId;
+    return commandId;
   }
 
   public List<Violation> violations() {
-    return List.copyOf(violations);
+    return List.of(violationDetails.clone());
   }
 }
