@@ -57,7 +57,8 @@ public final class HibernateJGitVersionedWorkflowStore
     this.storage = Objects.requireNonNull(storage, "storage");
     this.delegate = new JGitRepositoryVersionedWorkflowStore(storage.repository());
     String requiredRepositoryName = requireNotBlank(repositoryName, "repositoryName");
-    SessionFactory requiredSessionFactory = Objects.requireNonNull(sessionFactory, "sessionFactory");
+    SessionFactory requiredSessionFactory =
+        Objects.requireNonNull(sessionFactory, "sessionFactory");
     this.genericHistoryProjection =
         new GenericWorkflowHistoryProjection(
             storage.repository(), requiredSessionFactory, requiredRepositoryName);
