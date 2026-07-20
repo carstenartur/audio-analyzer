@@ -47,7 +47,7 @@ final class DeterministicAudioParameters {
           "channels * frame-count must be <= " + MAX_TOTAL_SAMPLES + ", was " + sampleCount);
     }
     float frequency = finiteFloat(entries, ExperimentNodeParameters.SIGNAL_FREQUENCY_HZ);
-    if (!(frequency > 0.0f) || frequency >= sampleRate / 2.0f) {
+    if (frequency <= 0.0f || frequency >= sampleRate / 2.0f) {
       throw invalid(
           ExperimentNodeParameters.SIGNAL_FREQUENCY_HZ,
           "must be > 0 and below Nyquist " + (sampleRate / 2.0f) + ", was " + frequency);
