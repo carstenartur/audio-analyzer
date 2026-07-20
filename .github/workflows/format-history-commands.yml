@@ -4,12 +4,9 @@ on:
   pull_request:
     branches:
       - master
-  push:
-    branches:
-      - feature/247-history-compare-restore
 
 permissions:
-  contents: read
+  contents: write
   packages: read
 
 jobs:
@@ -21,6 +18,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.head_ref }}
 
       - name: Set up JDK ${{ env.JAVA_VERSION }}
         uses: actions/setup-java@v5
@@ -32,28 +31,14 @@ jobs:
           server-username: GITHUB_ACTOR
           server-password: GITHUB_TOKEN
 
-      - name: Apply configured Java formatter
+      - name: Apply and commit configured Java formatting
         run: |
           mvn -B -pl audio-core,audio-app spotless:apply -DskipTests
-          git diff --name-only > formatted-files.txt
-          git diff > formatted.patch
-
-      - name: Upload formatted history sources
-        uses: actions/upload-artifact@v7
-        with:
-          name: formatted-history-command-sources
-          path: |
-            formatted-files.txt
-            formatted.patch
-            audio-core/src/main/java/org/hammer/audio/workflow/history/
-            audio-core/src/main/java/org/hammer/audio/workflow/store/
-            audio-core/src/test/java/org/hammer/audio/workflow/history/
-            audio-app/src/main/java/org/hammer/audio/app/WorkflowHistoryCommandConfiguration.java
-            audio-app/src/main/java/org/hammer/audio/infrastructure/workflow/history/
-            audio-app/src/main/java/org/hammer/audio/infrastructure/workflow/store/
-            audio-app/src/main/java/org/hammer/audio/workflow/editor/http/WorkflowHistoryCommand*.java
-            audio-app/src/test/java/org/hammer/audio/infrastructure/workflow/history/
-            audio-app/src/test/java/org/hammer/audio/infrastructure/workflow/store/ConditionalJGitWorkflowCommitTest.java
-            audio-app/src/test/java/org/hammer/audio/workflow/editor/http/WorkflowHistoryCommandHttpAdapterTest.java
-          if-no-files-found: error
-          retention-days: 1
+          if git diff --quiet; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add audio-core audio-app
+          git commit -m "Apply configured history command formatting"
+          git push origin HEAD:${{ github.head_ref }}
