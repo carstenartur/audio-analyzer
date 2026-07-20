@@ -4,10 +4,15 @@ import io.github.carstenartur.jgit.storage.hibernate.DefaultHibernateRepositoryF
 import io.github.carstenartur.jgit.storage.hibernate.HibernateGitStorage;
 import io.github.carstenartur.jgit.storage.hibernate.HibernateRepositoryFactory;
 import io.github.carstenartur.jgit.storage.hibernate.RepositoryName;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import org.hammer.audio.workflow.history.IndexedWorkflowCombinedHistorySearch;
 import org.hammer.audio.workflow.history.IndexedWorkflowHistorySearch;
 import org.hammer.audio.workflow.history.IndexedWorkflowSemanticHistorySearch;
+import org.hammer.audio.workflow.history.WorkflowCombinedHistoryQuery;
+import org.hammer.audio.workflow.history.WorkflowCombinedHistoryResult;
 import org.hammer.audio.workflow.history.WorkflowHistoryTextQuery;
 import org.hammer.audio.workflow.history.WorkflowHistoryTextResult;
 import org.hammer.audio.workflow.history.WorkflowSemanticHistoryQuery;
@@ -25,6 +30,7 @@ public final class HibernateJGitVersionedWorkflowStore
     implements VersionedWorkflowStore,
         IndexedWorkflowHistorySearch,
         IndexedWorkflowSemanticHistorySearch,
+        IndexedWorkflowCombinedHistorySearch,
         AutoCloseable {
 
   private final HibernateGitStorage storage;
@@ -116,6 +122,33 @@ public final class HibernateJGitVersionedWorkflowStore
   public List<WorkflowSemanticHistoryResult> searchSemantic(WorkflowSemanticHistoryQuery query) {
     requireSemanticSearchEnabled();
     return semanticHistoryProjection.search(query);
+  }
+
+  @Override
+  public List<WorkflowCombinedHistoryResult> searchCombined(WorkflowCombinedHistoryQuery query) {
+    Objects.requireNonNull(query, "query");
+    requireSearchEnabled();
+    requireSemanticSearchEnabled();
+    List<CommitId> candidates =
+        semanticHistoryProjection.candidateCommitIds(query.semanticFilter());
+    List<WorkflowHistoryTextResult> commits =
+        genericHistoryProjection.searchWithinCandidates(query.genericQuery(), candidates);
+    Map<String, WorkflowSemanticHistoryResult> evidence =
+        semanticHistoryProjection.evidence(
+            query.semanticFilter().branch(),
+            commits.stream().map(WorkflowHistoryTextResult::commitId).toList());
+    List<WorkflowCombinedHistoryResult> results = new ArrayList<>(commits.size());
+    for (WorkflowHistoryTextResult commit : commits) {
+      WorkflowSemanticHistoryResult semantics = evidence.get(commit.commitId().value());
+      if (semantics == null) {
+        throw new IllegalStateException(
+            "Semantic history projection changed while composing commit "
+                + commit.commitId().value()
+                + "; retry the query");
+      }
+      results.add(new WorkflowCombinedHistoryResult(commit, semantics));
+    }
+    return List.copyOf(results);
   }
 
   @Override
