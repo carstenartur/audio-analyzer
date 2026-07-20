@@ -28,6 +28,7 @@ class WorkflowSemanticHistoryIndexTest {
 
   private static final String REPOSITORY_NAME = "semantic-history-test";
   private static final String WORKFLOW_ID = "workflow.insect-observer";
+  private static final String DELIMITER_RICH_VALUE = "line one\nline two:[]";
   private static final Instant BASE_TIME = Instant.parse("2026-07-20T00:00:00Z");
 
   @Test
@@ -45,8 +46,7 @@ class WorkflowSemanticHistoryIndexTest {
               "Insect observer baseline",
               node("node.source", "source", "Microphone source", Map.of()),
               Map.of("mode", "observe"));
-      CommitId baselineCommit =
-          store.commit("main", baseline, metadata("Baseline", 1));
+      CommitId baselineCommit = store.commit("main", baseline, metadata("Baseline", 1));
       assertEquals(RefUpdateResult.SUCCESS, store.updateRef("experiment", null, baselineCommit));
 
       WorkflowSnapshot mainClassifier =
@@ -57,7 +57,10 @@ class WorkflowSemanticHistoryIndexTest {
                   "classifier",
                   "Wingbeat classifier",
                   Map.of("threshold", "high")),
-              Map.of("mode", "safe"));
+              Map.of(
+                  "empty", "",
+                  "mode", "safe",
+                  "notes", DELIMITER_RICH_VALUE));
       CommitId mainCommit =
           store.commit("main", mainClassifier, metadata("Add classifier", 2));
 
@@ -73,13 +76,43 @@ class WorkflowSemanticHistoryIndexTest {
       CommitId experimentCommit =
           store.commit("experiment", experimentGain, metadata("Tune experiment", 3));
 
+      assertEquals(
+          List.of(mainCommit, baselineCommit),
+          store.searchSemantic(query("main", null, null, null, null, null, null)).stream()
+              .map(WorkflowSemanticHistoryResult::commitId)
+              .toList(),
+          "incremental checkpoint indexing must keep newest-first branch positions");
+
       List<WorkflowSemanticHistoryResult> mainHits =
           store.searchSemantic(
               query("main", WORKFLOW_ID, null, "classifier", "wingbeat", "mode", "safe"));
-      assertEquals(List.of(mainCommit), mainHits.stream().map(WorkflowSemanticHistoryResult::commitId).toList());
+      assertEquals(
+          List.of(mainCommit),
+          mainHits.stream().map(WorkflowSemanticHistoryResult::commitId).toList());
       assertEquals(mainClassifier, store.loadAtCommit(mainHits.getFirst().commitId()));
       assertEquals(List.of("node.classifier"), mainHits.getFirst().nodeIds());
-      assertTrue(mainHits.getFirst().propertyKeys().containsAll(List.of("mode", "threshold")));
+      assertTrue(
+          mainHits
+              .getFirst()
+              .propertyKeys()
+              .containsAll(List.of("empty", "mode", "notes", "threshold")));
+      assertTrue(mainHits.getFirst().propertyValues().contains(""));
+      assertTrue(mainHits.getFirst().propertyValues().contains(DELIMITER_RICH_VALUE));
+      assertEquals(
+          List.of(mainCommit),
+          store
+              .searchSemantic(
+                  query(
+                      "main",
+                      WORKFLOW_ID,
+                      null,
+                      null,
+                      null,
+                      "notes",
+                      DELIMITER_RICH_VALUE))
+              .stream()
+              .map(WorkflowSemanticHistoryResult::commitId)
+              .toList());
 
       List<WorkflowSemanticHistoryResult> experimentHits =
           store.searchSemantic(
@@ -100,11 +133,15 @@ class WorkflowSemanticHistoryIndexTest {
           "branch reachability must be enforced by the semantic projection");
 
       assertEquals(0, store.rebuild("main", -1));
-      assertEquals(mainCommit, store.searchSemantic(query("main", WORKFLOW_ID, null, "classifier", null, null, null)).getFirst().commitId());
+      assertEquals(
+          List.of(mainCommit, baselineCommit),
+          store.searchSemantic(query("main", null, null, null, null, null, null)).stream()
+              .map(WorkflowSemanticHistoryResult::commitId)
+              .toList(),
+          "a full rebuild must preserve the incremental projection result");
 
       assertEquals(
-          RefUpdateResult.SUCCESS,
-          store.updateRef("main", mainCommit, baselineCommit));
+          RefUpdateResult.SUCCESS, store.updateRef("main", mainCommit, baselineCommit));
       assertEquals(
           List.of(),
           store.searchSemantic(
@@ -112,7 +149,11 @@ class WorkflowSemanticHistoryIndexTest {
           "moving a ref must remove commits that are no longer reachable on that branch");
       assertEquals(
           baselineCommit,
-          store.searchSemantic(query("main", WORKFLOW_ID, "node.source", null, null, null, null)).getFirst().commitId());
+          store
+              .searchSemantic(
+                  query("main", WORKFLOW_ID, "node.source", null, null, null, null))
+              .getFirst()
+              .commitId());
     }
   }
 
@@ -137,7 +178,8 @@ class WorkflowSemanticHistoryIndexTest {
             List.of(node),
             List.of(),
             new Metadata(workflowMetadata));
-    return new WorkflowSnapshot(WORKFLOW_ID, new WorkflowDslSerializer().serialize(workflow));
+    return new WorkflowSnapshot(
+        WORKFLOW_ID, new WorkflowDslSerializer().serialize(workflow));
   }
 
   private static Node node(
