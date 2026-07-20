@@ -148,15 +148,13 @@ public final class WorkflowSemanticIndexService {
               f -> {
                 var predicate =
                     f.bool()
-                        .filter(
-                            f.match().field("repositoryName").matching(repositoryName))
+                        .filter(f.match().field("repositoryName").matching(repositoryName))
                         .filter(
                             f.match()
                                 .field("branchName")
                                 .matching(normalizeBranch(query.branch())));
                 if (query.workflowId() != null) {
-                  predicate.filter(
-                      f.match().field("workflowId").matching(query.workflowId()));
+                  predicate.filter(f.match().field("workflowId").matching(query.workflowId()));
                 }
                 if (query.nodeId() != null) {
                   predicate.filter(
