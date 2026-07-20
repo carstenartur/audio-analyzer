@@ -61,7 +61,7 @@ class WorkbenchIndexedHistorySearchIT {
       toggle.click();
       page.locator("[data-testid='indexed-history-query']").fill(HISTORICAL_TERM);
       page.locator("[data-testid='indexed-history-author']").fill("nobody@example.org");
-      page.locator("[data-testid='indexed-history-path']").fill("workflow.dsl");
+      page.locator("[data-testid='indexed-history-path']").fill("workflow");
       page.locator("[data-testid='indexed-history-from']").fill("2026-07-19T12:59");
       page.locator("[data-testid='indexed-history-to']").fill("2026-07-19T13:00");
       page.locator("[data-testid='indexed-history-search']").click();
