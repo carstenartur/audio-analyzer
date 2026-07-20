@@ -15,7 +15,7 @@ final class DeterministicAudioExecutionGraph {
 
   private final Map<String, Node> nodesById;
   private final Map<String, Edge> incomingByTargetNodeId;
-  private final String terminalNodeId;
+  private final String terminalIdentity;
 
   private DeterministicAudioExecutionGraph(
       Map<String, Node> nodesById,
@@ -23,7 +23,7 @@ final class DeterministicAudioExecutionGraph {
       String terminalNodeId) {
     this.nodesById = Map.copyOf(nodesById);
     this.incomingByTargetNodeId = Map.copyOf(incomingByTargetNodeId);
-    this.terminalNodeId = Objects.requireNonNull(terminalNodeId, "terminalNodeId");
+    this.terminalIdentity = Objects.requireNonNull(terminalNodeId, "terminalNodeId");
   }
 
   static DeterministicAudioExecutionGraph from(Input input) {
@@ -70,7 +70,7 @@ final class DeterministicAudioExecutionGraph {
   }
 
   String terminalNodeId() {
-    return terminalNodeId;
+    return terminalIdentity;
   }
 
   String terminalOutputPortId() {
