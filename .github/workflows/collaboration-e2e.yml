@@ -73,12 +73,12 @@ jobs:
             2>&1 | tee "$E2E_LOG_DIR/playwright-install.log"
 
       # State, process, API and filesystem conditions only: never fixed-delay sleeps.
-      - name: Run collaboration, indexed history and durable restart scenarios
+      - name: Run collaboration, immutable-run, indexed history and durable restart scenarios
         shell: bash
         run: |
           set -o pipefail
           mvn -B -Pscreenshot-tests -pl workbench-screenshot-tests \
-            -Dit.test=WorkbenchTwoBrowserCollaborationIT,WorkbenchDurableRestartIT,WorkbenchIndexedHistorySearchIT verify \
+            -Dit.test=WorkbenchTwoBrowserCollaborationIT,WorkbenchWorkflowRunIT,WorkbenchDurableRestartIT,WorkbenchIndexedHistorySearchIT verify \
             2>&1 | tee "$E2E_LOG_DIR/test.log"
 
       - name: Upload collaboration workflow logs
