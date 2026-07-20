@@ -125,8 +125,7 @@ public final class WorkflowRunService {
 
   private void validateBackend(Input input) {
     List<Violation> violations =
-        List.copyOf(
-            Objects.requireNonNull(executionBackend.validate(input), "backend violations"));
+        List.copyOf(Objects.requireNonNull(executionBackend.validate(input), "backend violations"));
     if (violations.isEmpty()) {
       return;
     }
