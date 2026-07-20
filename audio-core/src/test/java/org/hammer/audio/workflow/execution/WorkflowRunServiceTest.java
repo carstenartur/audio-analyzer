@@ -165,7 +165,12 @@ class WorkflowRunServiceTest {
         OWNER,
         0,
         new RenameNode(
-            "operation.rename", NOW.plusSeconds(1), OWNER.actorId(), "node.test", "Before", "After"));
+            "operation.rename",
+            NOW.plusSeconds(1),
+            OWNER.actorId(),
+            "node.test",
+            "Before",
+            "After"));
     Snapshot afterEdit = service.inspect(captured.runId());
 
     assertEquals(captured.fingerprint(), afterEdit.fingerprint());
