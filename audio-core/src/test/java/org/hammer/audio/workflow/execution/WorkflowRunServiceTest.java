@@ -132,8 +132,7 @@ class WorkflowRunServiceTest {
     assertThrows(
         WorkflowSessionRevisionConflictException.class,
         () ->
-            service.start(
-                new Command("command.stale", new LiveSessionSource("session.test", 1))));
+            service.start(new Command("command.stale", new LiveSessionSource("session.test", 1))));
   }
 
   @org.junit.jupiter.api.Test
@@ -157,16 +156,14 @@ class WorkflowRunServiceTest {
             throw new AssertionError("must not execute");
           }
         };
-    WorkflowRunService service =
-        service(sessionsWithEmptyWorkflow(), null, backend, Runnable::run);
+    WorkflowRunService service = service(sessionsWithEmptyWorkflow(), null, backend, Runnable::run);
 
     WorkflowRunException exception =
         assertThrows(
             WorkflowRunException.class,
             () ->
                 service.start(
-                    new Command(
-                        "command.unsupported", new LiveSessionSource("session.test", 0))));
+                    new Command("command.unsupported", new LiveSessionSource("session.test", 0))));
 
     assertEquals(Code.UNSUPPORTED_NODE, exception.code());
     assertEquals(0, executions.get());
@@ -178,10 +175,7 @@ class WorkflowRunServiceTest {
     Executor executor = queued::set;
     WorkflowRunService service =
         service(
-            sessionsWithEmptyWorkflow(),
-            null,
-            new SimulationWorkflowExecutionBackend(),
-            executor);
+            sessionsWithEmptyWorkflow(), null, new SimulationWorkflowExecutionBackend(), executor);
 
     Snapshot started =
         service.start(new Command("command.cancel", new LiveSessionSource("session.test", 0)));
