@@ -67,7 +67,12 @@ public final class WorkflowRunModels {
     SourceKind kind();
   }
 
-  /** Selects one exact server-authoritative collaboration-session revision. */
+  /**
+   * Selects one exact server-authoritative collaboration-session revision.
+   *
+   * @param sessionId stable collaboration-session identifier
+   * @param expectedRevision exact semantic revision required by the caller
+   */
   public record LiveSessionSource(String sessionId, long expectedRevision) implements Source {
     public LiveSessionSource {
       requireNotBlank(sessionId, "sessionId");
@@ -82,7 +87,11 @@ public final class WorkflowRunModels {
     }
   }
 
-  /** Selects one exact stored workflow commit. */
+  /**
+   * Selects one exact stored workflow commit.
+   *
+   * @param commitId immutable version-control identifier
+   */
   public record StoredCommitSource(CommitId commitId) implements Source {
     public StoredCommitSource {
       Objects.requireNonNull(commitId, "commitId");
@@ -94,7 +103,12 @@ public final class WorkflowRunModels {
     }
   }
 
-  /** Idempotent start command for one immutable source. */
+  /**
+   * Idempotent start command for one immutable source.
+   *
+   * @param startCommandId stable transport-retry identity
+   * @param source exact workflow source to capture
+   */
   public record Command(String startCommandId, Source source) {
     public Command {
       StableExecutionIds.requireStable(startCommandId, "startCommandId");
@@ -102,7 +116,13 @@ public final class WorkflowRunModels {
     }
   }
 
-  /** Machine-readable preflight or backend-capability violation. */
+  /**
+   * Machine-readable preflight or backend-capability violation.
+   *
+   * @param code stable machine-readable code
+   * @param message human-readable diagnostic
+   * @param nodeId optional affected node identifier
+   */
   public record Violation(String code, String message, String nodeId) {
     public Violation {
       requireNotBlank(code, "code");
@@ -113,7 +133,20 @@ public final class WorkflowRunModels {
     }
   }
 
-  /** Immutable backend input derived from exact canonical DSL before dispatch. */
+  /**
+   * Immutable backend input derived from exact canonical DSL before dispatch.
+   *
+   * @param runId stable run identifier
+   * @param startCommandId idempotent start-command identity
+   * @param source exact selected workflow source
+   * @param dslText canonical deterministic workflow DSL
+   * @param fingerprint SHA-256 fingerprint of the canonical DSL
+   * @param snapshot immutable workflow snapshot
+   * @param plan immutable topological execution plan
+   * @param semanticRevision live-session revision, otherwise {@code null}
+   * @param commitId stored source commit, otherwise {@code null}
+   * @param capturedAt instant at which the immutable input was captured
+   */
   public record Input(
       String runId,
       String startCommandId,
@@ -149,7 +182,12 @@ public final class WorkflowRunModels {
     }
   }
 
-  /** Immutable result and optional backend-specific textual artifacts. */
+  /**
+   * Immutable result and optional backend-specific textual artifacts.
+   *
+   * @param reproducibilityBundle terminal execution evidence
+   * @param artifacts backend-specific immutable textual artifacts
+   */
   public record Result(ReproducibilityBundle reproducibilityBundle, Map<String, String> artifacts) {
     public Result {
       Objects.requireNonNull(reproducibilityBundle, "reproducibilityBundle");
@@ -157,7 +195,27 @@ public final class WorkflowRunModels {
     }
   }
 
-  /** Immutable public view of one process-local run. */
+  /**
+   * Immutable public view of one process-local run.
+   *
+   * @param runId stable run identifier
+   * @param startCommandId idempotent start-command identity
+   * @param state current lifecycle state
+   * @param mode truthful backend capability mode
+   * @param source exact captured source selector
+   * @param workflowId stable workflow identifier
+   * @param snapshotId immutable snapshot identifier
+   * @param planId immutable execution-plan identifier
+   * @param fingerprint SHA-256 fingerprint of canonical DSL
+   * @param semanticRevision live-session revision, otherwise {@code null}
+   * @param commitId stored source commit, otherwise {@code null}
+   * @param capturedAt source capture instant
+   * @param startedAt backend start instant, if started
+   * @param finishedAt terminal instant, if finished
+   * @param progressPercent bounded monotonic progress percentage
+   * @param statusMessage current human-readable status
+   * @param violations immutable diagnostics accumulated by the run
+   */
   public record Snapshot(
       String runId,
       String startCommandId,
