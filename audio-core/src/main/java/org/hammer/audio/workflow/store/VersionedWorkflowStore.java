@@ -1,6 +1,7 @@
 package org.hammer.audio.workflow.store;
 
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Persistence facade for versioned workflow checkpoints.
@@ -26,6 +27,31 @@ public interface VersionedWorkflowStore {
    * @return new commit identifier
    */
   CommitId commit(String branch, WorkflowSnapshot snapshot, CommitMetadata metadata);
+
+  /**
+   * Conditionally commits a workflow snapshot only while the branch still has the expected HEAD.
+   *
+   * <p>Implementations backed by an atomic ref store should override this method so the comparison
+   * and ref publication share one optimistic-concurrency boundary. The default implementation keeps
+   * test and lightweight stores compatible, but cannot eliminate a race between the history check
+   * and {@link #commit(String, WorkflowSnapshot, CommitMetadata)}.
+   *
+   * @param branch branch name
+   * @param expectedHead commit the caller expects at HEAD, or {@code null} for a new branch
+   * @param snapshot canonical DSL snapshot to persist
+   * @param metadata author, message and timestamp
+   * @return new commit identifier
+   * @throws StaleWorkflowHeadException when the observed HEAD differs
+   */
+  default CommitId commitIfHead(
+      String branch, CommitId expectedHead, WorkflowSnapshot snapshot, CommitMetadata metadata) {
+    List<CommitInfo> current = history(branch, 1);
+    CommitId actualHead = current.isEmpty() ? null : current.getFirst().commitId();
+    if (!Objects.equals(expectedHead, actualHead)) {
+      throw new StaleWorkflowHeadException(branch, expectedHead, actualHead);
+    }
+    return commit(branch, snapshot, metadata);
+  }
 
   /**
    * Loads the workflow snapshot at the given commit.

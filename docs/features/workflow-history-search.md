@@ -6,7 +6,7 @@ Audio Analyzer provides three complementary ways to query versioned workflow his
 - `IndexedWorkflowHistorySearch` uses the shared `jgit-storage-hibernate-search` projection for repeated compound queries over commit messages, authors, changed paths, commit time and changed `workflow.dsl` content.
 - `IndexedWorkflowSemanticHistorySearch` uses an Audio Analyzer-owned branch-aware projection for workflow ids/names, node ids/types/labels and selected workflow/node metadata.
 
-Every indexed result contains the exact Git commit identifier. The matching workflow is loaded through the existing `VersionedWorkflowStore.loadAtCommit` boundary or the `/workflow/load` command; neither Lucene projection becomes workflow authority.
+Every indexed result contains the exact Git commit identifier. The matching workflow is loaded through `VersionedWorkflowStore.loadAtCommit`; neither Lucene projection becomes workflow authority.
 
 ```text
 checkpoint -> Hibernate-backed JGit commit and ref update
@@ -67,11 +67,26 @@ The application uses one Hibernate `SessionFactory` for generic JGit storage, ge
 
 Each ownership boundary has its own Flyway history table. No second Hibernate bootstrap, raw JDBC search repository or Audio Analyzer copy of the generic commit index exists.
 
+## PostgreSQL rebuild evidence
+
+`WorkflowPostgreSqlProjectionRebuildIntegrationTest` exercises the complete production-oriented path on PostgreSQL 17.10:
+
+1. apply all four migration histories;
+2. start the shared Hibernate context in `validate` mode;
+3. create canonical workflow commits through the Hibernate-backed JGit store;
+4. delete both disposable projection row sets;
+5. restart Hibernate without touching Git objects or refs;
+6. rebuild generic and semantic projections from authoritative Git history;
+7. run generic and branch-semantic queries;
+8. load and compare the exact canonical snapshot.
+
+This proves that projection loss is recoverable and cannot destroy workflow authority.
+
 ## Workbench UI
 
-When `workbench.persistence.mode=hibernate` provides the indexed-search bean, the packaged React Flow workbench exposes a **Search version history** drawer. The drawer stays absent in non-indexed modes instead of presenting a control that cannot succeed.
+When `workbench.persistence.mode=hibernate` provides the indexed-search and history-command beans, the packaged React Flow workbench exposes a **Search version history** drawer. The drawer stays absent in non-indexed modes instead of presenting controls that cannot succeed.
 
-The production panel currently supports generic history filters:
+The production panel supports:
 
 - full-text expressions across commit summaries, changed paths and deterministic workflow DSL content;
 - exact author-email filtering;
@@ -80,13 +95,61 @@ The production panel currently supports generic history filters:
 - bounded result counts from 1 to 200;
 - explicit idempotent rebuild from an authoritative branch;
 - exact commit identity, author, timestamp and changed-path evidence per result;
-- loading the authoritative workflow snapshot for the selected commit.
+- loading an exact authoritative workflow snapshot;
+- comparing two exact result commits reachable from the selected branch;
+- restoring one exact result as a **new audit commit** on the selected branch.
 
 All supplied generic predicates execute in one bounded server-side query. The client does not intersect independently truncated result lists.
 
 Changed paths use a dedicated, language-neutral analyzer in the shared projection. It splits path punctuation and lowercases components, so `workflow` matches `workflow.dsl`. Language-specific stemming is separately configurable for commit-message fields in `jgit-storage-hibernate`; it is not applied to paths, identifiers or changed source text.
 
-Historical loading is blocked while the browser is attached to a collaboration session. The user must leave the session first, preventing a history load from competing with a server-authoritative live projection. The rebuild action remains safe because it only reconciles disposable search projections.
+## Compare semantics
+
+Comparison is read-only. Both commits must be reachable from the requested branch and contain the same workflow id. The response contains:
+
+- exact before and after commit ids;
+- full transport-safe graph projections for both states;
+- ordered semantic change atoms produced by `WorkflowDiff`.
+
+Full graph projections are included because node labels, workflow names and other visible fields may differ even when the current `WorkflowDiff` atom model does not yet assign a dedicated change subtype.
+
+```text
+POST /workflow/history/compare
+{
+  "branch": "main",
+  "beforeCommitId": "<exact commit>",
+  "afterCommitId": "<exact commit>"
+}
+```
+
+## Non-destructive restore semantics
+
+Restore never moves a branch backward and never deletes later history. It loads the historical target snapshot and commits that snapshot again on top of the current branch HEAD.
+
+The command requires the caller's observed `expectedHeadCommitId`. The JGit adapter compares that value with the actual ref and publishes the new commit through the same optimistic ref-update boundary. A concurrent branch advance therefore produces HTTP 409 instead of silently overwriting work.
+
+```text
+POST /workflow/history/restore
+{
+  "branch": "main",
+  "targetCommitId": "<reachable historical commit>",
+  "expectedHeadCommitId": "<current branch HEAD>",
+  "author": "Restorer",
+  "message": "Restore approved baseline",
+  "timestamp": "2026-07-20T08:00:00Z"
+}
+```
+
+The response identifies the historical source, previous HEAD and newly created restore commit. The workbench subsequently loads only the newly created commit.
+
+Restore is blocked while a collaboration session for the same workflow still has joined participants. A session may remain durable for reconnect after every participant leaves; that retained but inactive session does not block restore. Compare remains read-only and is allowed.
+
+Conflict responses use RFC 9457 problem details:
+
+- `STALE_WORKFLOW_HEAD` for optimistic-concurrency failure;
+- `WORKFLOW_HISTORY_ACCESS_CONFLICT` for active collaboration membership.
+
+The browser also performs an immediate local active-session guard for better feedback, but the server policy remains authoritative.
 
 ## Generic HTTP API
 
@@ -120,12 +183,7 @@ GET /workflow/history/semantic
     &limit=<1..200>
 ```
 
-`branch` is mandatory in the application contract and defaults to `main` at the HTTP boundary. Supplying both property parameters requires the key and value to belong to the same metadata entry. Results contain semantic evidence plus the exact commit id, which is loaded through the existing authoritative endpoint:
-
-```text
-POST /workflow/load
-{"commitId":"<exact commit id>"}
-```
+`branch` is mandatory in the application contract and defaults to `main` at the HTTP boundary. Supplying both property parameters requires the key and value to belong to the same metadata entry.
 
 ## Rebuild
 
@@ -137,8 +195,8 @@ A negative limit means all commits reachable from the branch head. The operation
 
 ## Query-composition boundary
 
-The generic and semantic endpoints are intentionally separate. Intersecting two independently limited result lists would produce incorrect omissions. A future combined endpoint must either execute one bounded server-side plan or use an explicitly unbounded/continuation-based commit-id candidate plan before ranking and limiting.
+The generic and semantic search endpoints remain intentionally separate. Intersecting two independently limited result lists would produce incorrect omissions. A future combined endpoint must either execute one bounded server-side plan or use an explicitly continued commit-id candidate plan before ranking and limiting.
 
 ## Current boundary
 
-No JGit, Hibernate, Hibernate Search or Lucene type crosses into `audio-core`, the frontend or HTTP response models. Remaining issue #247 work includes semantic controls in the production drawer, explicit compare/restore commands with access-policy enforcement, a correct combined query plan where needed, and PostgreSQL migrate → validate → rebuild → query evidence for the complete projection set.
+No JGit, Hibernate, Hibernate Search or Lucene type crosses into `audio-core`, the frontend or HTTP response models. Remaining issue #247 work is the correctness-preserving combined generic/semantic query plan and semantic filter controls in the production drawer.

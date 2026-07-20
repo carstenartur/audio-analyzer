@@ -70,12 +70,15 @@ public final class HibernateJGitVersionedWorkflowStore
   @Override
   public CommitId commit(String branch, WorkflowSnapshot snapshot, CommitMetadata metadata) {
     CommitId commitId = delegate.commit(branch, snapshot, metadata);
-    if (genericHistoryProjection != null) {
-      genericHistoryProjection.indexBestEffort(commitId);
-    }
-    if (semanticHistoryProjection != null) {
-      semanticHistoryProjection.indexBestEffort(branch, commitId, snapshot);
-    }
+    indexBestEffort(branch, commitId, snapshot);
+    return commitId;
+  }
+
+  @Override
+  public CommitId commitIfHead(
+      String branch, CommitId expectedHead, WorkflowSnapshot snapshot, CommitMetadata metadata) {
+    CommitId commitId = delegate.commitIfHead(branch, expectedHead, snapshot, metadata);
+    indexBestEffort(branch, commitId, snapshot);
     return commitId;
   }
 
@@ -137,6 +140,16 @@ public final class HibernateJGitVersionedWorkflowStore
     return new DefaultHibernateRepositoryFactory(
             Objects.requireNonNull(sessionFactory, "sessionFactory"))
         .open(new RepositoryName(repositoryName));
+  }
+
+  private void indexBestEffort(
+      String branch, CommitId commitId, WorkflowSnapshot authoritativeSnapshot) {
+    if (genericHistoryProjection != null) {
+      genericHistoryProjection.indexBestEffort(commitId);
+    }
+    if (semanticHistoryProjection != null) {
+      semanticHistoryProjection.indexBestEffort(branch, commitId, authoritativeSnapshot);
+    }
   }
 
   private void requireSearchEnabled() {

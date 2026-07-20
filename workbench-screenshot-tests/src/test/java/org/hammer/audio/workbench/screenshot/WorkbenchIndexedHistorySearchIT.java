@@ -17,7 +17,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.testcontainers.DockerClientFactory;
 
-/** Packaged-browser evidence for exact-commit indexed workflow history search. */
+/** Packaged-browser evidence for indexed search, compare and non-destructive restore. */
 @Tag("collaboration-e2e")
 class WorkbenchIndexedHistorySearchIT {
 
@@ -39,7 +39,7 @@ class WorkbenchIndexedHistorySearchIT {
   }
 
   @Test
-  void searchesWithStructuredFiltersAndLoadsTheExactAuthoritativeCommit() throws Exception {
+  void searchesComparesAndRestoresExactAuthoritativeCommits() throws Exception {
     try (WorkbenchBrowserHarness harness =
             WorkbenchBrowserHarness.start(
                 WorkbenchContainerFactory.createDurableRestart(dataDirectory, false));
@@ -52,7 +52,7 @@ class WorkbenchIndexedHistorySearchIT {
       String historicalCommit =
           checkpoint(page, "Indexed history " + HISTORICAL_TERM, "2026-07-19T13:00:00Z");
       applyLaterOperation(page);
-      checkpoint(page, "Later unrelated checkpoint", "2026-07-19T13:01:00Z");
+      String laterCommit = checkpoint(page, "Later unrelated checkpoint", "2026-07-19T13:01:00Z");
       page.reload();
       page.locator(LATER_NODE_SELECTOR).waitFor();
 
@@ -88,13 +88,44 @@ class WorkbenchIndexedHistorySearchIT {
       error.waitFor();
       assertTrue(error.innerText().contains("Leave collaboration session remembered-live-session"));
       assertEquals(1, page.locator(LATER_NODE_SELECTOR).count());
+      page.evaluate("key => sessionStorage.removeItem(key)", ACTIVE_SESSION_STORAGE_KEY);
+
+      showAllHistory(page);
+      page.locator("[data-testid='indexed-history-compare-before']").selectOption(historicalCommit);
+      page.locator("[data-testid='indexed-history-compare-after']").selectOption(laterCommit);
+      page.locator("[data-testid='indexed-history-compare']").click();
+      Locator comparison = page.locator("[data-testid='indexed-history-comparison']");
+      comparison.waitFor();
+      assertTrue(comparison.innerText().contains("NODE_ADDED"));
+      assertTrue(comparison.innerText().contains(LATER_NODE_ID));
+
+      page.locator("[data-testid='indexed-history-restore-target']").selectOption(historicalCommit);
+      page.evaluate(
+          "input => sessionStorage.setItem(input.key, input.value)",
+          Map.of("key", ACTIVE_SESSION_STORAGE_KEY, "value", "remembered-live-session"));
+      page.locator("[data-testid='indexed-history-restore']").click();
+      error.waitFor();
+      assertTrue(error.innerText().contains("Leave collaboration session remembered-live-session"));
+      assertEquals(1, page.locator(LATER_NODE_SELECTOR).count());
 
       page.evaluate("key => sessionStorage.removeItem(key)", ACTIVE_SESSION_STORAGE_KEY);
-      exactLoad.click();
+      page.locator("[data-testid='indexed-history-restore']").click();
       page.waitForCondition(() -> page.locator(LATER_NODE_SELECTOR).count() == 0);
       page.locator("[data-testid='workbench-title']").waitFor();
       assertFalse(currentProjectionNodeIds(page).contains(LATER_NODE_ID));
+      assertEquals(3, historyCommitIds(page).size());
+      assertEquals(historicalCommit, historyCommitIds(page).get(2));
     }
+  }
+
+  private static void showAllHistory(Page page) {
+    page.locator("[data-testid='indexed-history-query']").fill("");
+    page.locator("[data-testid='indexed-history-author']").fill("");
+    page.locator("[data-testid='indexed-history-path']").fill("");
+    page.locator("[data-testid='indexed-history-from']").fill("");
+    page.locator("[data-testid='indexed-history-to']").fill("");
+    page.locator("[data-testid='indexed-history-search']").click();
+    waitForStatus(page, "2 indexed checkpoints found.");
   }
 
   private static void waitForStatus(Page page, String expected) {
@@ -160,6 +191,21 @@ class WorkbenchIndexedHistorySearchIT {
               const response = await fetch('/workflow/projection', {headers: {Accept: 'application/json'}});
               const projection = await response.json();
               return projection.nodes.map(node => node.id);
+            }
+            """);
+  }
+
+  @SuppressWarnings("unchecked")
+  private static List<String> historyCommitIds(Page page) {
+    return (List<String>)
+        page.evaluate(
+            """
+            async () => {
+              const response = await fetch('/workflow/history?branch=main&limit=10', {
+                headers: {Accept: 'application/json'}
+              });
+              const history = await response.json();
+              return history.map(entry => entry.commitId);
             }
             """);
   }
