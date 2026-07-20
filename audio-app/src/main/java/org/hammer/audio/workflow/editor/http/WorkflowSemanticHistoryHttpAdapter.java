@@ -62,14 +62,7 @@ public final class WorkflowSemanticHistoryHttpAdapter {
 
     WorkflowSemanticHistoryQuery toQuery() {
       return new WorkflowSemanticHistoryQuery(
-          branch,
-          workflow,
-          node,
-          type,
-          label,
-          propertyKey,
-          propertyValue,
-          Integer.parseInt(limit));
+          branch, workflow, node, type, label, propertyKey, propertyValue, Integer.parseInt(limit));
     }
   }
 
