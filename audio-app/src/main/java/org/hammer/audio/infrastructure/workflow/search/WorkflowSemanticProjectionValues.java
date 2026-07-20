@@ -9,6 +9,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 import org.hammer.audio.workflow.Node;
 import org.hammer.audio.workflow.Workflow;
@@ -133,7 +134,7 @@ record WorkflowSemanticProjectionValues(
 
   private static List<String> normalizedValues(Collection<String> values) {
     Objects.requireNonNull(values, "values");
-    LinkedHashSet<String> normalized = new LinkedHashSet<>();
+    Set<String> normalized = new LinkedHashSet<>();
     values.stream()
         .map(value -> Objects.requireNonNull(value, "value"))
         .sorted()
