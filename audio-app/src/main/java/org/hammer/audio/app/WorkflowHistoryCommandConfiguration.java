@@ -9,9 +9,9 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-/** Wires explicit compare and restore commands when a persistence mode is selected. */
+/** Wires explicit compare and restore commands for the indexed Hibernate persistence mode. */
 @Configuration
-@ConditionalOnProperty(name = "workbench.persistence.mode")
+@ConditionalOnProperty(name = "workbench.persistence.mode", havingValue = "hibernate")
 public class WorkflowHistoryCommandConfiguration {
 
   /** Applies current collaboration membership as the restore access boundary. */
