@@ -21,8 +21,7 @@ class WorkflowSemanticHistoryHttpAdapterTest {
 
   @Test
   void returnsExactCommitAndForwardsBranchAwareSemanticFilters() throws Exception {
-    IndexedWorkflowSemanticHistorySearch search =
-        mock(IndexedWorkflowSemanticHistorySearch.class);
+    IndexedWorkflowSemanticHistorySearch search = mock(IndexedWorkflowSemanticHistorySearch.class);
     WorkflowSemanticHistoryQuery query =
         new WorkflowSemanticHistoryQuery(
             "experiment",
@@ -59,9 +58,7 @@ class WorkflowSemanticHistoryHttpAdapterTest {
                 .param("propertyValue", "high")
                 .param("limit", "7"))
         .andExpect(status().isOk())
-        .andExpect(
-            jsonPath("$[0].commitId")
-                .value("0123456789012345678901234567890123456789"))
+        .andExpect(jsonPath("$[0].commitId").value("0123456789012345678901234567890123456789"))
         .andExpect(jsonPath("$[0].branch").value("experiment"))
         .andExpect(jsonPath("$[0].nodeIds[0]").value("node.classifier"))
         .andExpect(jsonPath("$[0].properties[0].key").value("threshold"))
