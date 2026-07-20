@@ -1,5 +1,7 @@
 package org.hammer.audio.workflow.execution;
 
+import java.io.Serial;
+import java.io.Serializable;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -123,7 +125,10 @@ public final class WorkflowRunModels {
    * @param message human-readable diagnostic
    * @param nodeId optional affected node identifier
    */
-  public record Violation(String code, String message, String nodeId) {
+  public record Violation(String code, String message, String nodeId) implements Serializable {
+
+    @Serial private static final long serialVersionUID = 1L;
+
     public Violation {
       requireNotBlank(code, "code");
       requireNotBlank(message, "message");
