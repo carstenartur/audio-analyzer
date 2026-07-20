@@ -9,7 +9,9 @@ import org.hibernate.SessionFactory;
 /** Opens one logical Hibernate-backed Git repository from the shared persistence context. */
 final class HibernateWorkflowGitStorage {
 
-  private HibernateWorkflowGitStorage() {}
+  private HibernateWorkflowGitStorage() {
+    // Static factory only.
+  }
 
   static HibernateGitStorage open(SessionFactory sessionFactory, String repositoryName) {
     return new DefaultHibernateRepositoryFactory(
