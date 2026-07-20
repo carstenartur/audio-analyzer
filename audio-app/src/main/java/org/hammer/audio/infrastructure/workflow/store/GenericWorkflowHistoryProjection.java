@@ -34,7 +34,8 @@ final class GenericWorkflowHistoryProjection {
       Repository repository, SessionFactory sessionFactory, String repositoryName) {
     this.repository = Objects.requireNonNull(repository, "repository");
     this.repositoryName = requireNotBlank(repositoryName, "repositoryName");
-    SessionFactory requiredSessionFactory = Objects.requireNonNull(sessionFactory, "sessionFactory");
+    SessionFactory requiredSessionFactory =
+        Objects.requireNonNull(sessionFactory, "sessionFactory");
     this.commitIndexer = new CommitIndexer(requiredSessionFactory, this.repositoryName);
     this.searchService = new GitHistorySearchService(requiredSessionFactory);
   }
