@@ -238,8 +238,7 @@ public final class HibernateJGitVersionedWorkflowStore
     for (int position = 0; position < commits.size(); position++) {
       CommitId commitId = commits.get(position).commitId();
       entries.add(
-          new WorkflowSemanticProjectionEntry(
-              commitId, position, delegate.loadAtCommit(commitId)));
+          new WorkflowSemanticProjectionEntry(commitId, position, delegate.loadAtCommit(commitId)));
     }
     semanticIndexService.replaceBranch(branch, entries);
   }
