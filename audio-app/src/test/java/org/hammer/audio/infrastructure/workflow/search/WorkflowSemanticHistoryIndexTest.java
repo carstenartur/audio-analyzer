@@ -61,17 +61,12 @@ class WorkflowSemanticHistoryIndexTest {
                   "empty", "",
                   "mode", "safe",
                   "notes", DELIMITER_RICH_VALUE));
-      CommitId mainCommit =
-          store.commit("main", mainClassifier, metadata("Add classifier", 2));
+      CommitId mainCommit = store.commit("main", mainClassifier, metadata("Add classifier", 2));
 
       WorkflowSnapshot experimentGain =
           snapshot(
               "Experimental gain workflow",
-              node(
-                  "node.gain",
-                  "gain",
-                  "Experimental gain",
-                  Map.of("threshold", "high")),
+              node("node.gain", "gain", "Experimental gain", Map.of("threshold", "high")),
               Map.of("mode", "research"));
       CommitId experimentCommit =
           store.commit("experiment", experimentGain, metadata("Tune experiment", 3));
@@ -102,14 +97,7 @@ class WorkflowSemanticHistoryIndexTest {
           List.of(mainCommit),
           store
               .searchSemantic(
-                  query(
-                      "main",
-                      WORKFLOW_ID,
-                      null,
-                      null,
-                      null,
-                      "notes",
-                      DELIMITER_RICH_VALUE))
+                  query("main", WORKFLOW_ID, null, null, null, "notes", DELIMITER_RICH_VALUE))
               .stream()
               .map(WorkflowSemanticHistoryResult::commitId)
               .toList());
@@ -123,13 +111,11 @@ class WorkflowSemanticHistoryIndexTest {
 
       assertEquals(
           List.of(),
-          store.searchSemantic(
-              query("experiment", WORKFLOW_ID, null, null, null, "mode", "high")),
+          store.searchSemantic(query("experiment", WORKFLOW_ID, null, null, null, "mode", "high")),
           "key and value must belong to the same metadata entry");
       assertEquals(
           List.of(),
-          store.searchSemantic(
-              query("main", WORKFLOW_ID, "node.gain", null, null, null, null)),
+          store.searchSemantic(query("main", WORKFLOW_ID, "node.gain", null, null, null, null)),
           "branch reachability must be enforced by the semantic projection");
 
       assertEquals(0, store.rebuild("main", -1));
@@ -140,18 +126,15 @@ class WorkflowSemanticHistoryIndexTest {
               .toList(),
           "a full rebuild must preserve the incremental projection result");
 
-      assertEquals(
-          RefUpdateResult.SUCCESS, store.updateRef("main", mainCommit, baselineCommit));
+      assertEquals(RefUpdateResult.SUCCESS, store.updateRef("main", mainCommit, baselineCommit));
       assertEquals(
           List.of(),
-          store.searchSemantic(
-              query("main", WORKFLOW_ID, null, "classifier", null, null, null)),
+          store.searchSemantic(query("main", WORKFLOW_ID, null, "classifier", null, null, null)),
           "moving a ref must remove commits that are no longer reachable on that branch");
       assertEquals(
           baselineCommit,
           store
-              .searchSemantic(
-                  query("main", WORKFLOW_ID, "node.source", null, null, null, null))
+              .searchSemantic(query("main", WORKFLOW_ID, "node.source", null, null, null, null))
               .getFirst()
               .commitId());
     }
@@ -172,18 +155,11 @@ class WorkflowSemanticHistoryIndexTest {
   private static WorkflowSnapshot snapshot(
       String name, Node node, Map<String, String> workflowMetadata) {
     Workflow workflow =
-        new Workflow(
-            WORKFLOW_ID,
-            name,
-            List.of(node),
-            List.of(),
-            new Metadata(workflowMetadata));
-    return new WorkflowSnapshot(
-        WORKFLOW_ID, new WorkflowDslSerializer().serialize(workflow));
+        new Workflow(WORKFLOW_ID, name, List.of(node), List.of(), new Metadata(workflowMetadata));
+    return new WorkflowSnapshot(WORKFLOW_ID, new WorkflowDslSerializer().serialize(workflow));
   }
 
-  private static Node node(
-      String id, String type, String label, Map<String, String> metadata) {
+  private static Node node(String id, String type, String label, Map<String, String> metadata) {
     return new Node(id, type, label, List.of(), List.of(), new Metadata(metadata));
   }
 
@@ -194,8 +170,7 @@ class WorkflowSemanticHistoryIndexTest {
   private static Properties h2Properties() {
     Properties properties = new Properties();
     properties.put(
-        "hibernate.connection.url",
-        "jdbc:h2:mem:" + UUID.randomUUID() + ";DB_CLOSE_DELAY=-1");
+        "hibernate.connection.url", "jdbc:h2:mem:" + UUID.randomUUID() + ";DB_CLOSE_DELAY=-1");
     properties.put("hibernate.connection.driver_class", "org.h2.Driver");
     properties.put("hibernate.dialect", "org.hibernate.dialect.H2Dialect");
     properties.put("hibernate.hbm2ddl.auto", "create-drop");
