@@ -1,6 +1,7 @@
 package org.hammer.audio.experimental.acoustic;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -35,8 +36,8 @@ class SubSampleGccPhatTdoaEstimatorTest {
 
     assertEquals(2.4, estimatedSamples, 0.0625);
     assertTrue(result.diagnostics().peakRatio() > 1.5);
-    assertTrue(result.diagnostics().normalizedCurvature() > 0.1);
-    assertTrue(!result.diagnostics().ambiguous());
+    assertTrue(result.diagnostics().normalizedCurvature() > 1.5);
+    assertFalse(result.diagnostics().ambiguous());
   }
 
   @Test
@@ -74,7 +75,7 @@ class SubSampleGccPhatTdoaEstimatorTest {
     DiagnosticTdoaEstimate detailed = estimator.estimateDetailed(block, array(), 0, 1);
 
     assertTrue(detailed.diagnostics().ambiguous());
-    assertTrue(detailed.diagnostics().peakRatio() < 1.5);
+    assertTrue(detailed.diagnostics().normalizedCurvature() < 1.5);
     assertThrows(
         AmbiguousTdoaEstimateException.class,
         () -> estimator.estimateReliable(block, array(), 0, 1));
