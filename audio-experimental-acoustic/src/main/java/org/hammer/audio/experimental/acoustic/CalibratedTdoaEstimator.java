@@ -30,7 +30,8 @@ public final class CalibratedTdoaEstimator implements SynchronizationAwareTdoaEs
     if (!(maximumErrorSamples > 0.0) || !Double.isFinite(maximumErrorSamples)) {
       throw new IllegalArgumentException("maximumErrorSamples must be finite and > 0");
     }
-    if (!(speedOfSoundMetersPerSecond > 0.0) || !Double.isFinite(speedOfSoundMetersPerSecond)) {
+    if (!(speedOfSoundMetersPerSecond > 0.0)
+        || !Double.isFinite(speedOfSoundMetersPerSecond)) {
       throw new IllegalArgumentException("speedOfSoundMetersPerSecond must be finite and > 0");
     }
     this.maximumErrorSamples = maximumErrorSamples;
@@ -46,16 +47,18 @@ public final class CalibratedTdoaEstimator implements SynchronizationAwareTdoaEs
       throw new UnusableSynchronizationException(String.join(" ", assessment.diagnostics()));
     }
     TdoaEstimate raw = delegate.estimate(block, array, firstChannel, secondChannel);
-    double hardwareDelay =
+    double hardwareDelaySamples =
         calibration.relativeOffsetSamples(firstChannel, secondChannel, block.frameIndex());
-    int correctedDelaySamples = (int) Math.round(raw.delaySamples() - hardwareDelay);
+    double rawDelaySamples = raw.delaySeconds() * block.format().sampleRate();
+    double correctedDelaySamples = rawDelaySamples - hardwareDelaySamples;
+    int roundedDelaySamples = (int) Math.round(correctedDelaySamples);
     double correctedDelaySeconds = correctedDelaySamples / block.format().sampleRate();
     double confidenceScale =
         Math.max(0.0, 1.0 - assessment.estimatedErrorSamples() / maximumErrorSamples);
     return new TdoaEstimate(
         raw.firstMicrophoneId(),
         raw.secondMicrophoneId(),
-        correctedDelaySamples,
+        roundedDelaySamples,
         correctedDelaySeconds,
         correctedDelaySeconds * speedOfSoundMetersPerSecond,
         raw.confidence() * confidenceScale);
