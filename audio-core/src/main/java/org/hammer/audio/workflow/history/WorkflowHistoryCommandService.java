@@ -6,13 +6,12 @@ import org.hammer.audio.workflow.Workflow;
 import org.hammer.audio.workflow.dsl.WorkflowDslParser;
 import org.hammer.audio.workflow.store.CommitId;
 import org.hammer.audio.workflow.store.CommitInfo;
+import org.hammer.audio.workflow.store.RefUpdateResult;
 import org.hammer.audio.workflow.store.StaleWorkflowHeadException;
 import org.hammer.audio.workflow.store.VersionedWorkflowStore;
 import org.hammer.audio.workflow.store.WorkflowSnapshot;
 
-/**
- * Application service for explicit branch-scoped workflow comparison and non-destructive restore.
- */
+/** Application service for explicit branch-scoped workflow comparison, branching and restore. */
 public final class WorkflowHistoryCommandService {
 
   private final VersionedWorkflowStore store;
@@ -65,6 +64,31 @@ public final class WorkflowHistoryCommandService {
         beforeWorkflow,
         afterWorkflow,
         WorkflowDiff.compute(beforeWorkflow, afterWorkflow));
+  }
+
+  /**
+   * Creates a new branch from one exact commit reachable from a source branch.
+   *
+   * @param command source reachability boundary, new branch and exact initial HEAD
+   * @return newly created branch evidence
+   */
+  public WorkflowBranchCreationResult createBranch(CreateWorkflowBranchCommand command) {
+    Objects.requireNonNull(command, "command");
+    List<CommitInfo> reachable = store.history(command.sourceBranch(), Integer.MAX_VALUE);
+    if (reachable.isEmpty()) {
+      throw new IllegalArgumentException(
+          "Unknown or empty workflow branch: " + command.sourceBranch());
+    }
+    requireReachable(reachable, command.fromCommit(), command.sourceBranch());
+    Workflow workflow = loadWorkflow(command.fromCommit());
+    accessPolicy.assertRestoreAllowed(command.newBranch(), workflow.id());
+    RefUpdateResult update = store.updateRef(command.newBranch(), null, command.fromCommit());
+    if (update != RefUpdateResult.SUCCESS) {
+      throw new IllegalArgumentException(
+          "Workflow branch already exists or cannot be created: " + command.newBranch());
+    }
+    return new WorkflowBranchCreationResult(
+        command.sourceBranch(), command.newBranch(), command.fromCommit(), workflow.id());
   }
 
   /**

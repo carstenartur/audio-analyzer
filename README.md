@@ -24,6 +24,7 @@ The project provides real DSP and measurement foundations, recording and replay,
 | Build a workflow visually     | Typed React Flow nodes and ports backed by immutable Java workflow models                   |
 | Work with other people        | Shared sessions, ordered SSE updates, presence, revision conflicts and canonical reload     |
 | Undo safely                   | Personal or explicit shared semantic undo/redo with previews, blockers and durable history  |
+| Merge workflow versions       | Exact base/local/remote checkpoints, typed conflicts and validated merge commits            |
 | Preserve evidence             | `.aar` recordings, CSV/PNG exports, evidence bundles and versioned workflow checkpoints     |
 | Explore localization research | Simulated microphone arrays, TDOA, beamforming, tracking and HumBugDB-oriented experiments  |
 
@@ -117,6 +118,7 @@ The production-packaged client is exercised with two isolated Chromium contexts.
 - recording/replay and evidence-oriented exports;
 - immutable workflow models and deterministic serialization;
 - packaged React Flow client with server-authoritative collaboration;
+- semantic checkpoint comparison and validated three-way merge;
 - Hibernate-backed session history, transactional outbox and migration validation;
 - JGit-backed workflow checkpoints through the shared storage library;
 - architecture tests, static analysis, coverage, CodeQL and reproducible screenshots.
@@ -135,6 +137,7 @@ Start with the task that matches your goal:
 - [Getting started](docs/getting-started.md) — build, launch and first signal/workflow experiment.
 - [Feature guides](docs/features/README.md) — signal inspection, recording, comparison and collaborative workflows.
 - [Collaborative workflows](docs/features/collaborative-workflows.md) — sessions, revision safety and semantic undo/redo.
+- [Semantic workflow merge](docs/architecture/semantic-workflow-merge.md) — exact checkpoints, conflict types, resolution and audit guarantees.
 - [Experimental acoustic localization](docs/plugins/acoustic-localization.md) — capabilities, evidence and limitations.
 - [Architecture](ARCHITECTURE.md) — audio, workflow, collaboration, persistence and module boundaries.
 - [Persistent workbench operation](docs/workbench-hibernate-persistence.md) — Hibernate/JGit mode, migrations and outbox operation.

@@ -9,6 +9,7 @@ import java.util.List;
 import org.hammer.audio.workflow.Node;
 import org.hammer.audio.workflow.Workflow;
 import org.hammer.audio.workflow.dsl.WorkflowDslSerializer;
+import org.hammer.audio.workflow.history.WorkflowChange.ElementKind;
 import org.hammer.audio.workflow.store.CommitId;
 import org.hammer.audio.workflow.store.CommitMetadata;
 import org.hammer.audio.workflow.store.InMemoryVersionedWorkflowStore;
@@ -35,8 +36,14 @@ class WorkflowHistoryCommandServiceTest {
     WorkflowHistoryComparison comparison = service.compare("main", baselineCommit, changedCommit);
     assertEquals(baseline, comparison.beforeWorkflow());
     assertEquals(changed, comparison.afterWorkflow());
-    assertEquals(1, comparison.diff().changes().size());
+    assertEquals(2, comparison.diff().changes().size());
     assertInstanceOf(WorkflowChange.NodeAdded.class, comparison.diff().changes().getFirst());
+    WorkflowChange.FieldChanged nameChange =
+        assertInstanceOf(WorkflowChange.FieldChanged.class, comparison.diff().changes().get(1));
+    assertEquals(ElementKind.WORKFLOW, nameChange.elementKind());
+    assertEquals("name", nameChange.fieldPath());
+    assertEquals("Baseline", nameChange.oldValue());
+    assertEquals("Changed", nameChange.newValue());
 
     WorkflowRestoreResult result =
         service.restore(

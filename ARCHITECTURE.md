@@ -208,6 +208,8 @@ Authoritative data is split deliberately:
 
 A live operation and its outbox row share one Hibernate transaction. A Git checkpoint remains a separate explicit application command unless a verified shared transaction contract says otherwise.
 
+Semantic comparison and three-way merge load exact base/local/remote commits, resolve typed domain conflicts and write a validated deterministic checkpoint through the same `VersionedWorkflowStore` boundary. See [`docs/architecture/semantic-workflow-merge.md`](docs/architecture/semantic-workflow-merge.md).
+
 See [`docs/workbench-hibernate-persistence.md`](docs/workbench-hibernate-persistence.md).
 
 ## Plugin architecture
@@ -259,12 +261,11 @@ Stable domain packages must not import Swing, Spring, JGit, Hibernate, Playwrigh
 
 ## Current open architecture work
 
-The implemented collaboration foundation does not complete every planned workflow capability. Current open slices include:
+The collaborative workflow platform now covers durable restart, indexed history search, immutable execution, semantic undo/redo and deterministic three-way merge. The remaining open architecture and research slices are concentrated in the experimental acoustic-localization path:
 
-- durable full-process browser restart evidence (#249);
-- semantic diff, three-way merge and conflict resolution (#246);
-- rebuildable workflow-history search (#247);
-- immutable actual workflow execution and run UX (#248, #273–#275).
+- synchronization and microphone-array calibration (#136);
+- advanced measurable localization algorithms (#138);
+- the complete real-world hardware-to-localization workflow (#139).
 
 See [`ROADMAP.md`](ROADMAP.md).
 
