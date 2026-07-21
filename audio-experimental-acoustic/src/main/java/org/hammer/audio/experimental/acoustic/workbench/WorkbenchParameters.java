@@ -37,8 +37,10 @@ public record WorkbenchParameters(
 
   /** TDOA estimator strategy for the workbench pipeline. */
   public enum TdoaEstimatorType {
-    /** Frequency-domain GCC-PHAT (default, robust under narrow-band signals). */
+    /** Integer-sample frequency-domain GCC-PHAT baseline and default. */
     GCC_PHAT,
+    /** Sixteen-times interpolated GCC-PHAT with peak diagnostics and ambiguity evidence. */
+    SUB_SAMPLE_GCC_PHAT,
     /** Time-domain normalised cross-correlation (faster, weaker under reflections). */
     CROSS_CORRELATION
   }
