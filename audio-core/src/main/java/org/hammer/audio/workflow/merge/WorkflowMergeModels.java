@@ -102,19 +102,30 @@ public interface WorkflowMergeModels {
    *
    * @param autoMergedWorkflow workflow containing every non-conflicting automatic decision
    * @param conflicts unresolved semantic conflicts in stable order
+   * @param validationViolations structural violations caused by the combined automatic decisions
    */
-  record Preview(Workflow autoMergedWorkflow, List<Conflict> conflicts) {
+  record Preview(
+      Workflow autoMergedWorkflow,
+      List<Conflict> conflicts,
+      List<String> validationViolations) {
     public Preview {
       Objects.requireNonNull(autoMergedWorkflow, "autoMergedWorkflow");
       conflicts = List.copyOf(Objects.requireNonNull(conflicts, "conflicts"));
+      validationViolations =
+          List.copyOf(Objects.requireNonNull(validationViolations, "validationViolations"));
       if (!conflicts.equals(conflicts.stream().sorted(Conflict.ORDERING).toList())) {
         throw new IllegalArgumentException("conflicts must use stable semantic ordering");
       }
     }
 
-    /** Returns whether all changes were merged automatically. */
+    /** Returns whether no explicit field resolution remains. */
     public boolean conflictFree() {
       return conflicts.isEmpty();
+    }
+
+    /** Returns whether the automatic result may be serialized and committed directly. */
+    public boolean readyToCommit() {
+      return conflicts.isEmpty() && validationViolations.isEmpty();
     }
   }
 
