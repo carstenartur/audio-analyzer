@@ -10,6 +10,13 @@ export interface WorkflowHistoryEntry {
   timestamp: string;
 }
 
+export interface WorkflowBranchCreationResponse {
+  sourceBranch: string;
+  branch: string;
+  headCommitId: string;
+  workflowId: string;
+}
+
 export interface WorkflowMergeConflict {
   conflictId: string;
   kind: string;
@@ -72,6 +79,14 @@ export async function loadWorkflowBranchHistory(
   return getJson<WorkflowHistoryEntry[]>(
     `/workflow/history?branch=${encodeURIComponent(branch)}&limit=100`,
   );
+}
+
+export async function createWorkflowBranch(input: {
+  sourceBranch: string;
+  newBranch: string;
+  fromCommitId: string;
+}): Promise<WorkflowBranchCreationResponse> {
+  return postJson<WorkflowBranchCreationResponse>('/workflow/history/branches', input);
 }
 
 export async function previewWorkflowMerge(input: {
