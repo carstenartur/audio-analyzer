@@ -7,7 +7,18 @@ import org.hammer.audio.experimental.acoustic.DelayAndSumBeamformer.BeamformingP
 import org.hammer.audio.geometry.LocalizationConstraint2D;
 import org.hammer.audio.geometry.Vector2;
 
-/** Visualization-ready output from the experimental acoustic localization pipeline. */
+/**
+ * Visualization-ready output from the experimental acoustic localization pipeline.
+ *
+ * @param sourceFrameIndex absolute frame index of the analysed audio block
+ * @param sourceTimestampNanos timestamp of the analysed audio block
+ * @param trackedFrequency dominant tracked spectral peak
+ * @param tdoaEstimates pairwise time-difference estimates used by the pipeline
+ * @param constraints reusable geometric constraints derived from the TDOA estimates
+ * @param heatmap beamforming candidate scores
+ * @param estimatedPositionMeters best estimated source position
+ * @param synchronization synchronization evidence used for this localization result
+ */
 public record AcousticLocalizationSnapshot(
     long sourceFrameIndex,
     long sourceTimestampNanos,
