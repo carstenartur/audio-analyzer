@@ -1,12 +1,28 @@
 name: Workbench Screenshots
 
 on:
+  workflow_dispatch:
   pull_request:
     paths:
       - '.github/workflows/workbench-screenshots.yml'
+      - 'pom.xml'
+      - 'audio-web-editor/**'
+      - 'audio-app/**'
+      - 'workbench-screenshot-tests/**'
+      - 'docs/assets/screenshots/workbench/**'
+  push:
+    branches:
+      - master
+    paths:
+      - '.github/workflows/workbench-screenshots.yml'
+      - 'pom.xml'
+      - 'audio-web-editor/**'
+      - 'audio-app/**'
+      - 'workbench-screenshot-tests/**'
+      - 'docs/assets/screenshots/workbench/**'
 
 permissions:
-  contents: write
+  contents: read
   packages: read
 
 concurrency:
@@ -14,237 +30,58 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  integrate-calibration-diagnostics:
-    if: github.head_ref == 'feature/136-microphone-array-calibration' && github.actor != 'github-actions[bot]'
+  verify-screenshots:
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 35
     env:
+      JAVA_VERSION: '21'
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v7
-        with:
-          ref: feature/136-microphone-array-calibration
-          fetch-depth: 0
 
-      - uses: actions/setup-java@v5
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: '21'
+          java-version: ${{ env.JAVA_VERSION }}
           cache: maven
           server-id: github
           server-username: GITHUB_ACTOR
           server-password: GITHUB_TOKEN
 
-      - name: Add export and playback synchronization evidence
-        run: |
-          python3 <<'PY'
-          from pathlib import Path
+      - name: Build packaged application and screenshot-test reactor
+        run: >-
+          mvn -B -Pscreenshot-tests -DskipTests install
+          -pl workbench-screenshot-tests -am
 
-          def replace_once(text: str, old: str, new: str, label: str) -> str:
-              count = text.count(old)
-              if count != 1:
-                  raise SystemExit(f'{label}: expected one anchor, found {count}')
-              return text.replace(old, new, 1)
+      - name: Install Playwright Chromium
+        run: >-
+          mvn -B -Pscreenshot-tests -pl workbench-screenshot-tests
+          org.codehaus.mojo:exec-maven-plugin:3.5.0:java
+          -Dexec.mainClass=com.microsoft.playwright.CLI
+          -Dexec.classpathScope=test
+          -Dexec.args="install --with-deps chromium"
 
-          exporter = Path('audio-experimental-acoustic/src/main/java/org/hammer/audio/experimental/acoustic/workbench/WorkbenchRunExporter.java')
-          text = exporter.read_text(encoding='utf-8')
-          text = replace_once(
-              text,
-              'import java.util.Set;\n',
-              'import java.util.Set;\nimport java.util.stream.Collectors;\n',
-              'exporter import',
-          )
-          text = replace_once(
-              text,
-              '    appendRow(sb, "Distinct track IDs", result.distinctTrackCount());\n',
-              '    appendRow(sb, "Distinct track IDs", result.distinctTrackCount());\n'
-              '    appendRow(sb, "Synchronization modes", formatSynchronizationModes(result));\n'
-              '    appendRow(sb, "Worst synchronization", result.worstSynchronizationStatus());\n',
-              'exporter summary',
-          )
-          text = replace_once(
-              text,
-              '| Frame | Time (ms) | Clusters | Tracks | Proc. (µs) | Budget |\\n"\n'
-              '            + "|---|---|---|---|---|---|\\n',
-              '| Frame | Time (ms) | Clusters | Tracks | Proc. (µs) | Sync | Error (samples) | Budget |\\n"\n'
-              '            + "|---|---|---|---|---|---|---|---|\\n',
-              'exporter markdown header',
-          )
-          text = replace_once(
-              text,
-              '          .append(formatBudgetStatus(result, snap))\n'
-              '          .append(" |\\n");',
-              '          .append(snap.synchronization().status())\n'
-              '          .append(MARKDOWN_PIPE_SEPARATOR)\n'
-              '          .append(\n'
-              '              String.format(\n'
-              '                  Locale.ROOT,\n'
-              '                  "%.4f",\n'
-              '                  snap.synchronization().estimatedErrorSamples()))\n'
-              '          .append(MARKDOWN_PIPE_SEPARATOR)\n'
-              '          .append(formatBudgetStatus(result, snap))\n'
-              '          .append(" |\\n");',
-              'exporter markdown row',
-          )
-          text = replace_once(
-              text,
-              '            + "posX,posY,velX,velY,confidence,observations,processingNs,budgetExceeded\\n");',
-              '            + "posX,posY,velX,velY,confidence,observations,processingNs,"\n'
-              '            + "synchronizationMode,synchronizationStatus,synchronizationErrorSamples,"\n'
-              '            + "calibrationCurrent,budgetExceeded\\n");',
-              'exporter csv header',
-          )
-          csv_start = text.index('  public static String toCsv(')
-          json_start = text.index('  public static String toJsonLines(')
-          csv_prefix = text[:csv_start]
-          csv_body = text[csv_start:json_start]
-          csv_suffix = text[json_start:]
-          csv_body = replace_once(
-              csv_body,
-              '            .append(snap.processingNanos())\n'
-              '            .append(\',\')\n'
-              '            .append(formatBudgetExceededCsv(result, snap))',
-              '            .append(snap.processingNanos())\n'
-              '            .append(\',\')\n'
-              '            .append(snap.synchronization().mode())\n'
-              '            .append(\',\')\n'
-              '            .append(snap.synchronization().status())\n'
-              '            .append(\',\')\n'
-              '            .append(\n'
-              '                String.format(\n'
-              '                    Locale.ROOT,\n'
-              '                    "%.6f",\n'
-              '                    snap.synchronization().estimatedErrorSamples()))\n'
-              '            .append(\',\')\n'
-              '            .append(snap.synchronization().calibrationCurrent())\n'
-              '            .append(\',\')\n'
-              '            .append(formatBudgetExceededCsv(result, snap))',
-              'exporter csv row',
-          )
-          text = csv_prefix + csv_body + csv_suffix
-          text = replace_once(
-              text,
-              '          .append(",\\"budgetExceeded\\":")\n'
-              '          .append(formatBudgetExceededJson(result, snap))',
-              '          .append(",\\"synchronization\\":{\\"mode\\":\\"")\n'
-              '          .append(snap.synchronization().mode())\n'
-              '          .append("\\",\\"status\\":\\"")\n'
-              '          .append(snap.synchronization().status())\n'
-              '          .append("\\",\\"estimatedErrorSamples\\":")\n'
-              '          .append(\n'
-              '              String.format(\n'
-              '                  Locale.ROOT,\n'
-              '                  "%.6f",\n'
-              '                  snap.synchronization().estimatedErrorSamples()))\n'
-              '          .append(",\\"calibrationCurrent\\":")\n'
-              '          .append(snap.synchronization().calibrationCurrent())\n'
-              '          .append(\'}\')\n'
-              '          .append(",\\"budgetExceeded\\":")\n'
-              '          .append(formatBudgetExceededJson(result, snap))',
-              'exporter json synchronization',
-          )
-          text = replace_once(
-              text,
-              '  private static String formatBudgetStatus(WorkbenchRunResult result, TrackingSnapshot snap) {',
-              '  private static String formatSynchronizationModes(WorkbenchRunResult result) {\n'
-              '    return result.synchronizationModes().stream()\n'
-              '        .sorted()\n'
-              '        .map(Enum::name)\n'
-              '        .collect(Collectors.joining(", "));\n'
-              '  }\n\n'
-              '  private static String formatBudgetStatus(WorkbenchRunResult result, TrackingSnapshot snap) {',
-              'exporter synchronization helper',
-          )
-          exporter.write_text(text, encoding='utf-8')
+      # This gate is read-only: it reproduces documentation images but never rewrites baselines.
+      - name: Reproduce and compare committed screenshots
+        run: >-
+          mvn -B -Pscreenshot-tests -pl workbench-screenshot-tests
+          -DupdateScreenshots=false verify
 
-          panel = Path('audio-experimental-acoustic/src/main/java/org/hammer/audio/experimental/acoustic/workbench/AcousticLocalizationWorkbenchPanel.java')
-          text = panel.read_text(encoding='utf-8')
-          text = replace_once(
-              text,
-              'import org.hammer.audio.acquisition.Microphone;\n',
-              'import org.hammer.audio.acquisition.Microphone;\n'
-              'import org.hammer.audio.acquisition.SynchronizationStatus;\n',
-              'panel import',
-          )
-          text = replace_once(
-              text,
-              '  @SuppressWarnings("PMD.ConsecutiveAppendsShouldReuse")\n'
-              '  private void refreshPlaybackFrame(int frameIndex) {',
-              '  static String formatSynchronizationDetails(TrackingSnapshot snapshot) {\n'
-              '    return String.format(\n'
-              '        Locale.ROOT,\n'
-              '        "Synchronization: %s / %s (error=%.4f samples, %.2f µs)%n",\n'
-              '        snapshot.synchronization().mode(),\n'
-              '        snapshot.synchronization().status(),\n'
-              '        snapshot.synchronization().estimatedErrorSamples(),\n'
-              '        snapshot.synchronization().estimatedErrorSeconds() * 1_000_000.0);\n'
-              '  }\n\n'
-              '  @SuppressWarnings("PMD.ConsecutiveAppendsShouldReuse")\n'
-              '  private void refreshPlaybackFrame(int frameIndex) {',
-              'panel formatting helper',
-          )
-          text = replace_once(
-              text,
-              '    if (model.result().isFrameOverBudget(snap)) {\n'
-              '      sb.append("⚠ Frame exceeded real-time budget\\n");\n'
-              '    }',
-              '    sb.append(formatSynchronizationDetails(snap));\n'
-              '    if (snap.synchronization().status() != SynchronizationStatus.TRUSTED) {\n'
-              '      sb.append("⚠ Synchronization quality requires attention: ")\n'
-              '          .append(String.join(" ", snap.synchronization().diagnostics()))\n'
-              '          .append(\'\\n\');\n'
-              '    }\n'
-              '    if (model.result().isFrameOverBudget(snap)) {\n'
-              '      sb.append("⚠ Frame exceeded real-time budget\\n");\n'
-              '    }',
-              'panel playback details',
-          )
-          text = replace_once(
-              text,
-              '        markdownArea.setText(WorkbenchRunExporter.toMarkdown(result));',
-              '        appendLog("Synchronization: worst status " + result.worstSynchronizationStatus());\n'
-              '        if (result.hasSynchronizationWarning()) {\n'
-              '          appendLog("⚠ At least one frame has degraded or rejected synchronization.");\n'
-              '        }\n'
-              '        markdownArea.setText(WorkbenchRunExporter.toMarkdown(result));',
-              'panel run completion',
-          )
-          text = replace_once(
-              text,
-              '      if (snapshot.processingNanos() > budgetNanos) {',
-              '      sb.append(\n'
-              '          String.format(\n'
-              '              Locale.ROOT,\n'
-              '              "  sync=%s/%s err=%.4f samples",\n'
-              '              snapshot.synchronization().mode(),\n'
-              '              snapshot.synchronization().status(),\n'
-              '              snapshot.synchronization().estimatedErrorSamples()));\n'
-              '      if (snapshot.processingNanos() > budgetNanos) {',
-              'panel block log',
-          )
-          panel.write_text(text, encoding='utf-8')
-          PY
+      - name: Upload screenshot test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: workbench-screenshot-results
+          path: workbench-screenshot-tests/target/failsafe-reports/
+          if-no-files-found: warn
+          retention-days: 30
 
-          mvn -B -pl audio-experimental-acoustic -am spotless:apply
-          mvn -B -pl audio-experimental-acoustic -am test
-
-      - name: Validate controlled integration scope
-        run: |
-          allowed='^(audio-experimental-acoustic/src/main/java/org/hammer/audio/experimental/acoustic/workbench/(WorkbenchRunExporter|AcousticLocalizationWorkbenchPanel)\.java|audio-experimental-acoustic/src/test/java/org/hammer/audio/experimental/acoustic/workbench/WorkbenchSynchronizationExportTest\.java|\.github/workflows/workbench-screenshots\.yml)$'
-          unexpected=$(git diff --name-only | grep -Ev "$allowed" || true)
-          if [ -n "$unexpected" ]; then
-            printf 'Unexpected integration changes:\n%s\n' "$unexpected"
-            exit 1
-          fi
-
-      - name: Commit diagnostics and restore read-only workflow
-        run: |
-          git checkout origin/master -- .github/workflows/workbench-screenshots.yml
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add audio-experimental-acoustic/src/main/java/org/hammer/audio/experimental/acoustic/workbench/WorkbenchRunExporter.java
-          git add audio-experimental-acoustic/src/main/java/org/hammer/audio/experimental/acoustic/workbench/AcousticLocalizationWorkbenchPanel.java
-          git add audio-experimental-acoustic/src/test/java/org/hammer/audio/experimental/acoustic/workbench/WorkbenchSynchronizationExportTest.java
-          git add .github/workflows/workbench-screenshots.yml
-          git commit -m "Expose synchronization evidence in workbench exports (#136)"
-          git push origin HEAD:feature/136-microphone-array-calibration
+      - name: Upload screenshot comparison failures
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: workbench-screenshot-failures
+          path: workbench-screenshot-tests/target/screenshot-failures/
+          if-no-files-found: warn
+          retention-days: 30

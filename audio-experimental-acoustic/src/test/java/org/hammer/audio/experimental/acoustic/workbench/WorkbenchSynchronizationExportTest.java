@@ -64,18 +64,7 @@ class WorkbenchSynchronizationExportTest {
             List.of("Calibration consumes more than half of the error budget."));
     TrackedSource track =
         new TrackedSource(
-            7,
-            512.0,
-            512.0,
-            Vector2.ZERO,
-            Vector2.ZERO,
-            Vector3.ZERO,
-            0.0,
-            1.0,
-            0.8,
-            0L,
-            1);
-    return new TrackingSnapshot(
-        0L, 0L, List.of(), List.of(track), 10L, Map.of(), synchronization);
+            7, 512.0, 512.0, Vector2.ZERO, Vector2.ZERO, Vector3.ZERO, 0.0, 1.0, 0.8, 0L, 1);
+    return new TrackingSnapshot(0L, 0L, List.of(), List.of(track), 10L, Map.of(), synchronization);
   }
 }
