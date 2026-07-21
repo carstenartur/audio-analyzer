@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import org.hammer.audio.acquisition.MicrophoneArray;
+import org.hammer.audio.acquisition.SynchronizationAssessment;
 import org.hammer.audio.core.AudioBlock;
 import org.hammer.audio.experimental.acoustic.DelayAndSumBeamformer.BeamformingPoint;
 import org.hammer.audio.geometry.LocalizationConstraint2D;
@@ -80,6 +81,10 @@ public final class MosquitoLocalizationPipeline {
       throw new IllegalArgumentException(
           "frequencyReferenceChannel must exist in microphone array");
     }
+    SynchronizationAssessment synchronization = synchronizationAssessment(block, array);
+    if (!synchronization.usable()) {
+      throw new UnusableSynchronizationException(String.join(" ", synchronization.diagnostics()));
+    }
     SpectralPeak peak = trackFrequency(block, array);
     List<TdoaEstimate> estimates = new ArrayList<>();
     List<LocalizationConstraint2D> constraints = new ArrayList<>();
@@ -97,7 +102,16 @@ public final class MosquitoLocalizationPipeline {
         estimates,
         constraints,
         heatmap,
-        bestPosition);
+        bestPosition,
+        synchronization);
+  }
+
+  private SynchronizationAssessment synchronizationAssessment(
+      AudioBlock block, MicrophoneArray array) {
+    if (tdoaEstimator instanceof SynchronizationAwareTdoaEstimator aware) {
+      return aware.synchronizationAssessment(block, array);
+    }
+    return SynchronizationAssessment.nominalSharedClock();
   }
 
   private SpectralPeak trackFrequency(AudioBlock block, MicrophoneArray array) {
