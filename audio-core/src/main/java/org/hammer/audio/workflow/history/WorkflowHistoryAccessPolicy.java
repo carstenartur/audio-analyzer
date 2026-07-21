@@ -23,9 +23,19 @@ public interface WorkflowHistoryAccessPolicy {
   }
 
   /**
+   * Applies the existing mutation safety policy to a resolved merge commit by default.
+   *
+   * @param targetBranch branch receiving the merge checkpoint
+   * @param workflowId workflow merged by the command
+   */
+  default void assertMergeAllowed(String targetBranch, String workflowId) {
+    assertRestoreAllowed(targetBranch, workflowId);
+  }
+
+  /**
    * Returns a policy suitable for non-collaborative and isolated tests.
    *
-   * @return policy that permits every compare and restore command
+   * @return policy that permits every compare, restore and merge command
    */
   static WorkflowHistoryAccessPolicy allowAll() {
     return (branch, workflowId) -> {
