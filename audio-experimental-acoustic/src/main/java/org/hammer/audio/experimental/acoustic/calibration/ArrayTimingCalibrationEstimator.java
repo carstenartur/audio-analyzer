@@ -147,5 +147,5 @@ public final class ArrayTimingCalibrationEstimator {
     return denominator > 0.0 ? sum / denominator : 0.0;
   }
 
-  private record LagScore(int lag, double confidence) {}
+  private record LagScore(int lag, double confidence) { }
 }
