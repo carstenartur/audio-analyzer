@@ -26,7 +26,8 @@ class CalibratedTdoaEstimatorTest {
   @Test
   void removesPredictedHardwareOffsetFromRawTdoa() {
     MicrophoneArray array = array();
-    MicrophoneArrayCalibration calibration = profile(array, CALIBRATED_AT.plusSeconds(3_600));
+    MicrophoneArrayCalibration calibration =
+        profile(array, CALIBRATED_AT.plusSeconds(3_600), 3.0);
     TdoaEstimator delegate =
         (block, ignoredArray, first, second) ->
             new TdoaEstimate(
@@ -52,9 +53,34 @@ class CalibratedTdoaEstimatorTest {
   }
 
   @Test
+  void preservesFractionalCalibrationPrecisionInTimeAndPathDifference() {
+    MicrophoneArray array = array();
+    MicrophoneArrayCalibration calibration =
+        profile(array, CALIBRATED_AT.plusSeconds(3_600), 2.5);
+    TdoaEstimator delegate =
+        (block, ignoredArray, first, second) ->
+            new TdoaEstimate(
+                "left", "right", 5, 5.0 / 48_000.0, 5.0 / 48_000.0 * SPEED_OF_SOUND, 1.0);
+    CalibratedTdoaEstimator estimator =
+        new CalibratedTdoaEstimator(
+            delegate,
+            calibration,
+            Clock.fixed(CALIBRATED_AT.plusSeconds(30), ZoneOffset.UTC),
+            0.5,
+            SPEED_OF_SOUND);
+
+    TdoaEstimate corrected = estimator.estimate(block(10_000), array, 0, 1);
+
+    assertEquals(3, corrected.delaySamples());
+    assertEquals(2.5 / 48_000.0, corrected.delaySeconds(), 1.0e-12);
+    assertEquals(2.5 / 48_000.0 * SPEED_OF_SOUND, corrected.pathDifferenceMeters(), 1.0e-12);
+  }
+
+  @Test
   void rejectsExpiredCalibrationBeforeReturningLocalizationEvidence() {
     MicrophoneArray array = array();
-    MicrophoneArrayCalibration calibration = profile(array, CALIBRATED_AT.plusSeconds(10));
+    MicrophoneArrayCalibration calibration =
+        profile(array, CALIBRATED_AT.plusSeconds(10), 3.0);
     TdoaEstimator delegate =
         (block, ignoredArray, first, second) ->
             new TdoaEstimate("left", "right", 3, 3.0 / 48_000.0, 0.0, 1.0);
@@ -70,14 +96,16 @@ class CalibratedTdoaEstimatorTest {
         UnusableSynchronizationException.class, () -> estimator.estimate(block(0), array, 0, 1));
   }
 
-  private static MicrophoneArrayCalibration profile(MicrophoneArray array, Instant validUntil) {
+  private static MicrophoneArrayCalibration profile(
+      MicrophoneArray array, Instant validUntil, double offsetSamples) {
     return new MicrophoneArrayCalibration(
         "two-channel-profile",
         array,
         0,
         List.of(
             new ChannelTimingCalibration(0, 0, 0.0, 0.0, 0.0, 0.0, 1.0, false),
-            new ChannelTimingCalibration(1, 0, 3.0, 0.0, 0.05, 0.02, 1.0, false)),
+            new ChannelTimingCalibration(
+                1, 0, offsetSamples, 0.0, 0.05, 0.02, 1.0, false)),
         CALIBRATED_AT,
         validUntil);
   }
