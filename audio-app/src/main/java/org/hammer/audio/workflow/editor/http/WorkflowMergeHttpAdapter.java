@@ -167,7 +167,22 @@ public final class WorkflowMergeHttpAdapter {
     }
   }
 
-  /** Complete graph states, automatic candidate, ordered conflicts and validation impact. */
+  /**
+   * Complete graph states, automatic candidate, ordered conflicts and validation impact.
+   *
+   * @param targetBranch local branch and eventual checkpoint target
+   * @param remoteBranch remote source branch
+   * @param baseCommitId exact common base commit
+   * @param localCommitId exact local commit selected for the preview
+   * @param remoteCommitId exact remote commit selected for the preview
+   * @param base canonical graph projection at the base commit
+   * @param local canonical graph projection at the local commit
+   * @param remote canonical graph projection at the remote commit
+   * @param autoMerged canonical graph containing every automatic non-conflicting decision
+   * @param conflicts ordered unresolved semantic conflicts
+   * @param validationViolations structural violations in the automatic candidate
+   * @param readyToCommit whether the automatic candidate has no conflicts or violations
+   */
   public record PreviewResponse(
       String targetBranch,
       String remoteBranch,
@@ -205,7 +220,17 @@ public final class WorkflowMergeHttpAdapter {
     }
   }
 
-  /** Newly created merge checkpoint and exact reloaded workflow projection. */
+  /**
+   * Newly created merge checkpoint and exact reloaded workflow projection.
+   *
+   * @param targetBranch branch receiving the resolved checkpoint
+   * @param baseCommitId exact common base commit used by the merge
+   * @param localCommitId exact local commit protected as the expected target HEAD
+   * @param remoteCommitId exact remote commit merged into the target branch
+   * @param mergedCommitId newly created authoritative merge checkpoint
+   * @param workflow canonical graph reloaded from the merged commit
+   * @param auditMessage deterministic commit message including merge provenance and decisions
+   */
   public record ResolveResponse(
       String targetBranch,
       String baseCommitId,
