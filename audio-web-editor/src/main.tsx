@@ -3,9 +3,11 @@ import { createRoot } from 'react-dom/client';
 
 import { IndexedWorkflowHistoryPanel } from './IndexedWorkflowHistoryPanel';
 import WorkflowEditorApp from './WorkflowEditorApp';
+import { WorkflowMergePanel } from './WorkflowMergePanel';
 import './styles.css';
 import './indexed-history.css';
 import './workflow-run.css';
+import './workflow-merge.css';
 
 const ACTOR_STORAGE_KEY = 'audio-analyzer.workflow.actor';
 
@@ -64,5 +66,6 @@ createRoot(rootElement).render(
   <StrictMode>
     <WorkflowEditorApp />
     <IndexedWorkflowHistoryPanel />
+    <WorkflowMergePanel />
   </StrictMode>,
 );
