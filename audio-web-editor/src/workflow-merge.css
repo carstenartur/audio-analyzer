@@ -1,0 +1,164 @@
+.workflow-merge {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 22;
+}
+
+.workflow-merge__toggle {
+  padding: 10px 14px;
+  color: #cdd6f4;
+  background: #181825;
+  border: 1px solid #89b4fa;
+  border-radius: 7px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 36%);
+  cursor: pointer;
+}
+
+.workflow-merge__drawer {
+  position: absolute;
+  right: 0;
+  bottom: 48px;
+  width: min(760px, calc(100vw - 36px));
+  max-height: calc(100vh - 92px);
+  padding: 18px;
+  overflow: auto;
+  color: #cdd6f4;
+  background: #1e1e2e;
+  border: 1px solid #45475a;
+  border-radius: 10px;
+  box-shadow: 0 16px 42px rgb(0 0 0 / 48%);
+}
+
+.workflow-merge__drawer h2 {
+  margin: 0 0 6px;
+  font-size: 17px;
+}
+
+.workflow-merge__drawer header p {
+  margin: 0 0 14px;
+  color: #a6adc8;
+  font-size: 12px;
+}
+
+.workflow-merge__branches,
+.workflow-merge__versions,
+.workflow-merge__commit {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.workflow-merge__branches .action-button,
+.workflow-merge__commit .action-button {
+  align-self: end;
+}
+
+.workflow-merge__versions {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.workflow-merge__summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.workflow-merge__summary div {
+  min-width: 0;
+  padding: 8px;
+  background: #181825;
+  border: 1px solid #313244;
+  border-radius: 6px;
+}
+
+.workflow-merge__summary dt {
+  color: #a6adc8;
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.workflow-merge__summary dd {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+  font-size: 11px;
+}
+
+.workflow-merge__conflict {
+  margin: 12px 0;
+  padding: 12px;
+  background: #181825;
+  border: 1px solid #f9e2af;
+  border-radius: 8px;
+}
+
+.workflow-merge__conflict header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: space-between;
+  margin-bottom: 9px;
+  font-size: 11px;
+}
+
+.workflow-merge__conflict header strong {
+  color: #f9e2af;
+}
+
+.workflow-merge__values {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.workflow-merge__values div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.workflow-merge__values span {
+  color: #a6adc8;
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.workflow-merge__values code {
+  max-height: 92px;
+  padding: 7px;
+  overflow: auto;
+  color: #cdd6f4;
+  font-size: 10px;
+  white-space: pre-wrap;
+  background: #11111b;
+  border-radius: 4px;
+}
+
+.workflow-merge__result {
+  margin-top: 14px;
+  padding: 12px;
+  background: #181825;
+  border: 1px solid #a6e3a1;
+  border-radius: 8px;
+}
+
+.workflow-merge__result strong {
+  color: #a6e3a1;
+  overflow-wrap: anywhere;
+}
+
+.workflow-merge__result p {
+  font-size: 12px;
+}
+
+@media (max-width: 760px) {
+  .workflow-merge__branches,
+  .workflow-merge__versions,
+  .workflow-merge__commit,
+  .workflow-merge__summary,
+  .workflow-merge__values {
+    grid-template-columns: 1fr;
+  }
+}
