@@ -88,7 +88,14 @@ public final class WorkflowHistoryCommandHttpAdapter {
     }
   }
 
-  /** Newly created branch identity and exact initial workflow checkpoint. */
+  /**
+   * Newly created branch identity and exact initial workflow checkpoint.
+   *
+   * @param sourceBranch source branch from which the exact commit was selected
+   * @param branch newly created branch name
+   * @param headCommitId exact initial HEAD commit of the new branch
+   * @param workflowId workflow identity stored at the initial branch checkpoint
+   */
   public record BranchResponse(
       String sourceBranch, String branch, String headCommitId, String workflowId) {
 
