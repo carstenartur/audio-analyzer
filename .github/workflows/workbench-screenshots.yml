@@ -140,7 +140,7 @@ jobs:
 
       - name: Validate controlled PMD scope
         run: |
-          allowed='^(audio-experimental-acoustic/src/main/java/org/hammer/audio/experimental/acoustic/(calibration/(ArrayTimingCalibrationEstimator|CalibrationEventObservation)|tracking/TrackingPipeline|workbench/(AcousticLocalizationWorkbenchPanel|WorkbenchRunExporter|WorkbenchRunResult))\.java|\.github/workflows/workbench-screenshots\.yml)$'
+          allowed='^(audio-experimental-acoustic/src/|\.github/workflows/workbench-screenshots\.yml$)'
           unexpected=$(git diff --name-only | grep -Ev "$allowed" || true)
           if [ -n "$unexpected" ]; then
             printf 'Unexpected PMD cleanup changes:\n%s\n' "$unexpected"
@@ -152,12 +152,7 @@ jobs:
           git checkout origin/master -- .github/workflows/workbench-screenshots.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add audio-experimental-acoustic/src/main/java/org/hammer/audio/experimental/acoustic/calibration/ArrayTimingCalibrationEstimator.java
-          git add audio-experimental-acoustic/src/main/java/org/hammer/audio/experimental/acoustic/calibration/CalibrationEventObservation.java
-          git add audio-experimental-acoustic/src/main/java/org/hammer/audio/experimental/acoustic/tracking/TrackingPipeline.java
-          git add audio-experimental-acoustic/src/main/java/org/hammer/audio/experimental/acoustic/workbench/AcousticLocalizationWorkbenchPanel.java
-          git add audio-experimental-acoustic/src/main/java/org/hammer/audio/experimental/acoustic/workbench/WorkbenchRunExporter.java
-          git add audio-experimental-acoustic/src/main/java/org/hammer/audio/experimental/acoustic/workbench/WorkbenchRunResult.java
+          git add audio-experimental-acoustic/src
           git add .github/workflows/workbench-screenshots.yml
           git commit -m "Resolve microphone-array calibration PMD findings (#136)"
           git push origin HEAD:feature/136-microphone-array-calibration
