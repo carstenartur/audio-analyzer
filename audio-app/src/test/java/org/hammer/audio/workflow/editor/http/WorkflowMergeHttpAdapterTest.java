@@ -78,8 +78,8 @@ class WorkflowMergeHttpAdapterTest {
                 .content(previewJson()))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.baseCommitId").value(BASE.value()))
-        .andExpect(jsonPath("$.local.name").value("Local"))
-        .andExpect(jsonPath("$.remote.name").value("Remote"))
+        .andExpect(jsonPath("$.local.workflowName").value("Local"))
+        .andExpect(jsonPath("$.remote.workflowName").value("Remote"))
         .andExpect(jsonPath("$.conflicts[0].kind").value("DIVERGENT_VALUE"))
         .andExpect(jsonPath("$.conflicts[0].fieldPath").value("label"))
         .andExpect(jsonPath("$.readyToCommit").value(false));
@@ -127,7 +127,7 @@ class WorkflowMergeHttpAdapterTest {
                             BASE.value(), LOCAL.value(), REMOTE.value(), LOCAL.value())))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.mergedCommitId").value(MERGED.value()))
-        .andExpect(jsonPath("$.workflow.name").value("Resolved"))
+        .andExpect(jsonPath("$.workflow.workflowName").value("Resolved"))
         .andExpect(jsonPath("$.auditMessage").exists());
 
     ArgumentCaptor<ResolveWorkflowMergeCommand> command =
