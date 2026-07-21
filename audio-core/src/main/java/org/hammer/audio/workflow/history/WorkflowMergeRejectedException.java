@@ -10,30 +10,30 @@ public final class WorkflowMergeRejectedException extends IllegalArgumentExcepti
 
   @Serial private static final long serialVersionUID = 1L;
 
-  private final List<Conflict> unresolvedConflicts;
-  private final List<String> validationViolations;
+  private final List<Conflict> conflictDetails;
+  private final List<String> validatorMessages;
 
   /** Creates a structured rejection from the deterministic merge result. */
   public WorkflowMergeRejectedException(
       List<Conflict> unresolvedConflicts, List<String> validationViolations) {
     super(message(unresolvedConflicts, validationViolations));
-    this.unresolvedConflicts =
+    conflictDetails =
         List.copyOf(Objects.requireNonNull(unresolvedConflicts, "unresolvedConflicts"));
-    this.validationViolations =
+    validatorMessages =
         List.copyOf(Objects.requireNonNull(validationViolations, "validationViolations"));
-    if (this.unresolvedConflicts.isEmpty() && this.validationViolations.isEmpty()) {
+    if (conflictDetails.isEmpty() && validatorMessages.isEmpty()) {
       throw new IllegalArgumentException("A merge rejection requires conflicts or violations");
     }
   }
 
   /** Returns deterministic unresolved semantic conflicts. */
   public List<Conflict> unresolvedConflicts() {
-    return unresolvedConflicts;
+    return conflictDetails;
   }
 
   /** Returns structural validator diagnostics. */
   public List<String> validationViolations() {
-    return validationViolations;
+    return validatorMessages;
   }
 
   private static String message(
