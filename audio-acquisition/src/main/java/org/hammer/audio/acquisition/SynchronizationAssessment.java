@@ -21,16 +21,12 @@ public record SynchronizationAssessment(
     boolean calibrationCurrent,
     List<String> diagnostics) {
 
-  /** Creates a validated immutable assessment. */
+  // Validate and defensively copy one synchronization assessment.
   public SynchronizationAssessment {
     Objects.requireNonNull(mode, "mode");
     Objects.requireNonNull(status, "status");
-    if (estimatedErrorSamples < 0.0 || !Double.isFinite(estimatedErrorSamples)) {
-      throw new IllegalArgumentException("estimatedErrorSamples must be finite and >= 0");
-    }
-    if (estimatedErrorSeconds < 0.0 || !Double.isFinite(estimatedErrorSeconds)) {
-      throw new IllegalArgumentException("estimatedErrorSeconds must be finite and >= 0");
-    }
+    requireNonNegativeFinite(estimatedErrorSamples, "estimatedErrorSamples");
+    requireNonNegativeFinite(estimatedErrorSeconds, "estimatedErrorSeconds");
     diagnostics = List.copyOf(Objects.requireNonNull(diagnostics, "diagnostics"));
   }
 
@@ -48,5 +44,12 @@ public record SynchronizationAssessment(
   /** Returns whether localization should proceed with this synchronization state. */
   public boolean usable() {
     return status != SynchronizationStatus.REJECTED;
+  }
+
+  private static void requireNonNegativeFinite(double value, String name) {
+    if (Double.isFinite(value) && value >= 0.0) {
+      return;
+    }
+    throw new IllegalArgumentException(name + " must be finite and >= 0");
   }
 }
