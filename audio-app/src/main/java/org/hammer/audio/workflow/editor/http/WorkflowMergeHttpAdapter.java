@@ -116,6 +116,10 @@ public final class WorkflowMergeHttpAdapter {
       @NotBlank String message,
       @NotNull Instant timestamp) {
 
+    public ResolveRequest {
+      resolutions = List.copyOf(Objects.requireNonNull(resolutions, "resolutions"));
+    }
+
     ResolveWorkflowMergeCommand toCommand() {
       PreviewWorkflowMergeCommand preview =
           new PreviewRequest(
@@ -152,6 +156,10 @@ public final class WorkflowMergeHttpAdapter {
       String localValue,
       String remoteValue,
       Set<ResolutionChoice> allowedChoices) {
+
+    public ConflictResponse {
+      allowedChoices = Set.copyOf(Objects.requireNonNull(allowedChoices, "allowedChoices"));
+    }
 
     static ConflictResponse from(Conflict conflict) {
       return new ConflictResponse(
