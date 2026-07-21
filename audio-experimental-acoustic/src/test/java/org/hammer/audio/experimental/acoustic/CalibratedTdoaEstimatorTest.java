@@ -26,8 +26,7 @@ class CalibratedTdoaEstimatorTest {
   @Test
   void removesPredictedHardwareOffsetFromRawTdoa() {
     MicrophoneArray array = array();
-    MicrophoneArrayCalibration calibration =
-        profile(array, CALIBRATED_AT.plusSeconds(3_600), 3.0);
+    MicrophoneArrayCalibration calibration = profile(array, CALIBRATED_AT.plusSeconds(3_600), 3.0);
     TdoaEstimator delegate =
         (block, ignoredArray, first, second) ->
             new TdoaEstimate(
@@ -55,8 +54,7 @@ class CalibratedTdoaEstimatorTest {
   @Test
   void preservesFractionalCalibrationPrecisionInTimeAndPathDifference() {
     MicrophoneArray array = array();
-    MicrophoneArrayCalibration calibration =
-        profile(array, CALIBRATED_AT.plusSeconds(3_600), 2.5);
+    MicrophoneArrayCalibration calibration = profile(array, CALIBRATED_AT.plusSeconds(3_600), 2.5);
     TdoaEstimator delegate =
         (block, ignoredArray, first, second) ->
             new TdoaEstimate(
@@ -79,8 +77,7 @@ class CalibratedTdoaEstimatorTest {
   @Test
   void rejectsExpiredCalibrationBeforeReturningLocalizationEvidence() {
     MicrophoneArray array = array();
-    MicrophoneArrayCalibration calibration =
-        profile(array, CALIBRATED_AT.plusSeconds(10), 3.0);
+    MicrophoneArrayCalibration calibration = profile(array, CALIBRATED_AT.plusSeconds(10), 3.0);
     TdoaEstimator delegate =
         (block, ignoredArray, first, second) ->
             new TdoaEstimate("left", "right", 3, 3.0 / 48_000.0, 0.0, 1.0);
@@ -104,8 +101,7 @@ class CalibratedTdoaEstimatorTest {
         0,
         List.of(
             new ChannelTimingCalibration(0, 0, 0.0, 0.0, 0.0, 0.0, 1.0, false),
-            new ChannelTimingCalibration(
-                1, 0, offsetSamples, 0.0, 0.05, 0.02, 1.0, false)),
+            new ChannelTimingCalibration(1, 0, offsetSamples, 0.0, 0.05, 0.02, 1.0, false)),
         CALIBRATED_AT,
         validUntil);
   }
