@@ -13,6 +13,7 @@ import java.util.TreeSet;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 import org.hammer.audio.workflow.Edge;
 import org.hammer.audio.workflow.Metadata;
 import org.hammer.audio.workflow.Node;
@@ -83,12 +84,12 @@ public final class WorkflowThreeWayMerger {
       Workflow base, Workflow local, Workflow remote, List<Resolution> resolutions) {
     Objects.requireNonNull(resolutions, "resolutions");
     Computation computation = compute(base, local, remote);
-    Map<String, Resolution> byConflictId = indexResolutions(resolutions);
+    Map<String, Resolution> indexedResolutions = indexResolutions(resolutions);
     Set<String> knownConflictIds =
         computation.pending().stream()
             .map(pending -> pending.conflict().conflictId())
-            .collect(java.util.stream.Collectors.toUnmodifiableSet());
-    for (String conflictId : byConflictId.keySet()) {
+            .collect(Collectors.toUnmodifiableSet());
+    for (String conflictId : indexedResolutions.keySet()) {
       if (!knownConflictIds.contains(conflictId)) {
         throw new IllegalArgumentException("Unknown workflow merge conflict: " + conflictId);
       }
@@ -96,7 +97,7 @@ public final class WorkflowThreeWayMerger {
 
     List<Conflict> unresolved = new ArrayList<>();
     for (PendingConflict pending : computation.pending()) {
-      Resolution resolution = byConflictId.get(pending.conflict().conflictId());
+      Resolution resolution = indexedResolutions.get(pending.conflict().conflictId());
       if (resolution == null) {
         unresolved.add(pending.conflict());
       } else {
@@ -115,13 +116,8 @@ public final class WorkflowThreeWayMerger {
 
     mergeStringValue(
         pending,
-        ConflictKind.DIVERGENT_VALUE,
-        ElementKind.WORKFLOW,
-        base.id(),
-        "name",
-        base.name(),
-        local.name(),
-        remote.name(),
+        location(ConflictKind.DIVERGENT_VALUE, ElementKind.WORKFLOW, base.id(), "name"),
+        values(base.name(), local.name(), remote.name()),
         false,
         draft::setWorkflowName);
     mergeMetadata(
@@ -139,6 +135,7 @@ public final class WorkflowThreeWayMerger {
     Map<String, Edge> baseEdges = indexEdges(base.edges());
     Map<String, Edge> localEdges = indexEdges(local.edges());
     Map<String, Edge> remoteEdges = indexEdges(remote.edges());
+
     SpecialNodes specialNodes =
         findSpecialNodes(
             baseNodes, localNodes, remoteNodes, base.edges(), local.edges(), remote.edges());
@@ -189,27 +186,13 @@ public final class WorkflowThreeWayMerger {
       Node base = baseNodes.get(nodeId);
       Node local = localNodes.get(nodeId);
       Node remote = remoteNodes.get(nodeId);
-      ConflictKind conflictKind = null;
-      String fieldPath = null;
-      if (base == null && local != null && remote != null && !local.equals(remote)) {
-        conflictKind = ConflictKind.STABLE_ID_COLLISION;
-        fieldPath = "$object";
-      } else if (base != null
-          && local == null
-          && remote != null
-          && connectionsChanged(baseEdges, remoteEdges, nodeId)) {
-        conflictKind = ConflictKind.DELETE_CONNECT;
-        fieldPath = "connections";
-      } else if (base != null
-          && remote == null
-          && local != null
-          && connectionsChanged(baseEdges, localEdges, nodeId)) {
-        conflictKind = ConflictKind.DELETE_CONNECT;
-        fieldPath = "connections";
-      }
-      if (conflictKind == null) {
+      MergeLocation location =
+          specialNodeLocation(
+              nodeId, base, local, remote, baseEdges, localEdges, remoteEdges);
+      if (location == null) {
         continue;
       }
+
       List<Edge> baseConnected = WorkflowMergeDraft.connectedEdges(baseEdges, nodeId);
       List<Edge> localConnected = WorkflowMergeDraft.connectedEdges(localEdges, nodeId);
       List<Edge> remoteConnected = WorkflowMergeDraft.connectedEdges(remoteEdges, nodeId);
@@ -221,8 +204,7 @@ public final class WorkflowThreeWayMerger {
       specialById.put(
           nodeId,
           new SpecialNode(
-              conflictKind,
-              fieldPath,
+              location,
               base,
               local,
               remote,
@@ -234,6 +216,36 @@ public final class WorkflowThreeWayMerger {
     return new SpecialNodes(specialById, blockedEdgeIds);
   }
 
+  private static MergeLocation specialNodeLocation(
+      String nodeId,
+      Node base,
+      Node local,
+      Node remote,
+      List<Edge> baseEdges,
+      List<Edge> localEdges,
+      List<Edge> remoteEdges) {
+    if (base == null && local != null && remote != null && !local.equals(remote)) {
+      return location(ConflictKind.STABLE_ID_COLLISION, ElementKind.NODE, nodeId, "$object");
+    }
+    if (base != null && local == null && remote != null) {
+      if (connectionsChanged(baseEdges, remoteEdges, nodeId)) {
+        return location(ConflictKind.DELETE_CONNECT, ElementKind.NODE, nodeId, "connections");
+      }
+      if (!base.equals(remote)) {
+        return location(ConflictKind.DELETE_MODIFY, ElementKind.NODE, nodeId, "$object");
+      }
+    }
+    if (base != null && remote == null && local != null) {
+      if (connectionsChanged(baseEdges, localEdges, nodeId)) {
+        return location(ConflictKind.DELETE_CONNECT, ElementKind.NODE, nodeId, "connections");
+      }
+      if (!base.equals(local)) {
+        return location(ConflictKind.DELETE_MODIFY, ElementKind.NODE, nodeId, "$object");
+      }
+    }
+    return null;
+  }
+
   private static void installSpecialNodeConflicts(
       WorkflowMergeDraft draft, List<PendingConflict> pending, SpecialNodes specialNodes) {
     for (Map.Entry<String, SpecialNode> entry : specialNodes.byId().entrySet()) {
@@ -241,16 +253,12 @@ public final class WorkflowThreeWayMerger {
       SpecialNode special = entry.getValue();
       draft.replaceNodeNeighborhood(
           nodeId, special.base(), special.baseEdges(), special.relatedEdgeIds());
-      Conflict conflict =
-          conflict(
-              special.kind(),
-              ElementKind.NODE,
-              nodeId,
-              special.fieldPath(),
+      MergeValues<String> evidence =
+          values(
               WorkflowSemanticValueFormatter.neighborhood(special.base(), special.baseEdges()),
               WorkflowSemanticValueFormatter.neighborhood(special.local(), special.localEdges()),
-              WorkflowSemanticValueFormatter.neighborhood(special.remote(), special.remoteEdges()),
-              OBJECT_CHOICES);
+              WorkflowSemanticValueFormatter.neighborhood(special.remote(), special.remoteEdges()));
+      Conflict conflict = conflict(special.location(), evidence, OBJECT_CHOICES);
       pending.add(
           new PendingConflict(
               conflict,
@@ -273,7 +281,7 @@ public final class WorkflowThreeWayMerger {
               nodeId, special.remote(), special.remoteEdges(), special.relatedEdgeIds());
       case DELETE ->
           draft.replaceNodeNeighborhood(nodeId, null, List.of(), special.relatedEdgeIds());
-      case CUSTOM -> throw unsupportedChoice(choice, special.fieldPath());
+      case CUSTOM -> throw unsupportedChoice(choice, special.location().fieldPath());
     }
   }
 
@@ -288,16 +296,15 @@ public final class WorkflowThreeWayMerger {
       if (specialNodeIds.contains(nodeId)) {
         continue;
       }
-      Node base = baseNodes.get(nodeId);
-      Node local = localNodes.get(nodeId);
-      Node remote = remoteNodes.get(nodeId);
-      if (base == null) {
-        mergeAddedNode(draft, pending, nodeId, local, remote);
-      } else if (local == null || remote == null) {
-        mergeDeletedNode(draft, pending, nodeId, base, local, remote);
+      MergeValues<Node> nodeValues =
+          values(baseNodes.get(nodeId), localNodes.get(nodeId), remoteNodes.get(nodeId));
+      if (nodeValues.base() == null) {
+        mergeAddedNode(draft, pending, nodeId, nodeValues);
+      } else if (nodeValues.local() == null || nodeValues.remote() == null) {
+        mergeDeletedNode(draft, pending, nodeId, nodeValues);
       } else {
-        draft.putNode(base);
-        mergeNodeFields(draft, pending, base, local, remote);
+        draft.putNode(nodeValues.base());
+        mergeNodeFields(draft, pending, nodeValues);
       }
     }
   }
@@ -306,15 +313,17 @@ public final class WorkflowThreeWayMerger {
       WorkflowMergeDraft draft,
       List<PendingConflict> pending,
       String nodeId,
-      Node local,
-      Node remote) {
-    if (local == null) {
-      draft.putNode(remote);
-    } else if (remote == null || local.equals(remote)) {
-      draft.putNode(local);
+      MergeValues<Node> nodeValues) {
+    if (nodeValues.local() == null) {
+      draft.putNode(nodeValues.remote());
+    } else if (nodeValues.remote() == null || nodeValues.local().equals(nodeValues.remote())) {
+      draft.putNode(nodeValues.local());
     } else {
       addNodeObjectConflict(
-          draft, pending, ConflictKind.STABLE_ID_COLLISION, nodeId, null, local, remote);
+          draft,
+          pending,
+          location(ConflictKind.STABLE_ID_COLLISION, ElementKind.NODE, nodeId, "$object"),
+          nodeValues);
     }
   }
 
@@ -322,128 +331,88 @@ public final class WorkflowThreeWayMerger {
       WorkflowMergeDraft draft,
       List<PendingConflict> pending,
       String nodeId,
-      Node base,
-      Node local,
-      Node remote) {
-    if (local == null && remote == null) {
+      MergeValues<Node> nodeValues) {
+    if (nodeValues.local() == null && nodeValues.remote() == null) {
       draft.removeNode(nodeId);
-    } else if (local == null && base.equals(remote)) {
+    } else if (nodeValues.local() == null && nodeValues.base().equals(nodeValues.remote())) {
       draft.removeNode(nodeId);
-    } else if (remote == null && base.equals(local)) {
+    } else if (nodeValues.remote() == null && nodeValues.base().equals(nodeValues.local())) {
       draft.removeNode(nodeId);
     } else {
       addNodeObjectConflict(
-          draft, pending, ConflictKind.DELETE_MODIFY, nodeId, base, local, remote);
+          draft,
+          pending,
+          location(ConflictKind.DELETE_MODIFY, ElementKind.NODE, nodeId, "$object"),
+          nodeValues);
     }
   }
 
   private static void addNodeObjectConflict(
       WorkflowMergeDraft draft,
       List<PendingConflict> pending,
-      ConflictKind kind,
-      String nodeId,
-      Node base,
-      Node local,
-      Node remote) {
-    if (base == null) {
-      draft.removeNode(nodeId);
+      MergeLocation location,
+      MergeValues<Node> nodeValues) {
+    if (nodeValues.base() == null) {
+      draft.removeNode(location.elementId());
     } else {
-      draft.putNode(base);
+      draft.putNode(nodeValues.base());
     }
     Conflict conflict =
-        conflict(
-            kind,
-            ElementKind.NODE,
-            nodeId,
-            "$object",
-            base == null ? null : WorkflowSemanticValueFormatter.node(base),
-            local == null ? null : WorkflowSemanticValueFormatter.node(local),
-            remote == null ? null : WorkflowSemanticValueFormatter.node(remote),
-            OBJECT_CHOICES);
+        conflict(location, formatted(nodeValues, WorkflowSemanticValueFormatter::node), OBJECT_CHOICES);
     pending.add(
         new PendingConflict(
             conflict,
             resolution ->
-                applyNodeObjectResolution(
-                    draft, nodeId, base, local, remote, resolution.choice())));
+                applyNodeObjectResolution(draft, location, nodeValues, resolution.choice())));
   }
 
   private static void applyNodeObjectResolution(
       WorkflowMergeDraft draft,
-      String nodeId,
-      Node base,
-      Node local,
-      Node remote,
+      MergeLocation location,
+      MergeValues<Node> nodeValues,
       ResolutionChoice choice) {
-    Node selected =
-        switch (choice) {
-          case BASE -> base;
-          case LOCAL -> local;
-          case REMOTE -> remote;
-          case DELETE -> null;
-          case CUSTOM -> throw unsupportedChoice(choice, "$object");
-        };
+    Node selected = selectObject(nodeValues, location, choice);
     if (selected == null) {
-      draft.removeNode(nodeId);
+      draft.removeNode(location.elementId());
     } else {
       draft.putNode(selected);
     }
   }
 
   private static void mergeNodeFields(
-      WorkflowMergeDraft draft, List<PendingConflict> pending, Node base, Node local, Node remote) {
-    String nodeId = base.id();
+      WorkflowMergeDraft draft, List<PendingConflict> pending, MergeValues<Node> nodeValues) {
+    String nodeId = nodeValues.base().id();
     mergeTypedValue(
         pending,
-        ConflictKind.DIVERGENT_VALUE,
-        ElementKind.NODE,
-        nodeId,
-        "type",
-        base.type(),
-        local.type(),
-        remote.type(),
+        location(ConflictKind.DIVERGENT_VALUE, ElementKind.NODE, nodeId, "type"),
+        mapped(nodeValues, Node::type),
         Function.identity(),
         value -> draft.setNodeType(nodeId, value));
     mergeStringValue(
         pending,
-        ConflictKind.DIVERGENT_VALUE,
-        ElementKind.NODE,
-        nodeId,
-        "label",
-        base.label(),
-        local.label(),
-        remote.label(),
+        location(ConflictKind.DIVERGENT_VALUE, ElementKind.NODE, nodeId, "label"),
+        mapped(nodeValues, Node::label),
         false,
         value -> draft.setNodeLabel(nodeId, value));
     mergeTypedValue(
         pending,
-        ConflictKind.DIVERGENT_VALUE,
-        ElementKind.NODE,
-        nodeId,
-        "inputPorts",
-        base.inputPorts(),
-        local.inputPorts(),
-        remote.inputPorts(),
+        location(ConflictKind.DIVERGENT_VALUE, ElementKind.NODE, nodeId, "inputPorts"),
+        mapped(nodeValues, Node::inputPorts),
         WorkflowSemanticValueFormatter::ports,
         value -> draft.setNodeInputPorts(nodeId, value));
     mergeTypedValue(
         pending,
-        ConflictKind.DIVERGENT_VALUE,
-        ElementKind.NODE,
-        nodeId,
-        "outputPorts",
-        base.outputPorts(),
-        local.outputPorts(),
-        remote.outputPorts(),
+        location(ConflictKind.DIVERGENT_VALUE, ElementKind.NODE, nodeId, "outputPorts"),
+        mapped(nodeValues, Node::outputPorts),
         WorkflowSemanticValueFormatter::ports,
         value -> draft.setNodeOutputPorts(nodeId, value));
     mergeMetadata(
         pending,
         ElementKind.NODE,
         nodeId,
-        base.metadata(),
-        local.metadata(),
-        remote.metadata(),
+        nodeValues.base().metadata(),
+        nodeValues.local().metadata(),
+        nodeValues.remote().metadata(),
         (key, value) -> draft.setNodeMetadata(nodeId, key, value));
   }
 
@@ -458,16 +427,15 @@ public final class WorkflowThreeWayMerger {
       if (blockedEdgeIds.contains(edgeId)) {
         continue;
       }
-      Edge base = baseEdges.get(edgeId);
-      Edge local = localEdges.get(edgeId);
-      Edge remote = remoteEdges.get(edgeId);
-      if (base == null) {
-        mergeAddedEdge(draft, pending, edgeId, local, remote);
-      } else if (local == null || remote == null) {
-        mergeDeletedEdge(draft, pending, edgeId, base, local, remote);
+      MergeValues<Edge> edgeValues =
+          values(baseEdges.get(edgeId), localEdges.get(edgeId), remoteEdges.get(edgeId));
+      if (edgeValues.base() == null) {
+        mergeAddedEdge(draft, pending, edgeId, edgeValues);
+      } else if (edgeValues.local() == null || edgeValues.remote() == null) {
+        mergeDeletedEdge(draft, pending, edgeId, edgeValues);
       } else {
-        draft.putEdge(base);
-        mergeEdgeFields(draft, pending, base, local, remote);
+        draft.putEdge(edgeValues.base());
+        mergeEdgeFields(draft, pending, edgeValues);
       }
     }
   }
@@ -476,15 +444,17 @@ public final class WorkflowThreeWayMerger {
       WorkflowMergeDraft draft,
       List<PendingConflict> pending,
       String edgeId,
-      Edge local,
-      Edge remote) {
-    if (local == null) {
-      draft.putEdge(remote);
-    } else if (remote == null || local.equals(remote)) {
-      draft.putEdge(local);
+      MergeValues<Edge> edgeValues) {
+    if (edgeValues.local() == null) {
+      draft.putEdge(edgeValues.remote());
+    } else if (edgeValues.remote() == null || edgeValues.local().equals(edgeValues.remote())) {
+      draft.putEdge(edgeValues.local());
     } else {
       addEdgeObjectConflict(
-          draft, pending, ConflictKind.STABLE_ID_COLLISION, edgeId, null, local, remote);
+          draft,
+          pending,
+          location(ConflictKind.STABLE_ID_COLLISION, ElementKind.EDGE, edgeId, "$object"),
+          edgeValues);
     }
   }
 
@@ -492,95 +462,70 @@ public final class WorkflowThreeWayMerger {
       WorkflowMergeDraft draft,
       List<PendingConflict> pending,
       String edgeId,
-      Edge base,
-      Edge local,
-      Edge remote) {
-    if (local == null && remote == null) {
+      MergeValues<Edge> edgeValues) {
+    if (edgeValues.local() == null && edgeValues.remote() == null) {
       draft.removeEdge(edgeId);
-    } else if (local == null && base.equals(remote)) {
+    } else if (edgeValues.local() == null && edgeValues.base().equals(edgeValues.remote())) {
       draft.removeEdge(edgeId);
-    } else if (remote == null && base.equals(local)) {
+    } else if (edgeValues.remote() == null && edgeValues.base().equals(edgeValues.local())) {
       draft.removeEdge(edgeId);
     } else {
       addEdgeObjectConflict(
-          draft, pending, ConflictKind.DELETE_MODIFY, edgeId, base, local, remote);
+          draft,
+          pending,
+          location(ConflictKind.DELETE_MODIFY, ElementKind.EDGE, edgeId, "$object"),
+          edgeValues);
     }
   }
 
   private static void addEdgeObjectConflict(
       WorkflowMergeDraft draft,
       List<PendingConflict> pending,
-      ConflictKind kind,
-      String edgeId,
-      Edge base,
-      Edge local,
-      Edge remote) {
-    if (base == null) {
-      draft.removeEdge(edgeId);
+      MergeLocation location,
+      MergeValues<Edge> edgeValues) {
+    if (edgeValues.base() == null) {
+      draft.removeEdge(location.elementId());
     } else {
-      draft.putEdge(base);
+      draft.putEdge(edgeValues.base());
     }
     Conflict conflict =
-        conflict(
-            kind,
-            ElementKind.EDGE,
-            edgeId,
-            "$object",
-            base == null ? null : WorkflowSemanticValueFormatter.edge(base),
-            local == null ? null : WorkflowSemanticValueFormatter.edge(local),
-            remote == null ? null : WorkflowSemanticValueFormatter.edge(remote),
-            OBJECT_CHOICES);
+        conflict(location, formatted(edgeValues, WorkflowSemanticValueFormatter::edge), OBJECT_CHOICES);
     pending.add(
         new PendingConflict(
             conflict,
             resolution ->
-                applyEdgeObjectResolution(
-                    draft, edgeId, base, local, remote, resolution.choice())));
+                applyEdgeObjectResolution(draft, location, edgeValues, resolution.choice())));
   }
 
   private static void applyEdgeObjectResolution(
       WorkflowMergeDraft draft,
-      String edgeId,
-      Edge base,
-      Edge local,
-      Edge remote,
+      MergeLocation location,
+      MergeValues<Edge> edgeValues,
       ResolutionChoice choice) {
-    Edge selected =
-        switch (choice) {
-          case BASE -> base;
-          case LOCAL -> local;
-          case REMOTE -> remote;
-          case DELETE -> null;
-          case CUSTOM -> throw unsupportedChoice(choice, "$object");
-        };
+    Edge selected = selectObject(edgeValues, location, choice);
     if (selected == null) {
-      draft.removeEdge(edgeId);
+      draft.removeEdge(location.elementId());
     } else {
       draft.putEdge(selected);
     }
   }
 
   private static void mergeEdgeFields(
-      WorkflowMergeDraft draft, List<PendingConflict> pending, Edge base, Edge local, Edge remote) {
-    String edgeId = base.id();
+      WorkflowMergeDraft draft, List<PendingConflict> pending, MergeValues<Edge> edgeValues) {
+    String edgeId = edgeValues.base().id();
     mergeTypedValue(
         pending,
-        ConflictKind.DIVERGENT_EDGE_ENDPOINTS,
-        ElementKind.EDGE,
-        edgeId,
-        "endpoints",
-        endpointsOnly(base),
-        endpointsOnly(local),
-        endpointsOnly(remote),
+        location(ConflictKind.DIVERGENT_EDGE_ENDPOINTS, ElementKind.EDGE, edgeId, "endpoints"),
+        mapped(edgeValues, WorkflowThreeWayMerger::endpointsOnly),
         WorkflowSemanticValueFormatter::endpoints,
         value -> draft.setEdgeEndpoints(edgeId, value));
     mergeMetadata(
         pending,
         ElementKind.EDGE,
         edgeId,
-        base.metadata(),
-        local.metadata(),
-        remote.metadata(),
+        edgeValues.base().metadata(),
+        edgeValues.local().metadata(),
+        edgeValues.remote().metadata(),
         (key, value) -> draft.setEdgeMetadata(edgeId, key, value));
   }
 
@@ -604,13 +549,10 @@ public final class WorkflowThreeWayMerger {
     for (String key : union(base.entries(), local.entries(), remote.entries())) {
       mergeStringValue(
           pending,
-          ConflictKind.DIVERGENT_VALUE,
-          elementKind,
-          elementId,
-          "metadata." + key,
-          base.entries().get(key),
-          local.entries().get(key),
-          remote.entries().get(key),
+          location(
+              ConflictKind.DIVERGENT_VALUE, elementKind, elementId, "metadata." + key),
+          values(
+              base.entries().get(key), local.entries().get(key), remote.entries().get(key)),
           true,
           value -> setter.accept(key, value));
     }
@@ -618,95 +560,54 @@ public final class WorkflowThreeWayMerger {
 
   private static void mergeStringValue(
       List<PendingConflict> pending,
-      ConflictKind kind,
-      ElementKind elementKind,
-      String elementId,
-      String fieldPath,
-      String base,
-      String local,
-      String remote,
+      MergeLocation location,
+      MergeValues<String> mergeValues,
       boolean optional,
       Consumer<String> setter) {
-    String automatic = automatic(base, local, remote);
-    if (automatic != null || isAutomaticallyResolved(base, local, remote)) {
+    String automatic = mergeValues.automatic();
+    if (automatic != null || mergeValues.automaticallyResolved()) {
       setter.accept(automatic);
       return;
     }
     Set<ResolutionChoice> choices = optional ? OPTIONAL_STRING_CHOICES : CUSTOM_STRING_CHOICES;
-    Conflict conflict =
-        conflict(kind, elementKind, elementId, fieldPath, base, local, remote, choices);
+    Conflict conflict = conflict(location, mergeValues, choices);
     pending.add(
         new PendingConflict(
             conflict,
             resolution ->
-                setter.accept(selectString(base, local, remote, optional, fieldPath, resolution))));
+                setter.accept(selectString(mergeValues, optional, location, resolution))));
   }
 
   private static <T> void mergeTypedValue(
       List<PendingConflict> pending,
-      ConflictKind kind,
-      ElementKind elementKind,
-      String elementId,
-      String fieldPath,
-      T base,
-      T local,
-      T remote,
+      MergeLocation location,
+      MergeValues<T> mergeValues,
       Function<T, String> formatter,
       Consumer<T> setter) {
-    T automatic = automatic(base, local, remote);
-    if (automatic != null || isAutomaticallyResolved(base, local, remote)) {
+    T automatic = mergeValues.automatic();
+    if (automatic != null || mergeValues.automaticallyResolved()) {
       setter.accept(automatic);
       return;
     }
-    Conflict conflict =
-        conflict(
-            kind,
-            elementKind,
-            elementId,
-            fieldPath,
-            format(formatter, base),
-            format(formatter, local),
-            format(formatter, remote),
-            TYPED_VALUE_CHOICES);
+    Conflict conflict = conflict(location, formatted(mergeValues, formatter), TYPED_VALUE_CHOICES);
     pending.add(
         new PendingConflict(
             conflict,
-            resolution -> setter.accept(selectTyped(base, local, remote, fieldPath, resolution))));
-  }
-
-  private static boolean isAutomaticallyResolved(Object base, Object local, Object remote) {
-    return Objects.equals(local, remote)
-        || Objects.equals(local, base)
-        || Objects.equals(remote, base);
-  }
-
-  private static <T> T automatic(T base, T local, T remote) {
-    if (Objects.equals(local, remote)) {
-      return local;
-    }
-    if (Objects.equals(local, base)) {
-      return remote;
-    }
-    if (Objects.equals(remote, base)) {
-      return local;
-    }
-    return null;
+            resolution -> setter.accept(selectTyped(mergeValues, location, resolution))));
   }
 
   private static String selectString(
-      String base,
-      String local,
-      String remote,
+      MergeValues<String> mergeValues,
       boolean optional,
-      String fieldPath,
+      MergeLocation location,
       Resolution resolution) {
     return switch (resolution.choice()) {
-      case BASE -> base;
-      case LOCAL -> local;
-      case REMOTE -> remote;
+      case BASE -> mergeValues.base();
+      case LOCAL -> mergeValues.local();
+      case REMOTE -> mergeValues.remote();
       case DELETE -> {
         if (!optional) {
-          throw unsupportedChoice(resolution.choice(), fieldPath);
+          throw unsupportedChoice(resolution.choice(), location.fieldPath());
         }
         yield null;
       }
@@ -715,45 +616,50 @@ public final class WorkflowThreeWayMerger {
   }
 
   private static <T> T selectTyped(
-      T base, T local, T remote, String fieldPath, Resolution resolution) {
+      MergeValues<T> mergeValues, MergeLocation location, Resolution resolution) {
     return switch (resolution.choice()) {
-      case BASE -> base;
-      case LOCAL -> local;
-      case REMOTE -> remote;
-      case DELETE, CUSTOM -> throw unsupportedChoice(resolution.choice(), fieldPath);
+      case BASE -> mergeValues.base();
+      case LOCAL -> mergeValues.local();
+      case REMOTE -> mergeValues.remote();
+      case DELETE, CUSTOM -> throw unsupportedChoice(resolution.choice(), location.fieldPath());
+    };
+  }
+
+  private static <T> T selectObject(
+      MergeValues<T> mergeValues, MergeLocation location, ResolutionChoice choice) {
+    return switch (choice) {
+      case BASE -> mergeValues.base();
+      case LOCAL -> mergeValues.local();
+      case REMOTE -> mergeValues.remote();
+      case DELETE -> null;
+      case CUSTOM -> throw unsupportedChoice(choice, location.fieldPath());
     };
   }
 
   private static Conflict conflict(
-      ConflictKind kind,
-      ElementKind elementKind,
-      String elementId,
-      String fieldPath,
-      String baseValue,
-      String localValue,
-      String remoteValue,
+      MergeLocation location,
+      MergeValues<String> evidence,
       Set<ResolutionChoice> allowedChoices) {
     return new Conflict(
-        conflictId(kind, elementKind, elementId, fieldPath),
-        kind,
-        elementKind,
-        elementId,
-        fieldPath,
-        baseValue,
-        localValue,
-        remoteValue,
+        conflictId(location),
+        location.kind(),
+        location.elementKind(),
+        location.elementId(),
+        location.fieldPath(),
+        evidence.base(),
+        evidence.local(),
+        evidence.remote(),
         allowedChoices);
   }
 
-  private static String conflictId(
-      ConflictKind kind, ElementKind elementKind, String elementId, String fieldPath) {
-    return kind.name()
+  private static String conflictId(MergeLocation location) {
+    return location.kind().name()
         + ":"
-        + elementKind.name()
+        + location.elementKind().name()
         + ":"
-        + segment(elementId)
+        + segment(location.elementId())
         + ":"
-        + segment(fieldPath);
+        + segment(location.fieldPath());
   }
 
   private static String segment(String value) {
@@ -812,14 +718,68 @@ public final class WorkflowThreeWayMerger {
     return List.copyOf(keys);
   }
 
+  private static <T, R> MergeValues<R> mapped(
+      MergeValues<T> values, Function<T, R> mapper) {
+    return new MergeValues<>(
+        mapper.apply(values.base()), mapper.apply(values.local()), mapper.apply(values.remote()));
+  }
+
+  private static <T> MergeValues<String> formatted(
+      MergeValues<T> values, Function<T, String> formatter) {
+    return new MergeValues<>(
+        format(formatter, values.base()),
+        format(formatter, values.local()),
+        format(formatter, values.remote()));
+  }
+
   private static <T> String format(Function<T, String> formatter, T value) {
     return value == null ? null : formatter.apply(value);
+  }
+
+  private static MergeLocation location(
+      ConflictKind kind, ElementKind elementKind, String elementId, String fieldPath) {
+    return new MergeLocation(kind, elementKind, elementId, fieldPath);
+  }
+
+  private static <T> MergeValues<T> values(T base, T local, T remote) {
+    return new MergeValues<>(base, local, remote);
   }
 
   private static IllegalArgumentException unsupportedChoice(
       ResolutionChoice choice, String fieldPath) {
     return new IllegalArgumentException(
         "Resolution choice " + choice + " is not supported for " + fieldPath);
+  }
+
+  private record MergeLocation(
+      ConflictKind kind, ElementKind elementKind, String elementId, String fieldPath) {
+    MergeLocation {
+      Objects.requireNonNull(kind, "kind");
+      Objects.requireNonNull(elementKind, "elementKind");
+      Objects.requireNonNull(elementId, "elementId");
+      Objects.requireNonNull(fieldPath, "fieldPath");
+    }
+  }
+
+  private record MergeValues<T>(T base, T local, T remote) {
+    boolean automaticallyResolved() {
+      return Objects.equals(local, remote)
+          || Objects.equals(local, base)
+          || Objects.equals(remote, base);
+    }
+
+    T automatic() {
+      if (Objects.equals(local, remote)) {
+        return local;
+      }
+      if (Objects.equals(local, base)) {
+        return remote;
+      }
+      if (Objects.equals(remote, base)) {
+        return local;
+      }
+      return null;
+    }
   }
 
   private record PendingConflict(Conflict conflict, Consumer<Resolution> applier) {
@@ -862,8 +822,7 @@ public final class WorkflowThreeWayMerger {
   }
 
   private record SpecialNode(
-      ConflictKind kind,
-      String fieldPath,
+      MergeLocation location,
       Node base,
       Node local,
       Node remote,
@@ -872,8 +831,7 @@ public final class WorkflowThreeWayMerger {
       List<Edge> remoteEdges,
       Set<String> relatedEdgeIds) {
     SpecialNode {
-      Objects.requireNonNull(kind, "kind");
-      Objects.requireNonNull(fieldPath, "fieldPath");
+      Objects.requireNonNull(location, "location");
       baseEdges = List.copyOf(Objects.requireNonNull(baseEdges, "baseEdges"));
       localEdges = List.copyOf(Objects.requireNonNull(localEdges, "localEdges"));
       remoteEdges = List.copyOf(Objects.requireNonNull(remoteEdges, "remoteEdges"));
