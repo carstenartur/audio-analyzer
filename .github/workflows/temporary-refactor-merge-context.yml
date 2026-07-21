@@ -35,240 +35,85 @@ jobs:
           server-username: GITHUB_ACTOR
           server-password: GITHUB_TOKEN
 
-      - name: Introduce merge contexts
+      - name: Introduce merge location context
         run: |
           python3 <<'PY'
           from pathlib import Path
+          import re
 
           path = Path('audio-core/src/main/java/org/hammer/audio/workflow/merge/WorkflowThreeWayMerger.java')
           text = path.read_text(encoding='utf-8')
 
-          old_string = '''  private static void mergeStringValue(
-              List<PendingConflict> pending,
-              ConflictKind kind,
-              ElementKind elementKind,
-              String elementId,
-              String fieldPath,
-              String base,
-              String local,
-              String remote,
-              boolean optional,
-              Consumer<String> setter) {
-            String automatic = automatic(base, local, remote);
-            if (automatic != null || isAutomaticallyResolved(base, local, remote)) {
-              setter.accept(automatic);
-              return;
-            }
-            Set<ResolutionChoice> choices = optional ? OPTIONAL_STRING_CHOICES : CUSTOM_STRING_CHOICES;
-            Conflict conflict =
-                conflict(kind, elementKind, elementId, fieldPath, base, local, remote, choices);
-            pending.add(
-                new PendingConflict(
-                    conflict,
-                    resolution ->
-                        setter.accept(selectString(base, local, remote, optional, fieldPath, resolution))));
-          }
-'''
-          new_string = '''  private static void mergeStringValue(
-              List<PendingConflict> pending,
-              MergeLocation location,
-              MergeValues<String> values,
-              boolean optional,
-              Consumer<String> setter) {
-            String automatic = values.automatic();
-            if (automatic != null || values.automaticallyResolved()) {
-              setter.accept(automatic);
-              return;
-            }
-            Set<ResolutionChoice> choices = optional ? OPTIONAL_STRING_CHOICES : CUSTOM_STRING_CHOICES;
-            Conflict conflict = conflict(location, values, choices);
-            pending.add(
-                new PendingConflict(
-                    conflict,
-                    resolution -> setter.accept(selectString(values, optional, location, resolution))));
-          }
-'''
+          text, count = re.subn(
+              r'''private static void mergeStringValue\(\s*
+                  List<PendingConflict> pending,\s*
+                  ConflictKind kind,\s*
+                  ElementKind elementKind,\s*
+                  String elementId,\s*
+                  String fieldPath,\s*
+                  String base,\s*
+                  String local,\s*
+                  String remote,\s*
+                  boolean optional,\s*
+                  Consumer<String> setter\)''',
+              '''private static void mergeStringValue(
+                  List<PendingConflict> pending,
+                  MergeLocation location,
+                  String base,
+                  String local,
+                  String remote,
+                  boolean optional,
+                  Consumer<String> setter)''',
+              text,
+              flags=re.VERBOSE)
+          if count != 1:
+            raise SystemExit(f'mergeStringValue signature replacements: {count}')
 
-          old_typed = '''  private static <T> void mergeTypedValue(
-              List<PendingConflict> pending,
-              ConflictKind kind,
-              ElementKind elementKind,
-              String elementId,
-              String fieldPath,
-              T base,
-              T local,
-              T remote,
-              Function<T, String> formatter,
-              Consumer<T> setter) {
-            T automatic = automatic(base, local, remote);
-            if (automatic != null || isAutomaticallyResolved(base, local, remote)) {
-              setter.accept(automatic);
-              return;
-            }
-            Conflict conflict =
-                conflict(
-                    kind,
-                    elementKind,
-                    elementId,
-                    fieldPath,
-                    format(formatter, base),
-                    format(formatter, local),
-                    format(formatter, remote),
-                    TYPED_VALUE_CHOICES);
-            pending.add(
-                new PendingConflict(
-                    conflict,
-                    resolution -> setter.accept(selectTyped(base, local, remote, fieldPath, resolution))));
-          }
+          text, count = re.subn(
+              r'''private static <T> void mergeTypedValue\(\s*
+                  List<PendingConflict> pending,\s*
+                  ConflictKind kind,\s*
+                  ElementKind elementKind,\s*
+                  String elementId,\s*
+                  String fieldPath,\s*
+                  T base,\s*
+                  T local,\s*
+                  T remote,\s*
+                  Function<T, String> formatter,\s*
+                  Consumer<T> setter\)''',
+              '''private static <T> void mergeTypedValue(
+                  List<PendingConflict> pending,
+                  MergeLocation location,
+                  T base,
+                  T local,
+                  T remote,
+                  Function<T, String> formatter,
+                  Consumer<T> setter)''',
+              text,
+              flags=re.VERBOSE)
+          if count != 1:
+            raise SystemExit(f'mergeTypedValue signature replacements: {count}')
 
-          private static boolean isAutomaticallyResolved(Object base, Object local, Object remote) {
-            return Objects.equals(local, remote)
-                || Objects.equals(local, base)
-                || Objects.equals(remote, base);
-          }
-
-          private static <T> T automatic(T base, T local, T remote) {
-            if (Objects.equals(local, remote)) {
-              return local;
-            }
-            if (Objects.equals(local, base)) {
-              return remote;
-            }
-            if (Objects.equals(remote, base)) {
-              return local;
-            }
-            return null;
-          }
-'''
-          new_typed = '''  private static <T> void mergeTypedValue(
-              List<PendingConflict> pending,
-              MergeLocation location,
-              MergeValues<T> values,
-              Function<T, String> formatter,
-              Consumer<T> setter) {
-            T automatic = values.automatic();
-            if (automatic != null || values.automaticallyResolved()) {
-              setter.accept(automatic);
-              return;
-            }
-            Conflict conflict = conflict(location, formatted(values, formatter), TYPED_VALUE_CHOICES);
-            pending.add(
-                new PendingConflict(
-                    conflict,
-                    resolution -> setter.accept(selectTyped(values, location, resolution))));
-          }
-'''
-
-          old_select = '''  private static String selectString(
-              String base,
-              String local,
-              String remote,
-              boolean optional,
-              String fieldPath,
-              Resolution resolution) {
-            return switch (resolution.choice()) {
-              case BASE -> base;
-              case LOCAL -> local;
-              case REMOTE -> remote;
-              case DELETE -> {
-                if (!optional) {
-                  throw unsupportedChoice(resolution.choice(), fieldPath);
-                }
-                yield null;
-              }
-              case CUSTOM -> resolution.customValue();
-            };
-          }
-
-          private static <T> T selectTyped(
-              T base, T local, T remote, String fieldPath, Resolution resolution) {
-            return switch (resolution.choice()) {
-              case BASE -> base;
-              case LOCAL -> local;
-              case REMOTE -> remote;
-              case DELETE, CUSTOM -> throw unsupportedChoice(resolution.choice(), fieldPath);
-            };
-          }
-
-          private static Conflict conflict(
-              ConflictKind kind,
-              ElementKind elementKind,
-              String elementId,
-              String fieldPath,
-              String baseValue,
-              String localValue,
-              String remoteValue,
-              Set<ResolutionChoice> allowedChoices) {
-            return new Conflict(
-                conflictId(kind, elementKind, elementId, fieldPath),
-                kind,
-                elementKind,
-                elementId,
-                fieldPath,
-                baseValue,
-                localValue,
-                remoteValue,
-                allowedChoices);
-          }
-'''
-          new_select = '''  private static String selectString(
-              MergeValues<String> values,
-              boolean optional,
-              MergeLocation location,
-              Resolution resolution) {
-            return switch (resolution.choice()) {
-              case BASE -> values.base();
-              case LOCAL -> values.local();
-              case REMOTE -> values.remote();
-              case DELETE -> {
-                if (!optional) {
-                  throw unsupportedChoice(resolution.choice(), location.fieldPath());
-                }
-                yield null;
-              }
-              case CUSTOM -> resolution.customValue();
-            };
-          }
-
-          private static <T> T selectTyped(
-              MergeValues<T> values, MergeLocation location, Resolution resolution) {
-            return switch (resolution.choice()) {
-              case BASE -> values.base();
-              case LOCAL -> values.local();
-              case REMOTE -> values.remote();
-              case DELETE, CUSTOM ->
-                  throw unsupportedChoice(resolution.choice(), location.fieldPath());
-            };
-          }
-
-          private static Conflict conflict(
-              MergeLocation location,
-              MergeValues<String> values,
-              Set<ResolutionChoice> allowedChoices) {
-            return new Conflict(
-                conflictId(
-                    location.kind(),
-                    location.elementKind(),
-                    location.elementId(),
-                    location.fieldPath()),
-                location.kind(),
-                location.elementKind(),
-                location.elementId(),
-                location.fieldPath(),
-                values.base(),
-                values.local(),
-                values.remote(),
-                allowedChoices);
-          }
-'''
-
-          for old, new, name in [
-              (old_string, new_string, 'mergeStringValue'),
-              (old_typed, new_typed, 'mergeTypedValue'),
-              (old_select, new_select, 'selection/conflict')]:
-            if old not in text:
-              raise SystemExit(f'Expected {name} block not found')
-            text = text.replace(old, new)
+          text, count = re.subn(
+              r'''private static Conflict conflict\(\s*
+                  ConflictKind kind,\s*
+                  ElementKind elementKind,\s*
+                  String elementId,\s*
+                  String fieldPath,\s*
+                  String baseValue,\s*
+                  String localValue,\s*
+                  String remoteValue,\s*
+                  Set<ResolutionChoice> allowedChoices\)''',
+              '''private static Conflict conflict(
+                  MergeLocation location,
+                  String baseValue,
+                  String localValue,
+                  String remoteValue,
+                  Set<ResolutionChoice> allowedChoices)''',
+              text,
+              flags=re.VERBOSE)
+          if count != 1:
+            raise SystemExit(f'conflict signature replacements: {count}')
 
           def split_args(value):
             args = []
@@ -297,10 +142,10 @@ jobs:
             args.append(value[start:].strip())
             return args
 
-          def calls(source, name, expected, transform):
-            token = name + '('
-            found = []
+          def transform_calls(source, name, expected, replacement):
+            matches = []
             offset = 0
+            token = name + '('
             while True:
               start = source.find(token, offset)
               if start < 0:
@@ -330,54 +175,73 @@ jobs:
                     end = index
                     break
               if end is None:
-                raise SystemExit(f'Unclosed {name} invocation')
+                raise SystemExit(f'Unclosed {name} call')
               args = split_args(source[open_paren + 1:end])
               if len(args) == expected:
-                found.append((start, end + 1, transform(args)))
+                matches.append((start, end + 1, replacement(args)))
               offset = end + 1
-            for start, end, replacement in reversed(found):
-              source = source[:start] + replacement + source[end:]
+            for start, end, value in reversed(matches):
+              source = source[:start] + value + source[end:]
             return source
 
-          text = calls(
+          text = transform_calls(
               text,
               'mergeStringValue',
               10,
-              lambda a: 'mergeStringValue(\n'
-              + '        ' + a[0] + ',\n'
-              + '        new MergeLocation(' + ', '.join(a[1:5]) + '),\n'
-              + '        new MergeValues<>(' + ', '.join(a[5:8]) + '),\n'
-              + '        ' + a[8] + ',\n'
-              + '        ' + a[9] + ')')
-          text = calls(
+              lambda a: 'mergeStringValue('
+              + a[0] + ', new MergeLocation(' + ', '.join(a[1:5]) + '), '
+              + ', '.join(a[5:10]) + ')')
+          text = transform_calls(
               text,
               'mergeTypedValue',
               10,
-              lambda a: 'mergeTypedValue(\n'
-              + '        ' + a[0] + ',\n'
-              + '        new MergeLocation(' + ', '.join(a[1:5]) + '),\n'
-              + '        new MergeValues<>(' + ', '.join(a[5:8]) + '),\n'
-              + '        ' + a[8] + ',\n'
-              + '        ' + a[9] + ')')
-          text = calls(
+              lambda a: 'mergeTypedValue('
+              + a[0] + ', new MergeLocation(' + ', '.join(a[1:5]) + '), '
+              + ', '.join(a[5:10]) + ')')
+          text = transform_calls(
               text,
               'conflict',
               8,
-              lambda a: 'conflict(\n'
-              + '        new MergeLocation(' + ', '.join(a[0:4]) + '),\n'
-              + '        new MergeValues<>(' + ', '.join(a[4:7]) + '),\n'
-              + '        ' + a[7] + ')')
+              lambda a: 'conflict(new MergeLocation(' + ', '.join(a[0:4]) + '), '
+              + ', '.join(a[4:8]) + ')')
+
+          text = text.replace(
+              'selectString(base, local, remote, optional, fieldPath, resolution)',
+              'selectString(base, local, remote, optional, location.fieldPath(), resolution)')
+          text = text.replace(
+              'selectTyped(base, local, remote, fieldPath, resolution)',
+              'selectTyped(base, local, remote, location.fieldPath(), resolution)')
+
+          old_conflict_body = '''    return new Conflict(
+                conflictId(kind, elementKind, elementId, fieldPath),
+                kind,
+                elementKind,
+                elementId,
+                fieldPath,
+                baseValue,
+                localValue,
+                remoteValue,
+                allowedChoices);'''
+          new_conflict_body = '''    return new Conflict(
+                conflictId(
+                    location.kind(),
+                    location.elementKind(),
+                    location.elementId(),
+                    location.fieldPath()),
+                location.kind(),
+                location.elementKind(),
+                location.elementId(),
+                location.fieldPath(),
+                baseValue,
+                localValue,
+                remoteValue,
+                allowedChoices);'''
+          if old_conflict_body not in text:
+            raise SystemExit('conflict body not found')
+          text = text.replace(old_conflict_body, new_conflict_body)
 
           marker = '  private record PendingConflict(Conflict conflict, Consumer<Resolution> applier) {'
-          records = '''  private static <T> MergeValues<String> formatted(
-              MergeValues<T> values, Function<T, String> formatter) {
-            return new MergeValues<>(
-                format(formatter, values.base()),
-                format(formatter, values.local()),
-                format(formatter, values.remote()));
-          }
-
-          private record MergeLocation(
+          location = '''  private record MergeLocation(
               ConflictKind kind, ElementKind elementKind, String elementId, String fieldPath) {
             MergeLocation {
               Objects.requireNonNull(kind, "kind");
@@ -387,31 +251,10 @@ jobs:
             }
           }
 
-          private record MergeValues<T>(T base, T local, T remote) {
-            boolean automaticallyResolved() {
-              return Objects.equals(local, remote)
-                  || Objects.equals(local, base)
-                  || Objects.equals(remote, base);
-            }
-
-            T automatic() {
-              if (Objects.equals(local, remote)) {
-                return local;
-              }
-              if (Objects.equals(local, base)) {
-                return remote;
-              }
-              if (Objects.equals(remote, base)) {
-                return local;
-              }
-              return null;
-            }
-          }
-
 '''
           if marker not in text:
-            raise SystemExit('PendingConflict insertion point not found')
-          text = text.replace(marker, records + marker)
+            raise SystemExit('MergeLocation insertion point not found')
+          text = text.replace(marker, location + marker)
           path.write_text(text, encoding='utf-8')
           PY
 
@@ -423,5 +266,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add --all
-          git commit -m "Refactor semantic merge helper contexts (#246)"
+          git commit -m "Refactor semantic merge helper context (#246)"
           git push origin HEAD:feature/246-semantic-workflow-merge
