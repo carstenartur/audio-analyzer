@@ -19,8 +19,7 @@ class WorkflowDiffCompleteSemanticTest {
   void reportsWorkflowNodePortAndEdgeFieldsThroughTheEstablishedDiffApi() {
     Node generator = ExperimentNodeCatalog.syntheticSignalGenerator("node.generator");
     Node gain = ExperimentNodeCatalog.gain("node.gain");
-    Edge edge =
-        new Edge("edge.route", generator.id(), "signal-out", gain.id(), "audio-in");
+    Edge edge = new Edge("edge.route", generator.id(), "signal-out", gain.id(), "audio-in");
     Workflow before =
         new Workflow(
             "workflow.diff",
@@ -63,12 +62,7 @@ class WorkflowDiffCompleteSemanticTest {
         List.of(
             field(ElementKind.WORKFLOW, before.id(), "name", "Before", "After"),
             field(ElementKind.WORKFLOW, before.id(), "metadata.owner", "local", "remote"),
-            field(
-                ElementKind.WORKFLOW,
-                before.id(),
-                "metadata.purpose",
-                null,
-                "merge-test"),
+            field(ElementKind.WORKFLOW, before.id(), "metadata.purpose", null, "merge-test"),
             field(
                 ElementKind.NODE,
                 generator.id(),

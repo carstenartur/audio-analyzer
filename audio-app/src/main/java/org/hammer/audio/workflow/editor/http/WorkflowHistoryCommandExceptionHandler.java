@@ -38,10 +38,7 @@ public final class WorkflowHistoryCommandExceptionHandler {
       WorkflowMergeRejectedException exception, HttpServletRequest request) {
     ProblemDetail problem =
         problem(
-            "workflow-merge-rejected",
-            "Workflow merge rejected",
-            exception.getMessage(),
-            request);
+            "workflow-merge-rejected", "Workflow merge rejected", exception.getMessage(), request);
     problem.setProperty("code", "WORKFLOW_MERGE_REJECTED");
     problem.setProperty(
         "conflicts", exception.unresolvedConflicts().stream().map(this::conflict).toList());

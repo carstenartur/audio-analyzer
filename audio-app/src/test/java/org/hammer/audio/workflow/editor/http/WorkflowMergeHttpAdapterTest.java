@@ -69,8 +69,7 @@ class WorkflowMergeHttpAdapterTest {
                 local,
                 remote,
                 new Preview(base, List.of(conflict), List.of())));
-    MockMvc mvc =
-        MockMvcBuilders.standaloneSetup(new WorkflowMergeHttpAdapter(service)).build();
+    MockMvc mvc = MockMvcBuilders.standaloneSetup(new WorkflowMergeHttpAdapter(service)).build();
 
     mvc.perform(
             post("/workflow/history/merge/preview")
@@ -98,8 +97,7 @@ class WorkflowMergeHttpAdapterTest {
         .thenReturn(
             new WorkflowMergeCommitResult(
                 "main", BASE, LOCAL, REMOTE, MERGED, merged, "Merge\n\n[workflow-merge]\n"));
-    MockMvc mvc =
-        MockMvcBuilders.standaloneSetup(new WorkflowMergeHttpAdapter(service)).build();
+    MockMvc mvc = MockMvcBuilders.standaloneSetup(new WorkflowMergeHttpAdapter(service)).build();
 
     mvc.perform(
             post("/workflow/history/merge/resolve")
@@ -123,8 +121,7 @@ class WorkflowMergeHttpAdapterTest {
                       "timestamp":"2026-07-21T08:00:00Z"
                     }
                     """
-                        .formatted(
-                            BASE.value(), LOCAL.value(), REMOTE.value(), LOCAL.value())))
+                        .formatted(BASE.value(), LOCAL.value(), REMOTE.value(), LOCAL.value())))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.mergedCommitId").value(MERGED.value()))
         .andExpect(jsonPath("$.workflow.workflowName").value("Resolved"))

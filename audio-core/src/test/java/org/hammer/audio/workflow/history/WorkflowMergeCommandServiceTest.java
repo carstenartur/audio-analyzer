@@ -47,9 +47,9 @@ class WorkflowMergeCommandServiceTest {
     assertTrue(preview.merge().readyToCommit());
     assertEquals("Local signal", node(committed.workflow(), "node.generator").label());
     assertEquals(
-        "0.75",
-        node(committed.workflow(), "node.gain").metadata().entries().get("gain.factor"));
-    assertEquals(committed.workflow(), parse(repository.store().loadAtCommit(committed.mergedCommit())));
+        "0.75", node(committed.workflow(), "node.gain").metadata().entries().get("gain.factor"));
+    assertEquals(
+        committed.workflow(), parse(repository.store().loadAtCommit(committed.mergedCommit())));
     assertTrue(committed.auditMessage().contains("[workflow-merge]"));
     assertTrue(committed.auditMessage().contains("base=" + repository.baseCommit().value()));
     assertTrue(committed.auditMessage().contains("remoteBranch=feature"));
@@ -139,8 +139,7 @@ class WorkflowMergeCommandServiceTest {
         IllegalArgumentException.class,
         () ->
             service.preview(
-                new PreviewWorkflowMergeCommand(
-                    TARGET, REMOTE, base, local, unrelatedRemote)));
+                new PreviewWorkflowMergeCommand(TARGET, REMOTE, base, local, unrelatedRemote)));
   }
 
   private static MergeRepository repository(Workflow local, Workflow remote) {
@@ -229,8 +228,7 @@ class WorkflowMergeCommandServiceTest {
       CommitId localCommit,
       CommitId remoteCommit) {
     PreviewWorkflowMergeCommand command() {
-      return new PreviewWorkflowMergeCommand(
-          TARGET, REMOTE, baseCommit, localCommit, remoteCommit);
+      return new PreviewWorkflowMergeCommand(TARGET, REMOTE, baseCommit, localCommit, remoteCommit);
     }
   }
 }

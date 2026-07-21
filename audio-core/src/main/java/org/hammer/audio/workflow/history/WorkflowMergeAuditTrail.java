@@ -21,7 +21,9 @@ final class WorkflowMergeAuditTrail {
     Objects.requireNonNull(resolutions, "resolutions");
     Objects.requireNonNull(requested, "requested");
     return new CommitMetadata(
-        requested.author(), message(command, resolutions, requested.message()), requested.timestamp());
+        requested.author(),
+        message(command, resolutions, requested.message()),
+        requested.timestamp());
   }
 
   static String message(

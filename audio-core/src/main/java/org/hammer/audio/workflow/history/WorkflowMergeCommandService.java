@@ -164,8 +164,7 @@ public final class WorkflowMergeCommandService {
     }
   }
 
-  private static void requireReachable(
-      List<CommitInfo> history, CommitId commitId, String branch) {
+  private static void requireReachable(List<CommitInfo> history, CommitId commitId, String branch) {
     boolean found = history.stream().anyMatch(info -> info.commitId().equals(commitId));
     if (!found) {
       throw new IllegalArgumentException(

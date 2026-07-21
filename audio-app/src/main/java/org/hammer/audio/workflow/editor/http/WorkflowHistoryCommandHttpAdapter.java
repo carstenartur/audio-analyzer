@@ -45,7 +45,9 @@ public final class WorkflowHistoryCommandHttpAdapter {
     return BranchResponse.from(
         commandService.createBranch(
             new CreateWorkflowBranchCommand(
-                request.sourceBranch(), request.newBranch(), new CommitId(request.fromCommitId()))));
+                request.sourceBranch(),
+                request.newBranch(),
+                new CommitId(request.fromCommitId()))));
   }
 
   /** Compares two exact commits reachable from one branch. */
@@ -79,9 +81,7 @@ public final class WorkflowHistoryCommandHttpAdapter {
    * @param fromCommitId exact initial branch HEAD
    */
   public record BranchRequest(
-      @NotBlank String sourceBranch,
-      @NotBlank String newBranch,
-      @NotBlank String fromCommitId) {
+      @NotBlank String sourceBranch, @NotBlank String newBranch, @NotBlank String fromCommitId) {
 
     public BranchRequest {
       // Bean validation owns request-contract checks at the HTTP boundary.

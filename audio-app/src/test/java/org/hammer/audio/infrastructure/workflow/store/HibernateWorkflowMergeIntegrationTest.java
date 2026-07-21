@@ -44,11 +44,9 @@ class HibernateWorkflowMergeIntegrationTest {
           store.commit(
               "main", snapshot(replaceLabel(base, "Local signal")), metadata("Local change"));
       CommitId remoteCommit =
-          store.commit(
-              "feature", snapshot(addGainMetadata(base)), metadata("Remote change"));
+          store.commit("feature", snapshot(addGainMetadata(base)), metadata("Remote change"));
       PreviewWorkflowMergeCommand preview =
-          new PreviewWorkflowMergeCommand(
-              "main", "feature", baseCommit, localCommit, remoteCommit);
+          new PreviewWorkflowMergeCommand("main", "feature", baseCommit, localCommit, remoteCommit);
       WorkflowMergeCommandService service =
           new WorkflowMergeCommandService(store, WorkflowHistoryAccessPolicy.allowAll());
 
@@ -57,11 +55,11 @@ class HibernateWorkflowMergeIntegrationTest {
               new ResolveWorkflowMergeCommand(
                   preview, localCommit, List.of(), metadata("Merge stored branches")));
 
-      Workflow reloaded = new WorkflowDslParser().parse(store.loadAtCommit(result.mergedCommit()).dslText());
+      Workflow reloaded =
+          new WorkflowDslParser().parse(store.loadAtCommit(result.mergedCommit()).dslText());
       assertEquals(result.workflow(), reloaded);
       assertEquals("Local signal", node(reloaded, "node.generator").label());
-      assertEquals(
-          "0.75", node(reloaded, "node.gain").metadata().entries().get("gain.factor"));
+      assertEquals("0.75", node(reloaded, "node.gain").metadata().entries().get("gain.factor"));
       assertTrue(
           store.history("main", 1).getFirst().metadata().message().contains("[workflow-merge]"));
       assertEquals(result.mergedCommit(), store.history("main", 1).getFirst().commitId());
@@ -117,7 +115,10 @@ class HibernateWorkflowMergeIntegrationTest {
   }
 
   private static Node node(Workflow workflow, String nodeId) {
-    return workflow.nodes().stream().filter(node -> node.id().equals(nodeId)).findFirst().orElseThrow();
+    return workflow.nodes().stream()
+        .filter(node -> node.id().equals(nodeId))
+        .findFirst()
+        .orElseThrow();
   }
 
   private static WorkflowSnapshot snapshot(Workflow workflow) {

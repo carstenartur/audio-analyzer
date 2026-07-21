@@ -119,11 +119,7 @@ public final class WorkflowMergeHttpAdapter {
     ResolveWorkflowMergeCommand toCommand() {
       PreviewWorkflowMergeCommand preview =
           new PreviewRequest(
-                  targetBranch,
-                  remoteBranch,
-                  baseCommitId,
-                  localCommitId,
-                  remoteCommitId)
+                  targetBranch, remoteBranch, baseCommitId, localCommitId, remoteCommitId)
               .toCommand();
       return new ResolveWorkflowMergeCommand(
           preview,

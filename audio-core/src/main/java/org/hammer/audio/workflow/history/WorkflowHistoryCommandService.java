@@ -11,9 +11,7 @@ import org.hammer.audio.workflow.store.StaleWorkflowHeadException;
 import org.hammer.audio.workflow.store.VersionedWorkflowStore;
 import org.hammer.audio.workflow.store.WorkflowSnapshot;
 
-/**
- * Application service for explicit branch-scoped workflow comparison, branching and restore.
- */
+/** Application service for explicit branch-scoped workflow comparison, branching and restore. */
 public final class WorkflowHistoryCommandService {
 
   private final VersionedWorkflowStore store;
