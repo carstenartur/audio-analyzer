@@ -27,14 +27,10 @@ public final class CalibratedTdoaEstimator implements SynchronizationAwareTdoaEs
     this.delegate = Objects.requireNonNull(delegate, "delegate");
     this.calibration = Objects.requireNonNull(calibration, "calibration");
     this.clock = Objects.requireNonNull(clock, "clock");
-    if (!(maximumErrorSamples > 0.0) || !Double.isFinite(maximumErrorSamples)) {
-      throw new IllegalArgumentException("maximumErrorSamples must be finite and > 0");
-    }
-    if (!(speedOfSoundMetersPerSecond > 0.0) || !Double.isFinite(speedOfSoundMetersPerSecond)) {
-      throw new IllegalArgumentException("speedOfSoundMetersPerSecond must be finite and > 0");
-    }
-    this.maximumErrorSamples = maximumErrorSamples;
-    this.speedOfSoundMetersPerSecond = speedOfSoundMetersPerSecond;
+    this.maximumErrorSamples =
+        requirePositiveFinite(maximumErrorSamples, "maximumErrorSamples");
+    this.speedOfSoundMetersPerSecond =
+        requirePositiveFinite(speedOfSoundMetersPerSecond, "speedOfSoundMetersPerSecond");
   }
 
   @Override
@@ -83,5 +79,12 @@ public final class CalibratedTdoaEstimator implements SynchronizationAwareTdoaEs
         throw new IllegalArgumentException("microphone array does not match calibration profile");
       }
     }
+  }
+
+  private static double requirePositiveFinite(double value, String name) {
+    if (Double.isFinite(value) && value > 0.0) {
+      return value;
+    }
+    throw new IllegalArgumentException(name + " must be finite and > 0");
   }
 }
