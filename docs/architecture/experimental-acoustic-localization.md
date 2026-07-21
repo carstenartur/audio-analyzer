@@ -18,7 +18,7 @@ Existing reusable building blocks:
 ## Coupling analysis
 
 The experimental module must not depend on Swing panels, JavaSound device classes or application
-frame state. The new dependency direction is:
+frame state. The dependency direction is:
 
 ```text
 org.hammer.audio.core
@@ -28,6 +28,7 @@ org.hammer.audio.acquisition
         │
 org.hammer.audio.experimental.acoustic
         │
+        ├─ calibration estimators and synthetic fixtures
         ├─ simulation
         └─ visualization DTOs
 ```
@@ -36,46 +37,73 @@ Core packages do not import `org.hammer.audio.experimental.*`. The plugin import
 geometry and acquisition APIs. Visualization output is represented as DTOs so Swing, web or notebook
 renderers can consume it without coupling DSP to a UI framework.
 
-## What belongs in core
+## What belongs in stable modules
 
-Core contains abstractions useful beyond insects or research prototypes:
+Stable modules contain abstractions useful beyond insects or research prototypes:
 
-- microphone metadata and synchronized multi-channel source contracts;
+- microphone metadata and multi-channel source contracts;
+- immutable microphone-array calibration profiles;
+- per-channel static timing offset, affine drift, residual/jitter error, gain and polarity metadata;
+- synchronization mode/status values and deterministic timing-error assessments;
 - sample clock handling and timestamped `AudioBlock` frames;
 - 2D geometry primitives, rays and localization constraints;
 - existing FFT, DSP pipeline and analysis contracts;
 - recording/replay hooks that operate on `AudioBlock` rather than a concrete device library.
 
-These are intentionally small. They do not encode mosquito wingbeat ranges, beamforming heuristics
-or assumptions about a room experiment.
+The stable acquisition model records calibration evidence and quality, but it does not detect
+calibration events, run cross-correlation, resample a device or choose a localization algorithm.
+Those operations remain experimental and replaceable.
 
 ## What belongs in the acoustic plugin
 
 `org.hammer.audio.experimental.acoustic` contains research-specific and replaceable logic:
 
+- deterministic synthetic calibration-pulse fixtures;
+- offset observation through normalized cross-correlation;
+- drift estimation from repeated calibration events;
+- calibrated TDOA decoration and rejection of unusable synchronization evidence;
 - wingbeat/narrow-band frequency tracking;
 - cross-correlation and GCC-PHAT TDOA experiments;
 - delay-and-sum beamforming over candidate grids;
 - example mosquito-localization pipeline composition;
 - room simulation, moving emitters, reflections and noise;
-- visualization-ready debug frames and heatmaps.
+- visualization-ready debug frames, workbench diagnostics and heatmaps.
+
+Tracking and localization snapshots carry the synchronization assessment that was actually used.
+Workbench views and Markdown/CSV/JSON exports render the same evidence instead of inventing a second
+UI-only quality model.
 
 This code may evolve quickly and may be benchmarked or replaced without changing the stable
 application model.
 
+## Supported synchronization paths
+
+The architecture distinguishes three explicit modes:
+
+- `NOMINAL_SHARED_CLOCK` for one verified hardware clock;
+- `CALIBRATED_OFFSET` for a valid static inter-channel correction;
+- `DRIFT_COMPENSATED` for an affine offset model derived from repeated calibration events.
+
+Each observation is assessed as `TRUSTED`, `DEGRADED` or `REJECTED` against a caller-defined timing
+error budget. Rejected evidence stops calibrated TDOA/localization before a position is reported.
+
+This does not claim that arbitrary USB microphones are automatically synchronized. Automatic beacon
+detection, cycle-slip repair and continuous sample-rate conversion remain outside the implemented
+path and require separate measured validation.
+
 ## Maven modularization
 
-The repository now uses a seven-module Maven reactor. The split is the build-level compatibility
+The repository uses a seven-module Maven reactor. The split is the build-level compatibility
 boundary for stable audio APIs, plugin contracts, Swing application code and research-only acoustic
 localization code.
 
 - `audio-core` for `AudioBlock`, format metadata and generic immutable domain models;
 - `audio-geometry` for reusable 2D geometry primitives and localization constraints;
-- `audio-acquisition` for synchronized source and microphone-array contracts;
+- `audio-acquisition` for synchronized source, microphone-array and calibration contracts;
 - `audio-dsp` for reusable FFT, DSP, analyzer, spectrogram, diagnosis and stereo-delay logic;
 - `audio-plugin-api` for stable plugin contracts with no dependencies on concrete audio modules,
   host code or plugins;
-- `audio-experimental-acoustic` for mosquito/insect-specific research components;
+- `audio-experimental-acoustic` for calibration algorithms and insect-localization research;
 - `audio-app` for Swing UI, JavaSound/demo wiring, export, plugin hosting and packaging.
 
 The acoustic plugin depends on stable modules plus `audio-plugin-api`. The Swing app compiles
@@ -94,12 +122,13 @@ if:
 - `audio-plugin-api` imports host or concrete plugin packages;
 - `audio-app` has a compile-scope dependency on `audio-experimental-acoustic`.
 
-This keeps experimental acoustic code dependent on stable APIs only, while preventing stable core,
-DSP, acquisition or geometry code from depending on the plugin or app/UI layers.
+This keeps calibration evidence reusable while ensuring estimation algorithms, synthetic fixtures
+and workbench adapters cannot leak into stable acquisition or core packages.
 
 ## Rationale
 
 A build-level module boundary is the smallest backwards-compatible refactor that prevents
-experimental research code from becoming an implicit dependency of the stable platform. It was done
-now, before more acoustic localization experiments are added, so dependency direction is explicit
-and enforced by both Maven and automated tests.
+experimental research code from becoming an implicit dependency of the stable platform. Calibration
+quality is first-class stable data because acquisition, recording, replay, localization and export
+all need to agree on it. The algorithms that produce or consume that evidence remain replaceable and
+benchmarkable in the experimental module.

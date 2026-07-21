@@ -1,97 +1,102 @@
 # Synchronization requirements
 
-TDOA-based localization is fundamentally an inter-channel timing measurement. The accuracy of
-every downstream stage in the [tracking pipeline](tracking.md) is bounded by the
-sample-accurate alignment of the channels feeding it. This document captures the
-synchronization assumptions the plugin makes and the practical implications for hardware
-selection.
+TDOA-based localization is fundamentally an inter-channel timing measurement. The accuracy of every downstream stage in the [tracking pipeline](tracking.md) is bounded by the sample-accurate alignment of the channels feeding it. Synchronization quality is therefore represented as data and travels with localization/tracking snapshots; it is not an undocumented assumption of the estimator.
 
-## Required for the supported pipeline: a shared sample clock
+## Preferred production-like path: one shared sample clock
 
-Precise passive TDOA in the **currently implemented** plugin pipeline requires microphones sharing
-a single sample clock. The plugin assumes that frame `n` on channel A and frame `n` on channel B
-are captured at the same instant: `SampleClock` only stores nominal timestamps and the codebase
-does not yet implement inter-device offset, drift or cycle-slip correction. Sources that satisfy
-the shared-clock requirement include:
+The most reliable path remains microphones sharing one hardware sample clock. Frame `n` on channel A and frame `n` on channel B are then captured by one clock domain, and callers use the explicit `NOMINAL_SHARED_CLOCK` synchronization mode.
 
-- a single multi-channel audio interface (Focusrite Scarlett, RME Babyface, MOTU M-series,
-  Behringer UMC, etc.) where every input is sampled from the same crystal;
-- multiple interfaces locked together via word-clock or ADAT in a single ASIO / CoreAudio
-  aggregate driven by one master;
-- a dedicated multi-channel field recorder used in line-in mode.
+Sources that satisfy this requirement include:
 
-In all cases the host audio framework must deliver the channels as a single multi-channel
-stream so that the platform receives one `AudioBlock` per frame with `channels = N`.
+- a single multichannel audio interface where every input is sampled from the same crystal;
+- multiple interfaces locked through word clock or ADAT and exposed as one host stream;
+- a dedicated multichannel field recorder used in line-in mode.
 
-## Independent USB microphones with reference-beacon calibration (experimental, not implemented)
+The host audio framework must deliver one multichannel stream so that the platform receives one `AudioBlock` with `channels = N`. `SampleClock` remains the nominal frame-to-timestamp mapping for that stream; it is intentionally not expanded into an inter-device correction engine.
 
-USB microphones each contain their own crystal and ADC. Even nominally identical devices
-drift relative to each other at typical rates of a few PPM (parts per million), which
-accumulates to:
+## Implemented experimental path: calibrated independent clock domains
 
-- ~50 µs of drift over 50 seconds at 1 PPM (≈ 2 samples at 48 kHz);
-- multi-millisecond drift over a few minutes — orders of magnitude larger than the
-  inter-microphone delays the pipeline tries to estimate.
+Independent devices can now be represented by `MicrophoneArrayCalibration`. The profile covers every channel and records:
 
-For passive TDOA, arbitrary independent USB microphones therefore need explicit calibration before
-their relative timing can be trusted. They remain useful for non-TDOA demos (frequency tracking on a
-single channel, sample-rate calibration of the simulator). A research-grade workflow using an
-ultrasonic reference beacon, drift estimation and residual-error checks is described in
-[Physics and latency limits — Independent USB microphones and ultrasonic reference-beacon
-calibration](physics-and-latency-limits.md#independent-usb-microphones-and-ultrasonic-reference-beacon-calibration),
-but it is an **external/future research workflow**: the current codebase does not implement
-beacon detection, virtual-time-base reconstruction or cycle-slip handling, so it cannot today
-replace a shared-clock interface for TDOA in the plugin pipeline.
+- a reference channel;
+- static channel delay in samples at a known reference frame;
+- affine sample-rate drift in PPM;
+- calibration-fit residual and short-term jitter in samples;
+- gain correction and polarity metadata;
+- calibration and expiration timestamps.
 
-A practical low-cost experimental setup proposed for that external workflow is three stereo USB
-microphones rather than six independent mono USB microphones: each stereo device is treated as a
-locally synchronized pair, the three pairs are arranged with known positions and different baseline
-orientations, and an ultrasonic reference beacon is used to estimate inter-device delay offset,
-clock drift and cycle slips between the USB devices. Until such estimation is implemented and
-validated, USB-only setups should be considered demonstration-grade.
+`ChannelTimingCalibration.offsetAtFrame(frameIndex)` predicts the hardware delay at the absolute nominal frame. `CalibratedTdoaEstimator` subtracts the second-minus-first hardware delay from a delegate estimator before generating localization constraints.
 
-See [Physics and latency limits](physics-and-latency-limits.md) for the underlying path-difference,
-ultrasonic reference-beacon calibration, drift, ambiguity and AR-latency bounds that motivate this
-guidance.
+Every calibrated observation is assessed against a caller-defined timing-error budget:
+
+- `TRUSTED` — current profile, comfortably inside the budget;
+- `DEGRADED` — usable, but more than half of the budget is consumed;
+- `REJECTED` — expired profile or estimated residual/jitter exceeds the budget.
+
+`REJECTED` observations are stopped before localization/tracking returns evidence. The assessment is included in `AcousticLocalizationSnapshot` and `TrackingSnapshot`, allowing the workbench and exporters to present the exact mode, status, error estimate and diagnostics.
+
+## Deterministic calibration workflow
+
+The implemented calibration foundation is deliberately hardware-neutral and CI-safe:
+
+1. Record or generate a common calibration pulse on all channels.
+2. Use `ArrayTimingCalibrationEstimator.observe(...)` to estimate each channel delay relative to a selected reference by normalized cross-correlation.
+3. Repeat the calibration event after a known number of nominal frames.
+4. Use `calibrate(...)` to derive the static offset and affine drift in PPM.
+5. Store the resulting immutable profile with a validity window.
+6. Wrap the chosen TDOA implementation with `CalibratedTdoaEstimator` and configure the maximum acceptable timing error in samples.
+7. Inspect the synchronization assessment in every localization/tracking result.
+
+`SyntheticCalibrationFixture` provides deterministic common-pulse blocks for tests and simulation. CI proves recovery of known offsets and known drift without requiring live hardware.
+
+## What remains experimental or unsupported
+
+The framework does **not** claim that arbitrary USB microphones become trustworthy merely because a profile exists. A real setup must still provide repeatable calibration recordings and measured residuals.
+
+The current implementation does not yet provide:
+
+- automatic ultrasonic-beacon detection in a live capture service;
+- cycle-slip detection or sample insertion/removal;
+- continuous online re-estimation while localization is running;
+- resampling into a reconstructed virtual common clock;
+- automatic geometry measurement;
+- a validated hardware-specific accuracy claim.
+
+A setup with independent USB microphones is therefore experimental. If drift is non-affine, calibration expires, or cycle slips occur, the profile must be rejected and renewed rather than silently reused.
+
+A practical low-cost research setup may use several stereo USB devices: channels inside each device share a local clock, while repeated common calibration events estimate the offset and drift between device pairs. The profile and error budget must be derived from measurements for that exact setup.
+
+See [Physics and latency limits](physics-and-latency-limits.md) for the underlying path-difference, reference-beacon, drift, ambiguity and latency bounds.
 
 ## Timing precision requirements
 
-For a planar array of side `d`, a wavefront from a distant source crosses the array in at
-most `d / c` seconds (`c` ≈ 343 m/s). The pipeline can only resolve TDOA at integer-sample
-granularity (with sub-sample interpolation in the GCC-PHAT branch). Useful resolution
-therefore requires the smaller of:
+For a planar array of side `d`, a wavefront from a distant source crosses the array in at most `d / c` seconds (`c` ≈ 343 m/s). The current TDOA outputs use integer-sample delays; calibrated affine correction is rounded at the estimator boundary while residual/sub-sample uncertainty remains visible in the synchronization assessment.
+
+Useful resolution therefore requires the smaller of:
 
 - `1 / sampleRate` ≤ desired-angular-resolution × `d / c`;
-- `interChannelClockJitter < 0.5 / sampleRate`.
+- combined calibration residual and inter-channel jitter below the configured error budget.
 
-At 48 kHz this gives a per-sample resolution of ~20 µs and an angular resolution at the
-broadside that grows linearly with `1 / d`. Concretely:
+At 48 kHz the sample period is about 20.8 µs. Representative ideal upper bounds are:
 
-| Array spacing | Time-of-flight | Resolvable angles at 48 kHz |
-|---------------|----------------|-----------------------------|
-| 5 cm          | 146 µs         | ~7° steps                   |
-| 15 cm         | 437 µs         | ~2.5° steps                 |
-| 30 cm         | 875 µs         | ~1.3° steps                 |
+| Array spacing | Time of flight | Approximate broadside step at 48 kHz |
+|---------------|----------------|--------------------------------------|
+| 5 cm          | 146 µs         | ~7°                                  |
+| 15 cm         | 437 µs         | ~2.5°                                |
+| 30 cm         | 875 µs         | ~1.3°                                |
 
-These figures are upper bounds; reverberation, noise and channel mismatch reduce the
-achievable accuracy further.
+Reverberation, geometry uncertainty, noise, gain/polarity mismatch and synchronization residuals reduce achievable accuracy further.
 
 ## Capture-side checklist
 
-When evaluating a setup against this plugin, verify:
+Before treating localization as more than demonstration-grade, verify:
 
-1. The audio framework exposes a single multi-channel device (not separate per-microphone
-   devices wrapped into one). On Linux check `arecord -l`; on macOS check the Aggregate
-   Device's clock source; on Windows pick a driver that exposes the device as one
-   multi-channel interface.
-2. The microphones are mechanically rigid relative to each other and their positions are
-   measured to within a few millimeters; uncertainty in geometry directly translates into
-   localization error.
-3. The capture chain's per-channel gain mismatch is below ~3 dB and the channel order is
-   known and stable across reboots.
-4. The simulator (`SimulationScenarios`) is used as the ground-truth reference: the
-   `singleSource()` and `twoCloseFrequencies()` scenarios are bit-exact for a fixed seed
-   and provide the upper bound on what the pipeline can possibly achieve on the host.
+1. The channel mapping and microphone IDs match the calibration profile exactly.
+2. Microphones are mechanically rigid and their positions are measured to within the required geometry budget.
+3. Gain and polarity are known and stable.
+4. For shared-clock capture, the host exposes one real multichannel clock domain.
+5. For calibrated independent clocks, two or more repeatable calibration events recover offsets and drift within configured bounds.
+6. The profile is current and every returned snapshot reports `TRUSTED` or an explicitly accepted `DEGRADED` status.
+7. The simulator remains the ground-truth upper bound for the selected algorithm and array geometry.
 
-If any of these conditions cannot be met, treat the localization output as
-demonstration-grade only.
+If these conditions are not met, reject the localization result or label it demonstration-grade; do not hide synchronization uncertainty behind a position marker.

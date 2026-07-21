@@ -41,6 +41,7 @@ import javax.swing.SwingUtilities;
 import javax.swing.SwingWorker;
 import javax.swing.Timer;
 import org.hammer.audio.acquisition.Microphone;
+import org.hammer.audio.acquisition.SynchronizationStatus;
 import org.hammer.audio.experimental.acoustic.benchmark.AlignedSourceObservation;
 import org.hammer.audio.experimental.acoustic.benchmark.SnapshotAlignment;
 import org.hammer.audio.experimental.acoustic.benchmark.SnapshotGroundTruthAligner;
@@ -615,6 +616,16 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
     }
   }
 
+  static String formatSynchronizationDetails(TrackingSnapshot snapshot) {
+    return String.format(
+        Locale.ROOT,
+        "Synchronization: %s / %s (error=%.4f samples, %.2f µs)%n",
+        snapshot.synchronization().mode(),
+        snapshot.synchronization().status(),
+        snapshot.synchronization().estimatedErrorSamples(),
+        snapshot.synchronization().estimatedErrorSeconds() * 1_000_000.0);
+  }
+
   @SuppressWarnings("PMD.ConsecutiveAppendsShouldReuse")
   private void refreshPlaybackFrame(int frameIndex) {
     PlaybackModel model = playbackModel;
@@ -643,6 +654,12 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
     sb.append(String.format(Locale.ROOT, "Source frame: %d%n", snap.sourceFrameIndex()));
     sb.append(
         String.format(Locale.ROOT, "Processing:  %.1f µs%n", snap.processingNanos() / 1_000.0));
+    sb.append(formatSynchronizationDetails(snap));
+    if (snap.synchronization().status() != SynchronizationStatus.TRUSTED) {
+      sb.append("⚠ Synchronization quality requires attention: ")
+          .append(String.join(" ", snap.synchronization().diagnostics()))
+          .append('\n');
+    }
     if (model.result().isFrameOverBudget(snap)) {
       sb.append("⚠ Frame exceeded real-time budget\n");
     }
@@ -1114,6 +1131,10 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
                 result.blockCount(),
                 result.distinctTrackCount(),
                 result.averageProcessingNanosPerBlock() / 1_000.0));
+        appendLog("Synchronization: worst status " + result.worstSynchronizationStatus());
+        if (result.hasSynchronizationWarning()) {
+          appendLog("⚠ At least one frame has degraded or rejected synchronization.");
+        }
         markdownArea.setText(WorkbenchRunExporter.toMarkdown(result));
         csvArea.setText(WorkbenchRunExporter.toCsv(result));
         jsonArea.setText(WorkbenchRunExporter.toJsonLines(result));
@@ -1134,15 +1155,22 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
     private String formatBlockLine(TrackingSnapshot snapshot, int idx) {
       StringBuilder sb = new StringBuilder();
       sb.append(
-          String.format(
-              Locale.ROOT,
-              "Block %4d  frame=%6d  time=%6.1f ms  clusters=%d  tracks=%d  proc=%.1f µs",
-              idx,
-              snapshot.sourceFrameIndex(),
-              snapshot.sourceTimestampNanos() / 1_000_000.0,
-              snapshot.clusters().size(),
-              snapshot.tracks().size(),
-              snapshot.processingNanos() / 1_000.0));
+              String.format(
+                  Locale.ROOT,
+                  "Block %4d  frame=%6d  time=%6.1f ms  clusters=%d  tracks=%d  proc=%.1f µs",
+                  idx,
+                  snapshot.sourceFrameIndex(),
+                  snapshot.sourceTimestampNanos() / 1_000_000.0,
+                  snapshot.clusters().size(),
+                  snapshot.tracks().size(),
+                  snapshot.processingNanos() / 1_000.0))
+          .append(
+              String.format(
+                  Locale.ROOT,
+                  "  sync=%s/%s err=%.4f samples",
+                  snapshot.synchronization().mode(),
+                  snapshot.synchronization().status(),
+                  snapshot.synchronization().estimatedErrorSamples()));
       if (snapshot.processingNanos() > budgetNanos) {
         sb.append("  ⚠ OVER BUDGET");
       }

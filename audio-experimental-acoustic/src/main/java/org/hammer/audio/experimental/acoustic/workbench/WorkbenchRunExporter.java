@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
 import org.hammer.audio.experimental.acoustic.benchmark.BenchmarkReport;
 import org.hammer.audio.experimental.acoustic.tracking.FrequencyCluster;
 import org.hammer.audio.experimental.acoustic.tracking.TrackedSource;
@@ -149,6 +150,8 @@ public final class WorkbenchRunExporter {
     appendRow(sb, "Any tracked", result.anyTracked());
     appendRow(sb, "Max tracks in a frame", result.maxTracksInAnyFrame());
     appendRow(sb, "Distinct track IDs", result.distinctTrackCount());
+    appendRow(sb, "Synchronization modes", formatSynchronizationModes(result));
+    appendRow(sb, "Worst synchronization", result.worstSynchronizationStatus());
     appendRow(
         sb,
         "Avg processing / block",
@@ -167,9 +170,11 @@ public final class WorkbenchRunExporter {
     }
 
     sb.append(
-        "\n## Frame-by-frame summary\n\n"
-            + "| Frame | Time (ms) | Clusters | Tracks | Proc. (µs) | Budget |\n"
-            + "|---|---|---|---|---|---|\n");
+        "\n"
+            + "## Frame-by-frame summary\n\n"
+            + "| Frame | Time (ms) | Clusters | Tracks | Proc. (µs) | Sync | Error (samples) |"
+            + " Budget |\n"
+            + "|---|---|---|---|---|---|---|---|\n");
     for (TrackingSnapshot snap : result.snapshots()) {
       sb.append("| ")
           .append(snap.sourceFrameIndex())
@@ -181,6 +186,11 @@ public final class WorkbenchRunExporter {
           .append(snap.tracks().size())
           .append(MARKDOWN_PIPE_SEPARATOR)
           .append(String.format(Locale.ROOT, "%.1f", snap.processingNanos() / 1_000.0))
+          .append(MARKDOWN_PIPE_SEPARATOR)
+          .append(snap.synchronization().status())
+          .append(MARKDOWN_PIPE_SEPARATOR)
+          .append(
+              String.format(Locale.ROOT, "%.4f", snap.synchronization().estimatedErrorSamples()))
           .append(MARKDOWN_PIPE_SEPARATOR)
           .append(formatBudgetStatus(result, snap))
           .append(" |\n");
@@ -202,7 +212,9 @@ public final class WorkbenchRunExporter {
     StringBuilder sb = new StringBuilder(1024);
     sb.append(
         "frameIndex,timestampNs,trackId,frequencyHz,observedFrequencyHz,"
-            + "posX,posY,velX,velY,confidence,observations,processingNs,budgetExceeded\n");
+            + "posX,posY,velX,velY,confidence,observations,processingNs,"
+            + "synchronizationMode,synchronizationStatus,synchronizationErrorSamples,"
+            + "calibrationCurrent,budgetExceeded\n");
     for (TrackingSnapshot snap : result.snapshots()) {
       for (TrackedSource track : snap.tracks()) {
         sb.append(snap.sourceFrameIndex())
@@ -228,6 +240,15 @@ public final class WorkbenchRunExporter {
             .append(track.observationCount())
             .append(',')
             .append(snap.processingNanos())
+            .append(',')
+            .append(snap.synchronization().mode())
+            .append(',')
+            .append(snap.synchronization().status())
+            .append(',')
+            .append(
+                String.format(Locale.ROOT, "%.6f", snap.synchronization().estimatedErrorSamples()))
+            .append(',')
+            .append(snap.synchronization().calibrationCurrent())
             .append(',')
             .append(formatBudgetExceededCsv(result, snap))
             .append('\n');
@@ -256,7 +277,16 @@ public final class WorkbenchRunExporter {
           .append(snap.sourceTimestampNanos())
           .append(",\"processingNs\":")
           .append(snap.processingNanos())
-          .append(",\"budgetExceeded\":")
+          .append(",\"synchronization\":{\"mode\":\"")
+          .append(snap.synchronization().mode())
+          .append("\",\"status\":\"")
+          .append(snap.synchronization().status())
+          .append("\",\"estimatedErrorSamples\":")
+          .append(
+              String.format(Locale.ROOT, "%.6f", snap.synchronization().estimatedErrorSamples()))
+          .append(",\"calibrationCurrent\":")
+          .append(snap.synchronization().calibrationCurrent())
+          .append("},\"budgetExceeded\":")
           .append(formatBudgetExceededJson(result, snap))
           .append(",\"clusters\":[");
       appendClustersJson(sb, snap.clusters());
@@ -318,6 +348,13 @@ public final class WorkbenchRunExporter {
       }
     }
     return new ArrayList<>(seen);
+  }
+
+  private static String formatSynchronizationModes(WorkbenchRunResult result) {
+    return result.synchronizationModes().stream()
+        .sorted()
+        .map(Enum::name)
+        .collect(Collectors.joining(", "));
   }
 
   private static String formatBudgetStatus(WorkbenchRunResult result, TrackingSnapshot snap) {

@@ -115,6 +115,7 @@ The production-packaged client is exercised with two isolated Chromium contexts.
 - immutable audio blocks, format descriptors and deterministic generators;
 - bounded buffering and reproducible DSP pipelines;
 - sample decoding, FFT, spectrum, spectrogram and measurement snapshots;
+- microphone-array calibration profiles with explicit timing offsets, drift and error budgets;
 - recording/replay and evidence-oriented exports;
 - immutable workflow models and deterministic serialization;
 - packaged React Flow client with server-authoritative collaboration;
@@ -125,7 +126,7 @@ The production-packaged client is exercised with two isolated Chromium contexts.
 
 ### Experimental areas
 
-The acoustic-localization plugin contains research-grade simulation, TDOA estimation, beamforming, tracking, wingbeat features and dataset-oriented classification baselines. Real microphone-array localization still requires synchronized channels, calibrated geometry and documented error budgets.
+The acoustic-localization plugin contains research-grade simulation, calibration-event estimation, TDOA correction, beamforming, tracking, wingbeat features and dataset-oriented classification baselines. It exposes synchronization mode, trust status and timing-error evidence in snapshots and exports. Real microphone-array localization still requires measured geometry and validated calibration; automatic beacon detection, cycle-slip repair and continuous resampling are not claimed.
 
 The project deliberately keeps experimental claims separate from stable platform guarantees.
 
@@ -150,7 +151,7 @@ Start with the task that matches your goal:
 ```text
 audio-core                  immutable audio and workflow domain contracts
 audio-geometry              reusable 2D geometry and localization constraints
-audio-acquisition           microphone metadata, arrays, sources and clocks
+audio-acquisition           microphone metadata, arrays, sources and calibration evidence
 audio-dsp                   decoding, DSP, analysis, diagnosis and recording
 audio-plugin-api            stable host-facing plugin contracts
 audio-experimental-acoustic optional localization and dataset research plugin

@@ -3,12 +3,16 @@ package org.hammer.audio.experimental.acoustic.tracking;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import org.hammer.audio.acquisition.MicrophoneArray;
+import org.hammer.audio.acquisition.SynchronizationAssessment;
 import org.hammer.audio.core.AudioBlock;
 import org.hammer.audio.experimental.acoustic.DelayAndSumBeamformer;
+import org.hammer.audio.experimental.acoustic.SynchronizationAwareTdoaEstimator;
 import org.hammer.audio.experimental.acoustic.TdoaEstimator;
+import org.hammer.audio.experimental.acoustic.UnusableSynchronizationException;
 import org.hammer.audio.experimental.acoustic.doppler.FrequencyTrack;
 import org.hammer.audio.experimental.acoustic.doppler.MultiSensorDopplerEstimator;
 import org.hammer.audio.experimental.acoustic.doppler.RadialVelocityEstimate;
@@ -73,34 +77,33 @@ public final class TrackingPipeline {
     this(
         peakDetector,
         clusterer,
-        tdoaEstimator,
-        beamformer,
+        new LocalizationComponents(
+            tdoaEstimator,
+            beamformer,
+            SimpleMultiSensorDopplerEstimator.withDefaults(),
+            new VelocityReconstructor()),
         tracker,
-        SimpleMultiSensorDopplerEstimator.withDefaults(),
-        new VelocityReconstructor(),
         candidateGrid,
         schedule);
   }
 
-  /** Configure a pipeline with explicit Doppler components. */
+  /** Configure a pipeline with explicit localization and Doppler components. */
   public TrackingPipeline(
       MultiPeakDetector peakDetector,
       FrequencyClusterer clusterer,
-      TdoaEstimator tdoaEstimator,
-      DelayAndSumBeamformer beamformer,
+      LocalizationComponents localization,
       SourceTracker tracker,
-      MultiSensorDopplerEstimator dopplerEstimator,
-      VelocityReconstructor velocityReconstructor,
       List<Vector2> candidateGrid,
       FrameSchedule schedule) {
     this.peakDetector = Objects.requireNonNull(peakDetector, "peakDetector");
     this.clusterer = Objects.requireNonNull(clusterer, "clusterer");
-    this.tdoaEstimator = Objects.requireNonNull(tdoaEstimator, "tdoaEstimator");
-    this.beamformer = Objects.requireNonNull(beamformer, "beamformer");
+    LocalizationComponents requiredLocalization =
+        Objects.requireNonNull(localization, "localization");
+    this.tdoaEstimator = requiredLocalization.tdoaEstimator();
+    this.beamformer = requiredLocalization.beamformer();
     this.tracker = Objects.requireNonNull(tracker, "tracker");
-    this.dopplerEstimator = Objects.requireNonNull(dopplerEstimator, "dopplerEstimator");
-    this.velocityReconstructor =
-        Objects.requireNonNull(velocityReconstructor, "velocityReconstructor");
+    this.dopplerEstimator = requiredLocalization.dopplerEstimator();
+    this.velocityReconstructor = requiredLocalization.velocityReconstructor();
     Objects.requireNonNull(candidateGrid, "candidateGrid");
     if (candidateGrid.isEmpty()) {
       throw new IllegalArgumentException("candidateGrid must not be empty");
@@ -115,6 +118,10 @@ public final class TrackingPipeline {
     Objects.requireNonNull(array, "array");
     if (block.channels() != array.channels()) {
       throw new IllegalArgumentException("block channel count must match microphone array");
+    }
+    SynchronizationAssessment synchronization = synchronizationAssessment(block, array);
+    if (!synchronization.usable()) {
+      throw new UnusableSynchronizationException(String.join(" ", synchronization.diagnostics()));
     }
     long startNanos = System.nanoTime();
     List<List<DetectedPeak>> perChannel = peakDetector.detectAllChannels(block);
@@ -172,7 +179,13 @@ public final class TrackingPipeline {
     List<TrackedSource> tracks = tracker.update(block.frameIndex(), timestampSeconds, observations);
     long processingNanos = System.nanoTime() - startNanos;
     return new TrackingSnapshot(
-        block.frameIndex(), block.timestampNanos(), clusters, tracks, processingNanos);
+        block.frameIndex(),
+        block.timestampNanos(),
+        clusters,
+        tracks,
+        processingNanos,
+        Map.of(),
+        synchronization);
   }
 
   /** Snapshot the underlying tracker without consuming a new block. */
@@ -196,6 +209,14 @@ public final class TrackingPipeline {
   /** Frame schedule the pipeline was configured against, or {@code null} when unspecified. */
   public FrameSchedule schedule() {
     return schedule;
+  }
+
+  private SynchronizationAssessment synchronizationAssessment(
+      AudioBlock block, MicrophoneArray array) {
+    if (tdoaEstimator instanceof SynchronizationAwareTdoaEstimator aware) {
+      return aware.synchronizationAssessment(block, array);
+    }
+    return SynchronizationAssessment.nominalSharedClock();
   }
 
   private PipelineFrequencyTrack frequencyTrackFor(
@@ -248,6 +269,29 @@ public final class TrackingPipeline {
     }
   }
 
+  /**
+   * Interchangeable localization and Doppler stages configured as one coherent pipeline component.
+   *
+   * @param tdoaEstimator pairwise time-difference estimator
+   * @param beamformer candidate-grid localizer
+   * @param dopplerEstimator per-microphone radial-velocity estimator
+   * @param velocityReconstructor fused velocity reconstructor
+   */
+  public record LocalizationComponents(
+      TdoaEstimator tdoaEstimator,
+      DelayAndSumBeamformer beamformer,
+      MultiSensorDopplerEstimator dopplerEstimator,
+      VelocityReconstructor velocityReconstructor) {
+
+    // Validate all localization stages.
+    public LocalizationComponents {
+      Objects.requireNonNull(tdoaEstimator, "tdoaEstimator");
+      Objects.requireNonNull(beamformer, "beamformer");
+      Objects.requireNonNull(dopplerEstimator, "dopplerEstimator");
+      Objects.requireNonNull(velocityReconstructor, "velocityReconstructor");
+    }
+  }
+
   /** Frequency reference state matched by nearest observed frequency with per-frame exclusivity. */
   private static final class PipelineFrequencyTrack {
     final int id;
@@ -264,7 +308,16 @@ public final class TrackingPipeline {
     }
   }
 
-  /** Per-source Doppler diagnostics from the most recently processed frame. */
+  /**
+   * Per-source Doppler diagnostics from the most recently processed frame.
+   *
+   * @param referenceFrequencyHz smoothed source reference frequency
+   * @param observedFrequencyHz current observed source frequency
+   * @param positionMeters estimated source position used by the Doppler stage
+   * @param perMicrophoneRadialVelocities immutable radial-velocity estimates
+   * @param frequencyVarianceHzSquared variance of the tracked frequency reference
+   * @param radialVelocityStdDevMetersPerSecond spread of the radial-velocity estimates
+   */
   public record DopplerDiagnostics(
       double referenceFrequencyHz,
       double observedFrequencyHz,
