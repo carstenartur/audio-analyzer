@@ -5,10 +5,16 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import org.hammer.audio.workflow.Workflow;
-import org.hammer.audio.workflow.merge.WorkflowDiffModels.ElementKind;
 
 /** Framework-independent contracts for deterministic three-way workflow merge. */
 public interface WorkflowMergeModels {
+
+  /** Semantic workflow element owning a conflicted value. */
+  enum ElementKind {
+    WORKFLOW,
+    NODE,
+    EDGE
+  }
 
   /** Typed semantic conflict classification. */
   enum ConflictKind {
