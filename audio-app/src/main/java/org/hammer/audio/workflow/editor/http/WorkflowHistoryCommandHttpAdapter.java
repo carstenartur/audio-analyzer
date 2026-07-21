@@ -7,7 +7,9 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 import org.hammer.audio.workflow.editor.WorkflowProjection;
+import org.hammer.audio.workflow.history.CreateWorkflowBranchCommand;
 import org.hammer.audio.workflow.history.RestoreWorkflowVersionCommand;
+import org.hammer.audio.workflow.history.WorkflowBranchCreationResult;
 import org.hammer.audio.workflow.history.WorkflowChange;
 import org.hammer.audio.workflow.history.WorkflowHistoryCommandService;
 import org.hammer.audio.workflow.history.WorkflowHistoryComparison;
@@ -20,7 +22,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/** HTTP boundary for explicit branch-scoped workflow comparison and non-destructive restore. */
+/** HTTP boundary for explicit branch-scoped workflow comparison, branching and restore. */
 @RestController
 @RequestMapping("/workflow/history")
 @ConditionalOnProperty(name = "workbench.persistence.mode", havingValue = "hibernate")
@@ -31,10 +33,19 @@ public final class WorkflowHistoryCommandHttpAdapter {
   /**
    * Creates the history-command controller.
    *
-   * @param commandService compare and restore application service
+   * @param commandService compare, branch and restore application service
    */
   public WorkflowHistoryCommandHttpAdapter(WorkflowHistoryCommandService commandService) {
     this.commandService = Objects.requireNonNull(commandService, "commandService");
+  }
+
+  /** Creates a new branch from one exact source-branch-reachable commit. */
+  @PostMapping("/branches")
+  public BranchResponse createBranch(@Valid @RequestBody BranchRequest request) {
+    return BranchResponse.from(
+        commandService.createBranch(
+            new CreateWorkflowBranchCommand(
+                request.sourceBranch(), request.newBranch(), new CommitId(request.fromCommitId()))));
   }
 
   /** Compares two exact commits reachable from one branch. */
@@ -58,6 +69,33 @@ public final class WorkflowHistoryCommandHttpAdapter {
                 new CommitId(request.expectedHeadCommitId()),
                 new CommitMetadata(request.author(), request.message(), request.timestamp())));
     return RestoreResponse.from(result);
+  }
+
+  /**
+   * Exact new-branch creation request.
+   *
+   * @param sourceBranch source branch proving commit reachability
+   * @param newBranch branch name that must not already exist
+   * @param fromCommitId exact initial branch HEAD
+   */
+  public record BranchRequest(
+      @NotBlank String sourceBranch,
+      @NotBlank String newBranch,
+      @NotBlank String fromCommitId) {
+
+    public BranchRequest {
+      // Bean validation owns request-contract checks at the HTTP boundary.
+    }
+  }
+
+  /** Newly created branch identity and exact initial workflow checkpoint. */
+  public record BranchResponse(
+      String sourceBranch, String branch, String headCommitId, String workflowId) {
+
+    static BranchResponse from(WorkflowBranchCreationResult result) {
+      return new BranchResponse(
+          result.sourceBranch(), result.branch(), result.head().value(), result.workflowId());
+    }
   }
 
   /**
