@@ -30,8 +30,7 @@ public final class CalibratedTdoaEstimator implements SynchronizationAwareTdoaEs
     if (!(maximumErrorSamples > 0.0) || !Double.isFinite(maximumErrorSamples)) {
       throw new IllegalArgumentException("maximumErrorSamples must be finite and > 0");
     }
-    if (!(speedOfSoundMetersPerSecond > 0.0)
-        || !Double.isFinite(speedOfSoundMetersPerSecond)) {
+    if (!(speedOfSoundMetersPerSecond > 0.0) || !Double.isFinite(speedOfSoundMetersPerSecond)) {
       throw new IllegalArgumentException("speedOfSoundMetersPerSecond must be finite and > 0");
     }
     this.maximumErrorSamples = maximumErrorSamples;

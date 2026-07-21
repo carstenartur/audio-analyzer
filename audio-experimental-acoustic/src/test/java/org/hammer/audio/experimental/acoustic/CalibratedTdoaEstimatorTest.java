@@ -29,7 +29,8 @@ class CalibratedTdoaEstimatorTest {
     MicrophoneArrayCalibration calibration = profile(array, CALIBRATED_AT.plusSeconds(3_600));
     TdoaEstimator delegate =
         (block, ignoredArray, first, second) ->
-            new TdoaEstimate("left", "right", 5, 5.0 / 48_000.0, 5.0 / 48_000.0 * SPEED_OF_SOUND, 1.0);
+            new TdoaEstimate(
+                "left", "right", 5, 5.0 / 48_000.0, 5.0 / 48_000.0 * SPEED_OF_SOUND, 1.0);
     CalibratedTdoaEstimator estimator =
         new CalibratedTdoaEstimator(
             delegate,
@@ -42,7 +43,9 @@ class CalibratedTdoaEstimatorTest {
 
     assertEquals(2, corrected.delaySamples());
     assertEquals(2.0 / 48_000.0, corrected.delaySeconds(), 1.0e-12);
-    assertEquals(SynchronizationMode.CALIBRATED_OFFSET, estimator.synchronizationAssessment(block(10_000), array).mode());
+    assertEquals(
+        SynchronizationMode.CALIBRATED_OFFSET,
+        estimator.synchronizationAssessment(block(10_000), array).mode());
     assertEquals(
         SynchronizationStatus.TRUSTED,
         estimator.synchronizationAssessment(block(10_000), array).status());
@@ -64,12 +67,10 @@ class CalibratedTdoaEstimatorTest {
             SPEED_OF_SOUND);
 
     assertThrows(
-        UnusableSynchronizationException.class,
-        () -> estimator.estimate(block(0), array, 0, 1));
+        UnusableSynchronizationException.class, () -> estimator.estimate(block(0), array, 0, 1));
   }
 
-  private static MicrophoneArrayCalibration profile(
-      MicrophoneArray array, Instant validUntil) {
+  private static MicrophoneArrayCalibration profile(MicrophoneArray array, Instant validUntil) {
     return new MicrophoneArrayCalibration(
         "two-channel-profile",
         array,

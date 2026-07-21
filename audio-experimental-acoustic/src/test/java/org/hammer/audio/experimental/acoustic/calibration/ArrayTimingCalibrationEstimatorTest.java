@@ -21,8 +21,7 @@ class ArrayTimingCalibrationEstimatorTest {
   void recoversKnownInterChannelDelayFromSyntheticPulse() {
     AudioFormatDescriptor format = new AudioFormatDescriptor(48_000.0f, 3, 16);
     AudioBlock block =
-        SyntheticCalibrationFixture.pulseBlock(
-            format, 2_000, 0, 96, 32, new int[] {0, 4, 9});
+        SyntheticCalibrationFixture.pulseBlock(format, 2_000, 0, 96, 32, new int[] {0, 4, 9});
     ArrayTimingCalibrationEstimator estimator =
         new ArrayTimingCalibrationEstimator(12, 0.95, 500.0);
 
@@ -35,13 +34,10 @@ class ArrayTimingCalibrationEstimatorTest {
   @Test
   void derivesKnownDriftAcrossRepeatedCalibrationEvents() {
     CalibrationEventObservation first =
-        new CalibrationEventObservation(
-            1_000, 0, List.of(0.0, 2.0), List.of(1.0, 0.99));
+        new CalibrationEventObservation(1_000, 0, List.of(0.0, 2.0), List.of(1.0, 0.99));
     CalibrationEventObservation second =
-        new CalibrationEventObservation(
-            101_000, 0, List.of(0.0, 7.0), List.of(1.0, 0.98));
-    ArrayTimingCalibrationEstimator estimator =
-        new ArrayTimingCalibrationEstimator(16, 0.9, 100.0);
+        new CalibrationEventObservation(101_000, 0, List.of(0.0, 7.0), List.of(1.0, 0.98));
+    ArrayTimingCalibrationEstimator estimator = new ArrayTimingCalibrationEstimator(16, 0.9, 100.0);
 
     MicrophoneArrayCalibration calibration =
         estimator.calibrate(
@@ -57,8 +53,7 @@ class ArrayTimingCalibrationEstimatorTest {
         new CalibrationEventObservation(0, 0, List.of(0.0, 0.0), List.of(1.0, 1.0));
     CalibrationEventObservation second =
         new CalibrationEventObservation(10_000, 0, List.of(0.0, 5.0), List.of(1.0, 1.0));
-    ArrayTimingCalibrationEstimator estimator =
-        new ArrayTimingCalibrationEstimator(16, 0.9, 100.0);
+    ArrayTimingCalibrationEstimator estimator = new ArrayTimingCalibrationEstimator(16, 0.9, 100.0);
 
     assertThrows(
         IllegalArgumentException.class,

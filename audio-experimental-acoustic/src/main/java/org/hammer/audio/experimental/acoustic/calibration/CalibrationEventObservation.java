@@ -12,10 +12,7 @@ import java.util.Objects;
  * @param confidences normalized per-channel correlation confidence
  */
 public record CalibrationEventObservation(
-    long frameIndex,
-    int referenceChannel,
-    List<Double> offsetsSamples,
-    List<Double> confidences) {
+    long frameIndex, int referenceChannel, List<Double> offsetsSamples, List<Double> confidences) {
 
   /** Creates a complete immutable event observation. */
   public CalibrationEventObservation {

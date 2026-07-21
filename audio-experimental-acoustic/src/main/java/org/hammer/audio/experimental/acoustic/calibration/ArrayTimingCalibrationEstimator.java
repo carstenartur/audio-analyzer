@@ -22,9 +22,7 @@ public final class ArrayTimingCalibrationEstimator {
     if (maximumLagSamples < 1) {
       throw new IllegalArgumentException("maximumLagSamples must be >= 1");
     }
-    if (!Double.isFinite(minimumConfidence)
-        || minimumConfidence < 0.0
-        || minimumConfidence > 1.0) {
+    if (!Double.isFinite(minimumConfidence) || minimumConfidence < 0.0 || minimumConfidence > 1.0) {
       throw new IllegalArgumentException("minimumConfidence must be in [0,1]");
     }
     if (!(maximumAbsoluteDriftPpm > 0.0) || !Double.isFinite(maximumAbsoluteDriftPpm)) {
@@ -96,7 +94,9 @@ public final class ArrayTimingCalibrationEstimator {
           Math.min(first.confidences().get(channel), second.confidences().get(channel));
       double residualEstimate = 1.0 - confidence;
       if (channel == first.referenceChannel()) {
-        channels.add(new ChannelTimingCalibration(channel, first.frameIndex(), 0.0, 0.0, 0.0, 0.0, 1.0, false));
+        channels.add(
+            new ChannelTimingCalibration(
+                channel, first.frameIndex(), 0.0, 0.0, 0.0, 0.0, 1.0, false));
       } else {
         channels.add(
             new ChannelTimingCalibration(
@@ -111,12 +111,7 @@ public final class ArrayTimingCalibrationEstimator {
       }
     }
     return new MicrophoneArrayCalibration(
-        profileId,
-        array,
-        first.referenceChannel(),
-        channels,
-        calibratedAt,
-        validUntil);
+        profileId, array, first.referenceChannel(), channels, calibratedAt, validUntil);
   }
 
   private LagScore strongestLag(float[] reference, float[] channel) {

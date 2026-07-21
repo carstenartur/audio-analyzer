@@ -52,8 +52,7 @@ class TrackingSnapshotTest {
             List.of("Timing error consumes more than half of the budget."));
 
     TrackingSnapshot snapshot =
-        new TrackingSnapshot(
-            1L, 2L, List.of(cluster()), List.of(track()), 3L, Map.of(), degraded);
+        new TrackingSnapshot(1L, 2L, List.of(cluster()), List.of(track()), 3L, Map.of(), degraded);
 
     assertEquals(degraded, snapshot.synchronization());
   }
