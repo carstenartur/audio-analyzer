@@ -27,7 +27,8 @@ class WorkbenchWorkflowRunIT {
 
   private static final String SESSION_ID = "e2e-immutable-run";
   private static final String MODE = "SHARED_SESSION_PERSONAL_UNDO";
-  private static final Actor ALICE = new Actor("actor-run-alice", "user-run-alice", "Alice Run E2E");
+  private static final Actor ALICE =
+      new Actor("actor-run-alice", "user-run-alice", "Alice Run E2E");
   private static final Actor BOB = new Actor("actor-run-bob", "user-run-bob", "Bob Run E2E");
 
   private WorkbenchBrowserHarness harness;
@@ -97,7 +98,8 @@ class WorkbenchWorkflowRunIT {
       updateGain(bob.page(), 12, "0.25", "0.125", "operation.run.remote-edit.2");
       waitForRevision(alice.page(), 13);
       waitForRevision(bob.page(), 13);
-      assertEquals(fingerprint, alice.page().locator("[data-testid='run-fingerprint']").innerText());
+      assertEquals(
+          fingerprint, alice.page().locator("[data-testid='run-fingerprint']").innerText());
       assertTrue(record.innerText().contains("revision 11"));
       assertFalse(record.innerText().contains("revision 13"));
     } catch (Throwable failure) {
