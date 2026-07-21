@@ -111,19 +111,19 @@ Examples:
 ### Typed conflicts
 
 `DIVERGENT_VALUE`
-: Both branches changed the same scalar or metadata key differently.
+:   Both branches changed the same scalar or metadata key differently.
 
 `STABLE_ID_COLLISION`
-: Both branches independently added different node or edge snapshots with the same stable id.
+:   Both branches independently added different node or edge snapshots with the same stable id.
 
 `DELETE_MODIFY`
-: One branch deleted an existing object while the other modified it.
+:   One branch deleted an existing object while the other modified it.
 
 `DELETE_CONNECT`
-: One branch deleted a node while the other added or retained a connection that requires that node.
+:   One branch deleted a node while the other added or retained a connection that requires that node.
 
 `DIVERGENT_EDGE_ENDPOINTS`
-: Both branches changed the same edge id to different endpoint pairs.
+:   Both branches changed the same edge id to different endpoint pairs.
 
 Conflicts are ordered by element kind, stable element id, field path, conflict kind and deterministic conflict id.
 
