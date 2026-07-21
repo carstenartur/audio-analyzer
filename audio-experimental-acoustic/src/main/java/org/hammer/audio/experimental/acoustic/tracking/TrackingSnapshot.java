@@ -3,6 +3,7 @@ package org.hammer.audio.experimental.acoustic.tracking;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import org.hammer.audio.acquisition.SynchronizationAssessment;
 import org.hammer.audio.experimental.acoustic.wingbeat.ClassificationResult;
 
 /**
@@ -16,6 +17,7 @@ import org.hammer.audio.experimental.acoustic.wingbeat.ClassificationResult;
  * @param processingNanos wall-clock processing time of the pipeline for this block
  * @param classificationResults optional per-track classification results, keyed by {@link
  *     TrackedSource#id()}; empty when no classifier has been applied
+ * @param synchronization timing quality used for localization in this frame
  */
 public record TrackingSnapshot(
     long sourceFrameIndex,
@@ -23,19 +25,39 @@ public record TrackingSnapshot(
     List<FrequencyCluster> clusters,
     List<TrackedSource> tracks,
     long processingNanos,
-    Map<Integer, ClassificationResult> classificationResults) {
+    Map<Integer, ClassificationResult> classificationResults,
+    SynchronizationAssessment synchronization) {
 
   /* Validate and defensively copy lists and maps. */
   public TrackingSnapshot {
     Objects.requireNonNull(clusters, "clusters");
     Objects.requireNonNull(tracks, "tracks");
     Objects.requireNonNull(classificationResults, "classificationResults");
+    Objects.requireNonNull(synchronization, "synchronization");
     if (processingNanos < 0L) {
       throw new IllegalArgumentException("processingNanos must be >= 0");
     }
     clusters = List.copyOf(clusters);
     tracks = List.copyOf(tracks);
     classificationResults = Map.copyOf(classificationResults);
+  }
+
+  /** Creates a shared-clock snapshot with explicit classification results. */
+  public TrackingSnapshot(
+      long sourceFrameIndex,
+      long sourceTimestampNanos,
+      List<FrequencyCluster> clusters,
+      List<TrackedSource> tracks,
+      long processingNanos,
+      Map<Integer, ClassificationResult> classificationResults) {
+    this(
+        sourceFrameIndex,
+        sourceTimestampNanos,
+        clusters,
+        tracks,
+        processingNanos,
+        classificationResults,
+        SynchronizationAssessment.nominalSharedClock());
   }
 
   /**
@@ -53,6 +75,13 @@ public record TrackingSnapshot(
       List<FrequencyCluster> clusters,
       List<TrackedSource> tracks,
       long processingNanos) {
-    this(sourceFrameIndex, sourceTimestampNanos, clusters, tracks, processingNanos, Map.of());
+    this(
+        sourceFrameIndex,
+        sourceTimestampNanos,
+        clusters,
+        tracks,
+        processingNanos,
+        Map.of(),
+        SynchronizationAssessment.nominalSharedClock());
   }
 }
