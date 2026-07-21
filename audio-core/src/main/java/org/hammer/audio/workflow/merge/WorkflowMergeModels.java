@@ -1,5 +1,7 @@
 package org.hammer.audio.workflow.merge;
 
+import java.io.Serial;
+import java.io.Serializable;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
@@ -56,7 +58,10 @@ public interface WorkflowMergeModels {
       String baseValue,
       String localValue,
       String remoteValue,
-      Set<ResolutionChoice> allowedChoices) {
+      Set<ResolutionChoice> allowedChoices)
+      implements Serializable {
+
+    @Serial private static final long serialVersionUID = 1L;
 
     /** Stable ordering used by APIs, tests and user interfaces. */
     public static final Comparator<Conflict> ORDERING =
@@ -67,11 +72,17 @@ public interface WorkflowMergeModels {
             .thenComparing(Conflict::conflictId);
 
     public Conflict {
-      requireText(conflictId, "conflictId");
+      if (conflictId == null || conflictId.isBlank()) {
+        throw new IllegalArgumentException("conflictId must not be blank");
+      }
       Objects.requireNonNull(kind, "kind");
       Objects.requireNonNull(elementKind, "elementKind");
-      requireText(elementId, "elementId");
-      requireText(fieldPath, "fieldPath");
+      if (elementId == null || elementId.isBlank()) {
+        throw new IllegalArgumentException("elementId must not be blank");
+      }
+      if (fieldPath == null || fieldPath.isBlank()) {
+        throw new IllegalArgumentException("fieldPath must not be blank");
+      }
       allowedChoices = Set.copyOf(Objects.requireNonNull(allowedChoices, "allowedChoices"));
       if (allowedChoices.isEmpty()) {
         throw new IllegalArgumentException("allowedChoices must not be empty");
@@ -88,7 +99,9 @@ public interface WorkflowMergeModels {
    */
   record Resolution(String conflictId, ResolutionChoice choice, String customValue) {
     public Resolution {
-      requireText(conflictId, "conflictId");
+      if (conflictId == null || conflictId.isBlank()) {
+        throw new IllegalArgumentException("conflictId must not be blank");
+      }
       Objects.requireNonNull(choice, "choice");
       if (choice == ResolutionChoice.CUSTOM) {
         Objects.requireNonNull(customValue, "customValue");
@@ -153,12 +166,6 @@ public interface WorkflowMergeModels {
     /** Returns whether the candidate may be serialized and committed. */
     public boolean readyToCommit() {
       return unresolvedConflicts.isEmpty() && validationViolations.isEmpty();
-    }
-  }
-
-  private static void requireText(String value, String name) {
-    if (value == null || value.isBlank()) {
-      throw new IllegalArgumentException(name + " must not be blank");
     }
   }
 }
