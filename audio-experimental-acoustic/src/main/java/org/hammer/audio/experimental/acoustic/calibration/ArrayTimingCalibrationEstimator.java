@@ -147,5 +147,11 @@ public final class ArrayTimingCalibrationEstimator {
     return denominator > 0.0 ? sum / denominator : 0.0;
   }
 
-  private record LagScore(int lag, double confidence) { }
+  private record LagScore(int lag, double confidence) {
+    private LagScore {
+      if (!Double.isFinite(confidence) || confidence < 0.0 || confidence > 1.0) {
+        throw new IllegalArgumentException("confidence must be finite and in [0,1]");
+      }
+    }
+  }
 }
