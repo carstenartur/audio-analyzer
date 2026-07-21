@@ -37,7 +37,8 @@ public record TdoaBenchmarkCase(
         || firstChannel >= array.channels()
         || secondChannel >= array.channels()
         || firstChannel == secondChannel) {
-      throw new IllegalArgumentException("benchmark channels must be distinct valid array channels");
+      throw new IllegalArgumentException(
+          "benchmark channels must be distinct valid array channels");
     }
     if (!Double.isFinite(expectedDelaySamples)) {
       throw new IllegalArgumentException("expectedDelaySamples must be finite");

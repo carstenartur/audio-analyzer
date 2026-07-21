@@ -30,8 +30,7 @@ public final class TdoaAlgorithmBenchmarkRunner {
 
   /** Evaluates every estimator over the same ordered benchmark cases. */
   public TdoaAlgorithmBenchmarkReport run(List<TdoaBenchmarkCase> cases) {
-    List<TdoaBenchmarkCase> requiredCases =
-        List.copyOf(Objects.requireNonNull(cases, "cases"));
+    List<TdoaBenchmarkCase> requiredCases = List.copyOf(Objects.requireNonNull(cases, "cases"));
     if (requiredCases.isEmpty()) {
       throw new IllegalArgumentException("cases must not be empty");
     }
@@ -63,16 +62,17 @@ public final class TdoaAlgorithmBenchmarkRunner {
         }
       } else {
         estimate =
-            named.estimator()
+            named
+                .estimator()
                 .estimate(
                     benchmarkCase.block(),
                     benchmarkCase.array(),
                     benchmarkCase.firstChannel(),
                     benchmarkCase.secondChannel());
       }
-      double estimatedDelaySamples = estimate.delaySeconds() * benchmarkCase.block().format().sampleRate();
-      double absoluteError =
-          Math.abs(estimatedDelaySamples - benchmarkCase.expectedDelaySamples());
+      double estimatedDelaySamples =
+          estimate.delaySeconds() * benchmarkCase.block().format().sampleRate();
+      double absoluteError = Math.abs(estimatedDelaySamples - benchmarkCase.expectedDelaySamples());
       totalAbsoluteError += absoluteError;
       maximumAbsoluteError = Math.max(maximumAbsoluteError, absoluteError);
       totalConfidence += estimate.confidence();

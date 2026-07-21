@@ -27,8 +27,7 @@ class SubSampleGccPhatTdoaEstimatorTest {
 
   @Test
   void resolvesKnownFractionalDelayBelowOneSixteenthSample() {
-    SubSampleGccPhatTdoaEstimator estimator =
-        new SubSampleGccPhatTdoaEstimator(SPEED_OF_SOUND);
+    SubSampleGccPhatTdoaEstimator estimator = new SubSampleGccPhatTdoaEstimator(SPEED_OF_SOUND);
     AudioBlock block = fractionalDelayBlock(2.4, 42L);
 
     DiagnosticTdoaEstimate result = estimator.estimateDetailed(block, array(), 0, 1);
@@ -54,8 +53,7 @@ class SubSampleGccPhatTdoaEstimatorTest {
                     new NamedTdoaEstimator(
                         "integer-gcc-phat", new GccPhatTdoaEstimator(SPEED_OF_SOUND)),
                     new NamedTdoaEstimator(
-                        "sub-sample-gcc-phat",
-                        new SubSampleGccPhatTdoaEstimator(SPEED_OF_SOUND))))
+                        "sub-sample-gcc-phat", new SubSampleGccPhatTdoaEstimator(SPEED_OF_SOUND))))
             .run(cases);
 
     double integerError = report.results().get(0).meanAbsoluteErrorSamples();
@@ -68,8 +66,7 @@ class SubSampleGccPhatTdoaEstimatorTest {
 
   @Test
   void marksPeriodicMultiPeakSignalAmbiguousAndReliableApiRejectsIt() {
-    SubSampleGccPhatTdoaEstimator estimator =
-        new SubSampleGccPhatTdoaEstimator(SPEED_OF_SOUND);
+    SubSampleGccPhatTdoaEstimator estimator = new SubSampleGccPhatTdoaEstimator(SPEED_OF_SOUND);
     AudioBlock block = periodicDelayBlock(2.4);
 
     DiagnosticTdoaEstimate detailed = estimator.estimateDetailed(block, array(), 0, 1);
@@ -105,10 +102,7 @@ class SubSampleGccPhatTdoaEstimatorTest {
 
   private static AudioBlock block(float[] first, float[] second) {
     return AudioBlock.wrap(
-        new AudioFormatDescriptor(SAMPLE_RATE, 2, 16),
-        new float[][] {first, second},
-        0L,
-        0L);
+        new AudioFormatDescriptor(SAMPLE_RATE, 2, 16), new float[][] {first, second}, 0L, 0L);
   }
 
   private static float[] fractionalDelay(float[] source, double delaySamples) {

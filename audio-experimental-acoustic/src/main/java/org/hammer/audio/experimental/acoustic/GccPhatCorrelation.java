@@ -33,8 +33,7 @@ final class GccPhatCorrelation {
     float[] crossReal = new float[fftSize];
     float[] crossImaginary = new float[fftSize];
     for (int bin = 0; bin < fftSize; bin++) {
-      double real =
-          secondReal[bin] * firstReal[bin] + secondImaginary[bin] * firstImaginary[bin];
+      double real = secondReal[bin] * firstReal[bin] + secondImaginary[bin] * firstImaginary[bin];
       double imaginary =
           secondImaginary[bin] * firstReal[bin] - secondReal[bin] * firstImaginary[bin];
       double magnitude = Math.hypot(real, imaginary);

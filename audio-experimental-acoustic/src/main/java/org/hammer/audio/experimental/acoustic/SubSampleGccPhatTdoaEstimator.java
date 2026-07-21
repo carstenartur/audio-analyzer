@@ -57,11 +57,9 @@ public final class SubSampleGccPhatTdoaEstimator implements DiagnosticTdoaEstima
     float[] firstSamples = block.channelView(firstChannel);
     float[] secondSamples = block.channelView(secondChannel);
     int frames = Math.min(firstSamples.length, secondSamples.length);
-    int maximumLagSamples =
-        Math.min(frames - 1, maximumPhysicalLag(block, first, second));
+    int maximumLagSamples = Math.min(frames - 1, maximumPhysicalLag(block, first, second));
     double[] correlation =
-        GccPhatCorrelation.correlate(
-            firstSamples, secondSamples, frames, interpolationFactor);
+        GccPhatCorrelation.correlate(firstSamples, secondSamples, frames, interpolationFactor);
     PeakSelection selection = selectPeak(correlation, maximumLagSamples);
     double delaySeconds = selection.interpolatedLagSamples() / block.format().sampleRate();
     TdoaEstimate estimate =
@@ -117,8 +115,7 @@ public final class SubSampleGccPhatTdoaEstimator implements DiagnosticTdoaEstima
             peakRatio,
             normalizedCurvature,
             ambiguous);
-    double curvatureConfidence =
-        Math.min(1.0, normalizedCurvature / minimumNormalizedCurvature);
+    double curvatureConfidence = Math.min(1.0, normalizedCurvature / minimumNormalizedCurvature);
     double confidence = Math.sqrt(diagnostics.separation() * curvatureConfidence);
     return new PeakSelection(interpolatedLagSamples, confidence, diagnostics);
   }

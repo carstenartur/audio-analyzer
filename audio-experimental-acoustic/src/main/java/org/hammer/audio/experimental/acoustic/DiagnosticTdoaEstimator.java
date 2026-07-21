@@ -19,8 +19,7 @@ public interface DiagnosticTdoaEstimator extends TdoaEstimator {
   /** Returns an estimate only when its configured ambiguity policy accepts the selected peak. */
   default TdoaEstimate estimateReliable(
       AudioBlock block, MicrophoneArray array, int firstChannel, int secondChannel) {
-    DiagnosticTdoaEstimate detailed =
-        estimateDetailed(block, array, firstChannel, secondChannel);
+    DiagnosticTdoaEstimate detailed = estimateDetailed(block, array, firstChannel, secondChannel);
     if (detailed.diagnostics().ambiguous()) {
       throw new AmbiguousTdoaEstimateException(
           "Ambiguous TDOA peak: ratio="

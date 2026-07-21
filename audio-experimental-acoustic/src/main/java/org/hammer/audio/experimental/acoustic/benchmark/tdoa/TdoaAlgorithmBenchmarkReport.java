@@ -28,7 +28,8 @@ public record TdoaAlgorithmBenchmarkReport(List<TdoaAlgorithmBenchmarkResult> re
     StringBuilder output =
         new StringBuilder(
             "# TDOA Algorithm Benchmark\n\n"
-                + "| Algorithm | Cases | Mean abs. error (samples) | Max abs. error (samples) | Mean confidence | Ambiguous |\n"
+                + "| Algorithm | Cases | Mean abs. error (samples) | Max abs. error (samples) |"
+                + " Mean confidence | Ambiguous |\n"
                 + "|---|---:|---:|---:|---:|---:|\n");
     for (TdoaAlgorithmBenchmarkResult result : results) {
       output.append(
