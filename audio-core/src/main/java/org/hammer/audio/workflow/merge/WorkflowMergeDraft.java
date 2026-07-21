@@ -2,11 +2,12 @@ package org.hammer.audio.workflow.merge;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.TreeMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.UnaryOperator;
 import org.hammer.audio.workflow.Edge;
 import org.hammer.audio.workflow.Metadata;
@@ -18,9 +19,9 @@ import org.hammer.audio.workflow.Workflow;
 final class WorkflowMergeDraft {
 
   private final String workflowId;
-  private final Map<String, Node> nodesById = new TreeMap<>();
-  private final Map<String, Edge> edgesById = new TreeMap<>();
-  private final Map<String, String> workflowMetadata = new TreeMap<>();
+  private final Map<String, Node> nodesById = new ConcurrentHashMap<>();
+  private final Map<String, Edge> edgesById = new ConcurrentHashMap<>();
+  private final Map<String, String> workflowMetadata = new ConcurrentHashMap<>();
   private String workflowName;
 
   private WorkflowMergeDraft(Workflow base) {
@@ -43,8 +44,8 @@ final class WorkflowMergeDraft {
     return new Workflow(
         workflowId,
         workflowName,
-        List.copyOf(nodesById.values()),
-        List.copyOf(edgesById.values()),
+        nodesById.values().stream().sorted(Comparator.comparing(Node::id)).toList(),
+        edgesById.values().stream().sorted(Comparator.comparing(Edge::id)).toList(),
         new Metadata(workflowMetadata));
   }
 
@@ -121,7 +122,7 @@ final class WorkflowMergeDraft {
     updateNode(
         nodeId,
         node -> {
-          Map<String, String> entries = new TreeMap<>(node.metadata().entries());
+          Map<String, String> entries = new ConcurrentHashMap<>(node.metadata().entries());
           setMetadata(entries, key, value);
           return new Node(
               node.id(),
@@ -160,7 +161,7 @@ final class WorkflowMergeDraft {
     updateEdge(
         edgeId,
         edge -> {
-          Map<String, String> entries = new TreeMap<>(edge.metadata().entries());
+          Map<String, String> entries = new ConcurrentHashMap<>(edge.metadata().entries());
           setMetadata(entries, key, value);
           return new Edge(
               edge.id(),
@@ -224,7 +225,7 @@ final class WorkflowMergeDraft {
         connected.add(edge);
       }
     }
-    connected.sort(java.util.Comparator.comparing(Edge::id));
+    connected.sort(Comparator.comparing(Edge::id));
     return List.copyOf(connected);
   }
 
