@@ -19,7 +19,15 @@ public sealed interface WorkflowChange
         WorkflowChange.NodeRemoved,
         WorkflowChange.EdgeAdded,
         WorkflowChange.EdgeRemoved,
-        WorkflowChange.ParameterChanged {
+        WorkflowChange.ParameterChanged,
+        WorkflowChange.FieldChanged {
+
+  /** Semantic workflow element owning a field change. */
+  enum ElementKind {
+    WORKFLOW,
+    NODE,
+    EDGE
+  }
 
   /**
    * A node that is present in the <em>after</em> snapshot but absent in the <em>before</em>
@@ -83,9 +91,49 @@ public sealed interface WorkflowChange
   record ParameterChanged(String targetId, String propertyKey, String oldValue, String newValue)
       implements WorkflowChange {
     public ParameterChanged {
-      Objects.requireNonNull(targetId, "targetId");
-      Objects.requireNonNull(propertyKey, "propertyKey");
-      // oldValue and newValue are intentionally nullable (null = absent)
+      requireText(targetId, "targetId");
+      requireText(propertyKey, "propertyKey");
+      requireChanged(oldValue, newValue);
+    }
+  }
+
+  /**
+   * A non-legacy semantic field whose canonical value changed.
+   *
+   * <p>This variant extends the original metadata-focused diff without replacing the established
+   * {@link ParameterChanged} contract. It covers workflow name/metadata, node type/label/ports and
+   * edge endpoints.
+   *
+   * @param elementKind kind of workflow element owning the field
+   * @param targetId stable workflow, node or edge identifier
+   * @param fieldPath stable semantic field path
+   * @param oldValue canonical previous value, or {@code null} when added
+   * @param newValue canonical next value, or {@code null} when removed
+   */
+  record FieldChanged(
+      ElementKind elementKind,
+      String targetId,
+      String fieldPath,
+      String oldValue,
+      String newValue)
+      implements WorkflowChange {
+    public FieldChanged {
+      Objects.requireNonNull(elementKind, "elementKind");
+      requireText(targetId, "targetId");
+      requireText(fieldPath, "fieldPath");
+      requireChanged(oldValue, newValue);
+    }
+  }
+
+  private static void requireText(String value, String name) {
+    if (value == null || value.isBlank()) {
+      throw new IllegalArgumentException(name + " must not be blank");
+    }
+  }
+
+  private static void requireChanged(String oldValue, String newValue) {
+    if (Objects.equals(oldValue, newValue)) {
+      throw new IllegalArgumentException("A workflow change requires different values");
     }
   }
 }
