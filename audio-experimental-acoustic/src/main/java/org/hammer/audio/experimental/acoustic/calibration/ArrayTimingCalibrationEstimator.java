@@ -25,12 +25,10 @@ public final class ArrayTimingCalibrationEstimator {
     if (!Double.isFinite(minimumConfidence) || minimumConfidence < 0.0 || minimumConfidence > 1.0) {
       throw new IllegalArgumentException("minimumConfidence must be in [0,1]");
     }
-    if (!(maximumAbsoluteDriftPpm > 0.0) || !Double.isFinite(maximumAbsoluteDriftPpm)) {
-      throw new IllegalArgumentException("maximumAbsoluteDriftPpm must be finite and > 0");
-    }
     this.maximumLagSamples = maximumLagSamples;
     this.minimumConfidence = minimumConfidence;
-    this.maximumAbsoluteDriftPpm = maximumAbsoluteDriftPpm;
+    this.maximumAbsoluteDriftPpm =
+        requirePositiveFinite(maximumAbsoluteDriftPpm, "maximumAbsoluteDriftPpm");
   }
 
   /** Estimates channel delays for one common calibration event. */
@@ -145,6 +143,13 @@ public final class ArrayTimingCalibrationEstimator {
     }
     double denominator = Math.sqrt(firstEnergy * secondEnergy);
     return denominator > 0.0 ? sum / denominator : 0.0;
+  }
+
+  private static double requirePositiveFinite(double value, String name) {
+    if (Double.isFinite(value) && value > 0.0) {
+      return value;
+    }
+    throw new IllegalArgumentException(name + " must be finite and > 0");
   }
 
   private record LagScore(int lag, double confidence) {

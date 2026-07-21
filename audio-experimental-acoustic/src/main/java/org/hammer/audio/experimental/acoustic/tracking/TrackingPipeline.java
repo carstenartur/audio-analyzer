@@ -283,7 +283,7 @@ public final class TrackingPipeline {
       MultiSensorDopplerEstimator dopplerEstimator,
       VelocityReconstructor velocityReconstructor) {
 
-    /** Validate all localization stages. */
+    // Validate all localization stages.
     public LocalizationComponents {
       Objects.requireNonNull(tdoaEstimator, "tdoaEstimator");
       Objects.requireNonNull(beamformer, "beamformer");

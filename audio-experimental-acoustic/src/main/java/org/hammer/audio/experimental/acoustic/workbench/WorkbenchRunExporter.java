@@ -286,8 +286,7 @@ public final class WorkbenchRunExporter {
               String.format(Locale.ROOT, "%.6f", snap.synchronization().estimatedErrorSamples()))
           .append(",\"calibrationCurrent\":")
           .append(snap.synchronization().calibrationCurrent())
-          .append('}')
-          .append(",\"budgetExceeded\":")
+          .append("},\"budgetExceeded\":")
           .append(formatBudgetExceededJson(result, snap))
           .append(",\"clusters\":[");
       appendClustersJson(sb, snap.clusters());

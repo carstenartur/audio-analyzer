@@ -27,8 +27,7 @@ public final class CalibratedTdoaEstimator implements SynchronizationAwareTdoaEs
     this.delegate = Objects.requireNonNull(delegate, "delegate");
     this.calibration = Objects.requireNonNull(calibration, "calibration");
     this.clock = Objects.requireNonNull(clock, "clock");
-    this.maximumErrorSamples =
-        requirePositiveFinite(maximumErrorSamples, "maximumErrorSamples");
+    this.maximumErrorSamples = requirePositiveFinite(maximumErrorSamples, "maximumErrorSamples");
     this.speedOfSoundMetersPerSecond =
         requirePositiveFinite(speedOfSoundMetersPerSecond, "speedOfSoundMetersPerSecond");
   }

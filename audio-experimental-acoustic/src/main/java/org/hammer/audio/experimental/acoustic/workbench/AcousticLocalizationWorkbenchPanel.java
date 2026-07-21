@@ -1155,22 +1155,22 @@ public final class AcousticLocalizationWorkbenchPanel extends JPanel {
     private String formatBlockLine(TrackingSnapshot snapshot, int idx) {
       StringBuilder sb = new StringBuilder();
       sb.append(
-          String.format(
-              Locale.ROOT,
-              "Block %4d  frame=%6d  time=%6.1f ms  clusters=%d  tracks=%d  proc=%.1f µs",
-              idx,
-              snapshot.sourceFrameIndex(),
-              snapshot.sourceTimestampNanos() / 1_000_000.0,
-              snapshot.clusters().size(),
-              snapshot.tracks().size(),
-              snapshot.processingNanos() / 1_000.0));
-      sb.append(
-          String.format(
-              Locale.ROOT,
-              "  sync=%s/%s err=%.4f samples",
-              snapshot.synchronization().mode(),
-              snapshot.synchronization().status(),
-              snapshot.synchronization().estimatedErrorSamples()));
+              String.format(
+                  Locale.ROOT,
+                  "Block %4d  frame=%6d  time=%6.1f ms  clusters=%d  tracks=%d  proc=%.1f µs",
+                  idx,
+                  snapshot.sourceFrameIndex(),
+                  snapshot.sourceTimestampNanos() / 1_000_000.0,
+                  snapshot.clusters().size(),
+                  snapshot.tracks().size(),
+                  snapshot.processingNanos() / 1_000.0))
+          .append(
+              String.format(
+                  Locale.ROOT,
+                  "  sync=%s/%s err=%.4f samples",
+                  snapshot.synchronization().mode(),
+                  snapshot.synchronization().status(),
+                  snapshot.synchronization().estimatedErrorSamples()));
       if (snapshot.processingNanos() > budgetNanos) {
         sb.append("  ⚠ OVER BUDGET");
       }

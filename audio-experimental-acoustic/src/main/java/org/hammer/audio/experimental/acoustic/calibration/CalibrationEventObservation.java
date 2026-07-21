@@ -14,7 +14,7 @@ import java.util.Objects;
 public record CalibrationEventObservation(
     long frameIndex, int referenceChannel, List<Double> offsetsSamples, List<Double> confidences) {
 
-  /** Creates a complete immutable event observation. */
+  // Validate and defensively copy one complete event observation.
   public CalibrationEventObservation {
     if (frameIndex < 0) {
       throw new IllegalArgumentException("frameIndex must be >= 0");

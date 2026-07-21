@@ -1,12 +1,28 @@
 name: Workbench Screenshots
 
 on:
+  workflow_dispatch:
   pull_request:
     paths:
       - '.github/workflows/workbench-screenshots.yml'
+      - 'pom.xml'
+      - 'audio-web-editor/**'
+      - 'audio-app/**'
+      - 'workbench-screenshot-tests/**'
+      - 'docs/assets/screenshots/workbench/**'
+  push:
+    branches:
+      - master
+    paths:
+      - '.github/workflows/workbench-screenshots.yml'
+      - 'pom.xml'
+      - 'audio-web-editor/**'
+      - 'audio-app/**'
+      - 'workbench-screenshot-tests/**'
+      - 'docs/assets/screenshots/workbench/**'
 
 permissions:
-  contents: write
+  contents: read
   packages: read
 
 concurrency:
@@ -14,145 +30,58 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  clean-calibration-pmd:
-    if: github.head_ref == 'feature/136-microphone-array-calibration' && github.actor != 'github-actions[bot]'
+  verify-screenshots:
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 35
     env:
+      JAVA_VERSION: '21'
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v7
-        with:
-          ref: feature/136-microphone-array-calibration
-          fetch-depth: 0
 
-      - uses: actions/setup-java@v5
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: '21'
+          java-version: ${{ env.JAVA_VERSION }}
           cache: maven
           server-id: github
           server-username: GITHUB_ACTOR
           server-password: GITHUB_TOKEN
 
-      - name: Apply localized PMD cleanup
-        run: |
-          python3 <<'PY'
-          from pathlib import Path
+      - name: Build packaged application and screenshot-test reactor
+        run: >-
+          mvn -B -Pscreenshot-tests -DskipTests install
+          -pl workbench-screenshot-tests -am
 
-          def replace_once(path_name: str, old: str, new: str, label: str) -> None:
-              path = Path(path_name)
-              text = path.read_text(encoding='utf-8')
-              count = text.count(old)
-              if count != 1:
-                  raise SystemExit(f'{label}: expected one anchor, found {count}')
-              path.write_text(text.replace(old, new, 1), encoding='utf-8')
+      - name: Install Playwright Chromium
+        run: >-
+          mvn -B -Pscreenshot-tests -pl workbench-screenshot-tests
+          org.codehaus.mojo:exec-maven-plugin:3.5.0:java
+          -Dexec.mainClass=com.microsoft.playwright.CLI
+          -Dexec.classpathScope=test
+          -Dexec.args="install --with-deps chromium"
 
-          replace_once(
-              'audio-experimental-acoustic/src/main/java/org/hammer/audio/experimental/acoustic/calibration/ArrayTimingCalibrationEstimator.java',
-              '    if (!(maximumAbsoluteDriftPpm > 0.0) || !Double.isFinite(maximumAbsoluteDriftPpm)) {\n'
-              '      throw new IllegalArgumentException("maximumAbsoluteDriftPpm must be finite and > 0");\n'
-              '    }\n'
-              '    this.maximumLagSamples = maximumLagSamples;\n'
-              '    this.minimumConfidence = minimumConfidence;\n'
-              '    this.maximumAbsoluteDriftPpm = maximumAbsoluteDriftPpm;',
-              '    this.maximumLagSamples = maximumLagSamples;\n'
-              '    this.minimumConfidence = minimumConfidence;\n'
-              '    this.maximumAbsoluteDriftPpm =\n'
-              '        requirePositiveFinite(maximumAbsoluteDriftPpm, "maximumAbsoluteDriftPpm");',
-              'array timing validation',
-          )
-          replace_once(
-              'audio-experimental-acoustic/src/main/java/org/hammer/audio/experimental/acoustic/calibration/ArrayTimingCalibrationEstimator.java',
-              '  private record LagScore(int lag, double confidence) {',
-              '  private static double requirePositiveFinite(double value, String name) {\n'
-              '    if (Double.isFinite(value) && value > 0.0) {\n'
-              '      return value;\n'
-              '    }\n'
-              '    throw new IllegalArgumentException(name + " must be finite and > 0");\n'
-              '  }\n\n'
-              '  private record LagScore(int lag, double confidence) {',
-              'array timing helper',
-          )
-          replace_once(
-              'audio-experimental-acoustic/src/main/java/org/hammer/audio/experimental/acoustic/calibration/CalibrationEventObservation.java',
-              '  /** Creates a complete immutable event observation. */\n'
-              '  public CalibrationEventObservation {',
-              '  // Validate and defensively copy one complete event observation.\n'
-              '  public CalibrationEventObservation {',
-              'calibration event compact constructor comment',
-          )
-          replace_once(
-              'audio-experimental-acoustic/src/main/java/org/hammer/audio/experimental/acoustic/tracking/TrackingPipeline.java',
-              '    /** Validate all localization stages. */\n'
-              '    public LocalizationComponents {',
-              '    // Validate all localization stages.\n'
-              '    public LocalizationComponents {',
-              'localization components compact constructor comment',
-          )
-          replace_once(
-              'audio-experimental-acoustic/src/main/java/org/hammer/audio/experimental/acoustic/workbench/AcousticLocalizationWorkbenchPanel.java',
-              '      sb.append(\n'
-              '          String.format(\n'
-              '              Locale.ROOT,\n'
-              '              "Block %4d  frame=%6d  time=%6.1f ms  clusters=%d  tracks=%d  proc=%.1f µs",\n'
-              '              idx,\n'
-              '              snapshot.sourceFrameIndex(),\n'
-              '              snapshot.sourceTimestampNanos() / 1_000_000.0,\n'
-              '              snapshot.clusters().size(),\n'
-              '              snapshot.tracks().size(),\n'
-              '              snapshot.processingNanos() / 1_000.0));\n'
-              '      sb.append(\n'
-              '          String.format(',
-              '      sb.append(\n'
-              '              String.format(\n'
-              '                  Locale.ROOT,\n'
-              '                  "Block %4d  frame=%6d  time=%6.1f ms  clusters=%d  tracks=%d  proc=%.1f µs",\n'
-              '                  idx,\n'
-              '                  snapshot.sourceFrameIndex(),\n'
-              '                  snapshot.sourceTimestampNanos() / 1_000_000.0,\n'
-              '                  snapshot.clusters().size(),\n'
-              '                  snapshot.tracks().size(),\n'
-              '                  snapshot.processingNanos() / 1_000.0))\n'
-              '          .append(\n'
-              '              String.format(',
-              'workbench chained appends',
-          )
-          replace_once(
-              'audio-experimental-acoustic/src/main/java/org/hammer/audio/experimental/acoustic/workbench/WorkbenchRunExporter.java',
-              '          .append(snap.synchronization().calibrationCurrent())\n'
-              '          .append(\'}\')\n'
-              '          .append(",\\"budgetExceeded\\":")',
-              '          .append(snap.synchronization().calibrationCurrent())\n'
-              '          .append("},\\"budgetExceeded\\":")',
-              'exporter literal appends',
-          )
-          replace_once(
-              'audio-experimental-acoustic/src/main/java/org/hammer/audio/experimental/acoustic/workbench/WorkbenchRunResult.java',
-              '    EnumSet<SynchronizationMode> modes = EnumSet.noneOf(SynchronizationMode.class);',
-              '    Set<SynchronizationMode> modes = EnumSet.noneOf(SynchronizationMode.class);',
-              'workbench result loose coupling',
-          )
-          PY
+      # This gate is read-only: it reproduces documentation images but never rewrites baselines.
+      - name: Reproduce and compare committed screenshots
+        run: >-
+          mvn -B -Pscreenshot-tests -pl workbench-screenshot-tests
+          -DupdateScreenshots=false verify
 
-          mvn -B -pl audio-experimental-acoustic -am spotless:apply
-          mvn -B -pl audio-experimental-acoustic -am verify
+      - name: Upload screenshot test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: workbench-screenshot-results
+          path: workbench-screenshot-tests/target/failsafe-reports/
+          if-no-files-found: warn
+          retention-days: 30
 
-      - name: Validate controlled PMD scope
-        run: |
-          allowed='^(audio-experimental-acoustic/src/|\.github/workflows/workbench-screenshots\.yml$)'
-          unexpected=$(git diff --name-only | grep -Ev "$allowed" || true)
-          if [ -n "$unexpected" ]; then
-            printf 'Unexpected PMD cleanup changes:\n%s\n' "$unexpected"
-            exit 1
-          fi
-
-      - name: Commit cleanup and restore read-only workflow
-        run: |
-          git checkout origin/master -- .github/workflows/workbench-screenshots.yml
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add audio-experimental-acoustic/src
-          git add .github/workflows/workbench-screenshots.yml
-          git commit -m "Resolve microphone-array calibration PMD findings (#136)"
-          git push origin HEAD:feature/136-microphone-array-calibration
+      - name: Upload screenshot comparison failures
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: workbench-screenshot-failures
+          path: workbench-screenshot-tests/target/screenshot-failures/
+          if-no-files-found: warn
+          retention-days: 30

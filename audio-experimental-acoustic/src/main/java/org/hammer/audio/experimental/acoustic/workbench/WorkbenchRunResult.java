@@ -108,7 +108,7 @@ public record WorkbenchRunResult(
 
   /** Returns every synchronization model used during the run. */
   public Set<SynchronizationMode> synchronizationModes() {
-    EnumSet<SynchronizationMode> modes = EnumSet.noneOf(SynchronizationMode.class);
+    Set<SynchronizationMode> modes = EnumSet.noneOf(SynchronizationMode.class);
     snapshots.stream().map(snapshot -> snapshot.synchronization().mode()).forEach(modes::add);
     return Set.copyOf(modes);
   }
