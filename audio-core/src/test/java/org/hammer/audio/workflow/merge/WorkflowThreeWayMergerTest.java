@@ -73,7 +73,9 @@ class WorkflowThreeWayMergerTest {
     assertEquals("node.generator", conflict.elementId());
     assertEquals("label", conflict.fieldPath());
     assertTrue(conflict.allowedChoices().contains(ResolutionChoice.CUSTOM));
-    assertEquals("Synthetic signal generator", node(preview.autoMergedWorkflow(), conflict.elementId()).label());
+    assertEquals(
+        "Synthetic Signal Generator",
+        node(preview.autoMergedWorkflow(), conflict.elementId()).label());
     assertTrue(resolved.readyToCommit());
     assertEquals("Merged signal", node(resolved.workflow(), conflict.elementId()).label());
   }
