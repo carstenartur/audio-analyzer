@@ -13,7 +13,7 @@ public final class SubSampleGccPhatTdoaEstimator implements DiagnosticTdoaEstima
   private static final double EPSILON = 1.0e-12;
   private static final int DEFAULT_INTERPOLATION_FACTOR = 16;
   private static final double DEFAULT_MINIMUM_PEAK_RATIO = 1.5;
-  private static final double DEFAULT_MINIMUM_NORMALIZED_CURVATURE = 0.1;
+  private static final double DEFAULT_MINIMUM_NORMALIZED_CURVATURE = 1.5;
 
   private final double speedOfSoundMetersPerSecond;
   private final int interpolationFactor;
@@ -44,7 +44,7 @@ public final class SubSampleGccPhatTdoaEstimator implements DiagnosticTdoaEstima
     this.interpolationFactor = interpolationFactor;
     this.minimumPeakRatio = requireAtLeastOne(minimumPeakRatio, "minimumPeakRatio");
     this.minimumNormalizedCurvature =
-        requireUnitInterval(minimumNormalizedCurvature, "minimumNormalizedCurvature");
+        requirePositiveFinite(minimumNormalizedCurvature, "minimumNormalizedCurvature");
   }
 
   @Override
@@ -101,14 +101,12 @@ public final class SubSampleGccPhatTdoaEstimator implements DiagnosticTdoaEstima
     double interpolatedLagSamples = (bestLagUnits + fractionalUnit) / interpolationFactor;
     double peakRatio = primaryPeak > 0.0 ? primaryPeak / Math.max(secondaryPeak, EPSILON) : 0.0;
     double normalizedCurvature =
-        Math.min(
-            1.0,
-            Math.max(
-                0.0,
-                (2.0 * primaryPeak - left - right)
-                    / Math.max(primaryPeak, EPSILON)
-                    * interpolationFactor
-                    * interpolationFactor));
+        Math.max(
+            0.0,
+            (2.0 * primaryPeak - left - right)
+                / Math.max(primaryPeak, EPSILON)
+                * interpolationFactor
+                * interpolationFactor);
     boolean ambiguous =
         peakRatio < minimumPeakRatio || normalizedCurvature < minimumNormalizedCurvature;
     TdoaPeakDiagnostics diagnostics =
@@ -119,7 +117,9 @@ public final class SubSampleGccPhatTdoaEstimator implements DiagnosticTdoaEstima
             peakRatio,
             normalizedCurvature,
             ambiguous);
-    double confidence = Math.sqrt(diagnostics.separation() * normalizedCurvature);
+    double curvatureConfidence =
+        Math.min(1.0, normalizedCurvature / minimumNormalizedCurvature);
+    double confidence = Math.sqrt(diagnostics.separation() * curvatureConfidence);
     return new PeakSelection(interpolatedLagSamples, confidence, diagnostics);
   }
 
@@ -156,13 +156,6 @@ public final class SubSampleGccPhatTdoaEstimator implements DiagnosticTdoaEstima
       return value;
     }
     throw new IllegalArgumentException(name + " must be finite and >= 1");
-  }
-
-  private static double requireUnitInterval(double value, String name) {
-    if (Double.isFinite(value) && value >= 0.0 && value <= 1.0) {
-      return value;
-    }
-    throw new IllegalArgumentException(name + " must be finite and in [0,1]");
   }
 
   private record PeakSelection(
