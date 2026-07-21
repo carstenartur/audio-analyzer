@@ -3,12 +3,16 @@ package org.hammer.audio.experimental.acoustic.tracking;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import org.hammer.audio.acquisition.MicrophoneArray;
+import org.hammer.audio.acquisition.SynchronizationAssessment;
 import org.hammer.audio.core.AudioBlock;
 import org.hammer.audio.experimental.acoustic.DelayAndSumBeamformer;
+import org.hammer.audio.experimental.acoustic.SynchronizationAwareTdoaEstimator;
 import org.hammer.audio.experimental.acoustic.TdoaEstimator;
+import org.hammer.audio.experimental.acoustic.UnusableSynchronizationException;
 import org.hammer.audio.experimental.acoustic.doppler.FrequencyTrack;
 import org.hammer.audio.experimental.acoustic.doppler.MultiSensorDopplerEstimator;
 import org.hammer.audio.experimental.acoustic.doppler.RadialVelocityEstimate;
@@ -116,6 +120,10 @@ public final class TrackingPipeline {
     if (block.channels() != array.channels()) {
       throw new IllegalArgumentException("block channel count must match microphone array");
     }
+    SynchronizationAssessment synchronization = synchronizationAssessment(block, array);
+    if (!synchronization.usable()) {
+      throw new UnusableSynchronizationException(String.join(" ", synchronization.diagnostics()));
+    }
     long startNanos = System.nanoTime();
     List<List<DetectedPeak>> perChannel = peakDetector.detectAllChannels(block);
     List<FrequencyCluster> clusters = clusterer.clusterPerChannel(perChannel);
@@ -172,7 +180,13 @@ public final class TrackingPipeline {
     List<TrackedSource> tracks = tracker.update(block.frameIndex(), timestampSeconds, observations);
     long processingNanos = System.nanoTime() - startNanos;
     return new TrackingSnapshot(
-        block.frameIndex(), block.timestampNanos(), clusters, tracks, processingNanos);
+        block.frameIndex(),
+        block.timestampNanos(),
+        clusters,
+        tracks,
+        processingNanos,
+        Map.of(),
+        synchronization);
   }
 
   /** Snapshot the underlying tracker without consuming a new block. */
@@ -196,6 +210,14 @@ public final class TrackingPipeline {
   /** Frame schedule the pipeline was configured against, or {@code null} when unspecified. */
   public FrameSchedule schedule() {
     return schedule;
+  }
+
+  private SynchronizationAssessment synchronizationAssessment(
+      AudioBlock block, MicrophoneArray array) {
+    if (tdoaEstimator instanceof SynchronizationAwareTdoaEstimator aware) {
+      return aware.synchronizationAssessment(block, array);
+    }
+    return SynchronizationAssessment.nominalSharedClock();
   }
 
   private PipelineFrequencyTrack frequencyTrackFor(
