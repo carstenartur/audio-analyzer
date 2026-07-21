@@ -91,9 +91,15 @@ public sealed interface WorkflowChange
   record ParameterChanged(String targetId, String propertyKey, String oldValue, String newValue)
       implements WorkflowChange {
     public ParameterChanged {
-      requireText(targetId, "targetId");
-      requireText(propertyKey, "propertyKey");
-      requireChanged(oldValue, newValue);
+      if (targetId == null || targetId.isBlank()) {
+        throw new IllegalArgumentException("targetId must not be blank");
+      }
+      if (propertyKey == null || propertyKey.isBlank()) {
+        throw new IllegalArgumentException("propertyKey must not be blank");
+      }
+      if (Objects.equals(oldValue, newValue)) {
+        throw new IllegalArgumentException("A workflow change requires different values");
+      }
     }
   }
 
@@ -115,21 +121,15 @@ public sealed interface WorkflowChange
       implements WorkflowChange {
     public FieldChanged {
       Objects.requireNonNull(elementKind, "elementKind");
-      requireText(targetId, "targetId");
-      requireText(fieldPath, "fieldPath");
-      requireChanged(oldValue, newValue);
-    }
-  }
-
-  private static void requireText(String value, String name) {
-    if (value == null || value.isBlank()) {
-      throw new IllegalArgumentException(name + " must not be blank");
-    }
-  }
-
-  private static void requireChanged(String oldValue, String newValue) {
-    if (Objects.equals(oldValue, newValue)) {
-      throw new IllegalArgumentException("A workflow change requires different values");
+      if (targetId == null || targetId.isBlank()) {
+        throw new IllegalArgumentException("targetId must not be blank");
+      }
+      if (fieldPath == null || fieldPath.isBlank()) {
+        throw new IllegalArgumentException("fieldPath must not be blank");
+      }
+      if (Objects.equals(oldValue, newValue)) {
+        throw new IllegalArgumentException("A workflow change requires different values");
+      }
     }
   }
 }
