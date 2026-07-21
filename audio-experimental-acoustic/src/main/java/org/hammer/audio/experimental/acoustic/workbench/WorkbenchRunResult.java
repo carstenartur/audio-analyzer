@@ -1,7 +1,12 @@
 package org.hammer.audio.experimental.acoustic.workbench;
 
+import java.util.Comparator;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
+import org.hammer.audio.acquisition.SynchronizationMode;
+import org.hammer.audio.acquisition.SynchronizationStatus;
 import org.hammer.audio.experimental.acoustic.benchmark.BenchmarkReport;
 import org.hammer.audio.experimental.acoustic.simulation.SimulationScenarios.SimulationScenario;
 import org.hammer.audio.experimental.acoustic.tracking.FrameSchedule;
@@ -65,12 +70,12 @@ public record WorkbenchRunResult(
 
   /** Whether at least one tracked source appeared in any frame. */
   public boolean anyTracked() {
-    return snapshots.stream().anyMatch(s -> !s.tracks().isEmpty());
+    return snapshots.stream().anyMatch(snapshot -> !snapshot.tracks().isEmpty());
   }
 
   /** Maximum number of tracked sources observed in any single frame. */
   public int maxTracksInAnyFrame() {
-    return snapshots.stream().mapToInt(s -> s.tracks().size()).max().orElse(0);
+    return snapshots.stream().mapToInt(snapshot -> snapshot.tracks().size()).max().orElse(0);
   }
 
   /**
@@ -92,40 +97,50 @@ public record WorkbenchRunResult(
     return snapshots.stream().mapToLong(TrackingSnapshot::processingNanos).max().orElse(0L);
   }
 
-  /**
-   * Total number of distinct track IDs observed across all frames (may include transient tracks).
-   */
+  /** Total number of distinct track IDs observed across all frames. */
   public long distinctTrackCount() {
     return snapshots.stream()
-        .flatMap(s -> s.tracks().stream())
+        .flatMap(snapshot -> snapshot.tracks().stream())
         .mapToInt(TrackedSource::id)
         .distinct()
         .count();
   }
 
+  /** Returns every synchronization model used during the run. */
+  public Set<SynchronizationMode> synchronizationModes() {
+    EnumSet<SynchronizationMode> modes = EnumSet.noneOf(SynchronizationMode.class);
+    snapshots.stream().map(snapshot -> snapshot.synchronization().mode()).forEach(modes::add);
+    return Set.copyOf(modes);
+  }
+
+  /** Returns the most severe synchronization status observed during the run. */
+  public SynchronizationStatus worstSynchronizationStatus() {
+    return snapshots.stream()
+        .map(snapshot -> snapshot.synchronization().status())
+        .max(Comparator.comparingInt(Enum::ordinal))
+        .orElse(SynchronizationStatus.TRUSTED);
+  }
+
+  /** Whether any frame carries degraded or rejected synchronization evidence. */
+  public boolean hasSynchronizationWarning() {
+    return worstSynchronizationStatus() != SynchronizationStatus.TRUSTED;
+  }
+
   /**
    * Number of frames whose pipeline processing time exceeded the configured {@link FrameSchedule}
    * budget. Returns {@code 0} when no frame schedule is available.
-   *
-   * <p>A frame is considered over-budget when {@code snapshot.processingNanos() >
-   * frameSchedule.maxProcessingNanos()}.
-   *
-   * @return count of over-budget frames, or 0 if no schedule was recorded
    */
   public long overBudgetFrameCount() {
     if (frameSchedule == null) {
       return 0L;
     }
     long budget = frameSchedule.maxProcessingNanos();
-    return snapshots.stream().filter(s -> s.processingNanos() > budget).count();
+    return snapshots.stream().filter(snapshot -> snapshot.processingNanos() > budget).count();
   }
 
   /**
    * Whether the given snapshot's processing time exceeded the configured {@link FrameSchedule}
    * budget. Always returns {@code false} when no frame schedule is available.
-   *
-   * @param snapshot the snapshot to check; must not be {@code null}
-   * @return {@code true} if {@code snapshot.processingNanos()} exceeds the per-block budget
    */
   public boolean isFrameOverBudget(TrackingSnapshot snapshot) {
     Objects.requireNonNull(snapshot, "snapshot");
