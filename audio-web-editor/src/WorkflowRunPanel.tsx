@@ -31,6 +31,8 @@ import {
 
 const POLL_INTERVAL_MILLIS = 750;
 
+type HistoryLoadState = 'idle' | 'loading' | 'ready' | 'unavailable';
+
 interface CurrentWorkflowRunSource {
   sessionId: string;
   revision: number;
@@ -71,6 +73,19 @@ function sourceLabel(run: WorkflowRunSnapshot): string {
   return `commit ${run.source.commitId ?? 'unknown'}`;
 }
 
+function historyPlaceholder(state: HistoryLoadState): string {
+  switch (state) {
+    case 'idle':
+      return 'Refresh to load commits';
+    case 'loading':
+      return 'Loading commits…';
+    case 'unavailable':
+      return 'Stored commit history unavailable';
+    case 'ready':
+      return 'No commits on this branch';
+  }
+}
+
 function downloadResult(runId: string, result: unknown): void {
   const blob = new Blob([`${JSON.stringify(result, null, 2)}\n`], {
     type: 'application/json;charset=utf-8',
@@ -92,26 +107,34 @@ export function WorkflowRunPanel({ currentSource }: WorkflowRunPanelProps) {
   const [branch, setBranch] = useState('main');
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [selectedCommitId, setSelectedCommitId] = useState('');
+  const [historyLoadState, setHistoryLoadState] = useState<HistoryLoadState>('idle');
+  const [historyMessage, setHistoryMessage] = useState('Refresh to load exact stored commits.');
   const [status, setStatus] = useState('Ready to capture an immutable run');
   const [localError, setLocalError] = useState<string | null>(null);
   const resultRequests = useRef(new Set<string>());
 
   const refreshHistory = useCallback(async () => {
-    setLocalError(null);
+    setHistoryLoadState('loading');
+    setHistoryMessage('Loading exact stored commits…');
     try {
       const entries = await getJson<HistoryEntry[]>(
         `/workflow/history?branch=${encodeURIComponent(branch)}&limit=20`,
       );
       setHistory(entries);
-      setStatus(`Loaded ${entries.length} historical run source${entries.length === 1 ? '' : 's'}`);
+      setHistoryLoadState('ready');
+      setHistoryMessage(
+        entries.length === 0
+          ? `No stored commits are available on branch ${branch}.`
+          : `Loaded ${entries.length} exact stored commit${entries.length === 1 ? '' : 's'}.`,
+      );
     } catch (failure) {
-      setLocalError(problemFor(failure).detail ?? 'Could not load workflow history');
+      const detail = problemFor(failure).detail ?? 'The stored commit history endpoint is unavailable.';
+      setHistory([]);
+      setSelectedCommitId('');
+      setHistoryLoadState('unavailable');
+      setHistoryMessage(`Stored commit history is optional here: ${detail}`);
     }
   }, [branch]);
-
-  useEffect(() => {
-    void refreshHistory();
-  }, [refreshHistory]);
 
   useEffect(() => {
     if (selectedCommitId !== '' && history.some((entry) => entry.commitId === selectedCommitId)) {
@@ -255,6 +278,14 @@ export function WorkflowRunPanel({ currentSource }: WorkflowRunPanelProps) {
     setStatus('Ready to capture another immutable workflow run');
   }, []);
 
+  const changeBranch = useCallback((value: string) => {
+    setBranch(value);
+    setHistory([]);
+    setSelectedCommitId('');
+    setHistoryLoadState('idle');
+    setHistoryMessage('Refresh to load exact stored commits.');
+  }, []);
+
   const busy = state.phase === 'starting' || state.phase === 'active';
   const problemMessages = runProblemMessages(state.problem);
 
@@ -296,26 +327,29 @@ export function WorkflowRunPanel({ currentSource }: WorkflowRunPanelProps) {
 
       <label className="field">
         History branch
-        <input value={branch} onChange={(event) => setBranch(event.target.value)} />
+        <input value={branch} onChange={(event) => changeBranch(event.target.value)} />
       </label>
       <button
         className="action-button"
         data-testid="run-refresh-history"
-        disabled={busy}
+        disabled={busy || historyLoadState === 'loading'}
         onClick={() => void refreshHistory()}
         type="button"
       >
-        Refresh run sources
+        {historyLoadState === 'loading' ? 'Loading run sources…' : 'Refresh run sources'}
       </button>
+      <p className="help-text" data-testid="run-history-status">
+        {historyMessage}
+      </p>
       <label className="field">
         Historical commit
         <select
           data-testid="run-history-commit"
-          disabled={history.length === 0 || busy}
+          disabled={historyLoadState !== 'ready' || history.length === 0 || busy}
           value={selectedCommitId}
           onChange={(event) => setSelectedCommitId(event.target.value)}
         >
-          {history.length === 0 ? <option value="">No commits on this branch</option> : null}
+          {history.length === 0 ? <option value="">{historyPlaceholder(historyLoadState)}</option> : null}
           {history.map((entry) => (
             <option key={entry.commitId} value={entry.commitId}>
               {entry.message || entry.commitId.slice(0, 10)} · {entry.commitId.slice(0, 10)}
