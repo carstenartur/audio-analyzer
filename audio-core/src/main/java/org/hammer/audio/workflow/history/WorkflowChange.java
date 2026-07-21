@@ -111,11 +111,7 @@ public sealed interface WorkflowChange
    * @param newValue canonical next value, or {@code null} when removed
    */
   record FieldChanged(
-      ElementKind elementKind,
-      String targetId,
-      String fieldPath,
-      String oldValue,
-      String newValue)
+      ElementKind elementKind, String targetId, String fieldPath, String oldValue, String newValue)
       implements WorkflowChange {
     public FieldChanged {
       Objects.requireNonNull(elementKind, "elementKind");

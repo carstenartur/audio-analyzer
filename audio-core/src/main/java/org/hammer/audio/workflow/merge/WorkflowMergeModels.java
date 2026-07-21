@@ -111,9 +111,7 @@ public interface WorkflowMergeModels {
    * @param validationViolations structural violations caused by the combined automatic decisions
    */
   record Preview(
-      Workflow autoMergedWorkflow,
-      List<Conflict> conflicts,
-      List<String> validationViolations) {
+      Workflow autoMergedWorkflow, List<Conflict> conflicts, List<String> validationViolations) {
     public Preview {
       Objects.requireNonNull(autoMergedWorkflow, "autoMergedWorkflow");
       conflicts = List.copyOf(Objects.requireNonNull(conflicts, "conflicts"));
@@ -143,9 +141,7 @@ public interface WorkflowMergeModels {
    * @param validationViolations structural workflow validation diagnostics
    */
   record Result(
-      Workflow workflow,
-      List<Conflict> unresolvedConflicts,
-      List<String> validationViolations) {
+      Workflow workflow, List<Conflict> unresolvedConflicts, List<String> validationViolations) {
     public Result {
       Objects.requireNonNull(workflow, "workflow");
       unresolvedConflicts =

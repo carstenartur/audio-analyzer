@@ -14,9 +14,9 @@ import org.hammer.audio.workflow.Port;
 import org.hammer.audio.workflow.Workflow;
 import org.hammer.audio.workflow.catalog.ExperimentNodeCatalog;
 import org.hammer.audio.workflow.dsl.WorkflowDslSerializer;
-import org.hammer.audio.workflow.merge.WorkflowDiffModels.ElementKind;
 import org.hammer.audio.workflow.merge.WorkflowMergeModels.Conflict;
 import org.hammer.audio.workflow.merge.WorkflowMergeModels.ConflictKind;
+import org.hammer.audio.workflow.merge.WorkflowMergeModels.ElementKind;
 import org.hammer.audio.workflow.merge.WorkflowMergeModels.Preview;
 import org.hammer.audio.workflow.merge.WorkflowMergeModels.Resolution;
 import org.hammer.audio.workflow.merge.WorkflowMergeModels.ResolutionChoice;
@@ -32,8 +32,7 @@ class WorkflowThreeWayMergerTest {
     Workflow base = connectedWorkflow();
     Node localGenerator = withLabel(node(base, "node.generator"), "Local signal");
     Workflow local = replaceNode(base, localGenerator);
-    Node remoteGain =
-        withMetadata(node(base, "node.gain"), Map.of("gain.factor", "0.75"));
+    Node remoteGain = withMetadata(node(base, "node.gain"), Map.of("gain.factor", "0.75"));
     Workflow remote = replaceNode(base, remoteGain);
 
     Preview first = merger.preview(base, local, remote);
@@ -54,10 +53,8 @@ class WorkflowThreeWayMergerTest {
   @Test
   void exposesDivergentScalarValuesAndSupportsExplicitCustomResolution() {
     Workflow base = connectedWorkflow();
-    Workflow local =
-        replaceNode(base, withLabel(node(base, "node.generator"), "Local signal"));
-    Workflow remote =
-        replaceNode(base, withLabel(node(base, "node.generator"), "Remote signal"));
+    Workflow local = replaceNode(base, withLabel(node(base, "node.generator"), "Local signal"));
+    Workflow remote = replaceNode(base, withLabel(node(base, "node.generator"), "Remote signal"));
 
     Preview preview = merger.preview(base, local, remote);
     Conflict conflict = preview.conflicts().getFirst();
@@ -66,7 +63,8 @@ class WorkflowThreeWayMergerTest {
             base,
             local,
             remote,
-            List.of(new Resolution(conflict.conflictId(), ResolutionChoice.CUSTOM, "Merged signal")));
+            List.of(
+                new Resolution(conflict.conflictId(), ResolutionChoice.CUSTOM, "Merged signal")));
 
     assertEquals(ConflictKind.DIVERGENT_VALUE, conflict.kind());
     assertEquals(ElementKind.NODE, conflict.elementKind());
@@ -103,7 +101,8 @@ class WorkflowThreeWayMergerTest {
 
     assertEquals(ConflictKind.DELETE_MODIFY, conflict.kind());
     assertEquals("node.gain", conflict.elementId());
-    assertFalse(deleted.workflow().nodes().stream().anyMatch(value -> value.id().equals("node.gain")));
+    assertFalse(
+        deleted.workflow().nodes().stream().anyMatch(value -> value.id().equals("node.gain")));
     assertTrue(deleted.readyToCommit());
   }
 
@@ -148,9 +147,11 @@ class WorkflowThreeWayMergerTest {
     Node localGain = withLabel(ExperimentNodeCatalog.gain("node.gain"), "Local gain");
     Node remoteGain = withLabel(ExperimentNodeCatalog.gain("node.gain"), "Remote gain");
     Workflow local =
-        new Workflow(base.id(), base.name(), List.of(base.nodes().getFirst(), localGain), List.of());
+        new Workflow(
+            base.id(), base.name(), List.of(base.nodes().getFirst(), localGain), List.of());
     Workflow remote =
-        new Workflow(base.id(), base.name(), List.of(base.nodes().getFirst(), remoteGain), List.of());
+        new Workflow(
+            base.id(), base.name(), List.of(base.nodes().getFirst(), remoteGain), List.of());
 
     Preview preview = merger.preview(base, local, remote);
     Conflict conflict = preview.conflicts().getFirst();
@@ -260,8 +261,7 @@ class WorkflowThreeWayMergerTest {
             base.id(),
             "Local workflow",
             List.of(
-                withLabel(node(base, "node.generator"), "Local signal"),
-                node(base, "node.gain")),
+                withLabel(node(base, "node.generator"), "Local signal"), node(base, "node.gain")),
             base.edges(),
             base.metadata());
     Workflow remote =
@@ -269,8 +269,7 @@ class WorkflowThreeWayMergerTest {
             base.id(),
             "Remote workflow",
             List.of(
-                withLabel(node(base, "node.generator"), "Remote signal"),
-                node(base, "node.gain")),
+                withLabel(node(base, "node.generator"), "Remote signal"), node(base, "node.gain")),
             base.edges(),
             base.metadata());
 
@@ -318,17 +317,15 @@ class WorkflowThreeWayMergerTest {
   }
 
   private static Node node(Workflow workflow, String nodeId) {
-    return workflow.nodes().stream().filter(value -> value.id().equals(nodeId)).findFirst().orElseThrow();
+    return workflow.nodes().stream()
+        .filter(value -> value.id().equals(nodeId))
+        .findFirst()
+        .orElseThrow();
   }
 
   private static Node withLabel(Node node, String label) {
     return new Node(
-        node.id(),
-        node.type(),
-        label,
-        node.inputPorts(),
-        node.outputPorts(),
-        node.metadata());
+        node.id(), node.type(), label, node.inputPorts(), node.outputPorts(), node.metadata());
   }
 
   private static Node withMetadata(Node node, Map<String, String> entries) {

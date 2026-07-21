@@ -108,28 +108,19 @@ public record WorkflowDiff(List<WorkflowChange> changes) {
 
   private static void collectWorkflowFieldChanges(
       Workflow before, Workflow after, List<WorkflowChange> changes) {
-    addFieldChange(
-        changes,
-        ElementKind.WORKFLOW,
-        before.id(),
-        "name",
-        before.name(),
-        after.name());
+    addFieldChange(changes, ElementKind.WORKFLOW, before.id(), "name", before.name(), after.name());
     diffWorkflowMetadata(before.id(), before.metadata(), after.metadata(), changes);
   }
 
   private static void collectNodeFieldChanges(
-      Map<String, Node> beforeNodes,
-      Map<String, Node> afterNodes,
-      List<WorkflowChange> changes) {
+      Map<String, Node> beforeNodes, Map<String, Node> afterNodes, List<WorkflowChange> changes) {
     for (Map.Entry<String, Node> entry : afterNodes.entrySet()) {
       Node before = beforeNodes.get(entry.getKey());
       if (before == null) {
         continue;
       }
       Node after = entry.getValue();
-      addFieldChange(
-          changes, ElementKind.NODE, before.id(), "type", before.type(), after.type());
+      addFieldChange(changes, ElementKind.NODE, before.id(), "type", before.type(), after.type());
       addFieldChange(
           changes, ElementKind.NODE, before.id(), "label", before.label(), after.label());
       addFieldChange(
@@ -152,9 +143,7 @@ public record WorkflowDiff(List<WorkflowChange> changes) {
   }
 
   private static void collectEdgeFieldChanges(
-      Map<String, Edge> beforeEdges,
-      Map<String, Edge> afterEdges,
-      List<WorkflowChange> changes) {
+      Map<String, Edge> beforeEdges, Map<String, Edge> afterEdges, List<WorkflowChange> changes) {
     for (Map.Entry<String, Edge> entry : afterEdges.entrySet()) {
       Edge before = beforeEdges.get(entry.getKey());
       if (before == null) {
@@ -195,8 +184,7 @@ public record WorkflowDiff(List<WorkflowChange> changes) {
       String beforeValue = before.get(key);
       String afterValue = after.get(key);
       if (!Objects.equals(beforeValue, afterValue)) {
-        changes.add(
-            new WorkflowChange.ParameterChanged(targetId, key, beforeValue, afterValue));
+        changes.add(new WorkflowChange.ParameterChanged(targetId, key, beforeValue, afterValue));
       }
     }
   }
