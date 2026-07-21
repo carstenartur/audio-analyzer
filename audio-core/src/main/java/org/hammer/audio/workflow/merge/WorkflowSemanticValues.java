@@ -44,6 +44,18 @@ final class WorkflowSemanticValues {
         + "}";
   }
 
+  static String neighborhood(Node node, List<Edge> connectedEdges) {
+    if (node == null) {
+      return null;
+    }
+    StringJoiner edges = new StringJoiner(",", "[", "]");
+    connectedEdges.stream()
+        .sorted(java.util.Comparator.comparing(Edge::id))
+        .map(WorkflowSemanticValues::edge)
+        .forEach(edges::add);
+    return "neighborhood{node=" + node(node) + ",edges=" + edges + "}";
+  }
+
   static String endpoints(Edge edge) {
     return endpoint(edge.sourceNodeId(), edge.sourcePortId())
         + "->"
@@ -68,10 +80,6 @@ final class WorkflowSemanticValues {
       values.add(quote(entry.getKey()) + ":" + quote(entry.getValue()));
     }
     return values.toString();
-  }
-
-  static String nullable(String value) {
-    return value == null ? null : value;
   }
 
   private static String port(Port port) {
