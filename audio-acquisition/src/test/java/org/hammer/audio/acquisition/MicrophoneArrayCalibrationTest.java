@@ -49,8 +49,7 @@ class MicrophoneArrayCalibrationTest {
         SynchronizationStatus.DEGRADED,
         degraded.assess(CALIBRATED_AT.plusSeconds(60), 48_000.0f, 0.5).status());
 
-    SynchronizationAssessment expired =
-        trusted.assess(VALID_UNTIL.plusSeconds(1), 48_000.0f, 0.5);
+    SynchronizationAssessment expired = trusted.assess(VALID_UNTIL.plusSeconds(1), 48_000.0f, 0.5);
     assertEquals(SynchronizationStatus.REJECTED, expired.status());
     assertTrue(expired.diagnostics().getFirst().contains("validity window"));
   }
