@@ -94,7 +94,9 @@ class WorkbenchWorkflowMergeIT {
       assertTrue(result.innerText().contains(mergedCommit));
       assertEquals(localCommit, historyCommitIds(page, TARGET_BRANCH).get(1));
 
-      page.locator("[data-testid='merge-load-result']").click();
+      page.waitForNavigation(
+          () -> page.locator("[data-testid='merge-load-result']").click());
+      page.waitForLoadState();
       page.locator("[data-testid='workbench-title']").waitFor();
       page.waitForCondition(
           () -> "resolved".equals(currentNodeProperties(page, TARGET_NODE_ID).get(PROPERTY_KEY)));
