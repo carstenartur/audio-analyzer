@@ -40,170 +40,188 @@ jobs:
           python3 <<'PY'
           from pathlib import Path
 
+          def replace_once(text: str, old: str, new: str, label: str) -> str:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected one anchor, found {count}')
+              return text.replace(old, new, 1)
+
           exporter = Path('audio-experimental-acoustic/src/main/java/org/hammer/audio/experimental/acoustic/workbench/WorkbenchRunExporter.java')
           text = exporter.read_text(encoding='utf-8')
-          replacements = [
-              ('import java.util.Set;\n', 'import java.util.Set;\nimport java.util.stream.Collectors;\n'),
-              (
-                  '    appendRow(sb, "Distinct track IDs", result.distinctTrackCount());\n',
-                  '    appendRow(sb, "Distinct track IDs", result.distinctTrackCount());\n'
-                  '    appendRow(sb, "Synchronization modes", formatSynchronizationModes(result));\n'
-                  '    appendRow(sb, "Worst synchronization", result.worstSynchronizationStatus());\n',
-              ),
-              (
-                  '        "\\n## Frame-by-frame summary\\n\\n"\n'
-                  '            + "| Frame | Time (ms) | Clusters | Tracks | Proc. (µs) | Budget |\\n"\n'
-                  '            + "|---|---|---|---|---|---|\\n");',
-                  '        "\\n## Frame-by-frame summary\\n\\n"\n'
-                  '            + "| Frame | Time (ms) | Clusters | Tracks | Proc. (µs) | Sync | Error (samples) | Budget |\\n"\n'
-                  '            + "|---|---|---|---|---|---|---|---|\\n");',
-              ),
-              (
-                  '          .append(String.format(Locale.ROOT, "%.1f", snap.processingNanos() / 1_000.0))\n'
-                  '          .append(MARKDOWN_PIPE_SEPARATOR)\n'
-                  '          .append(formatBudgetStatus(result, snap))',
-                  '          .append(String.format(Locale.ROOT, "%.1f", snap.processingNanos() / 1_000.0))\n'
-                  '          .append(MARKDOWN_PIPE_SEPARATOR)\n'
-                  '          .append(snap.synchronization().status())\n'
-                  '          .append(MARKDOWN_PIPE_SEPARATOR)\n'
-                  '          .append(String.format(Locale.ROOT, "%.4f", snap.synchronization().estimatedErrorSamples()))\n'
-                  '          .append(MARKDOWN_PIPE_SEPARATOR)\n'
-                  '          .append(formatBudgetStatus(result, snap))',
-              ),
-              (
-                  '        "frameIndex,timestampNs,trackId,frequencyHz,observedFrequencyHz,"\n'
-                  '            + "posX,posY,velX,velY,confidence,observations,processingNs,budgetExceeded\\n");',
-                  '        "frameIndex,timestampNs,trackId,frequencyHz,observedFrequencyHz,"\n'
-                  '            + "posX,posY,velX,velY,confidence,observations,processingNs,"\n'
-                  '            + "synchronizationMode,synchronizationStatus,synchronizationErrorSamples,"\n'
-                  '            + "calibrationCurrent,budgetExceeded\\n");',
-              ),
-              (
-                  '            .append(snap.processingNanos())\n'
-                  '            .append(\',\')\n'
-                  '            .append(formatBudgetExceededCsv(result, snap))',
-                  '            .append(snap.processingNanos())\n'
-                  '            .append(\',\')\n'
-                  '            .append(snap.synchronization().mode())\n'
-                  '            .append(\',\')\n'
-                  '            .append(snap.synchronization().status())\n'
-                  '            .append(\',\')\n'
-                  '            .append(String.format(Locale.ROOT, "%.6f", snap.synchronization().estimatedErrorSamples()))\n'
-                  '            .append(\',\')\n'
-                  '            .append(snap.synchronization().calibrationCurrent())\n'
-                  '            .append(\',\')\n'
-                  '            .append(formatBudgetExceededCsv(result, snap))',
-              ),
-              (
-                  '          .append(",\\"processingNs\\":")\n'
-                  '          .append(snap.processingNanos())\n'
-                  '          .append(",\\"budgetExceeded\\":")',
-                  '          .append(",\\"processingNs\\":")\n'
-                  '          .append(snap.processingNanos())\n'
-                  '          .append(",\\"synchronization\\":{\\"mode\\":\\"")\n'
-                  '          .append(snap.synchronization().mode())\n'
-                  '          .append("\\",\\"status\\":\\"")\n'
-                  '          .append(snap.synchronization().status())\n'
-                  '          .append("\\",\\"estimatedErrorSamples\\":")\n'
-                  '          .append(String.format(Locale.ROOT, "%.6f", snap.synchronization().estimatedErrorSamples()))\n'
-                  '          .append(",\\"calibrationCurrent\\":")\n'
-                  '          .append(snap.synchronization().calibrationCurrent())\n'
-                  '          .append(\'}\')\n'
-                  '          .append(",\\"budgetExceeded\\":")',
-              ),
-              (
-                  '  private static String formatBudgetStatus(WorkbenchRunResult result, TrackingSnapshot snap) {',
-                  '  private static String formatSynchronizationModes(WorkbenchRunResult result) {\n'
-                  '    return result.synchronizationModes().stream()\n'
-                  '        .sorted()\n'
-                  '        .map(Enum::name)\n'
-                  '        .collect(Collectors.joining(", "));\n'
-                  '  }\n\n'
-                  '  private static String formatBudgetStatus(WorkbenchRunResult result, TrackingSnapshot snap) {',
-              ),
-          ]
-          for old, new in replacements:
-              if old not in text:
-                  raise SystemExit(f'Exporter replacement not found: {old[:100]!r}')
-              text = text.replace(old, new, 1)
+          text = replace_once(
+              text,
+              'import java.util.Set;\n',
+              'import java.util.Set;\nimport java.util.stream.Collectors;\n',
+              'exporter import',
+          )
+          text = replace_once(
+              text,
+              '    appendRow(sb, "Distinct track IDs", result.distinctTrackCount());\n',
+              '    appendRow(sb, "Distinct track IDs", result.distinctTrackCount());\n'
+              '    appendRow(sb, "Synchronization modes", formatSynchronizationModes(result));\n'
+              '    appendRow(sb, "Worst synchronization", result.worstSynchronizationStatus());\n',
+              'exporter summary',
+          )
+          text = replace_once(
+              text,
+              '| Frame | Time (ms) | Clusters | Tracks | Proc. (µs) | Budget |\\n"\n'
+              '            + "|---|---|---|---|---|---|\\n',
+              '| Frame | Time (ms) | Clusters | Tracks | Proc. (µs) | Sync | Error (samples) | Budget |\\n"\n'
+              '            + "|---|---|---|---|---|---|---|---|\\n',
+              'exporter markdown header',
+          )
+          text = replace_once(
+              text,
+              '          .append(formatBudgetStatus(result, snap))\n'
+              '          .append(" |\\n");',
+              '          .append(snap.synchronization().status())\n'
+              '          .append(MARKDOWN_PIPE_SEPARATOR)\n'
+              '          .append(\n'
+              '              String.format(\n'
+              '                  Locale.ROOT,\n'
+              '                  "%.4f",\n'
+              '                  snap.synchronization().estimatedErrorSamples()))\n'
+              '          .append(MARKDOWN_PIPE_SEPARATOR)\n'
+              '          .append(formatBudgetStatus(result, snap))\n'
+              '          .append(" |\\n");',
+              'exporter markdown row',
+          )
+          text = replace_once(
+              text,
+              '            + "posX,posY,velX,velY,confidence,observations,processingNs,budgetExceeded\\n");',
+              '            + "posX,posY,velX,velY,confidence,observations,processingNs,"\n'
+              '            + "synchronizationMode,synchronizationStatus,synchronizationErrorSamples,"\n'
+              '            + "calibrationCurrent,budgetExceeded\\n");',
+              'exporter csv header',
+          )
+          csv_start = text.index('  public static String toCsv(')
+          json_start = text.index('  public static String toJsonLines(')
+          csv_prefix = text[:csv_start]
+          csv_body = text[csv_start:json_start]
+          csv_suffix = text[json_start:]
+          csv_body = replace_once(
+              csv_body,
+              '            .append(snap.processingNanos())\n'
+              '            .append(\',\')\n'
+              '            .append(formatBudgetExceededCsv(result, snap))',
+              '            .append(snap.processingNanos())\n'
+              '            .append(\',\')\n'
+              '            .append(snap.synchronization().mode())\n'
+              '            .append(\',\')\n'
+              '            .append(snap.synchronization().status())\n'
+              '            .append(\',\')\n'
+              '            .append(\n'
+              '                String.format(\n'
+              '                    Locale.ROOT,\n'
+              '                    "%.6f",\n'
+              '                    snap.synchronization().estimatedErrorSamples()))\n'
+              '            .append(\',\')\n'
+              '            .append(snap.synchronization().calibrationCurrent())\n'
+              '            .append(\',\')\n'
+              '            .append(formatBudgetExceededCsv(result, snap))',
+              'exporter csv row',
+          )
+          text = csv_prefix + csv_body + csv_suffix
+          text = replace_once(
+              text,
+              '          .append(",\\"budgetExceeded\\":")\n'
+              '          .append(formatBudgetExceededJson(result, snap))',
+              '          .append(",\\"synchronization\\":{\\"mode\\":\\"")\n'
+              '          .append(snap.synchronization().mode())\n'
+              '          .append("\\",\\"status\\":\\"")\n'
+              '          .append(snap.synchronization().status())\n'
+              '          .append("\\",\\"estimatedErrorSamples\\":")\n'
+              '          .append(\n'
+              '              String.format(\n'
+              '                  Locale.ROOT,\n'
+              '                  "%.6f",\n'
+              '                  snap.synchronization().estimatedErrorSamples()))\n'
+              '          .append(",\\"calibrationCurrent\\":")\n'
+              '          .append(snap.synchronization().calibrationCurrent())\n'
+              '          .append(\'}\')\n'
+              '          .append(",\\"budgetExceeded\\":")\n'
+              '          .append(formatBudgetExceededJson(result, snap))',
+              'exporter json synchronization',
+          )
+          text = replace_once(
+              text,
+              '  private static String formatBudgetStatus(WorkbenchRunResult result, TrackingSnapshot snap) {',
+              '  private static String formatSynchronizationModes(WorkbenchRunResult result) {\n'
+              '    return result.synchronizationModes().stream()\n'
+              '        .sorted()\n'
+              '        .map(Enum::name)\n'
+              '        .collect(Collectors.joining(", "));\n'
+              '  }\n\n'
+              '  private static String formatBudgetStatus(WorkbenchRunResult result, TrackingSnapshot snap) {',
+              'exporter synchronization helper',
+          )
           exporter.write_text(text, encoding='utf-8')
 
           panel = Path('audio-experimental-acoustic/src/main/java/org/hammer/audio/experimental/acoustic/workbench/AcousticLocalizationWorkbenchPanel.java')
           text = panel.read_text(encoding='utf-8')
-          replacements = [
-              (
-                  'import org.hammer.audio.acquisition.Microphone;\n',
-                  'import org.hammer.audio.acquisition.Microphone;\n'
-                  'import org.hammer.audio.acquisition.SynchronizationStatus;\n',
-              ),
-              (
-                  '  @SuppressWarnings("PMD.ConsecutiveAppendsShouldReuse")\n'
-                  '  private void refreshPlaybackFrame(int frameIndex) {',
-                  '  static String formatSynchronizationDetails(TrackingSnapshot snapshot) {\n'
-                  '    return String.format(\n'
-                  '        Locale.ROOT,\n'
-                  '        "Synchronization: %s / %s (error=%.4f samples, %.2f µs)%n",\n'
-                  '        snapshot.synchronization().mode(),\n'
-                  '        snapshot.synchronization().status(),\n'
-                  '        snapshot.synchronization().estimatedErrorSamples(),\n'
-                  '        snapshot.synchronization().estimatedErrorSeconds() * 1_000_000.0);\n'
-                  '  }\n\n'
-                  '  @SuppressWarnings("PMD.ConsecutiveAppendsShouldReuse")\n'
-                  '  private void refreshPlaybackFrame(int frameIndex) {',
-              ),
-              (
-                  '    sb.append(\n'
-                  '        String.format(Locale.ROOT, "Processing:  %.1f µs%n", snap.processingNanos() / 1_000.0));\n'
-                  '    if (model.result().isFrameOverBudget(snap)) {',
-                  '    sb.append(\n'
-                  '        String.format(Locale.ROOT, "Processing:  %.1f µs%n", snap.processingNanos() / 1_000.0));\n'
-                  '    sb.append(formatSynchronizationDetails(snap));\n'
-                  '    if (snap.synchronization().status() != SynchronizationStatus.TRUSTED) {\n'
-                  '      sb.append("⚠ Synchronization quality requires attention: ")\n'
-                  '          .append(String.join(" ", snap.synchronization().diagnostics()))\n'
-                  '          .append(\'\\n\');\n'
-                  '    }\n'
-                  '    if (model.result().isFrameOverBudget(snap)) {',
-              ),
-              (
-                  '        updateStatus(\n'
-                  '            String.format(\n'
-                  '                Locale.ROOT,\n'
-                  '                "Done. %d blocks, %d distinct tracks, avg %.1f µs/block.",\n'
-                  '                result.blockCount(),\n'
-                  '                result.distinctTrackCount(),\n'
-                  '                result.averageProcessingNanosPerBlock() / 1_000.0));',
-                  '        appendLog("Synchronization: worst status " + result.worstSynchronizationStatus());\n'
-                  '        if (result.hasSynchronizationWarning()) {\n'
-                  '          appendLog("⚠ At least one frame has degraded or rejected synchronization.");\n'
-                  '        }\n'
-                  '        updateStatus(\n'
-                  '            String.format(\n'
-                  '                Locale.ROOT,\n'
-                  '                "Done. %d blocks, %d distinct tracks, avg %.1f µs/block, sync %s.",\n'
-                  '                result.blockCount(),\n'
-                  '                result.distinctTrackCount(),\n'
-                  '                result.averageProcessingNanosPerBlock() / 1_000.0,\n'
-                  '                result.worstSynchronizationStatus()));',
-              ),
-              (
-                  '               snapshot.tracks().size(),\n'
-                  '               snapshot.processingNanos() / 1_000.0));',
-                  '               snapshot.tracks().size(),\n'
-                  '               snapshot.processingNanos() / 1_000.0));\n'
-                  '       sb.append(\n'
-                  '           String.format(\n'
-                  '               Locale.ROOT,\n'
-                  '               "  sync=%s/%s err=%.4f samples",\n'
-                  '               snapshot.synchronization().mode(),\n'
-                  '               snapshot.synchronization().status(),\n'
-                  '               snapshot.synchronization().estimatedErrorSamples()));',
-              ),
-          ]
-          for old, new in replacements:
-              if old not in text:
-                  raise SystemExit(f'Panel replacement not found: {old[:120]!r}')
-              text = text.replace(old, new, 1)
+          text = replace_once(
+              text,
+              'import org.hammer.audio.acquisition.Microphone;\n',
+              'import org.hammer.audio.acquisition.Microphone;\n'
+              'import org.hammer.audio.acquisition.SynchronizationStatus;\n',
+              'panel import',
+          )
+          text = replace_once(
+              text,
+              '  @SuppressWarnings("PMD.ConsecutiveAppendsShouldReuse")\n'
+              '  private void refreshPlaybackFrame(int frameIndex) {',
+              '  static String formatSynchronizationDetails(TrackingSnapshot snapshot) {\n'
+              '    return String.format(\n'
+              '        Locale.ROOT,\n'
+              '        "Synchronization: %s / %s (error=%.4f samples, %.2f µs)%n",\n'
+              '        snapshot.synchronization().mode(),\n'
+              '        snapshot.synchronization().status(),\n'
+              '        snapshot.synchronization().estimatedErrorSamples(),\n'
+              '        snapshot.synchronization().estimatedErrorSeconds() * 1_000_000.0);\n'
+              '  }\n\n'
+              '  @SuppressWarnings("PMD.ConsecutiveAppendsShouldReuse")\n'
+              '  private void refreshPlaybackFrame(int frameIndex) {',
+              'panel formatting helper',
+          )
+          text = replace_once(
+              text,
+              '    if (model.result().isFrameOverBudget(snap)) {\n'
+              '      sb.append("⚠ Frame exceeded real-time budget\\n");\n'
+              '    }',
+              '    sb.append(formatSynchronizationDetails(snap));\n'
+              '    if (snap.synchronization().status() != SynchronizationStatus.TRUSTED) {\n'
+              '      sb.append("⚠ Synchronization quality requires attention: ")\n'
+              '          .append(String.join(" ", snap.synchronization().diagnostics()))\n'
+              '          .append(\'\\n\');\n'
+              '    }\n'
+              '    if (model.result().isFrameOverBudget(snap)) {\n'
+              '      sb.append("⚠ Frame exceeded real-time budget\\n");\n'
+              '    }',
+              'panel playback details',
+          )
+          text = replace_once(
+              text,
+              '        markdownArea.setText(WorkbenchRunExporter.toMarkdown(result));',
+              '        appendLog("Synchronization: worst status " + result.worstSynchronizationStatus());\n'
+              '        if (result.hasSynchronizationWarning()) {\n'
+              '          appendLog("⚠ At least one frame has degraded or rejected synchronization.");\n'
+              '        }\n'
+              '        markdownArea.setText(WorkbenchRunExporter.toMarkdown(result));',
+              'panel run completion',
+          )
+          text = replace_once(
+              text,
+              '      if (snapshot.processingNanos() > budgetNanos) {',
+              '      sb.append(\n'
+              '          String.format(\n'
+              '              Locale.ROOT,\n'
+              '              "  sync=%s/%s err=%.4f samples",\n'
+              '              snapshot.synchronization().mode(),\n'
+              '              snapshot.synchronization().status(),\n'
+              '              snapshot.synchronization().estimatedErrorSamples()));\n'
+              '      if (snapshot.processingNanos() > budgetNanos) {',
+              'panel block log',
+          )
           panel.write_text(text, encoding='utf-8')
           PY
 
