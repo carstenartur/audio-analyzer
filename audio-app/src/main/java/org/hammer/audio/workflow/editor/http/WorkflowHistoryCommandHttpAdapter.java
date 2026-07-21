@@ -37,12 +37,7 @@ public final class WorkflowHistoryCommandHttpAdapter {
     this.commandService = Objects.requireNonNull(commandService, "commandService");
   }
 
-  /**
-   * Compares two exact commits reachable from one branch.
-   *
-   * @param request validated branch and commit identities
-   * @return both graph states and ordered semantic change atoms
-   */
+  /** Compares two exact commits reachable from one branch. */
   @PostMapping("/compare")
   public ComparisonResponse compare(@Valid @RequestBody CompareRequest request) {
     return ComparisonResponse.from(
@@ -52,12 +47,7 @@ public final class WorkflowHistoryCommandHttpAdapter {
             new CommitId(request.afterCommitId())));
   }
 
-  /**
-   * Restores a historical snapshot as a new audit commit on the expected current HEAD.
-   *
-   * @param request validated target, expected HEAD and audit metadata
-   * @return source, previous HEAD and newly created restore commit identities
-   */
+  /** Restores a historical snapshot as a new audit commit on the expected current HEAD. */
   @PostMapping("/restore")
   public RestoreResponse restore(@Valid @RequestBody RestoreRequest request) {
     WorkflowRestoreResult result =
@@ -146,10 +136,10 @@ public final class WorkflowHistoryCommandHttpAdapter {
    * Transport-safe semantic change atom.
    *
    * @param kind stable change kind
-   * @param targetId affected node or edge identifier
-   * @param propertyKey metadata key for parameter changes
-   * @param oldValue previous label or property value
-   * @param newValue new label or property value
+   * @param targetId affected workflow, node or edge identifier
+   * @param propertyKey metadata key or stable semantic field path
+   * @param oldValue previous canonical value
+   * @param newValue new canonical value
    */
   public record ChangeResponse(
       String kind, String targetId, String propertyKey, String oldValue, String newValue) {
@@ -172,6 +162,13 @@ public final class WorkflowHistoryCommandHttpAdapter {
                 parameter.propertyKey(),
                 parameter.oldValue(),
                 parameter.newValue());
+        case WorkflowChange.FieldChanged field ->
+            new ChangeResponse(
+                field.elementKind().name() + "_FIELD_CHANGED",
+                field.targetId(),
+                field.fieldPath(),
+                field.oldValue(),
+                field.newValue());
       };
     }
   }
