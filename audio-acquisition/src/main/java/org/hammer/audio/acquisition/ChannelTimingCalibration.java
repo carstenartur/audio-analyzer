@@ -22,7 +22,7 @@ public record ChannelTimingCalibration(
     double gainLinear,
     boolean invertedPolarity) {
 
-  /** Creates one validated channel calibration. */
+  // Validate one channel calibration.
   public ChannelTimingCalibration {
     if (channel < 0) {
       throw new IllegalArgumentException("channel must be >= 0");
@@ -34,9 +34,7 @@ public record ChannelTimingCalibration(
     requireFinite(driftPpm, "driftPpm");
     requireNonNegativeFinite(residualRmsSamples, "residualRmsSamples");
     requireNonNegativeFinite(jitterRmsSamples, "jitterRmsSamples");
-    if (!(gainLinear > 0.0) || !Double.isFinite(gainLinear)) {
-      throw new IllegalArgumentException("gainLinear must be finite and > 0");
-    }
+    requirePositiveFinite(gainLinear, "gainLinear");
   }
 
   /** Returns the predicted channel delay at an absolute nominal frame index. */
@@ -53,14 +51,23 @@ public record ChannelTimingCalibration(
   }
 
   private static void requireFinite(double value, String name) {
-    if (!Double.isFinite(value)) {
-      throw new IllegalArgumentException(name + " must be finite");
+    if (Double.isFinite(value)) {
+      return;
     }
+    throw new IllegalArgumentException(name + " must be finite");
   }
 
   private static void requireNonNegativeFinite(double value, String name) {
-    if (value < 0.0 || !Double.isFinite(value)) {
-      throw new IllegalArgumentException(name + " must be finite and >= 0");
+    if (Double.isFinite(value) && value >= 0.0) {
+      return;
     }
+    throw new IllegalArgumentException(name + " must be finite and >= 0");
+  }
+
+  private static void requirePositiveFinite(double value, String name) {
+    if (Double.isFinite(value) && value > 0.0) {
+      return;
+    }
+    throw new IllegalArgumentException(name + " must be finite and > 0");
   }
 }
