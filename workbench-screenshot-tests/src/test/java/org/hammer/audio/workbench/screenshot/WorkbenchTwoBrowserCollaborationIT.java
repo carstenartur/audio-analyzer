@@ -69,9 +69,8 @@ class WorkbenchTwoBrowserCollaborationIT {
       waitForRevision(alice.page(), 1);
       waitForRevision(bob.page(), 1);
       Locator aliceNode = alice.page().locator(GENERATOR_SELECTOR).first();
-      Locator bobNode = bob.page().locator(GENERATOR_SELECTOR).first();
       aliceNode.waitFor();
-      bobNode.waitFor();
+      waitForNodeCount(bob.page(), GENERATOR_SELECTOR, 1);
       assertEquals(1, bob.page().locator(GENERATOR_SELECTOR).count());
 
       String nodeTestId = aliceNode.getAttribute("data-testid");
@@ -97,13 +96,13 @@ class WorkbenchTwoBrowserCollaborationIT {
       confirmHistoryDialog(alice.page(), false);
       waitForRevision(alice.page(), 2);
       waitForRevision(bob.page(), 2);
-      bob.page().waitForCondition(() -> bob.page().locator(GENERATOR_SELECTOR).count() == 0);
+      waitForNodeCount(bob.page(), GENERATOR_SELECTOR, 0);
 
       clickWhenEnabled(alice.page(), "[data-testid='redo-preview-button']");
       confirmHistoryDialog(alice.page(), false);
       waitForRevision(alice.page(), 3);
       waitForRevision(bob.page(), 3);
-      bob.page().locator(GENERATOR_SELECTOR).first().waitFor();
+      waitForNodeCount(bob.page(), GENERATOR_SELECTOR, 1);
       assertEquals(1, bob.page().locator(GENERATOR_SELECTOR).count());
 
       String eventStreamRoute = "**/events?afterSequence=*";
@@ -121,7 +120,7 @@ class WorkbenchTwoBrowserCollaborationIT {
       bob.context().unroute(eventStreamRoute);
       waitForLive(bob.page());
       waitForRevision(bob.page(), 4);
-      bob.page().locator(GAIN_SELECTOR).first().waitFor();
+      waitForNodeCount(bob.page(), GAIN_SELECTOR, 1);
       assertEquals(1, bob.page().locator(GENERATOR_SELECTOR).count());
       assertEquals(1, bob.page().locator(GAIN_SELECTOR).count());
 
@@ -129,8 +128,8 @@ class WorkbenchTwoBrowserCollaborationIT {
       waitForActiveSession(bob.page(), PERSONAL_SESSION_ID);
       waitForLive(bob.page());
       waitForRevision(bob.page(), 4);
-      bob.page().locator(GENERATOR_SELECTOR).first().waitFor();
-      bob.page().locator(GAIN_SELECTOR).first().waitFor();
+      waitForNodeCount(bob.page(), GENERATOR_SELECTOR, 1);
+      waitForNodeCount(bob.page(), GAIN_SELECTOR, 1);
       assertEquals(1, bob.page().locator(GENERATOR_SELECTOR).count());
       assertEquals(1, bob.page().locator(GAIN_SELECTOR).count());
       Locator capabilityRevision =
@@ -163,7 +162,7 @@ class WorkbenchTwoBrowserCollaborationIT {
       owner.page().locator("[data-testid='palette-node-synthetic-signal-generator']").click();
       waitForRevision(owner.page(), 1);
       waitForRevision(reviewer.page(), 1);
-      reviewer.page().locator(GENERATOR_SELECTOR).first().waitFor();
+      waitForNodeCount(reviewer.page(), GENERATOR_SELECTOR, 1);
 
       Locator previewButton = reviewer.page().locator("[data-testid='shared-undo-preview-button']");
       previewButton.waitFor();
@@ -184,17 +183,15 @@ class WorkbenchTwoBrowserCollaborationIT {
 
       waitForRevision(owner.page(), 2);
       waitForRevision(reviewer.page(), 2);
-      owner.page().waitForCondition(() -> owner.page().locator(GENERATOR_SELECTOR).count() == 0);
-      reviewer
-          .page()
-          .waitForCondition(() -> reviewer.page().locator(GENERATOR_SELECTOR).count() == 0);
+      waitForNodeCount(owner.page(), GENERATOR_SELECTOR, 0);
+      waitForNodeCount(reviewer.page(), GENERATOR_SELECTOR, 0);
 
       clickWhenEnabled(reviewer.page(), "[data-testid='redo-preview-button']");
       confirmHistoryDialog(reviewer.page(), false);
       waitForRevision(owner.page(), 3);
       waitForRevision(reviewer.page(), 3);
-      owner.page().locator(GENERATOR_SELECTOR).first().waitFor();
-      reviewer.page().locator(GENERATOR_SELECTOR).first().waitFor();
+      waitForNodeCount(owner.page(), GENERATOR_SELECTOR, 1);
+      waitForNodeCount(reviewer.page(), GENERATOR_SELECTOR, 1);
       assertEquals(1, owner.page().locator(GENERATOR_SELECTOR).count());
       assertEquals(1, reviewer.page().locator(GENERATOR_SELECTOR).count());
     } catch (Throwable failure) {
@@ -254,6 +251,10 @@ class WorkbenchTwoBrowserCollaborationIT {
   private static void assertParticipants(Page page, String firstActorId, String secondActorId) {
     page.locator("[data-testid='participant-" + firstActorId + "']").waitFor();
     page.locator("[data-testid='participant-" + secondActorId + "']").waitFor();
+  }
+
+  private static void waitForNodeCount(Page page, String selector, int expectedCount) {
+    page.waitForCondition(() -> page.locator(selector).count() == expectedCount);
   }
 
   private static void clickWhenEnabled(Page page, String selector) {
