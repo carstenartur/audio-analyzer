@@ -8,8 +8,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -29,7 +29,10 @@ import org.hammer.audio.workflow.merge.WorkflowMergeModels.ResolutionChoice;
 import org.hammer.audio.workflow.merge.WorkflowMergeModels.Result;
 
 /** Deterministic semantic three-way merger over immutable workflow values. */
+@SuppressWarnings("PMD.CouplingBetweenObjects")
 public final class WorkflowThreeWayMerger {
+
+  private static final String OBJECT_FIELD = "$object";
 
   private static final Set<ResolutionChoice> OBJECT_CHOICES =
       Set.copyOf(
@@ -180,7 +183,7 @@ public final class WorkflowThreeWayMerger {
       List<Edge> baseEdges,
       List<Edge> localEdges,
       List<Edge> remoteEdges) {
-    Map<String, SpecialNode> specialById = new TreeMap<>();
+    Map<String, SpecialNode> specialById = new ConcurrentHashMap<>();
     Set<String> blockedEdgeIds = new TreeSet<>();
     for (String nodeId : union(baseNodes, localNodes, remoteNodes)) {
       Node base = baseNodes.get(nodeId);
@@ -224,14 +227,14 @@ public final class WorkflowThreeWayMerger {
       List<Edge> localEdges,
       List<Edge> remoteEdges) {
     if (base == null && local != null && remote != null && !local.equals(remote)) {
-      return location(ConflictKind.STABLE_ID_COLLISION, ElementKind.NODE, nodeId, "$object");
+      return location(ConflictKind.STABLE_ID_COLLISION, ElementKind.NODE, nodeId, OBJECT_FIELD);
     }
     if (base != null && local == null && remote != null) {
       if (connectionsChanged(baseEdges, remoteEdges, nodeId)) {
         return location(ConflictKind.DELETE_CONNECT, ElementKind.NODE, nodeId, "connections");
       }
       if (!base.equals(remote)) {
-        return location(ConflictKind.DELETE_MODIFY, ElementKind.NODE, nodeId, "$object");
+        return location(ConflictKind.DELETE_MODIFY, ElementKind.NODE, nodeId, OBJECT_FIELD);
       }
     }
     if (base != null && remote == null && local != null) {
@@ -239,7 +242,7 @@ public final class WorkflowThreeWayMerger {
         return location(ConflictKind.DELETE_CONNECT, ElementKind.NODE, nodeId, "connections");
       }
       if (!base.equals(local)) {
-        return location(ConflictKind.DELETE_MODIFY, ElementKind.NODE, nodeId, "$object");
+        return location(ConflictKind.DELETE_MODIFY, ElementKind.NODE, nodeId, OBJECT_FIELD);
       }
     }
     return null;
@@ -321,7 +324,7 @@ public final class WorkflowThreeWayMerger {
       addNodeObjectConflict(
           draft,
           pending,
-          location(ConflictKind.STABLE_ID_COLLISION, ElementKind.NODE, nodeId, "$object"),
+          location(ConflictKind.STABLE_ID_COLLISION, ElementKind.NODE, nodeId, OBJECT_FIELD),
           nodeValues);
     }
   }
@@ -341,7 +344,7 @@ public final class WorkflowThreeWayMerger {
       addNodeObjectConflict(
           draft,
           pending,
-          location(ConflictKind.DELETE_MODIFY, ElementKind.NODE, nodeId, "$object"),
+          location(ConflictKind.DELETE_MODIFY, ElementKind.NODE, nodeId, OBJECT_FIELD),
           nodeValues);
     }
   }
@@ -453,7 +456,7 @@ public final class WorkflowThreeWayMerger {
       addEdgeObjectConflict(
           draft,
           pending,
-          location(ConflictKind.STABLE_ID_COLLISION, ElementKind.EDGE, edgeId, "$object"),
+          location(ConflictKind.STABLE_ID_COLLISION, ElementKind.EDGE, edgeId, OBJECT_FIELD),
           edgeValues);
     }
   }
@@ -473,7 +476,7 @@ public final class WorkflowThreeWayMerger {
       addEdgeObjectConflict(
           draft,
           pending,
-          location(ConflictKind.DELETE_MODIFY, ElementKind.EDGE, edgeId, "$object"),
+          location(ConflictKind.DELETE_MODIFY, ElementKind.EDGE, edgeId, OBJECT_FIELD),
           edgeValues);
     }
   }
@@ -663,7 +666,7 @@ public final class WorkflowThreeWayMerger {
   }
 
   private static Map<String, Resolution> indexResolutions(List<Resolution> resolutions) {
-    Map<String, Resolution> indexed = new TreeMap<>();
+    Map<String, Resolution> indexed = new ConcurrentHashMap<>();
     for (Resolution resolution : resolutions) {
       Resolution required = Objects.requireNonNull(resolution, "resolution");
       if (indexed.putIfAbsent(required.conflictId(), required) != null) {
@@ -675,7 +678,7 @@ public final class WorkflowThreeWayMerger {
   }
 
   private static Map<String, Node> indexNodes(List<Node> nodes) {
-    Map<String, Node> indexed = new TreeMap<>();
+    Map<String, Node> indexed = new ConcurrentHashMap<>();
     for (Node node : nodes) {
       if (indexed.putIfAbsent(node.id(), node) != null) {
         throw new IllegalArgumentException("Duplicate node id: " + node.id());
@@ -685,7 +688,7 @@ public final class WorkflowThreeWayMerger {
   }
 
   private static Map<String, Edge> indexEdges(List<Edge> edges) {
-    Map<String, Edge> indexed = new TreeMap<>();
+    Map<String, Edge> indexed = new ConcurrentHashMap<>();
     for (Edge edge : edges) {
       if (indexed.putIfAbsent(edge.id(), edge) != null) {
         throw new IllegalArgumentException("Duplicate edge id: " + edge.id());
@@ -708,7 +711,7 @@ public final class WorkflowThreeWayMerger {
 
   private static <T> List<String> union(
       Map<String, T> base, Map<String, T> local, Map<String, T> remote) {
-    TreeSet<String> keys = new TreeSet<>(base.keySet());
+    Set<String> keys = new TreeSet<>(base.keySet());
     keys.addAll(local.keySet());
     keys.addAll(remote.keySet());
     return List.copyOf(keys);
