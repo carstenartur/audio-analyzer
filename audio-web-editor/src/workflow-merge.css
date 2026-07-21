@@ -1,8 +1,8 @@
 .workflow-merge {
   position: fixed;
-  right: 18px;
-  bottom: 18px;
-  z-index: 22;
+  right: 16px;
+  bottom: 70px;
+  z-index: 1001;
 }
 
 .workflow-merge__toggle {
@@ -19,8 +19,8 @@
   position: absolute;
   right: 0;
   bottom: 48px;
-  width: min(760px, calc(100vw - 36px));
-  max-height: calc(100vh - 92px);
+  width: min(760px, calc(100vw - 32px));
+  max-height: calc(100vh - 144px);
   padding: 18px;
   overflow: auto;
   color: #cdd6f4;
@@ -154,6 +154,16 @@
 }
 
 @media (max-width: 760px) {
+  .workflow-merge {
+    right: 8px;
+    bottom: 62px;
+  }
+
+  .workflow-merge__drawer {
+    width: calc(100vw - 16px);
+    max-height: calc(100vh - 124px);
+  }
+
   .workflow-merge__branches,
   .workflow-merge__versions,
   .workflow-merge__commit,
