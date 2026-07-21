@@ -26,7 +26,7 @@ public record MicrophoneArrayCalibration(
 
   private static final double DRIFT_EPSILON_PPM = 1.0e-9;
 
-  /** Creates a complete validated calibration profile. */
+  // Validate one complete calibration profile.
   public MicrophoneArrayCalibration {
     if (profileId == null || profileId.isBlank()) {
       throw new IllegalArgumentException("profileId must not be blank");
@@ -85,34 +85,20 @@ public record MicrophoneArrayCalibration(
   public SynchronizationAssessment assess(
       Instant observationTime, float sampleRate, double maximumErrorSamples) {
     Objects.requireNonNull(observationTime, "observationTime");
-    if (!(sampleRate > 0.0f) || !Float.isFinite(sampleRate)) {
-      throw new IllegalArgumentException("sampleRate must be finite and > 0");
-    }
-    if (!(maximumErrorSamples > 0.0) || !Double.isFinite(maximumErrorSamples)) {
-      throw new IllegalArgumentException("maximumErrorSamples must be finite and > 0");
-    }
-    boolean current =
-        !observationTime.isBefore(calibratedAt) && !observationTime.isAfter(validUntil);
+    requirePositiveFinite(sampleRate, "sampleRate");
+    requirePositiveFinite(maximumErrorSamples, "maximumErrorSamples");
+
+    boolean outsideValidityWindow =
+        observationTime.isBefore(calibratedAt) || observationTime.isAfter(validUntil);
+    boolean current = !outsideValidityWindow;
     double estimatedErrorSamples =
         channels.stream()
             .mapToDouble(ChannelTimingCalibration::timingUncertaintySamples)
             .max()
             .orElse(0.0);
-    SynchronizationStatus status;
     List<String> diagnostics = new ArrayList<>();
-    if (!current) {
-      status = SynchronizationStatus.REJECTED;
-      diagnostics.add("Calibration is outside its validity window.");
-    } else if (estimatedErrorSamples > maximumErrorSamples) {
-      status = SynchronizationStatus.REJECTED;
-      diagnostics.add("Estimated timing error exceeds the localization error budget.");
-    } else if (estimatedErrorSamples > maximumErrorSamples * 0.5) {
-      status = SynchronizationStatus.DEGRADED;
-      diagnostics.add("Estimated timing error consumes more than half of the error budget.");
-    } else {
-      status = SynchronizationStatus.TRUSTED;
-      diagnostics.add("Calibration is current and inside the timing error budget.");
-    }
+    SynchronizationStatus status =
+        assessStatus(outsideValidityWindow, estimatedErrorSamples, maximumErrorSamples, diagnostics);
     diagnostics.add("Calibration profile: " + profileId);
     return new SynchronizationAssessment(
         mode(),
@@ -121,5 +107,33 @@ public record MicrophoneArrayCalibration(
         estimatedErrorSamples / sampleRate,
         current,
         diagnostics);
+  }
+
+  private static SynchronizationStatus assessStatus(
+      boolean outsideValidityWindow,
+      double estimatedErrorSamples,
+      double maximumErrorSamples,
+      List<String> diagnostics) {
+    if (outsideValidityWindow) {
+      diagnostics.add("Calibration is outside its validity window.");
+      return SynchronizationStatus.REJECTED;
+    }
+    if (estimatedErrorSamples > maximumErrorSamples) {
+      diagnostics.add("Estimated timing error exceeds the localization error budget.");
+      return SynchronizationStatus.REJECTED;
+    }
+    if (estimatedErrorSamples > maximumErrorSamples * 0.5) {
+      diagnostics.add("Estimated timing error consumes more than half of the error budget.");
+      return SynchronizationStatus.DEGRADED;
+    }
+    diagnostics.add("Calibration is current and inside the timing error budget.");
+    return SynchronizationStatus.TRUSTED;
+  }
+
+  private static void requirePositiveFinite(double value, String name) {
+    if (Double.isFinite(value) && value > 0.0) {
+      return;
+    }
+    throw new IllegalArgumentException(name + " must be finite and > 0");
   }
 }
