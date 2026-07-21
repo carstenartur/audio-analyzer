@@ -98,7 +98,8 @@ public record MicrophoneArrayCalibration(
             .orElse(0.0);
     List<String> diagnostics = new ArrayList<>();
     SynchronizationStatus status =
-        assessStatus(outsideValidityWindow, estimatedErrorSamples, maximumErrorSamples, diagnostics);
+        assessStatus(
+            outsideValidityWindow, estimatedErrorSamples, maximumErrorSamples, diagnostics);
     diagnostics.add("Calibration profile: " + profileId);
     return new SynchronizationAssessment(
         mode(),
