@@ -187,8 +187,7 @@ public final class WorkflowThreeWayMerger {
       Node local = localNodes.get(nodeId);
       Node remote = remoteNodes.get(nodeId);
       MergeLocation location =
-          specialNodeLocation(
-              nodeId, base, local, remote, baseEdges, localEdges, remoteEdges);
+          specialNodeLocation(nodeId, base, local, remote, baseEdges, localEdges, remoteEdges);
       if (location == null) {
         continue;
       }
@@ -358,7 +357,8 @@ public final class WorkflowThreeWayMerger {
       draft.putNode(nodeValues.base());
     }
     Conflict conflict =
-        conflict(location, formatted(nodeValues, WorkflowSemanticValueFormatter::node), OBJECT_CHOICES);
+        conflict(
+            location, formatted(nodeValues, WorkflowSemanticValueFormatter::node), OBJECT_CHOICES);
     pending.add(
         new PendingConflict(
             conflict,
@@ -489,7 +489,8 @@ public final class WorkflowThreeWayMerger {
       draft.putEdge(edgeValues.base());
     }
     Conflict conflict =
-        conflict(location, formatted(edgeValues, WorkflowSemanticValueFormatter::edge), OBJECT_CHOICES);
+        conflict(
+            location, formatted(edgeValues, WorkflowSemanticValueFormatter::edge), OBJECT_CHOICES);
     pending.add(
         new PendingConflict(
             conflict,
@@ -549,10 +550,8 @@ public final class WorkflowThreeWayMerger {
     for (String key : union(base.entries(), local.entries(), remote.entries())) {
       mergeStringValue(
           pending,
-          location(
-              ConflictKind.DIVERGENT_VALUE, elementKind, elementId, "metadata." + key),
-          values(
-              base.entries().get(key), local.entries().get(key), remote.entries().get(key)),
+          location(ConflictKind.DIVERGENT_VALUE, elementKind, elementId, "metadata." + key),
+          values(base.entries().get(key), local.entries().get(key), remote.entries().get(key)),
           true,
           value -> setter.accept(key, value));
     }
@@ -592,8 +591,7 @@ public final class WorkflowThreeWayMerger {
     Conflict conflict = conflict(location, formatted(mergeValues, formatter), TYPED_VALUE_CHOICES);
     pending.add(
         new PendingConflict(
-            conflict,
-            resolution -> setter.accept(selectTyped(mergeValues, location, resolution))));
+            conflict, resolution -> setter.accept(selectTyped(mergeValues, location, resolution))));
   }
 
   private static String selectString(
@@ -637,9 +635,7 @@ public final class WorkflowThreeWayMerger {
   }
 
   private static Conflict conflict(
-      MergeLocation location,
-      MergeValues<String> evidence,
-      Set<ResolutionChoice> allowedChoices) {
+      MergeLocation location, MergeValues<String> evidence, Set<ResolutionChoice> allowedChoices) {
     return new Conflict(
         conflictId(location),
         location.kind(),
@@ -718,8 +714,7 @@ public final class WorkflowThreeWayMerger {
     return List.copyOf(keys);
   }
 
-  private static <T, R> MergeValues<R> mapped(
-      MergeValues<T> values, Function<T, R> mapper) {
+  private static <T, R> MergeValues<R> mapped(MergeValues<T> values, Function<T, R> mapper) {
     return new MergeValues<>(
         mapper.apply(values.base()), mapper.apply(values.local()), mapper.apply(values.remote()));
   }
