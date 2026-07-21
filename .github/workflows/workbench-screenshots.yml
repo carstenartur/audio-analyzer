@@ -22,7 +22,7 @@ on:
       - 'docs/assets/screenshots/workbench/**'
 
 permissions:
-  contents: write
+  contents: read
   packages: read
 
 concurrency:
@@ -38,9 +38,6 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v7
-        with:
-          ref: feature/275-workflow-run-ux
-          fetch-depth: 0
 
       - name: Set up JDK 21
         uses: actions/setup-java@v5
@@ -65,30 +62,11 @@ jobs:
           -Dexec.classpathScope=test
           -Dexec.args="install --with-deps chromium"
 
+      # This gate is read-only: it reproduces documentation images but never rewrites baselines.
       - name: Reproduce and compare committed screenshots
-        id: compare
-        continue-on-error: true
         run: >-
           mvn -B -Pscreenshot-tests -pl workbench-screenshot-tests
           -DupdateScreenshots=false verify
-
-      - name: Commit intentional issue 275 baselines
-        if: steps.compare.outcome == 'failure' && github.head_ref == 'feature/275-workflow-run-ux'
-        run: |
-          cp workbench-screenshot-tests/target/screenshot-failures/*.png \
-            docs/assets/screenshots/workbench/
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add docs/assets/screenshots/workbench
-          if git diff --cached --quiet; then
-            exit 0
-          fi
-          git commit -m "Update workbench run screenshots (#275)"
-          git push origin HEAD:feature/275-workflow-run-ux
-
-      - name: Enforce screenshot comparison outside baseline update
-        if: steps.compare.outcome == 'failure' && github.head_ref != 'feature/275-workflow-run-ux'
-        run: exit 1
 
       - name: Upload screenshot test results
         if: always()
@@ -100,7 +78,7 @@ jobs:
           retention-days: 30
 
       - name: Upload screenshot comparison failures
-        if: steps.compare.outcome == 'failure'
+        if: failure()
         uses: actions/upload-artifact@v7
         with:
           name: workbench-screenshot-failures
