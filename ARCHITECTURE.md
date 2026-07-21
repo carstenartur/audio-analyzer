@@ -208,6 +208,8 @@ Authoritative data is split deliberately:
 
 A live operation and its outbox row share one Hibernate transaction. A Git checkpoint remains a separate explicit application command unless a verified shared transaction contract says otherwise.
 
+Semantic comparison and three-way merge load exact base/local/remote commits, resolve typed domain conflicts and write a validated deterministic checkpoint through the same `VersionedWorkflowStore` boundary. See [`docs/architecture/semantic-workflow-merge.md`](docs/architecture/semantic-workflow-merge.md).
+
 See [`docs/workbench-hibernate-persistence.md`](docs/workbench-hibernate-persistence.md).
 
 ## Plugin architecture
@@ -218,65 +220,47 @@ A plugin may contribute:
 
 - analyses and demo signals;
 - signal sources and experiments;
-- processing pipelines and snapshot streams;
-- visualization descriptions;
-- calibration and benchmark definitions;
-- exports, menu actions and optional Swing views.
+- optional menu actions and result views through host contracts.
 
-The host loads each plugin independently so one invalid provider does not prevent other plugins from loading.
+The host has no compile-time dependency on `audio-experimental-acoustic`. The experiment module is an optional runtime dependency.
 
-See [`docs/development/plugin-development.md`](docs/development/plugin-development.md).
+## Experimental acoustic boundary
 
-## Experimental acoustic localization
+Localization and insect-tracking code is intentionally separated from stable audio and workflow modules.
 
-`audio-experimental-acoustic` contains simulation, TDOA, beamforming, tracking, wingbeat and dataset research. Its assumptions remain isolated from stable APIs.
+The experimental plugin may use:
 
-Real localization requires evidence for:
+- microphone geometry;
+- GCC-PHAT/TDOA estimation;
+- SRP scanning;
+- trajectory tracking;
+- simulated multichannel scenes;
+- HumBugDB ingestion and benchmark manifests.
 
-- synchronized multichannel capture;
-- array geometry calibration;
-- acoustic propagation and reflection effects;
-- clock offset and drift;
-- confidence and error budgets;
-- repeatable benchmark fixtures.
+Experimental results are exposed honestly as research outputs. Accuracy claims belong to measured datasets and benchmark evidence, not architecture documentation.
 
-No architectural boundary turns an experimental algorithm into a validated detector.
+## Fitness rules
 
-## Boundary enforcement
+Architecture tests enforce representative rules such as:
 
-The build enforces architecture through:
+- `audio-core` has no UI, Spring, JGit, Hibernate or audio-DSP dependency;
+- `audio-plugin-api` has no dependency on concrete audio modules;
+- `audio-dsp` does not depend on Swing;
+- `audio-app` contains adapters, not duplicated domain models;
+- the React browser does not contain canonical workflow merge, undo or persistence logic;
+- production collaboration and search reuse one persistence context rather than parallel JDBC stacks.
 
-- Maven module dependencies;
-- source/import boundary tests;
-- ArchUnit fitness tests;
-- TypeScript architecture lint for the web client;
-- framework-independent reducer and codec tests;
-- migration/schema-validation integration tests;
-- packaged two-browser tests;
-- generated screenshot verification.
+## Verification layers
 
-Stable domain packages must not import Swing, Spring, JGit, Hibernate, Playwright or experimental implementation packages.
+```text
+unit tests
+  -> module contracts
+  -> architecture tests
+  -> persistence/migration tests
+  -> PostgreSQL Testcontainers
+  -> packaged browser tests
+  -> screenshot reproducibility
+  -> CodeQL and static analysis
+```
 
-## Current open architecture work
-
-The implemented collaboration foundation does not complete every planned workflow capability. Current open slices include:
-
-- durable full-process browser restart evidence (#249);
-- semantic diff, three-way merge and conflict resolution (#246);
-- rebuildable workflow-history search (#247);
-- immutable actual workflow execution and run UX (#248, #273–#275).
-
-See [`ROADMAP.md`](ROADMAP.md).
-
-## Extension guidelines
-
-When adding functionality:
-
-1. Put stable reusable semantics in a framework-independent module.
-2. Treat UI state as an adapter, not canonical domain state.
-3. Add a typed command or port instead of importing an infrastructure implementation.
-4. Keep derived indexes and event transports rebuildable or replayable.
-5. Keep experimental assumptions in an experimental module.
-6. Add deterministic tests before release-facing claims.
-7. Update executable documentation and screenshots when visible behavior changes.
-
+The complete Maven reactor is the release gate. Browser and container-heavy suites run in dedicated workflows while remaining executable from a clean checkout.
