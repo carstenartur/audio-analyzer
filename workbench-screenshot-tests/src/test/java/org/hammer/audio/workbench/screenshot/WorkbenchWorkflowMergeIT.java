@@ -169,7 +169,7 @@ class WorkbenchWorkflowMergeIT {
                         propertyKey: input.propertyKey,
                         newValue: input.newValue
                       };
-                      if (input.previousValue !== null) {
+                      if (input.hasPreviousValue) {
                         operation.previousValue = input.previousValue;
                       }
                       const response = await fetch('/workflow/operations', {
@@ -184,6 +184,7 @@ class WorkbenchWorkflowMergeIT {
                         "operationId", operationId,
                         "targetId", TARGET_NODE_ID,
                         "propertyKey", PROPERTY_KEY,
+                        "hasPreviousValue", previousValue != null,
                         "previousValue", previousValue == null ? "" : previousValue,
                         "newValue", newValue)))
             .longValue();
