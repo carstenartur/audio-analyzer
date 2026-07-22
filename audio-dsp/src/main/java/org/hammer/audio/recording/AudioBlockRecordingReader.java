@@ -101,6 +101,10 @@ public final class AudioBlockRecordingReader implements Closeable {
           reader.inspection().orElseThrow(() -> new IOException("Source inspection incomplete"));
       if (sourceInspection.blockCount() == 0L) {
         writer.abort();
+        Path partialFile = writer.partialFile();
+        if (partialFile != null) {
+          Files.deleteIfExists(partialFile);
+        }
         throw new IOException("No complete audio blocks can be recovered from " + source);
       }
     }
@@ -168,7 +172,7 @@ public final class AudioBlockRecordingReader implements Closeable {
       return handleCorruption("invalid frame count: " + frames, null);
     }
     long sampleValues = (long) frames * format.channels();
-    if (sampleValues > Integer.MAX_VALUE) {
+    if (sampleValues > AudioBlockRecordingFormat.MAX_SAMPLE_VALUES_PER_BLOCK) {
       return handleCorruption("recording block is too large: " + sampleValues + " samples", null);
     }
 
@@ -281,8 +285,7 @@ public final class AudioBlockRecordingReader implements Closeable {
     }
   }
 
-  private Optional<AudioBlock> handleTruncation(String detail, Exception cause)
-      throws IOException {
+  private Optional<AudioBlock> handleTruncation(String detail, Exception cause) throws IOException {
     if (allowIncomplete) {
       inspection = createInspection(RecordingIntegrity.TRUNCATED, "", detail);
       ended = true;
