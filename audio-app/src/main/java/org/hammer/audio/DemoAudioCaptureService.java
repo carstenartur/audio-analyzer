@@ -34,6 +34,7 @@ public final class DemoAudioCaptureService implements AudioCaptureService {
   private final SignalGenerator signalGenerator;
   private final AudioRingBuffer<AudioBlock> ringBuffer =
       new AudioRingBuffer<>(RING_BUFFER_CAPACITY);
+  private final AudioBlockBroadcaster broadcaster = new AudioBlockBroadcaster();
   private final int tickEveryNSamples;
   private final AudioFormat format;
 
@@ -121,6 +122,11 @@ public final class DemoAudioCaptureService implements AudioCaptureService {
   }
 
   @Override
+  public AudioBlockSubscription subscribe(AudioBlockListener listener) {
+    return broadcaster.subscribe(listener);
+  }
+
+  @Override
   public AudioRingBuffer<AudioBlock> getRingBuffer() {
     return ringBuffer;
   }
@@ -154,6 +160,7 @@ public final class DemoAudioCaptureService implements AudioCaptureService {
       AudioBlock block = signalGenerator.nextBlock(frames);
       latestBlock = block;
       ringBuffer.offer(block);
+      broadcaster.publish(block);
       latestModel = buildLegacyModel(block);
       int sleepMillis =
           Math.max(10, Math.round((1000f * frames) / Math.max(1f, descriptor.sampleRate())));
