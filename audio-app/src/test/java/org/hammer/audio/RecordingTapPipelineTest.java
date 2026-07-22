@@ -47,7 +47,8 @@ class RecordingTapPipelineTest {
     assertEquals(0L, tap.status().droppedBlocks());
     assertEquals(0L, tap.status().continuityGapCount());
     assertEquals(100, AudioBlockRecordingReader.readAll(file).size());
-    assertEquals(RecordingIntegrity.COMPLETE, AudioBlockRecordingReader.inspect(file).integrity());
+    assertEquals(
+        RecordingIntegrity.COMPLETE, AudioBlockRecordingReader.inspect(file).integrity());
   }
 
   @Test
