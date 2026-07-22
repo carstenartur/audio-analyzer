@@ -12,7 +12,7 @@ package org.hammer.audio.acquisition;
 public record CaptureDeviceDescriptor(
     String deviceId, String name, String vendor, String description, String version) {
 
-  /** Validate one discovered capture-device descriptor. */
+  // Validate one discovered capture-device descriptor.
   public CaptureDeviceDescriptor {
     requireText(deviceId, "deviceId");
     requireText(name, "name");
