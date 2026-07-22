@@ -41,7 +41,9 @@ public final class FileStoreRecordingStorageProbe implements RecordingStoragePro
     long criticalBytes =
         Math.max(MINIMUM_CRITICAL_BYTES, safeMultiply(expectedBytesPerSecond, CRITICAL_SECONDS));
     RecordingStorageLevel level;
-    if (!writable || usable <= criticalBytes || (remainingSeconds >= 0 && remainingSeconds <= CRITICAL_SECONDS)) {
+    if (!writable
+        || usable <= criticalBytes
+        || (remainingSeconds >= 0 && remainingSeconds <= CRITICAL_SECONDS)) {
       level = RecordingStorageLevel.CRITICAL;
     } else if (usable <= warningBytes
         || (remainingSeconds >= 0 && remainingSeconds <= WARNING_SECONDS)) {
