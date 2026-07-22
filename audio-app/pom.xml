@@ -185,7 +185,7 @@
             <manifest>
               <addClasspath>true</addClasspath>
               <classpathPrefix>lib/</classpathPrefix>
-              <mainClass>org.hammer.AudioAnalyseFrame</mainClass>
+              <mainClass>org.hammer.ExperimentAudioAnalyseFrame</mainClass>
             </manifest>
           </archive>
         </configuration>
