@@ -29,8 +29,7 @@ public final class JavaSoundCaptureDeviceDiscovery {
   public List<CaptureDeviceDescriptor> discover() {
     List<CaptureDeviceDescriptor> devices = new ArrayList<>();
     for (Mixer.Info info : catalog.infos()) {
-      Mixer mixer = catalog.mixer(info);
-      if (mixer.getTargetLineInfo().length > 0) {
+      if (catalog.inputCapable(info)) {
         devices.add(descriptor(info));
       }
     }
@@ -44,8 +43,7 @@ public final class JavaSoundCaptureDeviceDiscovery {
       return Optional.empty();
     }
     for (Mixer.Info info : catalog.infos()) {
-      if (deviceId.equals(descriptor(info).deviceId())
-          && catalog.mixer(info).getTargetLineInfo().length > 0) {
+      if (deviceId.equals(descriptor(info).deviceId()) && catalog.inputCapable(info)) {
         return Optional.of(info);
       }
     }
@@ -71,7 +69,7 @@ public final class JavaSoundCaptureDeviceDiscovery {
   interface MixerCatalog {
     List<Mixer.Info> infos();
 
-    Mixer mixer(Mixer.Info info);
+    boolean inputCapable(Mixer.Info info);
   }
 
   private static final class SystemMixerCatalog implements MixerCatalog {
@@ -82,8 +80,8 @@ public final class JavaSoundCaptureDeviceDiscovery {
     }
 
     @Override
-    public Mixer mixer(Mixer.Info info) {
-      return AudioSystem.getMixer(info);
+    public boolean inputCapable(Mixer.Info info) {
+      return AudioSystem.getMixer(info).getTargetLineInfo().length > 0;
     }
   }
 }
