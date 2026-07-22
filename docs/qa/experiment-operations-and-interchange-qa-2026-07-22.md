@@ -101,13 +101,13 @@ trusted/demo feature until actor identity is server-bound.
 
 **Yes.** The recommended initial public setup document is:
 
-| Property | Proposed value |
-|---|---|
-| Extension | `.audioexp` |
-| Media type | `application/vnd.carstenartur.audio-analyzer.experiment+json` |
-| Format identifier | `io.github.carstenartur.audio-analyzer.experiment` |
-| Envelope version | `1` |
-| Validation | checked-in JSON Schema plus semantic validation |
+|     Property      |                        Proposed value                         |
+|-------------------|---------------------------------------------------------------|
+| Extension         | `.audioexp`                                                   |
+| Media type        | `application/vnd.carstenartur.audio-analyzer.experiment+json` |
+| Format identifier | `io.github.carstenartur.audio-analyzer.experiment`            |
+| Envelope version  | `1`                                                           |
+| Validation        | checked-in JSON Schema plus semantic validation               |
 
 The exact spelling should be frozen before release. The important architectural decision is that this
 is a small, inspectable, versioned setup document, not an audio container.
@@ -402,38 +402,38 @@ Visible throughout any recording:
 
 ### Phase 1 — Prevent invalid evidence
 
-1. #305 — loss-aware non-blocking recording.
-2. #306 — storage preflight and persistent capacity display.
-3. #307 — recording finalization, integrity and recovery.
-4. #308 — server-bound collaboration identity before untrusted deployment.
+- Issue #305 — loss-aware non-blocking recording.
+- Issue #306 — storage preflight and persistent capacity display.
+- Issue #307 — recording finalization, integrity and recovery.
+- Issue #308 — server-bound collaboration identity before untrusted deployment.
 
 ### Phase 2 — Complete the operator workflow
 
-5. #139 — one simulation/replay/live acoustic workflow.
-6. #312 — shared readiness and runtime-health model/UI.
+- Issue #139 — one simulation/replay/live acoustic workflow.
+- Issue #312 — shared readiness and runtime-health model/UI.
 
 ### Phase 3 — Portable experiment exchange
 
-7. #309 — public experiment document and schema.
-8. #310 — plugin sections, validation and migrations.
-9. #311 — safe import/export and desktop association.
+- Issue #309 — public experiment document and schema.
+- Issue #310 — plugin sections, validation and migrations.
+- Issue #311 — safe import/export and desktop association.
 
 The phases may overlap at API-design level, but a polished file association should not precede strict
 format and plugin validation, and a polished dashboard should not hide a lossy recorder.
 
 ## Issue map
 
-| Issue | Purpose |
-|---|---|
-| #139 | complete visible simulation/replay/live localization workflow |
-| #305 | loss-aware, non-blocking and observable recording |
-| #306 | disk capacity, growth and remaining safe duration |
-| #307 | recording integrity, preferred extension and partial recovery |
-| #308 | authenticated actor identity and trustworthy participant display |
-| #309 | portable `.audioexp` document and media type |
-| #310 | versioned plugin document sections and migrations |
-| #311 | safe import/export and desktop association |
-| #312 | experiment readiness and runtime health dashboard |
+| Issue |                             Purpose                              |
+|-------|------------------------------------------------------------------|
+| #139  | complete visible simulation/replay/live localization workflow    |
+| #305  | loss-aware, non-blocking and observable recording                |
+| #306  | disk capacity, growth and remaining safe duration                |
+| #307  | recording integrity, preferred extension and partial recovery    |
+| #308  | authenticated actor identity and trustworthy participant display |
+| #309  | portable `.audioexp` document and media type                     |
+| #310  | versioned plugin document sections and migrations                |
+| #311  | safe import/export and desktop association                       |
+| #312  | experiment readiness and runtime health dashboard                |
 
 ## Exit criteria for the next QA closure
 
