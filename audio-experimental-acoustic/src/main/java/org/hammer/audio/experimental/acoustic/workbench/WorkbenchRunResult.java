@@ -4,7 +4,9 @@ import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
+import org.hammer.audio.acquisition.LocalizationExperiment;
 import org.hammer.audio.acquisition.SynchronizationMode;
 import org.hammer.audio.acquisition.SynchronizationStatus;
 import org.hammer.audio.experimental.acoustic.benchmark.BenchmarkReport;
@@ -24,6 +26,8 @@ import org.hammer.audio.experimental.acoustic.tracking.TrackingSnapshot;
  *     or {@code null} if benchmarking was not possible (e.g. empty run)
  * @param frameSchedule the real-time budget schedule used during the run, or {@code null} when not
  *     available; used to identify over-budget frames
+ * @param experiment reproducibility, array, source and calibration metadata, or {@code null} for
+ *     legacy callers
  */
 public record WorkbenchRunResult(
     SimulationScenario scenario,
@@ -31,7 +35,8 @@ public record WorkbenchRunResult(
     List<TrackingSnapshot> snapshots,
     long totalProcessingNanos,
     BenchmarkReport benchmarkReport,
-    FrameSchedule frameSchedule) {
+    FrameSchedule frameSchedule,
+    LocalizationExperiment experiment) {
 
   // Validates and defensively copies the snapshots list.
   public WorkbenchRunResult {
@@ -42,17 +47,40 @@ public record WorkbenchRunResult(
       throw new IllegalArgumentException("totalProcessingNanos must be >= 0");
     }
     snapshots = List.copyOf(snapshots);
-    // benchmarkReport and frameSchedule may be null
+    // benchmarkReport, frameSchedule and experiment may be null for compatibility.
   }
 
-  /** Construct a result without a frame schedule (budget compliance is unavailable). */
+  /** Construct a result without experiment metadata. */
+  public WorkbenchRunResult(
+      SimulationScenario scenario,
+      WorkbenchParameters parameters,
+      List<TrackingSnapshot> snapshots,
+      long totalProcessingNanos,
+      BenchmarkReport benchmarkReport,
+      FrameSchedule frameSchedule) {
+    this(
+        scenario,
+        parameters,
+        snapshots,
+        totalProcessingNanos,
+        benchmarkReport,
+        frameSchedule,
+        null);
+  }
+
+  /** Construct a result without a frame schedule or experiment metadata. */
   public WorkbenchRunResult(
       SimulationScenario scenario,
       WorkbenchParameters parameters,
       List<TrackingSnapshot> snapshots,
       long totalProcessingNanos,
       BenchmarkReport benchmarkReport) {
-    this(scenario, parameters, snapshots, totalProcessingNanos, benchmarkReport, null);
+    this(scenario, parameters, snapshots, totalProcessingNanos, benchmarkReport, null, null);
+  }
+
+  /** Optional reproducibility and hardware metadata. */
+  public Optional<LocalizationExperiment> experimentMetadata() {
+    return Optional.ofNullable(experiment);
   }
 
   /** Number of audio blocks that were processed. */
