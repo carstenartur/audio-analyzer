@@ -90,8 +90,7 @@ public final class JavaSoundMicrophoneArraySource implements MultiChannelAudioSo
     }
     float[][] samples = new float[format().channels()][decodedFrames];
     decoder.decode(data, decodedFrames * decoder.frameSize(), samples);
-    AudioBlock block =
-        AudioBlock.wrap(format(), samples, nextFrameIndex, System.nanoTime());
+    AudioBlock block = AudioBlock.wrap(format(), samples, nextFrameIndex, System.nanoTime());
     nextFrameIndex += decodedFrames;
     return Optional.of(block);
   }
@@ -141,13 +140,13 @@ public final class JavaSoundMicrophoneArraySource implements MultiChannelAudioSo
 
   private static AudioLineProvider provider(MicrophoneArrayProfile profile) {
     Objects.requireNonNull(profile, "profile");
-    String deviceId =
-        profile.liveCaptureConfiguration().orElseThrow().device().deviceId();
+    String deviceId = profile.liveCaptureConfiguration().orElseThrow().device().deviceId();
     JavaSoundCaptureDeviceDiscovery discovery = new JavaSoundCaptureDeviceDiscovery();
     return new DefaultAudioLineProvider(
         discovery
             .findMixerInfo(deviceId)
             .orElseThrow(
-                () -> new IllegalArgumentException("capture device is not available: " + deviceId)));
+                () ->
+                    new IllegalArgumentException("capture device is not available: " + deviceId)));
   }
 }
