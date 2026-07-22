@@ -68,7 +68,7 @@ public final class DirectoryMicrophoneArrayProfileStore implements MicrophoneArr
           .sorted(Comparator.comparing(MicrophoneArrayProfile::profileId))
           .toList();
     } catch (UncheckedIOException exception) {
-      throw exception.getCause();
+      throw new IOException("Failed to read microphone-array profile directory", exception);
     }
   }
 
