@@ -47,5 +47,7 @@ public final class AudioBlockRecordingFormat {
   /** Defensive upper bound for all channel/frame float values allocated for one block. */
   static final long MAX_SAMPLE_VALUES_PER_BLOCK = 16_777_216L;
 
-  private AudioBlockRecordingFormat() { }
+  private AudioBlockRecordingFormat() {
+    // utility class
+  }
 }
