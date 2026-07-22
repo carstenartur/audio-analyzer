@@ -9,13 +9,14 @@ import java.time.Instant;
 import java.util.Base64;
 import java.util.Map;
 import java.util.Properties;
-import java.util.TreeMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 /** Deterministic text codec for complete localization experiment manifests. */
 public final class LocalizationExperimentCodec {
 
   private static final String SCHEMA_VERSION = "1";
+  private static final String METADATA_PREFIX = "metadata.";
 
   private final MicrophoneArrayProfileCodec profileCodec;
 
@@ -31,7 +32,7 @@ public final class LocalizationExperimentCodec {
 
   /** Encode one complete experiment manifest in stable key order. */
   public String encode(LocalizationExperiment experiment) {
-    TreeMap<String, String> values = new TreeMap<>();
+    Map<String, String> values = new ConcurrentHashMap<>();
     put(values, "schema", SCHEMA_VERSION);
     put(values, "experiment.id", experiment.experimentId());
     put(values, "experiment.name", experiment.displayName());
@@ -45,14 +46,15 @@ public final class LocalizationExperimentCodec {
             .encodeToString(
                 profileCodec.encode(experiment.profile()).getBytes(StandardCharsets.UTF_8));
     put(values, "experiment.profile", profile);
-    put(values, "metadata.count", Integer.toString(experiment.metadata().size()));
+    put(values, METADATA_PREFIX + "count", Integer.toString(experiment.metadata().size()));
     int index = 0;
-    for (Map.Entry<String, String> entry : new TreeMap<>(experiment.metadata()).entrySet()) {
-      put(values, "metadata." + index + ".key", entry.getKey());
-      put(values, "metadata." + index + ".value", entry.getValue());
+    for (Map.Entry<String, String> entry : experiment.metadata().entrySet()) {
+      put(values, METADATA_PREFIX + index + ".key", entry.getKey());
+      put(values, METADATA_PREFIX + index + ".value", entry.getValue());
       index++;
     }
     return values.entrySet().stream()
+        .sorted(Map.Entry.comparingByKey())
         .map(entry -> entry.getKey() + '=' + entry.getValue())
         .collect(Collectors.joining("\n", "", "\n"));
   }
@@ -72,12 +74,12 @@ public final class LocalizationExperimentCodec {
     byte[] profileBytes = Base64.getUrlDecoder().decode(value(properties, "experiment.profile"));
     MicrophoneArrayProfile profile =
         profileCodec.decode(new String(profileBytes, StandardCharsets.UTF_8));
-    int metadataCount = Integer.parseInt(value(properties, "metadata.count"));
-    TreeMap<String, String> metadata = new TreeMap<>();
+    int metadataCount = Integer.parseInt(value(properties, METADATA_PREFIX + "count"));
+    Map<String, String> metadata = new ConcurrentHashMap<>();
     for (int index = 0; index < metadataCount; index++) {
       metadata.put(
-          value(properties, "metadata." + index + ".key"),
-          value(properties, "metadata." + index + ".value"));
+          value(properties, METADATA_PREFIX + index + ".key"),
+          value(properties, METADATA_PREFIX + index + ".value"));
     }
     return new LocalizationExperiment(
         value(properties, "experiment.id"),
