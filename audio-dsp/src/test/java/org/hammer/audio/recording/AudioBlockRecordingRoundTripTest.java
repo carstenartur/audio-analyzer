@@ -176,10 +176,7 @@ class AudioBlockRecordingRoundTripTest {
     AudioBlock first = block(0L, 0L, new float[] {0f});
     AudioBlock second =
         new AudioBlock(
-            new AudioFormatDescriptor(48000f, 2, 16),
-            new float[][] {{0f}, {0f}},
-            1L,
-            0L);
+            new AudioFormatDescriptor(48000f, 2, 16), new float[][] {{0f}, {0f}}, 1L, 0L);
     try (AudioBlockRecordingWriter writer = AudioBlockRecordingWriter.open(file)) {
       writer.write(first);
       assertThrows(IllegalStateException.class, () -> writer.write(second));
@@ -197,9 +194,7 @@ class AudioBlockRecordingRoundTripTest {
   private static void writeLegacyV1(Path file, AudioBlock block) throws IOException {
     try (DataOutputStream output = new DataOutputStream(Files.newOutputStream(file))) {
       writeHeader(
-          output,
-          AudioBlockRecordingFormat.LEGACY_MAGIC,
-          AudioBlockRecordingFormat.LEGACY_VERSION);
+          output, AudioBlockRecordingFormat.LEGACY_MAGIC, AudioBlockRecordingFormat.LEGACY_VERSION);
       output.writeInt(block.frames());
       output.writeLong(block.frameIndex());
       output.writeLong(block.timestampNanos());
