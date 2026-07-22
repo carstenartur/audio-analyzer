@@ -1,10 +1,8 @@
 package org.hammer.audio.experimental.acoustic;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import org.hammer.audio.acquisition.Microphone;
@@ -70,7 +68,7 @@ public final class TdoaPairConsistencyAnalyzer {
       List<TdoaEstimate> estimates,
       float sampleRate,
       double physicalToleranceSeconds) {
-    Map<OrientedPair, Double> delays = new HashMap<>();
+    List<OrientedDelay> delays = new ArrayList<>(estimates.size() * 2);
     Set<UnorderedPair> seenPairs = new HashSet<>();
     List<TdoaConsistencyFinding> findings = new ArrayList<>();
     for (TdoaEstimate estimate : estimates) {
@@ -78,8 +76,8 @@ public final class TdoaPairConsistencyAnalyzer {
       Microphone second = microphone(array, estimate.secondMicrophoneId());
       UnorderedPair pair = UnorderedPair.of(first.id(), second.id());
       if (seenPairs.add(pair)) {
-        delays.put(new OrientedPair(first.id(), second.id()), estimate.delaySeconds());
-        delays.put(new OrientedPair(second.id(), first.id()), -estimate.delaySeconds());
+        delays.add(new OrientedDelay(first.id(), second.id(), estimate.delaySeconds()));
+        delays.add(new OrientedDelay(second.id(), first.id(), -estimate.delaySeconds()));
       } else {
         throw new IllegalArgumentException("duplicate TDOA estimate for pair " + pair);
       }
@@ -89,7 +87,7 @@ public final class TdoaPairConsistencyAnalyzer {
         findings.add(finding);
       }
     }
-    return new PairAnalysis(delays, findings, findings.size());
+    return new PairAnalysis(List.copyOf(delays), findings, findings.size());
   }
 
   private TdoaConsistencyFinding physicalFinding(
@@ -115,7 +113,7 @@ public final class TdoaPairConsistencyAnalyzer {
 
   private static CycleAnalysis analyzeCycles(
       List<Microphone> microphones,
-      Map<OrientedPair, Double> delays,
+      List<OrientedDelay> delays,
       double cycleToleranceSeconds) {
     List<TdoaConsistencyFinding> findings = new ArrayList<>();
     int evaluatedCycles = 0;
@@ -127,9 +125,9 @@ public final class TdoaPairConsistencyAnalyzer {
           String firstId = microphones.get(firstIndex).id();
           String secondId = microphones.get(secondIndex).id();
           String thirdId = microphones.get(thirdIndex).id();
-          Double firstSecond = delays.get(new OrientedPair(firstId, secondId));
-          Double secondThird = delays.get(new OrientedPair(secondId, thirdId));
-          Double firstThird = delays.get(new OrientedPair(firstId, thirdId));
+          Double firstSecond = delay(delays, firstId, secondId);
+          Double secondThird = delay(delays, secondId, thirdId);
+          Double firstThird = delay(delays, firstId, thirdId);
           if (firstSecond == null || secondThird == null || firstThird == null) {
             continue;
           }
@@ -150,6 +148,15 @@ public final class TdoaPairConsistencyAnalyzer {
       }
     }
     return new CycleAnalysis(findings, evaluatedCycles, residualTotal, maximumResidual);
+  }
+
+  private static Double delay(List<OrientedDelay> delays, String firstId, String secondId) {
+    for (OrientedDelay delay : delays) {
+      if (delay.firstId().equals(firstId) && delay.secondId().equals(secondId)) {
+        return delay.delaySeconds();
+      }
+    }
+    return null;
   }
 
   private static Microphone microphone(MicrophoneArray array, String id) {
@@ -174,7 +181,7 @@ public final class TdoaPairConsistencyAnalyzer {
   }
 
   private record PairAnalysis(
-      Map<OrientedPair, Double> delays,
+      List<OrientedDelay> delays,
       List<TdoaConsistencyFinding> findings,
       int physicalViolationCount) {
     // immutable analysis tuple
@@ -186,6 +193,20 @@ public final class TdoaPairConsistencyAnalyzer {
       double residualTotal,
       double maximumResidual) {
     // immutable analysis tuple
+  }
+
+  private record OrientedDelay(String firstId, String secondId, double delaySeconds) {
+    private OrientedDelay {
+      if (firstId == null || firstId.isBlank() || secondId == null || secondId.isBlank()) {
+        throw new IllegalArgumentException("delay ids must not be blank");
+      }
+      if (firstId.equals(secondId)) {
+        throw new IllegalArgumentException("delay ids must be distinct");
+      }
+      if (!Double.isFinite(delaySeconds)) {
+        throw new IllegalArgumentException("delaySeconds must be finite");
+      }
+    }
   }
 
   private record UnorderedPair(String firstId, String secondId) {
@@ -202,17 +223,6 @@ public final class TdoaPairConsistencyAnalyzer {
       return firstId.compareTo(secondId) <= 0
           ? new UnorderedPair(firstId, secondId)
           : new UnorderedPair(secondId, firstId);
-    }
-  }
-
-  private record OrientedPair(String firstId, String secondId) {
-    private OrientedPair {
-      if (firstId == null || firstId.isBlank() || secondId == null || secondId.isBlank()) {
-        throw new IllegalArgumentException("pair ids must not be blank");
-      }
-      if (firstId.equals(secondId)) {
-        throw new IllegalArgumentException("pair ids must be distinct");
-      }
     }
   }
 }
