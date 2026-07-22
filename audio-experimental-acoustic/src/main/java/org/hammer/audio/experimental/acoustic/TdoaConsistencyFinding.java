@@ -25,11 +25,12 @@ public record TdoaConsistencyFinding(
   // Validate and defensively copy one finding.
   public TdoaConsistencyFinding {
     Objects.requireNonNull(kind, "kind");
-    microphoneIds = List.copyOf(Objects.requireNonNull(microphoneIds, "microphoneIds"));
-    if (microphoneIds.size() < 2
-        || microphoneIds.stream().anyMatch(id -> id == null || id.isBlank())) {
+    List<String> requiredIds = Objects.requireNonNull(microphoneIds, "microphoneIds");
+    if (requiredIds.size() < 2
+        || requiredIds.stream().anyMatch(id -> id == null || id.isBlank())) {
       throw new IllegalArgumentException("microphoneIds must contain at least two non-blank ids");
     }
+    microphoneIds = List.copyOf(requiredIds);
     if (!Double.isFinite(residualSeconds)) {
       throw new IllegalArgumentException("residualSeconds must be finite");
     }
