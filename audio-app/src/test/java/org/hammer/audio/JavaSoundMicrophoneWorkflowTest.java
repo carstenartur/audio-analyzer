@@ -10,6 +10,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.io.IOException;
 import java.time.Instant;
 import java.util.EnumSet;
 import java.util.List;
@@ -65,7 +66,7 @@ class JavaSoundMicrophoneWorkflowTest {
   }
 
   @Test
-  void readsCalibratedLivePcmThroughCommonMultichannelSource() throws Exception {
+  void readsCalibratedLivePcmThroughCommonMultichannelSource() throws IOException {
     TargetDataLine line = mock(TargetDataLine.class);
     AudioLineProvider provider = mock(AudioLineProvider.class);
     when(provider.acquireLine(any())).thenReturn(line);
