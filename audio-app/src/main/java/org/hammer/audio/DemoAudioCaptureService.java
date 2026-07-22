@@ -76,6 +76,7 @@ public final class DemoAudioCaptureService implements AudioCaptureService {
               return worker;
             });
     workerExecutor.submit(this::generateLoop);
+    ActiveAudioCaptureRegistry.activate(this);
   }
 
   @Override
@@ -83,6 +84,7 @@ public final class DemoAudioCaptureService implements AudioCaptureService {
     if (!running.getAndSet(false)) {
       return;
     }
+    ActiveAudioCaptureRegistry.deactivate(this);
     if (workerExecutor != null) {
       workerExecutor.shutdownNow();
       try {
