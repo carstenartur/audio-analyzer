@@ -1,0 +1,51 @@
+name: Format PR 304 Sources
+
+on:
+  push:
+    branches:
+      - feature/139-real-world-microphone-workflow
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  format:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          server-id: github
+          server-username: GITHUB_ACTOR
+          server-password: GITHUB_TOKEN
+
+      - name: Apply repository formatter
+        run: mvn -B spotless:apply
+
+      - name: Upload formatted changed files
+        uses: actions/upload-artifact@v7
+        with:
+          name: formatted-pr304-sources
+          path: |
+            audio-acquisition/src/main/java/org/hammer/audio/acquisition/
+            audio-acquisition/src/test/java/org/hammer/audio/acquisition/
+            audio-app/src/main/java/org/hammer/audio/JavaSoundCaptureDeviceDiscovery.java
+            audio-app/src/main/java/org/hammer/audio/JavaSoundMicrophoneArraySource.java
+            audio-app/src/test/java/org/hammer/audio/JavaSoundMicrophoneWorkflowTest.java
+            audio-app/pom.xml
+            audio-experimental-acoustic/src/main/java/org/hammer/audio/experimental/acoustic/workbench/WorkbenchRunResult.java
+            audio-experimental-acoustic/src/main/java/org/hammer/audio/experimental/acoustic/workbench/WorkbenchScenarioRunner.java
+            audio-experimental-acoustic/src/main/java/org/hammer/audio/experimental/acoustic/workbench/WorkbenchExperimentExporter.java
+            audio-experimental-acoustic/src/test/java/org/hammer/audio/experimental/acoustic/workbench/WorkbenchExperimentExporterTest.java
+            docs/plugins/acoustic-localization/research/hardware/real-world-localization-workflow.md
+          if-no-files-found: error
+          retention-days: 1
