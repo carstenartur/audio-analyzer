@@ -1,0 +1,42 @@
+name: Format experiment QA documentation
+
+on:
+  pull_request:
+    branches:
+      - master
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  format:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          server-id: github
+          server-username: GITHUB_ACTOR
+          server-password: GITHUB_TOKEN
+
+      - name: Apply configured Markdown formatter
+        run: mvn -B spotless:apply
+
+      - name: Upload formatted QA documentation
+        uses: actions/upload-artifact@v7
+        with:
+          name: formatted-experiment-qa-docs
+          path: |
+            docs/README.md
+            docs/qa/experiment-operations-and-interchange-qa-2026-07-22.md
+          if-no-files-found: error
+          retention-days: 1
