@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -78,7 +79,7 @@ class JavaSoundMicrophoneWorkflowTest {
               return Math.min(length, pcm.length);
             })
         .when(line)
-        .read(any(byte[].class), any(Integer.class), any(Integer.class));
+        .read(any(byte[].class), anyInt(), anyInt());
     JavaSoundMicrophoneArraySource source =
         new JavaSoundMicrophoneArraySource(profile(true), provider, 0.5, OBSERVATION_TIME);
 
