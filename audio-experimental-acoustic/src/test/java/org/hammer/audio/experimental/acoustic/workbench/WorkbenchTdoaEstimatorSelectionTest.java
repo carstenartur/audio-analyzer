@@ -1,6 +1,7 @@
 package org.hammer.audio.experimental.acoustic.workbench;
 
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.hammer.audio.experimental.acoustic.GccPhatTdoaEstimator;
@@ -23,6 +24,13 @@ class WorkbenchTdoaEstimatorSelectionTest {
     assertInstanceOf(
         SubSampleGccPhatTdoaEstimator.class,
         WorkbenchScenarioRunner.buildTdoaEstimator(advanced));
+  }
+
+  @Test
+  void rejectsMissingTdoaEstimatorStrategyAtConfigurationBoundary() {
+    assertThrows(
+        NullPointerException.class,
+        () -> WorkbenchParameters.defaults().tdoaEstimatorType(null));
   }
 
   @Test
