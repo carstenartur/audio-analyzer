@@ -54,21 +54,13 @@ public final class JavaSoundCaptureDeviceDiscovery {
 
   private static CaptureDeviceDescriptor descriptor(Mixer.Info info) {
     return new CaptureDeviceDescriptor(
-        stableId(info),
-        info.getName(),
-        info.getVendor(),
-        info.getDescription(),
-        info.getVersion());
+        stableId(info), info.getName(), info.getVendor(), info.getDescription(), info.getVersion());
   }
 
   private static String stableId(Mixer.Info info) {
     String identity =
         String.join(
-            "\u0000",
-            info.getName(),
-            info.getVendor(),
-            info.getDescription(),
-            info.getVersion());
+            "\u0000", info.getName(), info.getVendor(), info.getDescription(), info.getVersion());
     String encoded =
         Base64.getUrlEncoder()
             .withoutPadding()
