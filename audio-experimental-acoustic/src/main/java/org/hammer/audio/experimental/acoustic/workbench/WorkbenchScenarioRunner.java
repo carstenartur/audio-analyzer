@@ -1,11 +1,19 @@
 package org.hammer.audio.experimental.acoustic.workbench;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import org.hammer.audio.acquisition.LocalizationExperiment;
+import org.hammer.audio.acquisition.LocalizationExperimentStage;
+import org.hammer.audio.acquisition.LocalizationInputMode;
 import org.hammer.audio.acquisition.MicrophoneArray;
+import org.hammer.audio.acquisition.MicrophoneArrayLayout;
+import org.hammer.audio.acquisition.MicrophoneArrayProfile;
 import org.hammer.audio.core.AudioBlock;
 import org.hammer.audio.experimental.acoustic.CrossCorrelationTdoaEstimator;
 import org.hammer.audio.experimental.acoustic.DelayAndSumBeamformer;
@@ -66,26 +74,13 @@ public final class WorkbenchScenarioRunner {
     // utility class
   }
 
-  /**
-   * Run {@code scenario} with {@code parameters} and return the full result.
-   *
-   * @param scenario scenario to execute
-   * @param parameters pipeline configuration
-   * @return collected result containing all snapshots
-   */
+  /** Run {@code scenario} with {@code parameters} and return the full result. */
   public static WorkbenchRunResult run(
       SimulationScenario scenario, WorkbenchParameters parameters) {
     return run(scenario, parameters, null);
   }
 
-  /**
-   * Run {@code scenario} with {@code parameters}, notifying {@code callback} after each block.
-   *
-   * @param scenario scenario to execute
-   * @param parameters pipeline configuration
-   * @param callback optional per-block callback; {@code null} disables incremental notification
-   * @return collected result containing all snapshots
-   */
+  /** Run {@code scenario}, notifying {@code callback} after each block. */
   public static WorkbenchRunResult run(
       SimulationScenario scenario, WorkbenchParameters parameters, ProgressCallback callback) {
     Objects.requireNonNull(scenario, "scenario");
@@ -122,16 +117,39 @@ public final class WorkbenchScenarioRunner {
           snapshots,
           totalProcessingNanos,
           computeBenchmarkReport(scenario, snapshots),
-          pipeline.schedule());
+          pipeline.schedule(),
+          simulationExperiment(scenario, parameters));
     } catch (java.io.IOException exception) {
       throw new IllegalStateException("Unexpected close failure on simulation source", exception);
     }
   }
 
-  /**
-   * Compute a {@link BenchmarkReport} by comparing the collected snapshots against the scenario
-   * ground truth. Returns {@code null} when no snapshots were collected or if comparison fails.
-   */
+  private static LocalizationExperiment simulationExperiment(
+      SimulationScenario scenario, WorkbenchParameters parameters) {
+    MicrophoneArrayProfile profile =
+        new MicrophoneArrayProfile(
+            "simulation." + scenario.name(),
+            "Simulation array for " + scenario.name(),
+            MicrophoneArrayLayout.CUSTOM,
+            scenario.array(),
+            Set.of(LocalizationInputMode.SIMULATION),
+            null,
+            null);
+    return new LocalizationExperiment(
+        "simulation." + scenario.name() + '.' + scenario.randomSeed(),
+        "Simulation: " + scenario.name(),
+        profile,
+        LocalizationInputMode.SIMULATION,
+        "scenario:" + scenario.name(),
+        Instant.EPOCH,
+        LocalizationExperimentStage.LOCALIZED,
+        Map.of(
+            "blockSize", Integer.toString(parameters.blockSize()),
+            "randomSeed", Long.toString(scenario.randomSeed()),
+            "sampleRate", Float.toString(scenario.sampleRate())));
+  }
+
+  /** Compute a benchmark report, or {@code null} when comparison is unavailable. */
   private static BenchmarkReport computeBenchmarkReport(
       SimulationScenario scenario, List<TrackingSnapshot> snapshots) {
     if (snapshots.isEmpty()) {
@@ -147,11 +165,7 @@ public final class WorkbenchScenarioRunner {
     }
   }
 
-  /**
-   * Construct a {@link TrackingPipeline} from the given scenario and workbench parameters.
-   *
-   * <p>Visible for testing.
-   */
+  /** Construct a {@link TrackingPipeline} from the given scenario and workbench parameters. */
   static TrackingPipeline buildPipeline(SimulationScenario scenario, WorkbenchParameters params) {
     FrequencyBand band = new FrequencyBand(params.bandMinHz(), params.bandMaxHz());
     MultiPeakDetector detector =

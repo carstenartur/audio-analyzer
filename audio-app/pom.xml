@@ -63,6 +63,10 @@
     </dependency>
     <dependency>
       <groupId>${project.groupId}</groupId>
+      <artifactId>audio-acquisition</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>${project.groupId}</groupId>
       <artifactId>audio-dsp</artifactId>
     </dependency>
     <dependency>
