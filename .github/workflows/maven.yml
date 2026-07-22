@@ -40,6 +40,26 @@ jobs:
           set -o pipefail
           mvn -B clean verify --file pom.xml 2>&1 | tee maven-build.log
 
+      - name: Apply configured Spotless formatter for QA artifact
+        if: failure()
+        run: mvn -B -pl audio-experimental-acoustic spotless:apply
+
+      - name: Upload formatted TDOA sources
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: formatted-tdoa-sources
+          path: |
+            audio-experimental-acoustic/src/main/java/org/hammer/audio/experimental/acoustic/AdaptiveBeamformingSearch.java
+            audio-experimental-acoustic/src/main/java/org/hammer/audio/experimental/acoustic/TdoaPairConsistencyAnalyzer.java
+            audio-experimental-acoustic/src/main/java/org/hammer/audio/experimental/acoustic/TdoaConsistencyReport.java
+            audio-experimental-acoustic/src/test/java/org/hammer/audio/experimental/acoustic/AdaptiveBeamformingSearchTest.java
+            audio-experimental-acoustic/src/test/java/org/hammer/audio/experimental/acoustic/TdoaPairConsistencyAnalyzerTest.java
+            audio-experimental-acoustic/src/test/java/org/hammer/audio/experimental/acoustic/workbench/WorkbenchTdoaEstimatorSelectionTest.java
+            audio-experimental-acoustic/src/test/java/org/hammer/audio/experimental/acoustic/workbench/WorkbenchTdoaConsistencyExportTest.java
+          if-no-files-found: error
+          retention-days: 1
+
       - name: Upload Maven build log
         if: failure()
         uses: actions/upload-artifact@v7
