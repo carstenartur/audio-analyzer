@@ -44,9 +44,11 @@ public final class DelayAndSumBeamformer {
       double sum = 0.0;
       int contributors = 0;
       for (Microphone mic : array.microphones()) {
-        int delayedIndex = frame - delaySamples(block, mic, candidate);
-        if (delayedIndex >= 0 && delayedIndex < frames) {
-          sum += block.channelView(mic.channel())[delayedIndex];
+        // The captured sample already contains the propagation delay. Advance each channel by the
+        // candidate's predicted delay so equal source-emission times add coherently.
+        int alignedIndex = frame + delaySamples(block, mic, candidate);
+        if (alignedIndex >= 0 && alignedIndex < frames) {
+          sum += block.channelView(mic.channel())[alignedIndex];
           contributors++;
         }
       }
