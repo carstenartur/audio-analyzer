@@ -27,7 +27,7 @@ public record MicrophoneArrayProfile(
     CaptureDeviceConfiguration liveCapture,
     MicrophoneArrayCalibration calibration) {
 
-  /** Validate one reusable profile and defensively copy its supported modes. */
+  // Validate one reusable profile and defensively copy its supported modes.
   public MicrophoneArrayProfile {
     requireText(profileId, "profileId");
     requireText(displayName, "displayName");
@@ -37,7 +37,7 @@ public record MicrophoneArrayProfile(
     if (supportedModes.isEmpty()) {
       throw new IllegalArgumentException("supportedModes must not be empty");
     }
-    EnumSet<LocalizationInputMode> modes = EnumSet.copyOf(supportedModes);
+    Set<LocalizationInputMode> modes = EnumSet.copyOf(supportedModes);
     supportedModes = Collections.unmodifiableSet(modes);
     if (modes.contains(LocalizationInputMode.LIVE) && liveCapture == null) {
       throw new IllegalArgumentException("liveCapture is required when LIVE mode is supported");
