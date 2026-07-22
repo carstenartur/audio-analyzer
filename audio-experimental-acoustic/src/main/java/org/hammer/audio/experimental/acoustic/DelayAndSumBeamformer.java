@@ -40,28 +40,30 @@ public final class DelayAndSumBeamformer {
   private double scoreCandidate(AudioBlock block, MicrophoneArray array, Vector2 candidate) {
     List<Microphone> microphones = array.microphones();
     int[] relativeDelays = relativeDelaySamples(block, microphones, candidate);
-    int frames = block.frames();
+    int maximumDelay = 0;
+    float[][] channels = new float[microphones.size()][];
+    for (int index = 0; index < microphones.size(); index++) {
+      maximumDelay = Math.max(maximumDelay, relativeDelays[index]);
+      channels[index] = block.channelView(microphones.get(index).channel());
+    }
+    int commonFrames = block.frames() - maximumDelay;
+    if (commonFrames <= 0) {
+      return 0.0;
+    }
+
     double energy = 0.0;
-    for (int frame = 0; frame < frames; frame++) {
+    for (int frame = 0; frame < commonFrames; frame++) {
       double sum = 0.0;
-      int contributors = 0;
       for (int microphoneIndex = 0; microphoneIndex < microphones.size(); microphoneIndex++) {
-        Microphone microphone = microphones.get(microphoneIndex);
         // Captured channels already contain propagation delay. Advance each channel only by its
         // delay relative to the earliest microphone. A common absolute delay is not observable in
         // passive localization and must not change the score of a finite signal block.
-        int alignedIndex = frame + relativeDelays[microphoneIndex];
-        if (alignedIndex >= 0 && alignedIndex < frames) {
-          sum += block.channelView(microphone.channel())[alignedIndex];
-          contributors++;
-        }
+        sum += channels[microphoneIndex][frame + relativeDelays[microphoneIndex]];
       }
-      if (contributors > 0) {
-        double average = sum / contributors;
-        energy += average * average;
-      }
+      double average = sum / microphones.size();
+      energy += average * average;
     }
-    return frames > 0 ? energy / frames : 0.0;
+    return energy / commonFrames;
   }
 
   private int[] relativeDelaySamples(
