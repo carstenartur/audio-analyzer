@@ -66,3 +66,4 @@ Public documentation follows four rules:
 2. Distinguish stable platform capabilities from experimental research.
 3. Generate user-interface screenshots from executable integration scenarios.
 4. Link detailed architecture and development material instead of turning the README into an API manual.
+
