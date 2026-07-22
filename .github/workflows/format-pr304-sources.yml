@@ -1,9 +1,9 @@
 name: Format PR 304 Sources
 
 on:
-  push:
+  pull_request:
     branches:
-      - feature/139-real-world-microphone-workflow
+      - master
 
 permissions:
   contents: read
