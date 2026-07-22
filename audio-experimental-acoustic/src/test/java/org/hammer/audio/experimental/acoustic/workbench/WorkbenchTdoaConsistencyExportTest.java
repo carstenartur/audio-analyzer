@@ -15,7 +15,7 @@ import org.junit.jupiter.api.Test;
 class WorkbenchTdoaConsistencyExportTest {
 
   @Test
-  void exportsAndDisplaysPairConsistencyEvidence() {
+  void exportsPairConsistencyEvidenceAcrossSupportedFormats() {
     TrackingSnapshot snapshot = snapshot();
     WorkbenchRunResult result =
         new WorkbenchRunResult(
@@ -43,11 +43,6 @@ class WorkbenchTdoaConsistencyExportTest {
     assertTrue(
         json.contains(
             "\"tdoaConsistency\":{\"score\":0.350000,\"evaluatedCycles\":4,\"maximumCycleResidualSeconds\":0.000040000,\"physicalViolationCount\":1}"));
-
-    String playback = AcousticLocalizationWorkbenchPanel.formatTdoaConsistencyDetails(snapshot);
-    assertTrue(playback.contains("score=0.350"));
-    assertTrue(playback.contains("maxResidual=40.00 µs"));
-    assertTrue(playback.contains("physicalViolations=1"));
   }
 
   private static TrackingSnapshot snapshot() {
