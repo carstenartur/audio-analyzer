@@ -42,6 +42,7 @@ Plugin implementation details intentionally live outside the project README. The
 - [Quality gates and coverage](quality.md)
 - [Workbench screenshot pipeline](workbench-screenshot-pipeline.md)
 - [Application and documentation QA plan](qa/application-documentation-qa-plan.md)
+- [Experiment operations and document interchange QA](qa/experiment-operations-and-interchange-qa-2026-07-22.md)
 - [Release-readiness checklist](qa/release-readiness-checklist.md)
 - [Current QA findings](QA-FINDINGS.md)
 
@@ -65,4 +66,3 @@ Public documentation follows four rules:
 2. Distinguish stable platform capabilities from experimental research.
 3. Generate user-interface screenshots from executable integration scenarios.
 4. Link detailed architecture and development material instead of turning the README into an API manual.
-
