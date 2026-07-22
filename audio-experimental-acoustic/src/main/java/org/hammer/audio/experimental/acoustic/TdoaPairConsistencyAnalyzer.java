@@ -52,9 +52,7 @@ public final class TdoaPairConsistencyAnalyzer {
             ? cycleAnalysis.residualTotal() / cycleAnalysis.evaluatedCycles()
             : 0.0;
     double consistencyScore =
-        cycleAnalysis.evaluatedCycles() > 0
-            ? Math.exp(-meanResidual / cycleToleranceSeconds)
-            : 1.0;
+        cycleAnalysis.evaluatedCycles() > 0 ? Math.exp(-meanResidual / cycleToleranceSeconds) : 1.0;
     if (pairAnalysis.physicalViolationCount() > 0) {
       consistencyScore = 0.0;
     }
