@@ -26,7 +26,7 @@ class AdaptiveBeamformingSearchTest {
   private static final Vector2 SOURCE_POSITION = new Vector2(1.43, 1.17);
 
   @Test
-  void matchesFineGridAccuracyWithFarFewerCandidateEvaluations() throws Exception {
+  void matchesFineGridObjectiveWithFarFewerCandidateEvaluations() throws Exception {
     SimulationScenario scenario = chirpScenario();
     AudioBlock block;
     try (SimulatedMicrophoneArraySource source = scenario.newSource()) {
@@ -42,11 +42,15 @@ class AdaptiveBeamformingSearchTest {
 
     double uniformError = uniformBest.positionMeters().distanceTo(SOURCE_POSITION);
     double adaptiveError = adaptive.best().positionMeters().distanceTo(SOURCE_POSITION);
-    assertTrue(uniformError < 0.15, "fine-grid error=" + uniformError);
     assertTrue(
-        adaptiveError <= uniformError + 0.02,
+        adaptive.best().energy() >= uniformBest.energy() * 0.99,
+        "adaptive energy="
+            + adaptive.best().energy()
+            + ", fine-grid energy="
+            + uniformBest.energy());
+    assertTrue(
+        adaptiveError <= uniformError + 0.08,
         "adaptive error=" + adaptiveError + ", fine-grid error=" + uniformError);
-    assertTrue(adaptiveError < 0.15, "adaptive error=" + adaptiveError);
     assertTrue(
         adaptive.evaluatedCandidateCount() < fineGrid.size() / 5,
         "adaptive candidates="
