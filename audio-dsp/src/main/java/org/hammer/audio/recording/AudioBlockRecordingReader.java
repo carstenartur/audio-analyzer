@@ -372,5 +372,7 @@ public final class AudioBlockRecordingReader implements Closeable {
     return result.toString();
   }
 
-  private record Header(int version, AudioFormatDescriptor format, boolean legacy) { }
+  private record Header(int version, AudioFormatDescriptor format, boolean legacy) {
+    // immutable parsed header
+  }
 }
