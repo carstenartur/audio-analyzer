@@ -38,32 +38,56 @@ public final class DelayAndSumBeamformer {
   }
 
   private double scoreCandidate(AudioBlock block, MicrophoneArray array, Vector2 candidate) {
-    int frames = block.frames();
-    double energy = 0.0;
-    for (int frame = 0; frame < frames; frame++) {
-      double sum = 0.0;
-      int contributors = 0;
-      for (Microphone mic : array.microphones()) {
-        int delayedIndex = frame - delaySamples(block, mic, candidate);
-        if (delayedIndex >= 0 && delayedIndex < frames) {
-          sum += block.channelView(mic.channel())[delayedIndex];
-          contributors++;
-        }
-      }
-      if (contributors > 0) {
-        double average = sum / contributors;
-        energy += average * average;
-      }
+    List<Microphone> microphones = array.microphones();
+    int[] relativeDelays = relativeDelaySamples(block, microphones, candidate);
+    int maximumDelay = 0;
+    float[][] channels = new float[microphones.size()][];
+    for (int index = 0; index < microphones.size(); index++) {
+      maximumDelay = Math.max(maximumDelay, relativeDelays[index]);
+      channels[index] = block.channelView(microphones.get(index).channel());
     }
-    return frames > 0 ? energy / frames : 0.0;
+    int commonFrames = block.frames() - maximumDelay;
+    if (commonFrames <= 0) {
+      return 0.0;
+    }
+
+    double energy = 0.0;
+    for (int frame = 0; frame < commonFrames; frame++) {
+      double sum = 0.0;
+      for (int microphoneIndex = 0; microphoneIndex < microphones.size(); microphoneIndex++) {
+        // Captured channels already contain propagation delay. Advance each channel only by its
+        // delay relative to the earliest microphone. A common absolute delay is not observable in
+        // passive localization and must not change the score of a finite signal block.
+        sum += channels[microphoneIndex][frame + relativeDelays[microphoneIndex]];
+      }
+      double average = sum / microphones.size();
+      energy += average * average;
+    }
+    return energy / commonFrames;
   }
 
-  private int delaySamples(AudioBlock block, Microphone mic, Vector2 candidate) {
-    double seconds = mic.positionMeters().distanceTo(candidate) / speedOfSoundMetersPerSecond;
-    return (int) Math.round(seconds * block.format().sampleRate());
+  private int[] relativeDelaySamples(
+      AudioBlock block, List<Microphone> microphones, Vector2 candidate) {
+    double[] distances = new double[microphones.size()];
+    double minimumDistance = Double.POSITIVE_INFINITY;
+    for (int index = 0; index < microphones.size(); index++) {
+      distances[index] = microphones.get(index).positionMeters().distanceTo(candidate);
+      minimumDistance = Math.min(minimumDistance, distances[index]);
+    }
+    int[] delays = new int[microphones.size()];
+    double samplesPerMeter = block.format().sampleRate() / speedOfSoundMetersPerSecond;
+    for (int index = 0; index < delays.length; index++) {
+      delays[index] = (int) Math.round((distances[index] - minimumDistance) * samplesPerMeter);
+    }
+    return delays;
   }
 
-  /** Beamforming score at one candidate point. */
+  /**
+   * Beamforming score at one candidate point.
+   *
+   * @param positionMeters candidate position in meters
+   * @param energy normalized delay-and-sum energy
+   */
   public record BeamformingPoint(Vector2 positionMeters, double energy) {
 
     /** Create a score point. */

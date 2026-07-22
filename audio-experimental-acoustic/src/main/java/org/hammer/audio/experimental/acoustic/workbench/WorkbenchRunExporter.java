@@ -21,6 +21,8 @@ import org.hammer.audio.experimental.acoustic.tracking.TrackingSnapshot;
 public final class WorkbenchRunExporter {
 
   private static final String FMT_4F = "%.4f";
+  private static final String FMT_6F = "%.6f";
+  private static final String FMT_MICROSECONDS_2F = "%.2f µs";
   private static final String MARKDOWN_PIPE_SEPARATOR = " | ";
   private static final String PARAM_RESULT = "result";
   private static final String NA = "n/a";
@@ -80,7 +82,7 @@ public final class WorkbenchRunExporter {
         "Median absolute error (Hz)",
         formatMetric(FMT_4F, report.frequency().medianAbsoluteErrorHz()));
     appendRow(
-        sb, "Mean relative error", formatMetric("%.6f", report.frequency().meanRelativeError()));
+        sb, "Mean relative error", formatMetric(FMT_6F, report.frequency().meanRelativeError()));
     appendRow(sb, "Evaluated samples", report.frequency().evaluatedCount());
     sb.append("\n## Tracking Quality\n\n| Metric | Value |\n|---|---|\n");
     appendRow(sb, "Expected sources", report.expectedSourceCount());
@@ -154,18 +156,35 @@ public final class WorkbenchRunExporter {
     appendRow(sb, "Worst synchronization", result.worstSynchronizationStatus());
     appendRow(
         sb,
+        "Mean TDOA consistency",
+        String.format(Locale.ROOT, FMT_4F, result.meanTdoaConsistencyScore()));
+    appendRow(
+        sb,
+        "Maximum TDOA cycle residual",
+        String.format(
+            Locale.ROOT,
+            FMT_MICROSECONDS_2F,
+            result.maximumTdoaCycleResidualSeconds() * 1_000_000.0));
+    appendRow(sb, "Physical TDOA violations", result.physicalTdoaViolationCount());
+    appendRow(sb, "Unreliable TDOA frames", result.unreliableTdoaFrameCount());
+    appendRow(
+        sb,
         "Avg processing / block",
-        String.format(Locale.ROOT, "%.2f µs", result.averageProcessingNanosPerBlock() / 1_000.0));
+        String.format(
+            Locale.ROOT, FMT_MICROSECONDS_2F, result.averageProcessingNanosPerBlock() / 1_000.0));
     appendRow(
         sb,
         "Max processing / block",
-        String.format(Locale.ROOT, "%.2f µs", result.maxProcessingNanosPerBlock() / 1_000.0));
+        String.format(
+            Locale.ROOT, FMT_MICROSECONDS_2F, result.maxProcessingNanosPerBlock() / 1_000.0));
     if (result.frameSchedule() != null) {
       appendRow(
           sb,
           "Budget per block",
           String.format(
-              Locale.ROOT, "%.2f µs", result.frameSchedule().maxProcessingNanos() / 1_000.0));
+              Locale.ROOT,
+              FMT_MICROSECONDS_2F,
+              result.frameSchedule().maxProcessingNanos() / 1_000.0));
       appendRow(sb, "Over-budget frames", result.overBudgetFrameCount());
     }
 
@@ -173,8 +192,8 @@ public final class WorkbenchRunExporter {
         "\n"
             + "## Frame-by-frame summary\n\n"
             + "| Frame | Time (ms) | Clusters | Tracks | Proc. (µs) | Sync | Error (samples) |"
-            + " Budget |\n"
-            + "|---|---|---|---|---|---|---|---|\n");
+            + " TDOA score | Cycle residual (µs) | Physical | Budget |\n"
+            + "|---|---|---|---|---|---|---|---|---|---|---|\n");
     for (TrackingSnapshot snap : result.snapshots()) {
       sb.append("| ")
           .append(snap.sourceFrameIndex())
@@ -190,7 +209,17 @@ public final class WorkbenchRunExporter {
           .append(snap.synchronization().status())
           .append(MARKDOWN_PIPE_SEPARATOR)
           .append(
-              String.format(Locale.ROOT, "%.4f", snap.synchronization().estimatedErrorSamples()))
+              String.format(Locale.ROOT, FMT_4F, snap.synchronization().estimatedErrorSamples()))
+          .append(MARKDOWN_PIPE_SEPARATOR)
+          .append(String.format(Locale.ROOT, FMT_4F, snap.tdoaConsistency().consistencyScore()))
+          .append(MARKDOWN_PIPE_SEPARATOR)
+          .append(
+              String.format(
+                  Locale.ROOT,
+                  "%.2f",
+                  snap.tdoaConsistency().maximumAbsoluteCycleResidualSeconds() * 1_000_000.0))
+          .append(MARKDOWN_PIPE_SEPARATOR)
+          .append(snap.tdoaConsistency().physicalViolationCount())
           .append(MARKDOWN_PIPE_SEPARATOR)
           .append(formatBudgetStatus(result, snap))
           .append(" |\n");
@@ -214,7 +243,9 @@ public final class WorkbenchRunExporter {
         "frameIndex,timestampNs,trackId,frequencyHz,observedFrequencyHz,"
             + "posX,posY,velX,velY,confidence,observations,processingNs,"
             + "synchronizationMode,synchronizationStatus,synchronizationErrorSamples,"
-            + "calibrationCurrent,budgetExceeded\n");
+            + "calibrationCurrent,tdoaConsistencyScore,"
+            + "tdoaMaximumCycleResidualSeconds,tdoaPhysicalViolationCount,"
+            + "budgetExceeded\n");
     for (TrackingSnapshot snap : result.snapshots()) {
       for (TrackedSource track : snap.tracks()) {
         sb.append(snap.sourceFrameIndex())
@@ -246,9 +277,19 @@ public final class WorkbenchRunExporter {
             .append(snap.synchronization().status())
             .append(',')
             .append(
-                String.format(Locale.ROOT, "%.6f", snap.synchronization().estimatedErrorSamples()))
+                String.format(Locale.ROOT, FMT_6F, snap.synchronization().estimatedErrorSamples()))
             .append(',')
             .append(snap.synchronization().calibrationCurrent())
+            .append(',')
+            .append(String.format(Locale.ROOT, FMT_6F, snap.tdoaConsistency().consistencyScore()))
+            .append(',')
+            .append(
+                String.format(
+                    Locale.ROOT,
+                    "%.9f",
+                    snap.tdoaConsistency().maximumAbsoluteCycleResidualSeconds()))
+            .append(',')
+            .append(snap.tdoaConsistency().physicalViolationCount())
             .append(',')
             .append(formatBudgetExceededCsv(result, snap))
             .append('\n');
@@ -283,9 +324,21 @@ public final class WorkbenchRunExporter {
           .append(snap.synchronization().status())
           .append("\",\"estimatedErrorSamples\":")
           .append(
-              String.format(Locale.ROOT, "%.6f", snap.synchronization().estimatedErrorSamples()))
+              String.format(Locale.ROOT, FMT_6F, snap.synchronization().estimatedErrorSamples()))
           .append(",\"calibrationCurrent\":")
           .append(snap.synchronization().calibrationCurrent())
+          .append("},\"tdoaConsistency\":{\"score\":")
+          .append(String.format(Locale.ROOT, FMT_6F, snap.tdoaConsistency().consistencyScore()))
+          .append(",\"evaluatedCycles\":")
+          .append(snap.tdoaConsistency().evaluatedCycles())
+          .append(",\"maximumCycleResidualSeconds\":")
+          .append(
+              String.format(
+                  Locale.ROOT,
+                  "%.9f",
+                  snap.tdoaConsistency().maximumAbsoluteCycleResidualSeconds()))
+          .append(",\"physicalViolationCount\":")
+          .append(snap.tdoaConsistency().physicalViolationCount())
           .append("},\"budgetExceeded\":")
           .append(formatBudgetExceededJson(result, snap))
           .append(",\"clusters\":[");

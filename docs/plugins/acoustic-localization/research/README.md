@@ -30,6 +30,10 @@ proposals.
 | [`hardware/microphone-array-setup.md`](hardware/microphone-array-setup.md) | Practical setup notes for real microphone rigs, complementing the simulator.                                                    | Guidance for real-world experiments            |
 | [`simulation-datasets/README.md`](simulation-datasets/README.md)           | JSON scenario descriptors with ground truth, derived from `SimulationScenarios`, for benchmark scripts and external evaluation. | Generated from implemented scenarios           |
 
+The implemented TDOA and beamforming families, deterministic noise/reflection benchmarks, strengths,
+limitations and explicit non-claims are documented in
+[`localization-algorithms.md`](localization-algorithms.md).
+
 ## Related documents
 
 - Subproject overview: [`docs/plugins/acoustic-localization.md`](../../acoustic-localization.md)

@@ -11,7 +11,10 @@ import org.hammer.audio.acquisition.SynchronizationAssessment;
 import org.hammer.audio.core.AudioBlock;
 import org.hammer.audio.experimental.acoustic.DelayAndSumBeamformer;
 import org.hammer.audio.experimental.acoustic.SynchronizationAwareTdoaEstimator;
+import org.hammer.audio.experimental.acoustic.TdoaConsistencyReport;
+import org.hammer.audio.experimental.acoustic.TdoaEstimate;
 import org.hammer.audio.experimental.acoustic.TdoaEstimator;
+import org.hammer.audio.experimental.acoustic.TdoaPairConsistencyAnalyzer;
 import org.hammer.audio.experimental.acoustic.UnusableSynchronizationException;
 import org.hammer.audio.experimental.acoustic.doppler.FrequencyTrack;
 import org.hammer.audio.experimental.acoustic.doppler.MultiSensorDopplerEstimator;
@@ -30,8 +33,7 @@ import org.hammer.audio.geometry.Vector3;
  * <ol>
  *   <li>Per-channel multi-peak FFT detection ({@link MultiPeakDetector}).
  *   <li>Cross-channel frequency clustering ({@link FrequencyClusterer}).
- *   <li>Optional per-cluster TDOA estimation across all microphone pairs (currently informational;
- *       used as a consistency input for downstream tools).
+ *   <li>One pairwise TDOA pass across all microphones plus physical/cycle-consistency analysis.
  *   <li>Localization via delay-and-sum beamforming ({@link DelayAndSumBeamformer}) over a
  *       caller-supplied 2D candidate grid; one best position per cluster.
  *   <li>Temporal tracking via {@link SourceTracker} (identity persistence + Kalman smoothing).
@@ -46,6 +48,9 @@ import org.hammer.audio.geometry.Vector3;
  */
 public final class TrackingPipeline {
 
+  private static final double DEFAULT_SPEED_OF_SOUND_METERS_PER_SECOND = 343.0;
+  private static final double DEFAULT_CYCLE_TOLERANCE_SAMPLES = 0.75;
+  private static final double DEFAULT_PHYSICAL_TOLERANCE_SAMPLES = 0.25;
   private static final double FREQUENCY_TRACK_MATCH_TOLERANCE_HZ = 25.0;
   private static final int FREQUENCY_TRACK_HISTORY_FRAMES = 8;
   private static final double FREQUENCY_TRACK_SMOOTHING_ALPHA = 0.2;
@@ -55,6 +60,7 @@ public final class TrackingPipeline {
   private final MultiPeakDetector peakDetector;
   private final FrequencyClusterer clusterer;
   private final TdoaEstimator tdoaEstimator;
+  private final TdoaPairConsistencyAnalyzer consistencyAnalyzer;
   private final DelayAndSumBeamformer beamformer;
   private final SourceTracker tracker;
   private final MultiSensorDopplerEstimator dopplerEstimator;
@@ -63,6 +69,7 @@ public final class TrackingPipeline {
   private final FrameSchedule schedule;
   private final List<PipelineFrequencyTrack> frequencyTracks = new ArrayList<>();
   private List<DopplerDiagnostics> lastDopplerDiagnostics = List.of();
+  private TdoaConsistencyReport lastTdoaConsistency = TdoaConsistencyReport.notEvaluated();
   private int nextFrequencyTrackId;
 
   /** Configure a pipeline. {@code schedule} may be {@code null} to disable budget reporting. */
@@ -79,6 +86,10 @@ public final class TrackingPipeline {
         clusterer,
         new LocalizationComponents(
             tdoaEstimator,
+            new TdoaPairConsistencyAnalyzer(
+                DEFAULT_SPEED_OF_SOUND_METERS_PER_SECOND,
+                DEFAULT_CYCLE_TOLERANCE_SAMPLES,
+                DEFAULT_PHYSICAL_TOLERANCE_SAMPLES),
             beamformer,
             SimpleMultiSensorDopplerEstimator.withDefaults(),
             new VelocityReconstructor()),
@@ -100,6 +111,7 @@ public final class TrackingPipeline {
     LocalizationComponents requiredLocalization =
         Objects.requireNonNull(localization, "localization");
     this.tdoaEstimator = requiredLocalization.tdoaEstimator();
+    this.consistencyAnalyzer = requiredLocalization.consistencyAnalyzer();
     this.beamformer = requiredLocalization.beamformer();
     this.tracker = Objects.requireNonNull(tracker, "tracker");
     this.dopplerEstimator = requiredLocalization.dopplerEstimator();
@@ -126,19 +138,16 @@ public final class TrackingPipeline {
     long startNanos = System.nanoTime();
     List<List<DetectedPeak>> perChannel = peakDetector.detectAllChannels(block);
     List<FrequencyCluster> clusters = clusterer.clusterPerChannel(perChannel);
+    List<TdoaEstimate> pairEstimates = estimatePairs(block, array);
+    TdoaConsistencyReport consistency =
+        consistencyAnalyzer.analyze(array, pairEstimates, block.format().sampleRate());
+    lastTdoaConsistency = consistency;
     evictStaleFrequencyTracks(block.frameIndex());
 
     List<SourceTracker.Observation> observations = new ArrayList<>(clusters.size());
     List<DopplerDiagnostics> dopplerDiagnostics = new ArrayList<>(clusters.size());
     Set<Integer> usedFrequencyTracks = new HashSet<>();
     for (FrequencyCluster cluster : clusters) {
-      // Run TDOA across all pairs purely for consistency reporting; the beamformer is the
-      // primary localizer. Future stages can use these estimates as additional constraints.
-      for (int first = 0; first < array.channels(); first++) {
-        for (int second = first + 1; second < array.channels(); second++) {
-          tdoaEstimator.estimate(block, array, first, second);
-        }
-      }
       DelayAndSumBeamformer.BeamformingPoint best = beamformer.best(block, array, candidateGrid);
       PipelineFrequencyTrack pipelineFrequencyTrack =
           frequencyTrackFor(cluster.centerFrequencyHz(), block.frameIndex(), usedFrequencyTracks);
@@ -185,7 +194,8 @@ public final class TrackingPipeline {
         tracks,
         processingNanos,
         Map.of(),
-        synchronization);
+        synchronization,
+        consistency);
   }
 
   /** Snapshot the underlying tracker without consuming a new block. */
@@ -198,17 +208,33 @@ public final class TrackingPipeline {
     return lastDopplerDiagnostics;
   }
 
+  /** Physical and cycle-consistency evidence from the most recently processed frame. */
+  public TdoaConsistencyReport currentTdoaConsistency() {
+    return lastTdoaConsistency;
+  }
+
   /** Reset internal tracking state. */
   public void reset() {
     tracker.reset();
     frequencyTracks.clear();
     lastDopplerDiagnostics = List.of();
+    lastTdoaConsistency = TdoaConsistencyReport.notEvaluated();
     nextFrequencyTrackId = 0;
   }
 
   /** Frame schedule the pipeline was configured against, or {@code null} when unspecified. */
   public FrameSchedule schedule() {
     return schedule;
+  }
+
+  private List<TdoaEstimate> estimatePairs(AudioBlock block, MicrophoneArray array) {
+    List<TdoaEstimate> estimates = new ArrayList<>();
+    for (int first = 0; first < array.channels(); first++) {
+      for (int second = first + 1; second < array.channels(); second++) {
+        estimates.add(tdoaEstimator.estimate(block, array, first, second));
+      }
+    }
+    return List.copyOf(estimates);
   }
 
   private SynchronizationAssessment synchronizationAssessment(
@@ -259,10 +285,10 @@ public final class TrackingPipeline {
     }
     while (frequencyTracks.size() > FREQUENCY_TRACK_MAX_ACTIVE) {
       int oldestIndex = 0;
-      for (int i = 1; i < frequencyTracks.size(); i++) {
-        if (frequencyTracks.get(i).lastTouchedFrameIndex
+      for (int index = 1; index < frequencyTracks.size(); index++) {
+        if (frequencyTracks.get(index).lastTouchedFrameIndex
             < frequencyTracks.get(oldestIndex).lastTouchedFrameIndex) {
-          oldestIndex = i;
+          oldestIndex = index;
         }
       }
       frequencyTracks.remove(oldestIndex);
@@ -273,12 +299,14 @@ public final class TrackingPipeline {
    * Interchangeable localization and Doppler stages configured as one coherent pipeline component.
    *
    * @param tdoaEstimator pairwise time-difference estimator
+   * @param consistencyAnalyzer physical and cycle-consistency analyzer
    * @param beamformer candidate-grid localizer
    * @param dopplerEstimator per-microphone radial-velocity estimator
    * @param velocityReconstructor fused velocity reconstructor
    */
   public record LocalizationComponents(
       TdoaEstimator tdoaEstimator,
+      TdoaPairConsistencyAnalyzer consistencyAnalyzer,
       DelayAndSumBeamformer beamformer,
       MultiSensorDopplerEstimator dopplerEstimator,
       VelocityReconstructor velocityReconstructor) {
@@ -286,6 +314,7 @@ public final class TrackingPipeline {
     // Validate all localization stages.
     public LocalizationComponents {
       Objects.requireNonNull(tdoaEstimator, "tdoaEstimator");
+      Objects.requireNonNull(consistencyAnalyzer, "consistencyAnalyzer");
       Objects.requireNonNull(beamformer, "beamformer");
       Objects.requireNonNull(dopplerEstimator, "dopplerEstimator");
       Objects.requireNonNull(velocityReconstructor, "velocityReconstructor");

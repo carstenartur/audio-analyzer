@@ -11,6 +11,7 @@ import org.hammer.audio.experimental.acoustic.CrossCorrelationTdoaEstimator;
 import org.hammer.audio.experimental.acoustic.DelayAndSumBeamformer;
 import org.hammer.audio.experimental.acoustic.FrequencyBand;
 import org.hammer.audio.experimental.acoustic.GccPhatTdoaEstimator;
+import org.hammer.audio.experimental.acoustic.SubSampleGccPhatTdoaEstimator;
 import org.hammer.audio.experimental.acoustic.TdoaEstimator;
 import org.hammer.audio.experimental.acoustic.benchmark.BenchmarkMeasurements;
 import org.hammer.audio.experimental.acoustic.benchmark.BenchmarkReport;
@@ -122,8 +123,8 @@ public final class WorkbenchScenarioRunner {
           totalProcessingNanos,
           computeBenchmarkReport(scenario, snapshots),
           pipeline.schedule());
-    } catch (java.io.IOException e) {
-      throw new IllegalStateException("Unexpected close failure on simulation source", e);
+    } catch (java.io.IOException exception) {
+      throw new IllegalStateException("Unexpected close failure on simulation source", exception);
     }
   }
 
@@ -140,8 +141,8 @@ public final class WorkbenchScenarioRunner {
       Scenario truth = scenario.groundTruth();
       BenchmarkMeasurements measurements = BenchmarkMeasurements.of(scenario.array(), snapshots);
       return new TrackingBenchmarkComparator().compare(truth, measurements);
-    } catch (RuntimeException e) {
-      LOGGER.log(Level.WARNING, "Benchmark report computation failed", e);
+    } catch (RuntimeException exception) {
+      LOGGER.log(Level.WARNING, "Benchmark report computation failed", exception);
       return null;
     }
   }
@@ -178,11 +179,13 @@ public final class WorkbenchScenarioRunner {
         detector, clusterer, tdoaEstimator, beamformer, tracker, grid, schedule);
   }
 
-  private static TdoaEstimator buildTdoaEstimator(WorkbenchParameters params) {
+  /** Creates the configured interchangeable TDOA stage. Visible for tests. */
+  static TdoaEstimator buildTdoaEstimator(WorkbenchParameters params) {
     double speedOfSound = SimulatedMicrophoneArraySource.DEFAULT_SPEED_OF_SOUND_METERS_PER_SECOND;
     return switch (params.tdoaEstimatorType()) {
       case CROSS_CORRELATION -> new CrossCorrelationTdoaEstimator(speedOfSound);
       case GCC_PHAT -> new GccPhatTdoaEstimator(speedOfSound);
+      case SUB_SAMPLE_GCC_PHAT -> new SubSampleGccPhatTdoaEstimator(speedOfSound);
     };
   }
 
@@ -193,9 +196,9 @@ public final class WorkbenchScenarioRunner {
     List<Vector2> grid = new ArrayList<>((steps + 1) * (steps + 1));
     double width = scenario.room().widthMeters();
     double height = scenario.room().heightMeters();
-    for (int xi = 0; xi <= steps; xi++) {
-      for (int yi = 0; yi <= steps; yi++) {
-        grid.add(new Vector2(width * xi / steps, height * yi / steps));
+    for (int xIndex = 0; xIndex <= steps; xIndex++) {
+      for (int yIndex = 0; yIndex <= steps; yIndex++) {
+        grid.add(new Vector2(width * xIndex / steps, height * yIndex / steps));
       }
     }
     return grid;

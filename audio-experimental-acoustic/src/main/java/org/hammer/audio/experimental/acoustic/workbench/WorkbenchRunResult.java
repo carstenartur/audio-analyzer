@@ -45,15 +45,7 @@ public record WorkbenchRunResult(
     // benchmarkReport and frameSchedule may be null
   }
 
-  /**
-   * Construct a result without a frame schedule (budget compliance is unavailable).
-   *
-   * @param scenario the scenario that was executed
-   * @param parameters the parameters used during the run
-   * @param snapshots one {@link TrackingSnapshot} per processed audio block, in order
-   * @param totalProcessingNanos cumulative pipeline wall-clock time across all blocks
-   * @param benchmarkReport benchmark quality report, or {@code null}
-   */
+  /** Construct a result without a frame schedule (budget compliance is unavailable). */
   public WorkbenchRunResult(
       SimulationScenario scenario,
       WorkbenchParameters parameters,
@@ -78,21 +70,12 @@ public record WorkbenchRunResult(
     return snapshots.stream().mapToInt(snapshot -> snapshot.tracks().size()).max().orElse(0);
   }
 
-  /**
-   * Average pipeline processing time per block in nanoseconds, or {@code 0.0} if no blocks were
-   * processed.
-   */
+  /** Average pipeline processing time per block in nanoseconds, or zero for an empty run. */
   public double averageProcessingNanosPerBlock() {
-    if (snapshots.isEmpty()) {
-      return 0.0;
-    }
-    return (double) totalProcessingNanos / snapshots.size();
+    return snapshots.isEmpty() ? 0.0 : (double) totalProcessingNanos / snapshots.size();
   }
 
-  /**
-   * Maximum pipeline processing time across all blocks in nanoseconds, or {@code 0} if no blocks
-   * were processed.
-   */
+  /** Maximum pipeline processing time across all blocks in nanoseconds. */
   public long maxProcessingNanosPerBlock() {
     return snapshots.stream().mapToLong(TrackingSnapshot::processingNanos).max().orElse(0L);
   }
@@ -126,10 +109,35 @@ public record WorkbenchRunResult(
     return worstSynchronizationStatus() != SynchronizationStatus.TRUSTED;
   }
 
-  /**
-   * Number of frames whose pipeline processing time exceeded the configured {@link FrameSchedule}
-   * budget. Returns {@code 0} when no frame schedule is available.
-   */
+  /** Mean physical/cycle-consistency score across all processed frames. */
+  public double meanTdoaConsistencyScore() {
+    return snapshots.stream()
+        .mapToDouble(snapshot -> snapshot.tdoaConsistency().consistencyScore())
+        .average()
+        .orElse(1.0);
+  }
+
+  /** Largest absolute TDOA cycle residual observed during the run. */
+  public double maximumTdoaCycleResidualSeconds() {
+    return snapshots.stream()
+        .mapToDouble(snapshot -> snapshot.tdoaConsistency().maximumAbsoluteCycleResidualSeconds())
+        .max()
+        .orElse(0.0);
+  }
+
+  /** Total pair delays that exceeded their physical propagation limit. */
+  public int physicalTdoaViolationCount() {
+    return snapshots.stream()
+        .mapToInt(snapshot -> snapshot.tdoaConsistency().physicalViolationCount())
+        .sum();
+  }
+
+  /** Number of frames whose TDOA pair evidence is unreliable. */
+  public long unreliableTdoaFrameCount() {
+    return snapshots.stream().filter(snapshot -> !snapshot.tdoaConsistency().reliable()).count();
+  }
+
+  /** Number of frames whose processing time exceeded the configured frame budget. */
   public long overBudgetFrameCount() {
     if (frameSchedule == null) {
       return 0L;
@@ -138,10 +146,7 @@ public record WorkbenchRunResult(
     return snapshots.stream().filter(snapshot -> snapshot.processingNanos() > budget).count();
   }
 
-  /**
-   * Whether the given snapshot's processing time exceeded the configured {@link FrameSchedule}
-   * budget. Always returns {@code false} when no frame schedule is available.
-   */
+  /** Whether one snapshot exceeded the configured frame budget. */
   public boolean isFrameOverBudget(TrackingSnapshot snapshot) {
     Objects.requireNonNull(snapshot, "snapshot");
     return frameSchedule != null && snapshot.processingNanos() > frameSchedule.maxProcessingNanos();

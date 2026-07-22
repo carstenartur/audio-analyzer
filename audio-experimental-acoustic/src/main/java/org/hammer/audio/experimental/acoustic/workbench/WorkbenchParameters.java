@@ -1,5 +1,7 @@
 package org.hammer.audio.experimental.acoustic.workbench;
 
+import java.util.Objects;
+
 /**
  * Configurable parameters for an acoustic localization workbench run.
  *
@@ -37,14 +39,17 @@ public record WorkbenchParameters(
 
   /** TDOA estimator strategy for the workbench pipeline. */
   public enum TdoaEstimatorType {
-    /** Frequency-domain GCC-PHAT (default, robust under narrow-band signals). */
+    /** Integer-sample frequency-domain GCC-PHAT baseline and default. */
     GCC_PHAT,
+    /** Sixteen-times interpolated GCC-PHAT with peak diagnostics and ambiguity evidence. */
+    SUB_SAMPLE_GCC_PHAT,
     /** Time-domain normalised cross-correlation (faster, weaker under reflections). */
     CROSS_CORRELATION
   }
 
   // Compact constructor: validates inputs
   public WorkbenchParameters {
+    Objects.requireNonNull(tdoaEstimatorType, "tdoaEstimatorType");
     if (!Double.isFinite(minSnr)) {
       throw new IllegalArgumentException("minSnr must be finite, got " + minSnr);
     }
@@ -79,7 +84,9 @@ public record WorkbenchParameters(
     private double valTrackerConfidenceDecay = 0.85;
     private double valTrackerConfidenceGain = 0.4;
 
-    private Builder() {}
+    private Builder() {
+      // use defaults()
+    }
 
     /** Set block size (and default FFT size). */
     public Builder blockSize(int v) {
@@ -141,7 +148,7 @@ public record WorkbenchParameters(
 
     /** Set TDOA estimator type. */
     public Builder tdoaEstimatorType(TdoaEstimatorType v) {
-      this.valTdoaEstimatorType = v;
+      this.valTdoaEstimatorType = Objects.requireNonNull(v, "tdoaEstimatorType");
       return this;
     }
 
