@@ -30,7 +30,6 @@ public final class AudioBlockRecordingReader implements Closeable {
 
   private final DigestInputStream digestStream;
   private final DataInputStream in;
-  private final MessageDigest digest;
   private final AudioFormatDescriptor format;
   private final int formatVersion;
   private final boolean legacy;
@@ -121,7 +120,7 @@ public final class AudioBlockRecordingReader implements Closeable {
 
   private AudioBlockRecordingReader(InputStream stream, boolean allowIncomplete)
       throws IOException {
-    this.digest = newSha256();
+    MessageDigest digest = newSha256();
     this.digestStream =
         new DigestInputStream(
             new BufferedInputStream(Objects.requireNonNull(stream, "stream")), digest);
@@ -242,7 +241,7 @@ public final class AudioBlockRecordingReader implements Closeable {
 
   private Optional<AudioBlock> readAndValidateFooter() throws IOException {
     digestStream.on(false);
-    byte[] calculatedChecksum = digest.digest();
+    byte[] calculatedChecksum = digestStream.getMessageDigest().digest();
     try {
       int footerMagic = in.readInt();
       long declaredBlocks = in.readLong();
@@ -366,8 +365,9 @@ public final class AudioBlockRecordingReader implements Closeable {
   private static String toHex(byte[] bytes) {
     StringBuilder result = new StringBuilder(bytes.length * 2);
     for (byte value : bytes) {
-      result.append(Character.forDigit((value >>> 4) & 0x0f, 16));
-      result.append(Character.forDigit(value & 0x0f, 16));
+      result
+          .append(Character.forDigit((value >>> 4) & 0x0f, 16))
+          .append(Character.forDigit(value & 0x0f, 16));
     }
     return result.toString();
   }
