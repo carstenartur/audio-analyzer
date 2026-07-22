@@ -30,16 +30,26 @@ public record TdoaConsistencyFinding(
       throw new IllegalArgumentException("microphoneIds must contain at least two non-blank ids");
     }
     microphoneIds = List.copyOf(requiredIds);
-    if (!Double.isFinite(residualSeconds)) {
-      throw new IllegalArgumentException("residualSeconds must be finite");
-    }
-    if (!(toleranceSeconds > 0.0) || !Double.isFinite(toleranceSeconds)) {
-      throw new IllegalArgumentException("toleranceSeconds must be finite and > 0");
-    }
+    requireFinite(residualSeconds, "residualSeconds");
+    requirePositiveFinite(toleranceSeconds, "toleranceSeconds");
   }
 
   /** Absolute residual normalized to the configured tolerance. */
   public double normalizedSeverity() {
     return Math.abs(residualSeconds) / toleranceSeconds;
+  }
+
+  private static void requireFinite(double value, String name) {
+    if (Double.isFinite(value)) {
+      return;
+    }
+    throw new IllegalArgumentException(name + " must be finite");
+  }
+
+  private static void requirePositiveFinite(double value, String name) {
+    if (Double.isFinite(value) && value > 0.0) {
+      return;
+    }
+    throw new IllegalArgumentException(name + " must be finite and > 0");
   }
 }
