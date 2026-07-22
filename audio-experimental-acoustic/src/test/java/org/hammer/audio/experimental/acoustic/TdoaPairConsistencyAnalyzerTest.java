@@ -2,9 +2,11 @@ package org.hammer.audio.experimental.acoustic;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import org.hammer.audio.acquisition.MicrophoneArray;
 import org.hammer.audio.experimental.acoustic.TdoaConsistencyFinding.Kind;
@@ -61,6 +63,14 @@ class TdoaPairConsistencyAnalyzerTest {
         report.findings().stream().anyMatch(finding -> finding.kind() == Kind.PHYSICAL_LIMIT));
     assertEquals(0.0, report.confidenceMultiplier(), 0.0);
     assertFalse(report.reliable());
+  }
+
+  @Test
+  void rejectsNullMicrophoneIdsWithTheDocumentedContract() {
+    List<String> ids = Arrays.asList("m0", null);
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> new TdoaConsistencyFinding(Kind.PHYSICAL_LIMIT, ids, 1.0e-6, 1.0e-6));
   }
 
   private static TdoaPairConsistencyAnalyzer analyzer() {
