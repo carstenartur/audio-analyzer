@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.IOException;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.EnumSet;
@@ -54,7 +55,7 @@ class MicrophoneArrayProfileWorkflowTest {
   }
 
   @Test
-  void directoryStoreCreatesUpdatesListsLoadsAndDeletesProfiles() throws Exception {
+  void directoryStoreCreatesUpdatesListsLoadsAndDeletesProfiles() throws IOException {
     DirectoryMicrophoneArrayProfileStore store =
         new DirectoryMicrophoneArrayProfileStore(temporaryDirectory.resolve("profiles"));
     MicrophoneArrayProfile first = profile(true);
