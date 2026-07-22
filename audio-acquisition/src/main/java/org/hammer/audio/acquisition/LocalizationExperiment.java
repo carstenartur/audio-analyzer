@@ -1,6 +1,7 @@
 package org.hammer.audio.acquisition;
 
 import java.time.Instant;
+import java.util.Collections;
 import java.util.Map;
 import java.util.Objects;
 import java.util.TreeMap;
@@ -45,7 +46,7 @@ public record LocalizationExperiment(
       Objects.requireNonNull(entry.getValue(), "metadata value");
       ordered.put(entry.getKey(), entry.getValue());
     }
-    metadata = Map.copyOf(ordered);
+    metadata = Collections.unmodifiableMap(ordered);
   }
 
   /** Create a newly defined experiment. */
