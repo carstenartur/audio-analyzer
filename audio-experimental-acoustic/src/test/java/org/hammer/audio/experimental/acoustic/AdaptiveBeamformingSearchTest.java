@@ -34,8 +34,7 @@ class AdaptiveBeamformingSearchTest {
     List<Vector2> fineGrid = bounds.grid(32);
     BeamformingPoint uniformBest = beamformer.best(block, scenario.array(), fineGrid);
     BeamformingSearchResult adaptive =
-        new AdaptiveBeamformingSearch(beamformer)
-            .search(block, scenario.array(), bounds, 4, 4);
+        new AdaptiveBeamformingSearch(beamformer).search(block, scenario.array(), bounds, 4, 4);
 
     double uniformError = uniformBest.positionMeters().distanceTo(SOURCE_POSITION);
     double adaptiveError = adaptive.best().positionMeters().distanceTo(SOURCE_POSITION);
@@ -67,12 +66,50 @@ class AdaptiveBeamformingSearchTest {
     assertEquals(first.evaluatedPoints(), second.evaluatedPoints());
   }
 
+  @Test
+  void retainsGlobalMaximumAndNormalizedSurfaceWithOddGridSteps() throws Exception {
+    Vector2 coarseGridPoint = new Vector2(1.0, 2.0 / 3.0);
+    SimulationScenario scenario = chirpScenario(coarseGridPoint, "odd-grid-beamforming-chirp");
+    AudioBlock block;
+    try (SimulatedMicrophoneArraySource source = scenario.newSource()) {
+      block = source.readBlock(2_048).orElseThrow();
+    }
+    BeamformingSearchResult result =
+        new AdaptiveBeamformingSearch(new DelayAndSumBeamformer(SPEED_OF_SOUND))
+            .search(
+                block,
+                scenario.array(),
+                new SearchBounds(0.0, 3.0, 0.0, 2.0),
+                3,
+                3);
+
+    double maximumEvaluatedEnergy =
+        result.evaluatedPoints().stream()
+            .mapToDouble(BeamformingPoint::energy)
+            .max()
+            .orElseThrow();
+    assertEquals(maximumEvaluatedEnergy, result.best().energy(), 1.0e-12);
+    assertTrue(
+        result.normalizedConfidenceSurface().stream()
+            .allMatch(
+                point ->
+                    point.normalizedConfidence() >= 0.0
+                        && point.normalizedConfidence() <= 1.0));
+    assertTrue(
+        result.normalizedConfidenceSurface().stream()
+            .anyMatch(point -> Math.abs(point.normalizedConfidence() - 1.0) < 1.0e-12));
+  }
+
   private static SimulationScenario chirpScenario() {
+    return chirpScenario(SOURCE_POSITION, "adaptive-beamforming-chirp");
+  }
+
+  private static SimulationScenario chirpScenario(Vector2 sourcePosition, String name) {
     AcousticEmitter2D emitter =
         new AcousticEmitter2D() {
           @Override
           public Vector2 startMeters() {
-            return SOURCE_POSITION;
+            return sourcePosition;
           }
 
           @Override
@@ -102,7 +139,7 @@ class AdaptiveBeamformingSearchTest {
           }
         };
     return new SimulationScenario(
-        "adaptive-beamforming-chirp",
+        name,
         new Room2D(3.0, 2.0, 0.0, 0.0),
         SimulationScenarios.defaultArray(),
         List.of(emitter),
