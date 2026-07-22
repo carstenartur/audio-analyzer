@@ -41,7 +41,8 @@ class TdoaPairConsistencyAnalyzerTest {
 
     TdoaConsistencyReport report = analyzer().analyze(array(), estimates, SAMPLE_RATE);
 
-    assertTrue(report.findings().stream().anyMatch(finding -> finding.kind() == Kind.CYCLE_RESIDUAL));
+    assertTrue(
+        report.findings().stream().anyMatch(finding -> finding.kind() == Kind.CYCLE_RESIDUAL));
     assertTrue(report.maximumAbsoluteCycleResidualSeconds() >= 3.0 / SAMPLE_RATE - 1.0e-12);
     assertTrue(report.consistencyScore() < 0.5);
     assertFalse(report.reliable());
@@ -56,7 +57,8 @@ class TdoaPairConsistencyAnalyzerTest {
     TdoaConsistencyReport report = analyzer().analyze(array(), estimates, SAMPLE_RATE);
 
     assertEquals(1, report.physicalViolationCount());
-    assertTrue(report.findings().stream().anyMatch(finding -> finding.kind() == Kind.PHYSICAL_LIMIT));
+    assertTrue(
+        report.findings().stream().anyMatch(finding -> finding.kind() == Kind.PHYSICAL_LIMIT));
     assertEquals(0.0, report.confidenceMultiplier(), 0.0);
     assertFalse(report.reliable());
   }
