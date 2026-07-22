@@ -1,5 +1,6 @@
 package org.hammer.audio.acquisition;
 
+import java.util.Collections;
 import java.util.EnumSet;
 import java.util.Objects;
 import java.util.Optional;
@@ -33,11 +34,11 @@ public record MicrophoneArrayProfile(
     Objects.requireNonNull(layout, "layout");
     Objects.requireNonNull(array, "array");
     Objects.requireNonNull(supportedModes, "supportedModes");
-    EnumSet<LocalizationInputMode> modes = EnumSet.copyOf(supportedModes);
-    if (modes.isEmpty()) {
+    if (supportedModes.isEmpty()) {
       throw new IllegalArgumentException("supportedModes must not be empty");
     }
-    supportedModes = Set.copyOf(modes);
+    EnumSet<LocalizationInputMode> modes = EnumSet.copyOf(supportedModes);
+    supportedModes = Collections.unmodifiableSet(modes);
     if (modes.contains(LocalizationInputMode.LIVE) && liveCapture == null) {
       throw new IllegalArgumentException("liveCapture is required when LIVE mode is supported");
     }
