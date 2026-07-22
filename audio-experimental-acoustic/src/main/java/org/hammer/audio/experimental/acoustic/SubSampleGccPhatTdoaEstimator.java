@@ -156,5 +156,7 @@ public final class SubSampleGccPhatTdoaEstimator implements DiagnosticTdoaEstima
   }
 
   private record PeakSelection(
-      double interpolatedLagSamples, double confidence, TdoaPeakDiagnostics diagnostics) {}
+      double interpolatedLagSamples, double confidence, TdoaPeakDiagnostics diagnostics) {
+    // immutable selection tuple
+  }
 }
