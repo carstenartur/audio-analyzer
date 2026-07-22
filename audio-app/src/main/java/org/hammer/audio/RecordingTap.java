@@ -253,7 +253,8 @@ public final class RecordingTap {
           stopReason = "Recording stopped before the destination filesystem was exhausted.";
           requestStopFromWorker();
         }
-        publishStatus(stopRequested.get() ? RecordingState.STOPPING : RecordingState.RECORDING, false);
+        publishStatus(
+            stopRequested.get() ? RecordingState.STOPPING : RecordingState.RECORDING, false);
       }
       finalizeWriter();
     } catch (InterruptedException exception) {
@@ -385,8 +386,13 @@ public final class RecordingTap {
     String errorMessage = "";
     if (terminalFailure != null) {
       terminalState = RecordingState.FAILED;
-      errorMessage = terminalFailure.getMessage() == null ? terminalFailure.toString() : terminalFailure.getMessage();
-    } else if (incomplete.get() || writer.continuityGapCount() > 0L || droppedBlocks.get() > 0L) {
+      errorMessage =
+          terminalFailure.getMessage() == null
+              ? terminalFailure.toString()
+              : terminalFailure.getMessage();
+    } else if (incomplete.get()
+        || writer.continuityGapCount() > 0L
+        || droppedBlocks.get() > 0L) {
       terminalState = RecordingState.INCOMPLETE;
     } else {
       terminalState = RecordingState.COMPLETED;
@@ -401,9 +407,7 @@ public final class RecordingTap {
   private void publishStatus(RecordingState state, boolean force, String errorMessage) {
     long nowNanos = System.nanoTime();
     long previous = lastStatusPublishedNanos.get();
-    if (!force
-        && previous != 0L
-        && nowNanos - previous < STATUS_INTERVAL_NANOS) {
+    if (!force && previous != 0L && nowNanos - previous < STATUS_INTERVAL_NANOS) {
       return;
     }
     if (!lastStatusPublishedNanos.compareAndSet(previous, nowNanos) && !force) {
