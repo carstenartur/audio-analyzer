@@ -12,7 +12,8 @@ import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
-import java.util.TreeMap;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import org.hammer.audio.core.AudioFormatDescriptor;
 import org.hammer.audio.geometry.Vector2;
@@ -24,7 +25,7 @@ public final class MicrophoneArrayProfileCodec {
 
   /** Encode a profile without timestamps or platform-dependent ordering. */
   public String encode(MicrophoneArrayProfile profile) {
-    Map<String, String> values = new TreeMap<>();
+    Map<String, String> values = new ConcurrentHashMap<>();
     put(values, "schema", SCHEMA_VERSION);
     put(values, "profile.id", profile.profileId());
     put(values, "profile.name", profile.displayName());
@@ -40,6 +41,7 @@ public final class MicrophoneArrayProfileCodec {
     writeCapture(values, profile.liveCapture());
     writeCalibration(values, profile.calibration());
     return values.entrySet().stream()
+        .sorted(Map.Entry.comparingByKey())
         .map(entry -> entry.getKey() + '=' + entry.getValue())
         .collect(Collectors.joining("\n", "", "\n"));
   }
@@ -187,9 +189,9 @@ public final class MicrophoneArrayProfileCodec {
         Instant.parse(value(properties, "calibration.validUntil")));
   }
 
-  private static EnumSet<LocalizationInputMode> readModes(Properties properties) {
+  private static Set<LocalizationInputMode> readModes(Properties properties) {
     String encodedModes = value(properties, "profile.modes");
-    EnumSet<LocalizationInputMode> modes = EnumSet.noneOf(LocalizationInputMode.class);
+    Set<LocalizationInputMode> modes = EnumSet.noneOf(LocalizationInputMode.class);
     Arrays.stream(encodedModes.split(","))
         .filter(mode -> !mode.isBlank())
         .map(LocalizationInputMode::valueOf)
