@@ -15,7 +15,7 @@ import java.util.Objects;
 public record MicrophoneArrayReadiness(
     boolean ready, SynchronizationAssessment synchronization, List<String> diagnostics) {
 
-  /** Validate and defensively copy one readiness result. */
+  // Validate and defensively copy one readiness result.
   public MicrophoneArrayReadiness {
     Objects.requireNonNull(synchronization, "synchronization");
     diagnostics = List.copyOf(Objects.requireNonNull(diagnostics, "diagnostics"));
