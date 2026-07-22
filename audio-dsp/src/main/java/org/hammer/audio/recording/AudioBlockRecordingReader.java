@@ -64,9 +64,10 @@ public final class AudioBlockRecordingReader implements Closeable {
   public static List<AudioBlock> readAll(Path file) throws IOException {
     try (AudioBlockRecordingReader reader = open(file)) {
       List<AudioBlock> blocks = new ArrayList<>();
-      Optional<AudioBlock> next;
-      while ((next = reader.next()).isPresent()) {
+      Optional<AudioBlock> next = reader.next();
+      while (next.isPresent()) {
         blocks.add(next.get());
+        next = reader.next();
       }
       return Collections.unmodifiableList(blocks);
     }
@@ -75,8 +76,9 @@ public final class AudioBlockRecordingReader implements Closeable {
   /** Inspect a recording without allocating one list containing all samples. */
   public static RecordingInspection inspect(Path file) throws IOException {
     try (AudioBlockRecordingReader reader = open(file, true)) {
-      while (reader.next().isPresent()) {
-        // stream through complete records
+      Optional<AudioBlock> next = reader.next();
+      while (next.isPresent()) {
+        next = reader.next();
       }
       return reader
           .inspection()
@@ -93,9 +95,10 @@ public final class AudioBlockRecordingReader implements Closeable {
     Objects.requireNonNull(target, "target");
     try (AudioBlockRecordingReader reader = open(source, true);
         AudioBlockRecordingWriter writer = AudioBlockRecordingWriter.open(target)) {
-      Optional<AudioBlock> next;
-      while ((next = reader.next()).isPresent()) {
+      Optional<AudioBlock> next = reader.next();
+      while (next.isPresent()) {
         writer.write(next.get());
+        next = reader.next();
       }
       RecordingInspection sourceInspection =
           reader.inspection().orElseThrow(() -> new IOException("Source inspection incomplete"));
@@ -369,5 +372,5 @@ public final class AudioBlockRecordingReader implements Closeable {
     return result.toString();
   }
 
-  private record Header(int version, AudioFormatDescriptor format, boolean legacy) {}
+  private record Header(int version, AudioFormatDescriptor format, boolean legacy) { }
 }
