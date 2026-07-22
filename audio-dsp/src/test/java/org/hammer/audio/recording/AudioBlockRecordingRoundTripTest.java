@@ -10,6 +10,7 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.List;
 import org.hammer.audio.core.AudioBlock;
 import org.hammer.audio.core.AudioFormatDescriptor;
@@ -68,10 +69,9 @@ class AudioBlockRecordingRoundTripTest {
   void missingFooterIsRejectedStrictlyButRecoverableWithoutChangingSource(@TempDir Path directory)
       throws IOException {
     Path target = directory.resolve("interrupted.aarec");
-    Path partial;
     AudioBlockRecordingWriter writer = AudioBlockRecordingWriter.open(target);
     writer.write(block(0L, 100L, new float[] {0.1f, 0.2f}));
-    partial = writer.partialFile();
+    Path partial = writer.partialFile();
     writer.abort();
 
     assertFalse(Files.exists(target));
@@ -87,6 +87,78 @@ class AudioBlockRecordingRoundTripTest {
     assertEquals(RecordingIntegrity.COMPLETE, recoveredInspection.integrity());
     assertArrayEquals(original, Files.readAllBytes(partial));
     assertEquals(1, AudioBlockRecordingReader.readAll(recovered).size());
+  }
+
+  @Test
+  void truncatedFooterIsClassifiedAndEarlierBlocksCanBeRecovered(@TempDir Path directory)
+      throws IOException {
+    Path complete = directory.resolve("complete.aarec");
+    try (AudioBlockRecordingWriter writer = AudioBlockRecordingWriter.open(complete)) {
+      writer.write(block(0L, 100L, new float[] {0.1f, 0.2f}));
+      writer.write(block(2L, 200L, new float[] {0.3f, 0.4f}));
+    }
+    byte[] bytes = Files.readAllBytes(complete);
+    Path truncated = directory.resolve("truncated.aarec.partial");
+    Files.write(truncated, Arrays.copyOf(bytes, bytes.length - 12));
+
+    assertThrows(IOException.class, () -> AudioBlockRecordingReader.readAll(truncated));
+    RecordingInspection inspection = AudioBlockRecordingReader.inspect(truncated);
+    assertEquals(RecordingIntegrity.TRUNCATED, inspection.integrity());
+    assertEquals(2L, inspection.blockCount());
+
+    Path recovered = directory.resolve("truncated-recovered.aarec");
+    RecordingInspection recoveredInspection =
+        AudioBlockRecordingReader.recover(truncated, recovered);
+    assertEquals(RecordingIntegrity.COMPLETE, recoveredInspection.integrity());
+    assertEquals(2L, recoveredInspection.blockCount());
+  }
+
+  @Test
+  void legacyFileEndingInsideBlockIsTruncatedNotMerelyUnverified(@TempDir Path directory)
+      throws IOException {
+    Path complete = directory.resolve("legacy-complete.aar");
+    writeLegacyV1(complete, block(0L, 123L, new float[] {0.25f, 0.5f}));
+    byte[] bytes = Files.readAllBytes(complete);
+    Path truncated = directory.resolve("legacy-truncated.aar");
+    Files.write(truncated, Arrays.copyOf(bytes, bytes.length - 2));
+
+    RecordingInspection inspection = AudioBlockRecordingReader.inspect(truncated);
+
+    assertEquals(RecordingIntegrity.TRUNCATED, inspection.integrity());
+    assertEquals(0L, inspection.blockCount());
+    assertThrows(IOException.class, () -> AudioBlockRecordingReader.readAll(truncated));
+  }
+
+  @Test
+  void checksumManipulationIsCorrupt(@TempDir Path directory) throws IOException {
+    Path complete = directory.resolve("checksum.aarec");
+    try (AudioBlockRecordingWriter writer = AudioBlockRecordingWriter.open(complete)) {
+      writer.write(block(0L, 100L, new float[] {0.1f, 0.2f}));
+    }
+    byte[] bytes = Files.readAllBytes(complete);
+    bytes[AudioBlockRecordingFormat.HEADER_BYTES + 20] ^= 0x01;
+    Path corrupt = directory.resolve("checksum-corrupt.aarec");
+    Files.write(corrupt, bytes);
+
+    RecordingInspection inspection = AudioBlockRecordingReader.inspect(corrupt);
+
+    assertEquals(RecordingIntegrity.CORRUPT, inspection.integrity());
+    assertThrows(IOException.class, () -> AudioBlockRecordingReader.readAll(corrupt));
+  }
+
+  @Test
+  void oversizedFrameCountIsRejectedBeforeSampleAllocation(@TempDir Path directory)
+      throws IOException {
+    Path file = directory.resolve("oversized.aarec");
+    try (DataOutputStream output = new DataOutputStream(Files.newOutputStream(file))) {
+      writeHeader(output, AudioBlockRecordingFormat.MAGIC, AudioBlockRecordingFormat.VERSION);
+      output.writeInt(AudioBlockRecordingFormat.MAX_FRAMES_PER_BLOCK + 1);
+    }
+
+    RecordingInspection inspection = AudioBlockRecordingReader.inspect(file);
+
+    assertEquals(RecordingIntegrity.CORRUPT, inspection.integrity());
+    assertThrows(IOException.class, () -> AudioBlockRecordingReader.readAll(file));
   }
 
   @Test
@@ -124,12 +196,10 @@ class AudioBlockRecordingRoundTripTest {
 
   private static void writeLegacyV1(Path file, AudioBlock block) throws IOException {
     try (DataOutputStream output = new DataOutputStream(Files.newOutputStream(file))) {
-      output.writeInt(AudioBlockRecordingFormat.LEGACY_MAGIC);
-      output.writeShort(AudioBlockRecordingFormat.LEGACY_VERSION);
-      output.writeShort(block.channels());
-      output.writeFloat(block.format().sampleRate());
-      output.writeShort(block.format().sourceSampleSizeInBits());
-      output.writeShort(0);
+      writeHeader(
+          output,
+          AudioBlockRecordingFormat.LEGACY_MAGIC,
+          AudioBlockRecordingFormat.LEGACY_VERSION);
       output.writeInt(block.frames());
       output.writeLong(block.frameIndex());
       output.writeLong(block.timestampNanos());
@@ -139,5 +209,15 @@ class AudioBlockRecordingRoundTripTest {
         }
       }
     }
+  }
+
+  private static void writeHeader(DataOutputStream output, int magic, int version)
+      throws IOException {
+    output.writeInt(magic);
+    output.writeShort(version);
+    output.writeShort(STEREO_44K.channels());
+    output.writeFloat(STEREO_44K.sampleRate());
+    output.writeShort(STEREO_44K.sourceSampleSizeInBits());
+    output.writeShort(0);
   }
 }
