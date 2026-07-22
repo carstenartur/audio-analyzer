@@ -59,13 +59,13 @@ it again.
 
 ## File identity
 
-| Property | Current value |
-|---|---|
-| Preferred extension | `.aarec` |
-| Binary media type | `application/vnd.carstenartur.audio-recording` |
-| Current format version | `2` |
-| Legacy import extension | `.aar` |
-| Legacy format version | `1` |
+|         Property          |                 Current value                  |
+|---------------------------|------------------------------------------------|
+| Preferred extension       | `.aarec`                                       |
+| Binary media type         | `application/vnd.carstenartur.audio-recording` |
+| Current format version    | `2`                                            |
+| Legacy import extension   | `.aar`                                         |
+| Legacy format version     | `1`                                            |
 
 The new extension avoids collision with Android Archive (`.aar`) files. Extension and media type are
 hints only; the reader validates the binary magic value and version.
@@ -134,3 +134,4 @@ Non-UI code can use the same components:
   dropped before reaching the recorder. The recording runtime status records that separate fact.
 - Legacy version 1 files remain importable but can never be upgraded to verified historical evidence
   without an explicit recovery/export step.
+
