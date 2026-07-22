@@ -22,15 +22,13 @@ class WorkbenchTdoaEstimatorSelectionTest {
             .tdoaEstimatorType(WorkbenchParameters.TdoaEstimatorType.SUB_SAMPLE_GCC_PHAT)
             .build();
     assertInstanceOf(
-        SubSampleGccPhatTdoaEstimator.class,
-        WorkbenchScenarioRunner.buildTdoaEstimator(advanced));
+        SubSampleGccPhatTdoaEstimator.class, WorkbenchScenarioRunner.buildTdoaEstimator(advanced));
   }
 
   @Test
   void rejectsMissingTdoaEstimatorStrategyAtConfigurationBoundary() {
     assertThrows(
-        NullPointerException.class,
-        () -> WorkbenchParameters.defaults().tdoaEstimatorType(null));
+        NullPointerException.class, () -> WorkbenchParameters.defaults().tdoaEstimatorType(null));
   }
 
   @Test
