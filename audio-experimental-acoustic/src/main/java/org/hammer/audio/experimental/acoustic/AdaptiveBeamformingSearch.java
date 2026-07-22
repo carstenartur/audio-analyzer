@@ -50,8 +50,7 @@ public final class AdaptiveBeamformingSearch {
     for (int level = 0; level < refinementLevels; level++) {
       Map<Vector2, BeamformingPoint> levelPoints = new LinkedHashMap<>();
       for (SearchBounds region : activeRegions) {
-        for (BeamformingPoint point :
-            beamformer.scan(block, array, region.grid(stepsPerAxis))) {
+        for (BeamformingPoint point : beamformer.scan(block, array, region.grid(stepsPerAxis))) {
           levelPoints.putIfAbsent(point.positionMeters(), point);
           evaluatedByPosition.putIfAbsent(point.positionMeters(), point);
         }
@@ -77,14 +76,10 @@ public final class AdaptiveBeamformingSearch {
     }
 
     return new BeamformingSearchResult(
-        globalBest,
-        List.copyOf(evaluatedByPosition.values()),
-        refinementLevels,
-        stepsPerAxis);
+        globalBest, List.copyOf(evaluatedByPosition.values()), refinementLevels, stepsPerAxis);
   }
 
-  private static List<BeamformingPoint> rankByEnergy(
-      Iterable<BeamformingPoint> points) {
+  private static List<BeamformingPoint> rankByEnergy(Iterable<BeamformingPoint> points) {
     List<BeamformingPoint> ranked = new ArrayList<>();
     points.forEach(ranked::add);
     ranked.sort(
@@ -99,10 +94,7 @@ public final class AdaptiveBeamformingSearch {
   }
 
   private static List<BeamformingPoint> selectRefinementCenters(
-      List<BeamformingPoint> ranked,
-      double xRadius,
-      double yRadius,
-      int maximumCenters) {
+      List<BeamformingPoint> ranked, double xRadius, double yRadius, int maximumCenters) {
     List<BeamformingPoint> selected = new ArrayList<>(maximumCenters);
     for (BeamformingPoint candidate : ranked) {
       if (isSpatiallyDistinct(candidate, selected, xRadius, yRadius)) {
@@ -124,15 +116,10 @@ public final class AdaptiveBeamformingSearch {
   }
 
   private static boolean isSpatiallyDistinct(
-      BeamformingPoint candidate,
-      List<BeamformingPoint> selected,
-      double xRadius,
-      double yRadius) {
+      BeamformingPoint candidate, List<BeamformingPoint> selected, double xRadius, double yRadius) {
     for (BeamformingPoint existing : selected) {
-      double xDistance =
-          Math.abs(candidate.positionMeters().x() - existing.positionMeters().x());
-      double yDistance =
-          Math.abs(candidate.positionMeters().y() - existing.positionMeters().y());
+      double xDistance = Math.abs(candidate.positionMeters().x() - existing.positionMeters().x());
+      double yDistance = Math.abs(candidate.positionMeters().y() - existing.positionMeters().y());
       if (xDistance <= 2.0 * xRadius && yDistance <= 2.0 * yRadius) {
         return false;
       }
@@ -201,8 +188,7 @@ public final class AdaptiveBeamformingSearch {
         clippedMinimumY = Math.max(minimumY, clippedMinimumY - yRadius);
         clippedMaximumY = Math.min(maximumY, clippedMaximumY + yRadius);
       }
-      return new SearchBounds(
-          clippedMinimumX, clippedMaximumX, clippedMinimumY, clippedMaximumY);
+      return new SearchBounds(clippedMinimumX, clippedMaximumX, clippedMinimumY, clippedMaximumY);
     }
   }
 
@@ -216,8 +202,7 @@ public final class AdaptiveBeamformingSearch {
     // Validate and defensively copy one search result.
     public BeamformingSearchResult {
       Objects.requireNonNull(best, "best");
-      evaluatedPoints =
-          List.copyOf(Objects.requireNonNull(evaluatedPoints, "evaluatedPoints"));
+      evaluatedPoints = List.copyOf(Objects.requireNonNull(evaluatedPoints, "evaluatedPoints"));
       if (evaluatedPoints.isEmpty()) {
         throw new IllegalArgumentException("evaluatedPoints must not be empty");
       }
