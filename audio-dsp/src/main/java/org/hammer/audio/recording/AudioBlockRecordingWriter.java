@@ -28,7 +28,6 @@ public final class AudioBlockRecordingWriter implements Closeable {
   private final CountingOutputStream counter;
   private final DigestOutputStream digestStream;
   private final DataOutputStream out;
-  private final MessageDigest digest;
   private final Path targetFile;
   private final Path partialFile;
 
@@ -71,7 +70,7 @@ public final class AudioBlockRecordingWriter implements Closeable {
   }
 
   private AudioBlockRecordingWriter(OutputStream stream, Path targetFile, Path partialFile) {
-    this.digest = newSha256();
+    MessageDigest digest = newSha256();
     this.counter = new CountingOutputStream(Objects.requireNonNull(stream, "stream"));
     this.digestStream = new DigestOutputStream(counter, digest);
     this.out = new DataOutputStream(digestStream);
@@ -221,7 +220,7 @@ public final class AudioBlockRecordingWriter implements Closeable {
     out.writeInt(AudioBlockRecordingFormat.FOOTER_MARKER);
     out.flush();
     digestStream.on(false);
-    byte[] checksum = digest.digest();
+    byte[] checksum = digestStream.getMessageDigest().digest();
     out.writeInt(AudioBlockRecordingFormat.FOOTER_MAGIC);
     out.writeLong(blocksWritten);
     out.writeLong(totalFrames);
@@ -257,7 +256,7 @@ public final class AudioBlockRecordingWriter implements Closeable {
 
   private static final class CountingOutputStream extends FilterOutputStream {
 
-    private long count;
+    private long byteCount;
 
     private CountingOutputStream(OutputStream stream) {
       super(stream);
@@ -266,17 +265,17 @@ public final class AudioBlockRecordingWriter implements Closeable {
     @Override
     public void write(int value) throws IOException {
       out.write(value);
-      count++;
+      byteCount++;
     }
 
     @Override
     public void write(byte[] bytes, int offset, int length) throws IOException {
       out.write(bytes, offset, length);
-      count = Math.addExact(count, length);
+      byteCount = Math.addExact(byteCount, length);
     }
 
     private long count() {
-      return count;
+      return byteCount;
     }
   }
 }
