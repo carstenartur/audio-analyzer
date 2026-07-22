@@ -2,9 +2,11 @@ package org.hammer.audio.experimental.acoustic;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import org.hammer.audio.acquisition.Microphone;
 import org.hammer.audio.acquisition.MicrophoneArray;
 
@@ -37,38 +39,90 @@ public final class TdoaPairConsistencyAnalyzer {
     requirePositiveFinite(sampleRate, "sampleRate");
     double cycleToleranceSeconds = cycleToleranceSamples / sampleRate;
     double physicalToleranceSeconds = physicalToleranceSamples / sampleRate;
-    Map<OrientedPair, Double> delays = new HashMap<>();
-    List<TdoaConsistencyFinding> findings = new ArrayList<>();
-    int physicalViolations = 0;
 
-    for (TdoaEstimate estimate : requiredEstimates) {
+    PairAnalysis pairAnalysis =
+        analyzePairs(array, requiredEstimates, sampleRate, physicalToleranceSeconds);
+    CycleAnalysis cycleAnalysis =
+        analyzeCycles(array.microphones(), pairAnalysis.delays(), cycleToleranceSeconds);
+    List<TdoaConsistencyFinding> findings = new ArrayList<>(pairAnalysis.findings());
+    findings.addAll(cycleAnalysis.findings());
+
+    double meanResidual =
+        cycleAnalysis.evaluatedCycles() > 0
+            ? cycleAnalysis.residualTotal() / cycleAnalysis.evaluatedCycles()
+            : 0.0;
+    double consistencyScore =
+        cycleAnalysis.evaluatedCycles() > 0
+            ? Math.exp(-meanResidual / cycleToleranceSeconds)
+            : 1.0;
+    if (pairAnalysis.physicalViolationCount() > 0) {
+      consistencyScore = 0.0;
+    }
+    return new TdoaConsistencyReport(
+        findings,
+        cycleAnalysis.evaluatedCycles(),
+        meanResidual,
+        cycleAnalysis.maximumResidual(),
+        pairAnalysis.physicalViolationCount(),
+        consistencyScore);
+  }
+
+  private PairAnalysis analyzePairs(
+      MicrophoneArray array,
+      List<TdoaEstimate> estimates,
+      float sampleRate,
+      double physicalToleranceSeconds) {
+    Map<OrientedPair, Double> delays = new HashMap<>();
+    Set<UnorderedPair> seenPairs = new HashSet<>();
+    List<TdoaConsistencyFinding> findings = new ArrayList<>();
+    for (TdoaEstimate estimate : estimates) {
       Microphone first = microphone(array, estimate.firstMicrophoneId());
       Microphone second = microphone(array, estimate.secondMicrophoneId());
-      OrientedPair forward = new OrientedPair(first.id(), second.id());
-      OrientedPair reverse = new OrientedPair(second.id(), first.id());
-      if (delays.putIfAbsent(forward, estimate.delaySeconds()) != null
-          || delays.putIfAbsent(reverse, -estimate.delaySeconds()) != null) {
-        throw new IllegalArgumentException("duplicate TDOA estimate for pair " + forward);
+      UnorderedPair pair = UnorderedPair.of(first.id(), second.id());
+      if (seenPairs.add(pair)) {
+        delays.put(new OrientedPair(first.id(), second.id()), estimate.delaySeconds());
+        delays.put(new OrientedPair(second.id(), first.id()), -estimate.delaySeconds());
+      } else {
+        throw new IllegalArgumentException("duplicate TDOA estimate for pair " + pair);
       }
-      double physicalLimit =
-          first.positionMeters().distanceTo(second.positionMeters()) / speedOfSoundMetersPerSecond
-              + physicalToleranceSeconds;
-      double excess = Math.abs(estimate.delaySeconds()) - physicalLimit;
-      if (excess > 0.0) {
-        physicalViolations++;
-        findings.add(
-            new TdoaConsistencyFinding(
-                TdoaConsistencyFinding.Kind.PHYSICAL_LIMIT,
-                List.of(first.id(), second.id()),
-                Math.copySign(excess, estimate.delaySeconds()),
-                physicalToleranceSeconds > 0.0 ? physicalToleranceSeconds : 1.0 / sampleRate));
+      TdoaConsistencyFinding finding =
+          physicalFinding(first, second, estimate, sampleRate, physicalToleranceSeconds);
+      if (finding != null) {
+        findings.add(finding);
       }
     }
+    return new PairAnalysis(delays, findings, findings.size());
+  }
 
+  private TdoaConsistencyFinding physicalFinding(
+      Microphone first,
+      Microphone second,
+      TdoaEstimate estimate,
+      float sampleRate,
+      double physicalToleranceSeconds) {
+    double physicalLimit =
+        first.positionMeters().distanceTo(second.positionMeters()) / speedOfSoundMetersPerSecond
+            + physicalToleranceSeconds;
+    double excess = Math.abs(estimate.delaySeconds()) - physicalLimit;
+    if (excess <= 0.0) {
+      return null;
+    }
+    double tolerance = physicalToleranceSeconds > 0.0 ? physicalToleranceSeconds : 1.0 / sampleRate;
+    return new TdoaConsistencyFinding(
+        TdoaConsistencyFinding.Kind.PHYSICAL_LIMIT,
+        List.of(first.id(), second.id()),
+        Math.copySign(excess, estimate.delaySeconds()),
+        tolerance);
+  }
+
+  private static CycleAnalysis analyzeCycles(
+      List<Microphone> microphones,
+      Map<OrientedPair, Double> delays,
+      double cycleToleranceSeconds) {
+    List<TdoaConsistencyFinding> findings = new ArrayList<>();
     int evaluatedCycles = 0;
     double residualTotal = 0.0;
     double maximumResidual = 0.0;
-    List<Microphone> microphones = array.microphones();
     for (int firstIndex = 0; firstIndex < microphones.size(); firstIndex++) {
       for (int secondIndex = firstIndex + 1; secondIndex < microphones.size(); secondIndex++) {
         for (int thirdIndex = secondIndex + 1; thirdIndex < microphones.size(); thirdIndex++) {
@@ -97,20 +151,7 @@ public final class TdoaPairConsistencyAnalyzer {
         }
       }
     }
-
-    double meanResidual = evaluatedCycles > 0 ? residualTotal / evaluatedCycles : 0.0;
-    double consistencyScore =
-        evaluatedCycles > 0 ? Math.exp(-meanResidual / cycleToleranceSeconds) : 1.0;
-    if (physicalViolations > 0) {
-      consistencyScore = 0.0;
-    }
-    return new TdoaConsistencyReport(
-        findings,
-        evaluatedCycles,
-        meanResidual,
-        maximumResidual,
-        physicalViolations,
-        consistencyScore);
+    return new CycleAnalysis(findings, evaluatedCycles, residualTotal, maximumResidual);
   }
 
   private static Microphone microphone(MicrophoneArray array, String id) {
@@ -132,6 +173,38 @@ public final class TdoaPairConsistencyAnalyzer {
       return value;
     }
     throw new IllegalArgumentException(name + " must be finite and >= 0");
+  }
+
+  private record PairAnalysis(
+      Map<OrientedPair, Double> delays,
+      List<TdoaConsistencyFinding> findings,
+      int physicalViolationCount) {
+    // immutable analysis tuple
+  }
+
+  private record CycleAnalysis(
+      List<TdoaConsistencyFinding> findings,
+      int evaluatedCycles,
+      double residualTotal,
+      double maximumResidual) {
+    // immutable analysis tuple
+  }
+
+  private record UnorderedPair(String firstId, String secondId) {
+    private UnorderedPair {
+      if (firstId == null || firstId.isBlank() || secondId == null || secondId.isBlank()) {
+        throw new IllegalArgumentException("pair ids must not be blank");
+      }
+      if (firstId.equals(secondId)) {
+        throw new IllegalArgumentException("pair ids must be distinct");
+      }
+    }
+
+    private static UnorderedPair of(String firstId, String secondId) {
+      return firstId.compareTo(secondId) <= 0
+          ? new UnorderedPair(firstId, secondId)
+          : new UnorderedPair(secondId, firstId);
+    }
   }
 
   private record OrientedPair(String firstId, String secondId) {
