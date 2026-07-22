@@ -5,7 +5,11 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 
-/** Immutable side-by-side TDOA benchmark report. */
+/**
+ * Immutable side-by-side TDOA benchmark report.
+ *
+ * @param results stable algorithm results in registration order
+ */
 public record TdoaAlgorithmBenchmarkReport(List<TdoaAlgorithmBenchmarkResult> results) {
 
   // Validate stable algorithm ordering and defensively copy results.
