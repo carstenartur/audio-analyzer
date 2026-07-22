@@ -134,8 +134,7 @@ class SubSampleGccPhatTdoaEstimatorTest {
 
   private static AudioBlock reflectedDelayBlock(double delaySamples, long seed) {
     float[] source = broadbandSource(seed);
-    float[] first =
-        mix(source, fractionalDelay(source, REFLECTION_DELAY_SAMPLES), REFLECTION_GAIN);
+    float[] first = mix(source, fractionalDelay(source, REFLECTION_DELAY_SAMPLES), REFLECTION_GAIN);
     float[] second =
         mix(
             fractionalDelay(source, delaySamples),
