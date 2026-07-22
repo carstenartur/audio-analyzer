@@ -7,7 +7,9 @@ final class GccPhatCorrelation {
 
   private static final double EPSILON = 1.0e-12;
 
-  private GccPhatCorrelation() {}
+  private GccPhatCorrelation() {
+    // utility class
+  }
 
   /** Returns the PHAT-weighted circular correlation at the requested interpolation factor. */
   static double[] correlate(float[] first, float[] second, int frames, int interpolationFactor) {
