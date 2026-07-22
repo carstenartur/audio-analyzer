@@ -17,9 +17,9 @@ import org.hammer.audio.snapshot.WaveformSnapshot;
 import org.hammer.audio.ui.WaveformRenderer;
 
 /**
- * {@link AudioCaptureService} that replays a previously recorded audio file. Blocks are published at
- * their natural sample-rate pace and exposed exactly like live or demo capture, so the rest of the
- * application is unaware of the origin of the audio data.
+ * {@link AudioCaptureService} that replays a previously recorded audio file. Blocks are published
+ * at their natural sample-rate pace and exposed exactly like live or demo capture, so the rest of
+ * the application is unaware of the origin of the audio data.
  *
  * <p>When the recording is exhausted the service automatically stops, mirroring the behavior of
  * pressing "Stop" on a live capture.
@@ -105,6 +105,7 @@ public final class RecordedAudioCaptureService implements AudioCaptureService {
               return worker;
             });
     workerExecutor.submit(this::replayLoop);
+    ActiveAudioCaptureRegistry.activate(this);
   }
 
   @Override
@@ -112,6 +113,7 @@ public final class RecordedAudioCaptureService implements AudioCaptureService {
     if (!running.getAndSet(false)) {
       return;
     }
+    ActiveAudioCaptureRegistry.deactivate(this);
     if (workerExecutor != null) {
       workerExecutor.shutdownNow();
       try {
@@ -203,6 +205,7 @@ public final class RecordedAudioCaptureService implements AudioCaptureService {
       if (index >= blocks.size()) {
         if (!loop) {
           running.set(false);
+          ActiveAudioCaptureRegistry.deactivate(this);
           return;
         }
         index = 0;
