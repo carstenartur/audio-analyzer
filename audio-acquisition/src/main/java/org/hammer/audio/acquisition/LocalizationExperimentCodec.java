@@ -42,7 +42,8 @@ public final class LocalizationExperimentCodec {
     String profile =
         Base64.getUrlEncoder()
             .withoutPadding()
-            .encodeToString(profileCodec.encode(experiment.profile()).getBytes(StandardCharsets.UTF_8));
+            .encodeToString(
+                profileCodec.encode(experiment.profile()).getBytes(StandardCharsets.UTF_8));
     put(values, "experiment.profile", profile);
     put(values, "metadata.count", Integer.toString(experiment.metadata().size()));
     int index = 0;
@@ -68,8 +69,7 @@ public final class LocalizationExperimentCodec {
       throw new IllegalArgumentException("experiment text could not be read", exception);
     }
     requireValue(properties, "schema", SCHEMA_VERSION);
-    byte[] profileBytes =
-        Base64.getUrlDecoder().decode(value(properties, "experiment.profile"));
+    byte[] profileBytes = Base64.getUrlDecoder().decode(value(properties, "experiment.profile"));
     MicrophoneArrayProfile profile =
         profileCodec.decode(new String(profileBytes, StandardCharsets.UTF_8));
     int metadataCount = Integer.parseInt(value(properties, "metadata.count"));
