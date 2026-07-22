@@ -71,7 +71,9 @@ class MicrophoneArrayProfileWorkflowTest {
     store.save(first);
     store.save(second);
 
-    assertEquals(List.of("another-array", "desk-array"), store.list().stream().map(MicrophoneArrayProfile::profileId).toList());
+    assertEquals(
+        List.of("another-array", "desk-array"),
+        store.list().stream().map(MicrophoneArrayProfile::profileId).toList());
     assertEquals("Desk array", store.find("desk-array").orElseThrow().displayName());
     assertTrue(store.delete("desk-array"));
     assertFalse(store.find("desk-array").isPresent());
