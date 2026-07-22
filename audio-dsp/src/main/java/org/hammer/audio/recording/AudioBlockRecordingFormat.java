@@ -41,8 +41,11 @@ public final class AudioBlockRecordingFormat {
   /** SHA-256 digest length. */
   static final int SHA_256_BYTES = 32;
 
-  /** Defensive upper bound for one decoded block. */
-  static final int MAX_FRAMES_PER_BLOCK = 16_777_216;
+  /** Defensive upper bound for one decoded block's frame count. */
+  static final int MAX_FRAMES_PER_BLOCK = 1_048_576;
+
+  /** Defensive upper bound for all channel/frame float values allocated for one block. */
+  static final long MAX_SAMPLE_VALUES_PER_BLOCK = 16_777_216L;
 
   private AudioBlockRecordingFormat() {}
 }
