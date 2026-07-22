@@ -46,8 +46,7 @@ public record MicrophoneArrayProfile(
       throw new IllegalArgumentException(
           "capture channel count must match microphone-array channel count");
     }
-    if (calibration != null
-        && !calibration.array().microphones().equals(array.microphones())) {
+    if (calibration != null && !calibration.array().microphones().equals(array.microphones())) {
       throw new IllegalArgumentException(
           "calibration geometry and channel mapping must match the profile array");
     }
