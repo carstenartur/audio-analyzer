@@ -59,13 +59,13 @@ it again.
 
 ## File identity
 
-|         Property          |                 Current value                  |
-|---------------------------|------------------------------------------------|
-| Preferred extension       | `.aarec`                                       |
-| Binary media type         | `application/vnd.carstenartur.audio-recording` |
-| Current format version    | `2`                                            |
-| Legacy import extension   | `.aar`                                         |
-| Legacy format version     | `1`                                            |
+|        Property         |                 Current value                  |
+|-------------------------|------------------------------------------------|
+| Preferred extension     | `.aarec`                                       |
+| Binary media type       | `application/vnd.carstenartur.audio-recording` |
+| Current format version  | `2`                                            |
+| Legacy import extension | `.aar`                                         |
+| Legacy format version   | `1`                                            |
 
 The new extension avoids collision with Android Archive (`.aar`) files. Extension and media type are
 hints only; the reader validates the binary magic value and version.
