@@ -51,8 +51,7 @@ public final class TdoaPairConsistencyAnalyzer {
         throw new IllegalArgumentException("duplicate TDOA estimate for pair " + forward);
       }
       double physicalLimit =
-          first.positionMeters().distanceTo(second.positionMeters())
-                  / speedOfSoundMetersPerSecond
+          first.positionMeters().distanceTo(second.positionMeters()) / speedOfSoundMetersPerSecond
               + physicalToleranceSeconds;
       double excess = Math.abs(estimate.delaySeconds()) - physicalLimit;
       if (excess > 0.0) {
@@ -62,9 +61,7 @@ public final class TdoaPairConsistencyAnalyzer {
                 TdoaConsistencyFinding.Kind.PHYSICAL_LIMIT,
                 List.of(first.id(), second.id()),
                 Math.copySign(excess, estimate.delaySeconds()),
-                physicalToleranceSeconds > 0.0
-                    ? physicalToleranceSeconds
-                    : 1.0 / sampleRate));
+                physicalToleranceSeconds > 0.0 ? physicalToleranceSeconds : 1.0 / sampleRate));
       }
     }
 
