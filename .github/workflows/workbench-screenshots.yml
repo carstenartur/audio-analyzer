@@ -10,14 +10,14 @@ permissions:
   packages: read
 
 concurrency:
-  group: workbench-screenshots-${{ github.ref }}
+  group: repair-tdoa-workbench-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  integrate-tdoa-consistency-evidence:
+  repair-incomplete-tdoa-integration:
     if: github.head_ref == 'feature/138-advanced-localization-algorithms' && github.actor != 'github-actions[bot]'
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 30
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
@@ -26,7 +26,8 @@ jobs:
           ref: feature/138-advanced-localization-algorithms
           fetch-depth: 0
 
-      - uses: actions/setup-java@v5
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
@@ -35,7 +36,7 @@ jobs:
           server-username: GITHUB_ACTOR
           server-password: GITHUB_TOKEN
 
-      - name: Add workbench and export evidence
+      - name: Complete TDOA evidence integration
         run: |
           python3 <<'PY'
           from pathlib import Path
@@ -153,31 +154,43 @@ jobs:
           )
 
           panel = 'audio-experimental-acoustic/src/main/java/org/hammer/audio/experimental/acoustic/workbench/AcousticLocalizationWorkbenchPanel.java'
+          synchronization_formatter = '''  static String formatSynchronizationDetails(TrackingSnapshot snapshot) {
+    return String.format(
+        Locale.ROOT,
+        "Synchronization: %s / %s (error=%.4f samples, %.2f µs)%n",
+        snapshot.synchronization().mode(),
+        snapshot.synchronization().status(),
+        snapshot.synchronization().estimatedErrorSamples(),
+        snapshot.synchronization().estimatedErrorSeconds() * 1_000_000.0);
+  }
+'''
           replace_once(
               panel,
-              '  @SuppressWarnings("PMD.ConsecutiveAppendsShouldReuse")\n'
-              '  private void refreshPlaybackFrame(int frameIndex) {',
-              '  static String formatTdoaConsistencyDetails(TrackingSnapshot snapshot) {\n'
-              '    return String.format(\n'
-              '        Locale.ROOT,\n'
-              '        "TDOA consistency: score=%.3f cycles=%d maxResidual=%.2f µs physicalViolations=%d%n",\n'
-              '        snapshot.tdoaConsistency().consistencyScore(),\n'
-              '        snapshot.tdoaConsistency().evaluatedCycles(),\n'
-              '        snapshot.tdoaConsistency().maximumAbsoluteCycleResidualSeconds() * 1_000_000.0,\n'
-              '        snapshot.tdoaConsistency().physicalViolationCount());\n'
-              '  }\n\n'
-              '  @SuppressWarnings("PMD.ConsecutiveAppendsShouldReuse")\n'
-              '  private void refreshPlaybackFrame(int frameIndex) {',
+              synchronization_formatter,
+              synchronization_formatter
+              + '''
+  static String formatTdoaConsistencyDetails(TrackingSnapshot snapshot) {
+    return String.format(
+        Locale.ROOT,
+        "TDOA consistency: score=%.3f cycles=%d maxResidual=%.2f µs physicalViolations=%d%n",
+        snapshot.tdoaConsistency().consistencyScore(),
+        snapshot.tdoaConsistency().evaluatedCycles(),
+        snapshot.tdoaConsistency().maximumAbsoluteCycleResidualSeconds() * 1_000_000.0,
+        snapshot.tdoaConsistency().physicalViolationCount());
+  }
+''',
               'panel consistency formatter',
           )
           replace_once(
               panel,
-              '    sb.append(formatSynchronizationDetails(snap));\n',
+              '    sb.append(formatSynchronizationDetails(snap));\n'
+              '    if (snap.synchronization().status() != SynchronizationStatus.TRUSTED) {',
               '    sb.append(formatSynchronizationDetails(snap));\n'
               '    sb.append(formatTdoaConsistencyDetails(snap));\n'
               '    if (!snap.tdoaConsistency().reliable()) {\n'
               '      sb.append("⚠ TDOA pair evidence is physically or cyclically inconsistent.\\n");\n'
-              '    }\n',
+              '    }\n'
+              '    if (snap.synchronization().status() != SynchronizationStatus.TRUSTED) {',
               'panel playback evidence',
           )
           replace_once(
@@ -212,30 +225,27 @@ jobs:
               '                      * 1_000_000.0,\n'
               '                  snapshot.tdoaConsistency().physicalViolationCount()));\n'
               '      if (snapshot.processingNanos() > budgetNanos) {',
-              'panel block line evidence',
+              'panel block-line evidence',
           )
           PY
 
           mvn -B -pl audio-experimental-acoustic -am spotless:apply
           mvn -B -pl audio-experimental-acoustic -am test
 
-      - name: Validate controlled evidence scope
-        run: |
-          allowed='^(audio-experimental-acoustic/src/main/java/org/hammer/audio/experimental/acoustic/workbench/(WorkbenchRunExporter|AcousticLocalizationWorkbenchPanel)\.java|audio-experimental-acoustic/src/test/java/org/hammer/audio/experimental/acoustic/workbench/WorkbenchTdoaConsistencyExportTest\.java|\.github/workflows/workbench-screenshots\.yml)$'
-          unexpected=$(git diff --name-only | grep -Ev "$allowed" || true)
-          if [ -n "$unexpected" ]; then
-            printf 'Unexpected evidence changes:\n%s\n' "$unexpected"
-            exit 1
-          fi
-
-      - name: Commit evidence and restore read-only workflow
+      - name: Validate and commit repaired scope
         run: |
           git checkout origin/master -- .github/workflows/workbench-screenshots.yml
+          allowed='^(audio-experimental-acoustic/src/main/java/org/hammer/audio/experimental/acoustic/workbench/(WorkbenchRunExporter|AcousticLocalizationWorkbenchPanel)\.java|\.github/workflows/workbench-screenshots\.yml)$'
+          unexpected=$(git diff --name-only | grep -Ev "$allowed" || true)
+          if [ -n "$unexpected" ]; then
+            printf 'Unexpected repair changes:\n%s\n' "$unexpected"
+            exit 1
+          fi
+          git diff --check
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add audio-experimental-acoustic/src/main/java/org/hammer/audio/experimental/acoustic/workbench/WorkbenchRunExporter.java
           git add audio-experimental-acoustic/src/main/java/org/hammer/audio/experimental/acoustic/workbench/AcousticLocalizationWorkbenchPanel.java
-          git add audio-experimental-acoustic/src/test/java/org/hammer/audio/experimental/acoustic/workbench/WorkbenchTdoaConsistencyExportTest.java
           git add .github/workflows/workbench-screenshots.yml
           git commit -m "Expose TDOA consistency evidence in workbench (#138)"
           git push origin HEAD:feature/138-advanced-localization-algorithms
