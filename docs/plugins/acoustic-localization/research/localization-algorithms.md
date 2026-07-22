@@ -7,11 +7,58 @@ claims about uncalibrated real hardware.
 
 ## TDOA estimators
 
-| Algorithm | Implementation | Strengths | Limitations | Evidence |
-|---|---|---|---|---|
-| Integer GCC-PHAT | `GccPhatTdoaEstimator` | Small and understandable baseline; physically bounded lag search; useful compatibility reference | Quantizes every delay to a whole sample; confidence is the selected peak's fraction of the searched correlation energy | `GccPhatTdoaEstimatorTest` and the baseline rows in `SubSampleGccPhatTdoaEstimatorTest` |
-| Sub-sample GCC-PHAT | `SubSampleGccPhatTdoaEstimator` | Sixteen-times spectral interpolation; parabolic refinement; primary/secondary peak evidence; curvature-aware confidence; explicit ambiguity rejection | More FFT work and memory than the integer baseline; periodic or strongly multipath-dominated signals can still be ambiguous | `SubSampleGccPhatTdoaEstimatorTest` |
-| Time-domain cross-correlation | `CrossCorrelationTdoaEstimator` | Simple alternative with different failure modes and no frequency-domain preprocessing | More sensitive to spectral coloration and reverberation; integer-sample result | Workbench estimator selection and existing estimator tests |
+### Integer GCC-PHAT
+
+Implementation: `GccPhatTdoaEstimator`.
+
+Strengths:
+
+- small and understandable compatibility baseline;
+- physically bounded lag search;
+- inexpensive reference for side-by-side reports.
+
+Limitations:
+
+- quantizes every delay to a whole sample;
+- confidence is only the selected peak's fraction of the searched correlation energy.
+
+Evidence: `GccPhatTdoaEstimatorTest` and the baseline rows in
+`SubSampleGccPhatTdoaEstimatorTest`.
+
+### Sub-sample GCC-PHAT
+
+Implementation: `SubSampleGccPhatTdoaEstimator`.
+
+Strengths:
+
+- sixteen-times spectral interpolation;
+- parabolic peak refinement;
+- primary and secondary peak evidence;
+- curvature-aware confidence;
+- explicit ambiguity rejection.
+
+Limitations:
+
+- requires more FFT work and memory than the integer baseline;
+- periodic or strongly multipath-dominated signals can remain ambiguous.
+
+Evidence: `SubSampleGccPhatTdoaEstimatorTest`.
+
+### Time-domain cross-correlation
+
+Implementation: `CrossCorrelationTdoaEstimator`.
+
+Strengths:
+
+- simple alternative with different failure modes;
+- no frequency-domain preprocessing.
+
+Limitations:
+
+- integer-sample result;
+- more sensitive to spectral coloration and reverberation.
+
+Evidence: workbench estimator selection and the existing estimator tests.
 
 The default workbench strategy remains the integer GCC-PHAT implementation so existing runs remain
 reproducible. `SUB_SAMPLE_GCC_PHAT` is an explicit selectable strategy.
@@ -61,10 +108,39 @@ The workbench exports this evidence in Markdown, CSV and JSON-lines output throu
 
 ## Beamforming search
 
-| Algorithm | Implementation | Strengths | Limitations | Evidence |
-|---|---|---|---|---|
-| Uniform grid | `DelayAndSumBeamformer.scan(...)` | Complete, deterministic baseline over caller-provided candidates | Cost grows with every candidate; resolution is fixed by the grid | Existing tracking and scenario tests |
-| Adaptive multi-hypothesis refinement | `AdaptiveBeamformingSearch` | Retains the global maximum, follows two spatially distinct hypotheses, deduplicates evaluated positions and exports the complete normalized confidence surface | Still depends on the underlying delay-and-sum score; it is not a replacement for source separation or a calibrated SRP implementation | `AdaptiveBeamformingSearchTest` |
+### Uniform grid
+
+Implementation: `DelayAndSumBeamformer.scan(...)`.
+
+Strengths:
+
+- complete deterministic baseline over caller-provided candidates;
+- simple reference surface for comparisons.
+
+Limitations:
+
+- cost grows with every candidate;
+- resolution is fixed by the supplied grid.
+
+Evidence: existing tracking and scenario tests.
+
+### Adaptive multi-hypothesis refinement
+
+Implementation: `AdaptiveBeamformingSearch`.
+
+Strengths:
+
+- retains the global maximum over every refinement level;
+- follows two spatially distinct hypotheses;
+- deduplicates evaluated positions;
+- exports the complete normalized confidence surface.
+
+Limitations:
+
+- still depends on the underlying delay-and-sum score;
+- is not a replacement for source separation or a calibrated SRP implementation.
+
+Evidence: `AdaptiveBeamformingSearchTest`.
 
 The delay-and-sum scorer aligns channels using **relative** propagation times, rounds only after the
 relative delay is formed and evaluates only the common valid overlap of all channels. This avoids
