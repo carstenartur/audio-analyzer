@@ -78,7 +78,9 @@ public final class AudioBlockRecordingReader implements Closeable {
       while (reader.next().isPresent()) {
         // stream through complete records
       }
-      return reader.inspection().orElseThrow(() -> new IOException("Recording inspection incomplete"));
+      return reader
+          .inspection()
+          .orElseThrow(() -> new IOException("Recording inspection incomplete"));
     }
   }
 
@@ -110,7 +112,8 @@ public final class AudioBlockRecordingReader implements Closeable {
     this(stream, false);
   }
 
-  private AudioBlockRecordingReader(InputStream stream, boolean allowIncomplete) throws IOException {
+  private AudioBlockRecordingReader(InputStream stream, boolean allowIncomplete)
+      throws IOException {
     this.digest = newSha256();
     this.digestStream =
         new DigestInputStream(
@@ -147,6 +150,15 @@ public final class AudioBlockRecordingReader implements Closeable {
     try {
       frames = in.readInt();
     } catch (EOFException exception) {
+      if (legacy) {
+        inspection =
+            createInspection(
+                RecordingIntegrity.LEGACY_UNVERIFIED,
+                "",
+                "Legacy recording reached a clean end of file without a completion footer.");
+        ended = true;
+        return Optional.empty();
+      }
       return handleUnexpectedEnd("end of file reached before version-2 footer", exception);
     }
     if (!legacy && frames == AudioBlockRecordingFormat.FOOTER_MARKER) {
@@ -172,7 +184,7 @@ public final class AudioBlockRecordingReader implements Closeable {
       acceptRecord(frames, frameIndex, timestampNanos);
       return Optional.of(new AudioBlock(format, samples, frameIndex, timestampNanos));
     } catch (EOFException exception) {
-      return handleUnexpectedEnd("recording ended inside an audio block", exception);
+      return handleTruncation("recording ended inside an audio block", exception);
     }
   }
 
@@ -186,16 +198,14 @@ public final class AudioBlockRecordingReader implements Closeable {
         magic == AudioBlockRecordingFormat.MAGIC && version == AudioBlockRecordingFormat.VERSION;
     if (!legacyHeader && !currentHeader) {
       throw new IOException(
-          String.format("unsupported audio recording header magic=0x%08x version=%d", magic, version));
+          String.format(
+              "unsupported audio recording header magic=0x%08x version=%d", magic, version));
     }
     int channels = in.readUnsignedShort();
     float sampleRate = in.readFloat();
     int sourceBits = in.readUnsignedShort();
     in.readUnsignedShort();
-    if (channels < 1
-        || sourceBits < 1
-        || !(sampleRate > 0f)
-        || !Float.isFinite(sampleRate)) {
+    if (channels < 1 || sourceBits < 1 || !(sampleRate > 0f) || !Float.isFinite(sampleRate)) {
       throw new IOException(
           "invalid header values: channels="
               + channels
@@ -243,7 +253,7 @@ public final class AudioBlockRecordingReader implements Closeable {
       }
       byte[] declaredChecksum = in.readNBytes(checksumLength);
       if (declaredChecksum.length != checksumLength) {
-        return handleUnexpectedEnd("recording ended inside completion footer", null);
+        return handleTruncation("recording ended inside completion footer", null);
       }
       boolean countersMatch =
           declaredBlocks == blockCount
@@ -267,16 +277,26 @@ public final class AudioBlockRecordingReader implements Closeable {
       ended = true;
       return Optional.empty();
     } catch (EOFException exception) {
-      return handleUnexpectedEnd("recording ended inside completion footer", exception);
+      return handleTruncation("recording ended inside completion footer", exception);
     }
   }
 
-  private Optional<AudioBlock> handleUnexpectedEnd(String detail, Exception cause) throws IOException {
-    if (legacy) {
-      inspection = createInspection(RecordingIntegrity.LEGACY_UNVERIFIED, "", detail);
+  private Optional<AudioBlock> handleTruncation(String detail, Exception cause)
+      throws IOException {
+    if (allowIncomplete) {
+      inspection = createInspection(RecordingIntegrity.TRUNCATED, "", detail);
       ended = true;
       return Optional.empty();
     }
+    EOFException exception = new EOFException(detail);
+    if (cause != null) {
+      exception.initCause(cause);
+    }
+    throw exception;
+  }
+
+  private Optional<AudioBlock> handleUnexpectedEnd(String detail, Exception cause)
+      throws IOException {
     if (allowIncomplete) {
       inspection = createInspection(RecordingIntegrity.RECOVERABLE_INCOMPLETE, "", detail);
       ended = true;
