@@ -4,7 +4,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
+import org.hammer.audio.acquisition.Microphone;
+import org.hammer.audio.acquisition.MicrophoneArray;
 import org.hammer.audio.core.AudioBlock;
+import org.hammer.audio.core.AudioFormatDescriptor;
 import org.hammer.audio.experimental.acoustic.AdaptiveBeamformingSearch.BeamformingSearchResult;
 import org.hammer.audio.experimental.acoustic.AdaptiveBeamformingSearch.SearchBounds;
 import org.hammer.audio.experimental.acoustic.DelayAndSumBeamformer.BeamformingPoint;
@@ -19,6 +22,7 @@ import org.junit.jupiter.api.Test;
 class AdaptiveBeamformingSearchTest {
 
   private static final double SPEED_OF_SOUND = 343.0;
+  private static final float SAMPLE_RATE = 16_000.0f;
   private static final Vector2 SOURCE_POSITION = new Vector2(1.43, 1.17);
 
   @Test
@@ -53,6 +57,32 @@ class AdaptiveBeamformingSearchTest {
     assertTrue(
         adaptive.normalizedConfidenceSurface().stream()
             .anyMatch(point -> Math.abs(point.normalizedConfidence() - 1.0) < 1.0e-12));
+  }
+
+  @Test
+  void ignoresUnobservableCommonPropagationDelay() {
+    int frames = 512;
+    float[][] samples = new float[2][frames];
+    for (int frame = 0; frame < frames; frame++) {
+      double seconds = frame / SAMPLE_RATE;
+      float value =
+          (float) Math.sin(2.0 * Math.PI * (300.0 * seconds + 2_000.0 * seconds * seconds));
+      samples[0][frame] = value;
+      samples[1][frame] = value;
+    }
+    AudioBlock block =
+        AudioBlock.wrap(new AudioFormatDescriptor(SAMPLE_RATE, 2, 32), samples, 0L, 0L);
+    MicrophoneArray array =
+        new MicrophoneArray(
+            List.of(
+                new Microphone("left", new Vector2(-0.15, 0.0), 0),
+                new Microphone("right", new Vector2(0.15, 0.0), 1)));
+
+    List<BeamformingPoint> scores =
+        new DelayAndSumBeamformer(SPEED_OF_SOUND)
+            .scan(block, array, List.of(new Vector2(0.0, 1.0), new Vector2(0.0, 2.0)));
+
+    assertEquals(scores.get(0).energy(), scores.get(1).energy(), 1.0e-12);
   }
 
   @Test
@@ -141,7 +171,7 @@ class AdaptiveBeamformingSearchTest {
         new Room2D(3.0, 2.0, 0.0, 0.0),
         SimulationScenarios.defaultArray(),
         List.of(emitter),
-        16_000.0f,
+        SAMPLE_RATE,
         0.25,
         138L);
   }
