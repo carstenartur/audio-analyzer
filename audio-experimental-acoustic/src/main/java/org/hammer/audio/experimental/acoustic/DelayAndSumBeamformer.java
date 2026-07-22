@@ -83,7 +83,12 @@ public final class DelayAndSumBeamformer {
     return (int) Math.round(seconds * block.format().sampleRate());
   }
 
-  /** Beamforming score at one candidate point. */
+  /**
+   * Beamforming score at one candidate point.
+   *
+   * @param positionMeters candidate position in meters
+   * @param energy normalized delay-and-sum energy
+   */
   public record BeamformingPoint(Vector2 positionMeters, double energy) {
 
     /** Create a score point. */
