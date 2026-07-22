@@ -49,8 +49,7 @@ class AdaptiveBeamformingSearchTest {
             + adaptive.evaluatedCandidateCount()
             + ", fine-grid candidates="
             + fineGrid.size());
-    assertEquals(
-        adaptive.evaluatedCandidateCount(), adaptive.normalizedConfidenceSurface().size());
+    assertEquals(adaptive.evaluatedCandidateCount(), adaptive.normalizedConfidenceSurface().size());
     assertTrue(
         adaptive.normalizedConfidenceSurface().stream()
             .anyMatch(point -> Math.abs(point.normalizedConfidence() - 1.0) < 1.0e-12));
@@ -84,25 +83,16 @@ class AdaptiveBeamformingSearchTest {
     }
     BeamformingSearchResult result =
         new AdaptiveBeamformingSearch(new DelayAndSumBeamformer(SPEED_OF_SOUND))
-            .search(
-                block,
-                scenario.array(),
-                new SearchBounds(0.0, 3.0, 0.0, 2.0),
-                3,
-                3);
+            .search(block, scenario.array(), new SearchBounds(0.0, 3.0, 0.0, 2.0), 3, 3);
 
     double maximumEvaluatedEnergy =
-        result.evaluatedPoints().stream()
-            .mapToDouble(BeamformingPoint::energy)
-            .max()
-            .orElseThrow();
+        result.evaluatedPoints().stream().mapToDouble(BeamformingPoint::energy).max().orElseThrow();
     assertEquals(maximumEvaluatedEnergy, result.best().energy(), 1.0e-12);
     assertTrue(
         result.normalizedConfidenceSurface().stream()
             .allMatch(
                 point ->
-                    point.normalizedConfidence() >= 0.0
-                        && point.normalizedConfidence() <= 1.0));
+                    point.normalizedConfidence() >= 0.0 && point.normalizedConfidence() <= 1.0));
     assertTrue(
         result.normalizedConfidenceSurface().stream()
             .anyMatch(point -> Math.abs(point.normalizedConfidence() - 1.0) < 1.0e-12));
