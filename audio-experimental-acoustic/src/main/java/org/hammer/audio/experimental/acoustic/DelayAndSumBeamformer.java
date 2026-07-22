@@ -38,17 +38,21 @@ public final class DelayAndSumBeamformer {
   }
 
   private double scoreCandidate(AudioBlock block, MicrophoneArray array, Vector2 candidate) {
+    List<Microphone> microphones = array.microphones();
+    int[] relativeDelays = relativeDelaySamples(block, microphones, candidate);
     int frames = block.frames();
     double energy = 0.0;
     for (int frame = 0; frame < frames; frame++) {
       double sum = 0.0;
       int contributors = 0;
-      for (Microphone mic : array.microphones()) {
-        // The captured sample already contains the propagation delay. Advance each channel by the
-        // candidate's predicted delay so equal source-emission times add coherently.
-        int alignedIndex = frame + delaySamples(block, mic, candidate);
+      for (int microphoneIndex = 0; microphoneIndex < microphones.size(); microphoneIndex++) {
+        Microphone microphone = microphones.get(microphoneIndex);
+        // Captured channels already contain propagation delay. Advance each channel only by its
+        // delay relative to the earliest microphone. A common absolute delay is not observable in
+        // passive localization and must not change the score of a finite signal block.
+        int alignedIndex = frame + relativeDelays[microphoneIndex];
         if (alignedIndex >= 0 && alignedIndex < frames) {
-          sum += block.channelView(mic.channel())[alignedIndex];
+          sum += block.channelView(microphone.channel())[alignedIndex];
           contributors++;
         }
       }
@@ -58,6 +62,20 @@ public final class DelayAndSumBeamformer {
       }
     }
     return frames > 0 ? energy / frames : 0.0;
+  }
+
+  private int[] relativeDelaySamples(
+      AudioBlock block, List<Microphone> microphones, Vector2 candidate) {
+    int[] delays = new int[microphones.size()];
+    int minimumDelay = Integer.MAX_VALUE;
+    for (int index = 0; index < microphones.size(); index++) {
+      delays[index] = delaySamples(block, microphones.get(index), candidate);
+      minimumDelay = Math.min(minimumDelay, delays[index]);
+    }
+    for (int index = 0; index < delays.length; index++) {
+      delays[index] -= minimumDelay;
+    }
+    return delays;
   }
 
   private int delaySamples(AudioBlock block, Microphone mic, Vector2 candidate) {
