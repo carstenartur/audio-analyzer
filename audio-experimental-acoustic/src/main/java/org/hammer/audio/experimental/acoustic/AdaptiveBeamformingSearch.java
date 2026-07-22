@@ -1,7 +1,10 @@
 package org.hammer.audio.experimental.acoustic;
 
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import org.hammer.audio.acquisition.MicrophoneArray;
 import org.hammer.audio.core.AudioBlock;
@@ -11,6 +14,8 @@ import org.hammer.audio.geometry.Vector2;
 /** Coarse-to-fine candidate refinement over the existing delay-and-sum beamforming baseline. */
 public final class AdaptiveBeamformingSearch {
 
+  private static final int ACTIVE_HYPOTHESIS_LIMIT = 2;
+
   private final DelayAndSumBeamformer beamformer;
 
   /** Creates an adaptive search over one interchangeable beamforming scorer. */
@@ -19,8 +24,9 @@ public final class AdaptiveBeamformingSearch {
   }
 
   /**
-   * Searches the initial bounds and repeatedly refines the cell surrounding the current level's
-   * best point while retaining the global best point across every evaluated level.
+   * Searches the initial bounds and repeatedly refines two deterministic, spatially distinct score
+   * hypotheses. Retaining more than one path prevents an early coarse-grid alias from irreversibly
+   * excluding the physically correct basin.
    */
   public BeamformingSearchResult search(
       AudioBlock block,
@@ -38,35 +44,100 @@ public final class AdaptiveBeamformingSearch {
       throw new IllegalArgumentException("refinementLevels must be >= 1");
     }
 
-    SearchBounds currentBounds = initialBounds;
-    List<BeamformingPoint> evaluated = new ArrayList<>();
+    List<SearchBounds> activeRegions = List.of(initialBounds);
+    Map<Vector2, BeamformingPoint> evaluatedByPosition = new LinkedHashMap<>();
     BeamformingPoint globalBest = null;
     for (int level = 0; level < refinementLevels; level++) {
-      List<BeamformingPoint> levelPoints =
-          beamformer.scan(block, array, currentBounds.grid(stepsPerAxis));
-      evaluated.addAll(levelPoints);
-      BeamformingPoint levelBest = bestPoint(levelPoints);
+      Map<Vector2, BeamformingPoint> levelPoints = new LinkedHashMap<>();
+      for (SearchBounds region : activeRegions) {
+        for (BeamformingPoint point :
+            beamformer.scan(block, array, region.grid(stepsPerAxis))) {
+          levelPoints.putIfAbsent(point.positionMeters(), point);
+          evaluatedByPosition.putIfAbsent(point.positionMeters(), point);
+        }
+      }
+
+      List<BeamformingPoint> ranked = rankByEnergy(levelPoints.values());
+      BeamformingPoint levelBest = ranked.get(0);
       if (globalBest == null || levelBest.energy() > globalBest.energy()) {
         globalBest = levelBest;
       }
-      double xRadius = currentBounds.width() / stepsPerAxis;
-      double yRadius = currentBounds.height() / stepsPerAxis;
-      currentBounds = initialBounds.around(levelBest.positionMeters(), xRadius, yRadius);
-    }
-    return new BeamformingSearchResult(globalBest, evaluated, refinementLevels, stepsPerAxis);
-  }
-
-  private static BeamformingPoint bestPoint(List<BeamformingPoint> points) {
-    BeamformingPoint best = null;
-    for (BeamformingPoint point : points) {
-      if (best == null || point.energy() > best.energy()) {
-        best = point;
+      if (level + 1 < refinementLevels) {
+        double scale = Math.pow(stepsPerAxis, level + 1.0);
+        double xRadius = initialBounds.width() / scale;
+        double yRadius = initialBounds.height() / scale;
+        List<BeamformingPoint> centers =
+            selectRefinementCenters(ranked, xRadius, yRadius, ACTIVE_HYPOTHESIS_LIMIT);
+        List<SearchBounds> nextRegions = new ArrayList<>(centers.size());
+        for (BeamformingPoint center : centers) {
+          nextRegions.add(initialBounds.around(center.positionMeters(), xRadius, yRadius));
+        }
+        activeRegions = List.copyOf(nextRegions);
       }
     }
-    if (best == null) {
+
+    return new BeamformingSearchResult(
+        globalBest,
+        List.copyOf(evaluatedByPosition.values()),
+        refinementLevels,
+        stepsPerAxis);
+  }
+
+  private static List<BeamformingPoint> rankByEnergy(
+      Iterable<BeamformingPoint> points) {
+    List<BeamformingPoint> ranked = new ArrayList<>();
+    points.forEach(ranked::add);
+    ranked.sort(
+        Comparator.comparingDouble(BeamformingPoint::energy)
+            .reversed()
+            .thenComparingDouble(point -> point.positionMeters().x())
+            .thenComparingDouble(point -> point.positionMeters().y()));
+    if (ranked.isEmpty()) {
       throw new IllegalArgumentException("points must not be empty");
     }
-    return best;
+    return List.copyOf(ranked);
+  }
+
+  private static List<BeamformingPoint> selectRefinementCenters(
+      List<BeamformingPoint> ranked,
+      double xRadius,
+      double yRadius,
+      int maximumCenters) {
+    List<BeamformingPoint> selected = new ArrayList<>(maximumCenters);
+    for (BeamformingPoint candidate : ranked) {
+      if (isSpatiallyDistinct(candidate, selected, xRadius, yRadius)) {
+        selected.add(candidate);
+        if (selected.size() == maximumCenters) {
+          return List.copyOf(selected);
+        }
+      }
+    }
+    for (BeamformingPoint candidate : ranked) {
+      if (!selected.contains(candidate)) {
+        selected.add(candidate);
+        if (selected.size() == maximumCenters) {
+          break;
+        }
+      }
+    }
+    return List.copyOf(selected);
+  }
+
+  private static boolean isSpatiallyDistinct(
+      BeamformingPoint candidate,
+      List<BeamformingPoint> selected,
+      double xRadius,
+      double yRadius) {
+    for (BeamformingPoint existing : selected) {
+      double xDistance =
+          Math.abs(candidate.positionMeters().x() - existing.positionMeters().x());
+      double yDistance =
+          Math.abs(candidate.positionMeters().y() - existing.positionMeters().y());
+      if (xDistance <= 2.0 * xRadius && yDistance <= 2.0 * yRadius) {
+        return false;
+      }
+    }
+    return true;
   }
 
   /** Rectangular search region in meters. */
@@ -135,7 +206,7 @@ public final class AdaptiveBeamformingSearch {
     }
   }
 
-  /** Adaptive best point plus every evaluated confidence-surface point. */
+  /** Adaptive best point plus every uniquely evaluated confidence-surface point. */
   public record BeamformingSearchResult(
       BeamformingPoint best,
       List<BeamformingPoint> evaluatedPoints,
@@ -155,7 +226,7 @@ public final class AdaptiveBeamformingSearch {
       }
     }
 
-    /** Number of beamforming candidates actually evaluated. */
+    /** Number of unique beamforming candidates actually evaluated. */
     public int evaluatedCandidateCount() {
       return evaluatedPoints.size();
     }
@@ -175,7 +246,7 @@ public final class AdaptiveBeamformingSearch {
     }
   }
 
-  /** One evaluated beamforming point with confidence normalized to the selected best score. */
+  /** One evaluated beamforming point with confidence normalized to the global maximum. */
   public record BeamformingConfidencePoint(
       Vector2 positionMeters, double energy, double normalizedConfidence) {
 
