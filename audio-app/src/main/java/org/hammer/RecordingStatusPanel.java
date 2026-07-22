@@ -1,6 +1,7 @@
 package org.hammer;
 
 import java.awt.FlowLayout;
+import java.awt.event.ActionListener;
 import java.time.Duration;
 import java.util.Locale;
 import java.util.Objects;
@@ -47,7 +48,7 @@ public final class RecordingStatusPanel extends JPanel {
   /** Configure the action invoked by the persistent stop control. */
   public void setStopAction(Runnable action) {
     Objects.requireNonNull(action, "action");
-    for (var listener : stopButton.getActionListeners()) {
+    for (ActionListener listener : stopButton.getActionListeners()) {
       stopButton.removeActionListener(listener);
     }
     stopButton.addActionListener(event -> action.run());
@@ -108,7 +109,8 @@ public final class RecordingStatusPanel extends JPanel {
   }
 
   private static String detail(RecordingStatus status) {
-    String reason = status.stopReason().isBlank() ? "No stop reason recorded." : status.stopReason();
+    String reason =
+        status.stopReason().isBlank() ? "No stop reason recorded." : status.stopReason();
     return reason
         + " Written frames: "
         + status.writtenFrames()
