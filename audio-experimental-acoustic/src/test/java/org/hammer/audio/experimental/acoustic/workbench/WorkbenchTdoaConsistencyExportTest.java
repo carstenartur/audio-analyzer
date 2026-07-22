@@ -51,10 +51,7 @@ class WorkbenchTdoaConsistencyExportTest {
   private static TrackingSnapshot snapshot() {
     TdoaConsistencyFinding finding =
         new TdoaConsistencyFinding(
-            TdoaConsistencyFinding.Kind.PHYSICAL_LIMIT,
-            List.of("m0", "m1"),
-            20.0e-6,
-            5.0e-6);
+            TdoaConsistencyFinding.Kind.PHYSICAL_LIMIT, List.of("m0", "m1"), 20.0e-6, 5.0e-6);
     TdoaConsistencyReport report =
         new TdoaConsistencyReport(List.of(finding), 4, 20.0e-6, 40.0e-6, 1, 0.35);
     TrackedSource track =
