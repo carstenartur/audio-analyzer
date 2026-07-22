@@ -66,21 +66,18 @@ public final class DelayAndSumBeamformer {
 
   private int[] relativeDelaySamples(
       AudioBlock block, List<Microphone> microphones, Vector2 candidate) {
-    int[] delays = new int[microphones.size()];
-    int minimumDelay = Integer.MAX_VALUE;
+    double[] distances = new double[microphones.size()];
+    double minimumDistance = Double.POSITIVE_INFINITY;
     for (int index = 0; index < microphones.size(); index++) {
-      delays[index] = delaySamples(block, microphones.get(index), candidate);
-      minimumDelay = Math.min(minimumDelay, delays[index]);
+      distances[index] = microphones.get(index).positionMeters().distanceTo(candidate);
+      minimumDistance = Math.min(minimumDistance, distances[index]);
     }
+    int[] delays = new int[microphones.size()];
+    double samplesPerMeter = block.format().sampleRate() / speedOfSoundMetersPerSecond;
     for (int index = 0; index < delays.length; index++) {
-      delays[index] -= minimumDelay;
+      delays[index] = (int) Math.round((distances[index] - minimumDistance) * samplesPerMeter);
     }
     return delays;
-  }
-
-  private int delaySamples(AudioBlock block, Microphone mic, Vector2 candidate) {
-    double seconds = mic.positionMeters().distanceTo(candidate) / speedOfSoundMetersPerSecond;
-    return (int) Math.round(seconds * block.format().sampleRate());
   }
 
   /**
