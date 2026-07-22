@@ -63,7 +63,7 @@ public final class DirectoryMicrophoneArrayProfileStore implements MicrophoneArr
     }
     try (Stream<Path> paths = Files.list(directory)) {
       return paths
-          .filter(path -> path.getFileName().toString().endsWith(FILE_SUFFIX))
+          .filter(DirectoryMicrophoneArrayProfileStore::isProfileFile)
           .map(this::readUnchecked)
           .sorted(Comparator.comparing(MicrophoneArrayProfile::profileId))
           .toList();
@@ -94,6 +94,11 @@ public final class DirectoryMicrophoneArrayProfileStore implements MicrophoneArr
             .withoutPadding()
             .encodeToString(profileId.getBytes(StandardCharsets.UTF_8));
     return directory.resolve(encoded + FILE_SUFFIX);
+  }
+
+  private static boolean isProfileFile(Path path) {
+    Path fileName = path.getFileName();
+    return fileName != null && fileName.toString().endsWith(FILE_SUFFIX);
   }
 
   private static void moveAtomicallyWhenSupported(Path source, Path target) throws IOException {
