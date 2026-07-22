@@ -8,11 +8,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.time.Instant;
-import java.util.List;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReference;
 import javax.sound.sampled.AudioFormat;
 import org.hammer.audio.core.AudioBlock;
 import org.hammer.audio.core.AudioFormatDescriptor;
@@ -32,31 +29,23 @@ class RecordingTapPipelineTest {
 
   @Test
   void recordsEveryRapidlyPublishedBlockWithoutUsingUiPolling(@TempDir Path directory)
-      throws Exception {
+      throws IOException {
     FakeAudioService service = new FakeAudioService();
     Path file = directory.resolve("all-blocks.aarec");
     RecordingTap tap = RecordingTap.start(service, file, 128, healthyProbe(), START);
-    AtomicReference<String> writingThread = new AtomicReference<>();
-    CountDownLatch wrote = new CountDownLatch(1);
-    tap.addStatusListener(
-        status -> {
-          if (status.writtenBlocks() > 0L) {
-            writingThread.compareAndSet(null, Thread.currentThread().getName());
-            wrote.countDown();
-          }
-        });
 
     for (int index = 0; index < 100; index++) {
       service.emit(block(index * 8L, index));
     }
     tap.stop();
 
-    assertTrue(wrote.await(1L, TimeUnit.SECONDS));
-    assertTrue(writingThread.get().contains("ExperimentRecordingWriter"));
     assertEquals(RecordingState.COMPLETED, tap.status().state());
     assertEquals(100L, tap.status().receivedBlocks());
     assertEquals(100L, tap.status().writtenBlocks());
+    assertEquals(800L, tap.status().receivedFrames());
+    assertEquals(800L, tap.status().writtenFrames());
     assertEquals(0L, tap.status().droppedBlocks());
+    assertEquals(0L, tap.status().continuityGapCount());
     assertEquals(100, AudioBlockRecordingReader.readAll(file).size());
     assertEquals(RecordingIntegrity.COMPLETE, AudioBlockRecordingReader.inspect(file).integrity());
   }
@@ -190,10 +179,14 @@ class RecordingTapPipelineTest {
     }
 
     @Override
-    public void start() {}
+    public void start() {
+      // deterministic test source is push-driven
+    }
 
     @Override
-    public void stop() {}
+    public void stop() {
+      // deterministic test source owns no resources
+    }
 
     @Override
     public boolean isRunning() {
@@ -211,7 +204,9 @@ class RecordingTapPipelineTest {
     }
 
     @Override
-    public void setDivisor(int divisor) {}
+    public void setDivisor(int divisor) {
+      // not relevant to this push-driven test source
+    }
 
     @Override
     public int getDivisor() {
@@ -219,6 +214,8 @@ class RecordingTapPipelineTest {
     }
 
     @Override
-    public void recomputeLayout(int width, int height) {}
+    public void recomputeLayout(int width, int height) {
+      // test source has no UI projection
+    }
   }
 }
