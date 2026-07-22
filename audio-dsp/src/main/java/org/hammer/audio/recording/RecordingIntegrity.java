@@ -8,7 +8,9 @@ public enum RecordingIntegrity {
   COMPLETE,
   /** Complete frame records were recovered but the final footer is absent. */
   RECOVERABLE_INCOMPLETE,
-  /** The stream ended inside a block or footer; earlier complete blocks may still be recoverable. */
+  /**
+   * The stream ended inside a block or footer; earlier complete blocks may still be recoverable.
+   */
   TRUNCATED,
   /** Structure or digest is invalid. */
   CORRUPT
