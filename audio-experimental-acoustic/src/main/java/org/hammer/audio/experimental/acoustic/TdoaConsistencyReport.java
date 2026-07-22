@@ -27,8 +27,7 @@ public record TdoaConsistencyReport(
     if (evaluatedCycles < 0 || physicalViolationCount < 0) {
       throw new IllegalArgumentException("report counts must be >= 0");
     }
-    requireNonNegativeFinite(
-        meanAbsoluteCycleResidualSeconds, "meanAbsoluteCycleResidualSeconds");
+    requireNonNegativeFinite(meanAbsoluteCycleResidualSeconds, "meanAbsoluteCycleResidualSeconds");
     requireNonNegativeFinite(
         maximumAbsoluteCycleResidualSeconds, "maximumAbsoluteCycleResidualSeconds");
     if (!Double.isFinite(consistencyScore) || consistencyScore < 0.0 || consistencyScore > 1.0) {
