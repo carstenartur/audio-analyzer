@@ -1,6 +1,7 @@
 package org.hammer.audio.acquisition;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
@@ -66,7 +67,7 @@ public final class DirectoryMicrophoneArrayProfileStore implements MicrophoneArr
           .map(this::readUnchecked)
           .sorted(Comparator.comparing(MicrophoneArrayProfile::profileId))
           .toList();
-    } catch (UncheckedProfileIOException exception) {
+    } catch (UncheckedIOException exception) {
       throw exception.getCause();
     }
   }
@@ -80,7 +81,7 @@ public final class DirectoryMicrophoneArrayProfileStore implements MicrophoneArr
     try {
       return codec.decode(Files.readString(path, StandardCharsets.UTF_8));
     } catch (IOException exception) {
-      throw new UncheckedProfileIOException(exception);
+      throw new UncheckedIOException(exception);
     }
   }
 
@@ -101,20 +102,6 @@ public final class DirectoryMicrophoneArrayProfileStore implements MicrophoneArr
           source, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
     } catch (AtomicMoveNotSupportedException exception) {
       Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
-    }
-  }
-
-  private static final class UncheckedProfileIOException extends RuntimeException {
-
-    private static final long serialVersionUID = 1L;
-
-    private UncheckedProfileIOException(IOException cause) {
-      super(cause);
-    }
-
-    @Override
-    public synchronized IOException getCause() {
-      return (IOException) super.getCause();
     }
   }
 }
