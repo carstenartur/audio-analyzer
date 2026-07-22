@@ -41,7 +41,8 @@ public record LocalizationExperiment(
       throw new IllegalArgumentException("profile does not support experiment input mode");
     }
     TreeMap<String, String> ordered = new TreeMap<>();
-    for (Map.Entry<String, String> entry : Objects.requireNonNull(metadata, "metadata").entrySet()) {
+    for (Map.Entry<String, String> entry :
+        Objects.requireNonNull(metadata, "metadata").entrySet()) {
       requireText(entry.getKey(), "metadata key");
       Objects.requireNonNull(entry.getValue(), "metadata value");
       ordered.put(entry.getKey(), entry.getValue());
@@ -94,14 +95,7 @@ public record LocalizationExperiment(
     Map<String, String> changed = new TreeMap<>(metadata);
     changed.put(key, value);
     return new LocalizationExperiment(
-        experimentId,
-        displayName,
-        profile,
-        inputMode,
-        sourceReference,
-        createdAt,
-        stage,
-        changed);
+        experimentId, displayName, profile, inputMode, sourceReference, createdAt, stage, changed);
   }
 
   private LocalizationExperiment withStage(LocalizationExperimentStage nextStage) {
