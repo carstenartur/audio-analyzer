@@ -137,8 +137,7 @@ public final class ExperimentAudioAnalyseFrame extends AudioAnalyseFrame {
         new FileNameExtensionFilter(
             "AudioAnalyzer recording (*." + AudioBlockRecordingFormat.FILE_EXTENSION + ")",
             AudioBlockRecordingFormat.FILE_EXTENSION));
-    chooser.setSelectedFile(
-        new File("recording." + AudioBlockRecordingFormat.FILE_EXTENSION));
+    chooser.setSelectedFile(new File("recording." + AudioBlockRecordingFormat.FILE_EXTENSION));
     if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) {
       return;
     }
@@ -217,9 +216,7 @@ public final class ExperimentAudioAnalyseFrame extends AudioAnalyseFrame {
             this,
             inspectionText(inspection),
             "Recording inspection",
-            inspection.complete()
-                ? JOptionPane.INFORMATION_MESSAGE
-                : JOptionPane.WARNING_MESSAGE);
+            inspection.complete() ? JOptionPane.INFORMATION_MESSAGE : JOptionPane.WARNING_MESSAGE);
       }
     } catch (IOException exception) {
       LOGGER.log(Level.WARNING, "Recording inspection failed", exception);
