@@ -89,8 +89,7 @@ public final class MicrophoneArrayProfileCodec {
       microphones.add(
           new Microphone(
               value(properties, prefix + "id"),
-              new Vector2(
-                  decimal(properties, prefix + "x"), decimal(properties, prefix + "y")),
+              new Vector2(decimal(properties, prefix + "x"), decimal(properties, prefix + "y")),
               integer(properties, prefix + "channel")));
     }
     return new MicrophoneArray(microphones);
