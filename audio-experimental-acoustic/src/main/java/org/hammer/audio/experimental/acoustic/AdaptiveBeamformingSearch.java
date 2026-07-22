@@ -2,10 +2,10 @@ package org.hammer.audio.experimental.acoustic;
 
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import org.hammer.audio.acquisition.MicrophoneArray;
 import org.hammer.audio.core.AudioBlock;
 import org.hammer.audio.experimental.acoustic.DelayAndSumBeamformer.BeamformingPoint;
@@ -45,18 +45,24 @@ public final class AdaptiveBeamformingSearch {
     }
 
     List<SearchBounds> activeRegions = List.of(initialBounds);
-    Map<Vector2, BeamformingPoint> evaluatedByPosition = new LinkedHashMap<>();
+    Set<Vector2> evaluatedPositions = new LinkedHashSet<>();
+    List<BeamformingPoint> evaluatedPoints = new ArrayList<>();
     BeamformingPoint globalBest = null;
     for (int level = 0; level < refinementLevels; level++) {
-      Map<Vector2, BeamformingPoint> levelPoints = new LinkedHashMap<>();
+      Set<Vector2> levelPositions = new LinkedHashSet<>();
+      List<BeamformingPoint> levelPoints = new ArrayList<>();
       for (SearchBounds region : activeRegions) {
         for (BeamformingPoint point : beamformer.scan(block, array, region.grid(stepsPerAxis))) {
-          levelPoints.putIfAbsent(point.positionMeters(), point);
-          evaluatedByPosition.putIfAbsent(point.positionMeters(), point);
+          if (levelPositions.add(point.positionMeters())) {
+            levelPoints.add(point);
+          }
+          if (evaluatedPositions.add(point.positionMeters())) {
+            evaluatedPoints.add(point);
+          }
         }
       }
 
-      List<BeamformingPoint> ranked = rankByEnergy(levelPoints.values());
+      List<BeamformingPoint> ranked = rankByEnergy(levelPoints);
       BeamformingPoint levelBest = ranked.get(0);
       if (globalBest == null || levelBest.energy() > globalBest.energy()) {
         globalBest = levelBest;
@@ -76,12 +82,11 @@ public final class AdaptiveBeamformingSearch {
     }
 
     return new BeamformingSearchResult(
-        globalBest, List.copyOf(evaluatedByPosition.values()), refinementLevels, stepsPerAxis);
+        globalBest, List.copyOf(evaluatedPoints), refinementLevels, stepsPerAxis);
   }
 
-  private static List<BeamformingPoint> rankByEnergy(Iterable<BeamformingPoint> points) {
-    List<BeamformingPoint> ranked = new ArrayList<>();
-    points.forEach(ranked::add);
+  private static List<BeamformingPoint> rankByEnergy(List<BeamformingPoint> points) {
+    List<BeamformingPoint> ranked = new ArrayList<>(points);
     ranked.sort(
         Comparator.comparingDouble(BeamformingPoint::energy)
             .reversed()
@@ -125,6 +130,13 @@ public final class AdaptiveBeamformingSearch {
       }
     }
     return true;
+  }
+
+  private static void requirePositiveFinite(double value, String name) {
+    if (Double.isFinite(value) && value > 0.0) {
+      return;
+    }
+    throw new IllegalArgumentException(name + " must be finite and > 0");
   }
 
   /**
@@ -180,9 +192,8 @@ public final class AdaptiveBeamformingSearch {
     /** Returns a clipped refinement region around one selected point. */
     public SearchBounds around(Vector2 center, double xRadius, double yRadius) {
       Objects.requireNonNull(center, "center");
-      if (!(xRadius > 0.0) || !(yRadius > 0.0)) {
-        throw new IllegalArgumentException("refinement radii must be > 0");
-      }
+      requirePositiveFinite(xRadius, "xRadius");
+      requirePositiveFinite(yRadius, "yRadius");
       double clippedMinimumX = Math.max(minimumX, center.x() - xRadius);
       double clippedMaximumX = Math.min(maximumX, center.x() + xRadius);
       double clippedMinimumY = Math.max(minimumY, center.y() - yRadius);
