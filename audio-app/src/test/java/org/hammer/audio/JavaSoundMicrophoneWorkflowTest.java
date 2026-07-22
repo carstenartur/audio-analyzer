@@ -14,7 +14,6 @@ import java.io.IOException;
 import java.time.Instant;
 import java.util.EnumSet;
 import java.util.List;
-import javax.sound.sampled.Line;
 import javax.sound.sampled.Mixer;
 import javax.sound.sampled.TargetDataLine;
 import org.hammer.audio.acquisition.CaptureDeviceConfiguration;
@@ -39,11 +38,6 @@ class JavaSoundMicrophoneWorkflowTest {
   void discoversOnlyInputCapableMixersAndResolvesStableIdentity() {
     Mixer.Info inputInfo = new TestMixerInfo("Input", "Vendor", "Capture", "1");
     Mixer.Info outputInfo = new TestMixerInfo("Output", "Vendor", "Playback", "1");
-    Mixer inputMixer = mock(Mixer.class);
-    Mixer outputMixer = mock(Mixer.class);
-    when(inputMixer.getTargetLineInfo())
-        .thenReturn(new Line.Info[] {new Line.Info(TargetDataLine.class)});
-    when(outputMixer.getTargetLineInfo()).thenReturn(new Line.Info[0]);
     JavaSoundCaptureDeviceDiscovery discovery =
         new JavaSoundCaptureDeviceDiscovery(
             new JavaSoundCaptureDeviceDiscovery.MixerCatalog() {
@@ -53,8 +47,8 @@ class JavaSoundMicrophoneWorkflowTest {
               }
 
               @Override
-              public Mixer mixer(Mixer.Info info) {
-                return info == inputInfo ? inputMixer : outputMixer;
+              public boolean inputCapable(Mixer.Info info) {
+                return info == inputInfo;
               }
             });
 
