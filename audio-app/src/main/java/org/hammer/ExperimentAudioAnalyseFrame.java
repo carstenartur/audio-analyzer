@@ -74,9 +74,10 @@ public final class ExperimentAudioAnalyseFrame extends AudioAnalyseFrame {
   }
 
   private void installStatusStrip() {
-    Component existingSouth = getContentPane().getLayout() instanceof BorderLayout
-        ? ((BorderLayout) getContentPane().getLayout()).getLayoutComponent(BorderLayout.SOUTH)
-        : null;
+    Component existingSouth =
+        getContentPane().getLayout() instanceof BorderLayout
+            ? ((BorderLayout) getContentPane().getLayout()).getLayoutComponent(BorderLayout.SOUTH)
+            : null;
     JPanel south = new JPanel(new BorderLayout(4, 4));
     if (existingSouth != null) {
       getContentPane().remove(existingSouth);
@@ -107,7 +108,8 @@ public final class ExperimentAudioAnalyseFrame extends AudioAnalyseFrame {
         "Inspect completion, continuity and checksum evidence or recover complete blocks from a"
             + " partial recording.");
     inspect.addActionListener(event -> inspectOrRecoverRecording());
-    fileMenu.insert(inspect, Math.min(fileMenu.getItemCount(), stop.getParent().getComponentZOrder(stop) + 1));
+    int stopIndex = stop.getParent().getComponentZOrder(stop);
+    fileMenu.insert(inspect, Math.min(fileMenu.getItemCount(), stopIndex + 1));
   }
 
   private void startExperimentRecording() {
@@ -208,8 +210,7 @@ public final class ExperimentAudioAnalyseFrame extends AudioAnalyseFrame {
     Path source = chooser.getSelectedFile().toPath();
     try {
       RecordingInspection inspection = AudioBlockRecordingReader.inspect(source);
-      if (inspection.integrity() == RecordingIntegrity.RECOVERABLE_INCOMPLETE
-          || inspection.integrity() == RecordingIntegrity.CORRUPT) {
+      if (recoverable(inspection.integrity())) {
         offerRecovery(source, inspection);
       } else {
         JOptionPane.showMessageDialog(
@@ -228,6 +229,12 @@ public final class ExperimentAudioAnalyseFrame extends AudioAnalyseFrame {
           "Recording inspection",
           JOptionPane.ERROR_MESSAGE);
     }
+  }
+
+  private static boolean recoverable(RecordingIntegrity integrity) {
+    return integrity == RecordingIntegrity.RECOVERABLE_INCOMPLETE
+        || integrity == RecordingIntegrity.TRUNCATED
+        || integrity == RecordingIntegrity.CORRUPT;
   }
 
   private void offerRecovery(Path source, RecordingInspection inspection) throws IOException {
