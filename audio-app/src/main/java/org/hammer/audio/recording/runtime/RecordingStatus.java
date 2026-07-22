@@ -5,7 +5,29 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
 
-/** Complete immutable runtime snapshot for an experiment recording. */
+/**
+ * Complete immutable runtime snapshot for an experiment recording.
+ *
+ * @param state current recording lifecycle state
+ * @param destination normalized target recording path
+ * @param startedAt recording start instant
+ * @param updatedAt snapshot observation instant
+ * @param receivedBlocks blocks offered by the source subscription
+ * @param writtenBlocks blocks successfully serialized
+ * @param receivedFrames frames offered by the source subscription
+ * @param writtenFrames frames successfully serialized
+ * @param droppedBlocks blocks rejected because the recorder queue was full
+ * @param droppedFrames frames contained in dropped blocks
+ * @param continuityGapCount source frame-index discontinuities detected by the writer
+ * @param queueDepth current recorder queue occupancy
+ * @param queueCapacity bounded recorder queue capacity
+ * @param maximumQueueDepth highest observed queue occupancy
+ * @param bytesWritten current serialized bytes including container overhead
+ * @param measuredBytesPerSecond observed write throughput
+ * @param storage current backing-store capacity snapshot
+ * @param stopReason user- or system-visible terminal/degradation reason
+ * @param errorMessage terminal error detail, otherwise empty
+ */
 public record RecordingStatus(
     RecordingState state,
     Path destination,
@@ -27,6 +49,7 @@ public record RecordingStatus(
     String stopReason,
     String errorMessage) {
 
+  // Validate required fields and normalize optional text.
   public RecordingStatus {
     Objects.requireNonNull(state, "state");
     Objects.requireNonNull(destination, "destination");
@@ -39,9 +62,8 @@ public record RecordingStatus(
 
   /** Elapsed wall-clock recording time. */
   public Duration elapsed() {
-    return Duration.between(startedAt, updatedAt).isNegative()
-        ? Duration.ZERO
-        : Duration.between(startedAt, updatedAt);
+    Duration elapsed = Duration.between(startedAt, updatedAt);
+    return elapsed.isNegative() ? Duration.ZERO : elapsed;
   }
 
   /** Returns whether all received blocks were written without a continuity gap. */
