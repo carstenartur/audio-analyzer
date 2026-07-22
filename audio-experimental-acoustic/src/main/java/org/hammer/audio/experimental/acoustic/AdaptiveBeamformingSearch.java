@@ -19,7 +19,8 @@ public final class AdaptiveBeamformingSearch {
   }
 
   /**
-   * Searches the initial bounds and repeatedly refines the cell surrounding the current best point.
+   * Searches the initial bounds and repeatedly refines the cell surrounding the current level's
+   * best point while retaining the global best point across every evaluated level.
    */
   public BeamformingSearchResult search(
       AudioBlock block,
@@ -39,17 +40,20 @@ public final class AdaptiveBeamformingSearch {
 
     SearchBounds currentBounds = initialBounds;
     List<BeamformingPoint> evaluated = new ArrayList<>();
-    BeamformingPoint best = null;
+    BeamformingPoint globalBest = null;
     for (int level = 0; level < refinementLevels; level++) {
       List<BeamformingPoint> levelPoints =
           beamformer.scan(block, array, currentBounds.grid(stepsPerAxis));
       evaluated.addAll(levelPoints);
-      best = bestPoint(levelPoints);
+      BeamformingPoint levelBest = bestPoint(levelPoints);
+      if (globalBest == null || levelBest.energy() > globalBest.energy()) {
+        globalBest = levelBest;
+      }
       double xRadius = currentBounds.width() / stepsPerAxis;
       double yRadius = currentBounds.height() / stepsPerAxis;
-      currentBounds = initialBounds.around(best.positionMeters(), xRadius, yRadius);
+      currentBounds = initialBounds.around(levelBest.positionMeters(), xRadius, yRadius);
     }
-    return new BeamformingSearchResult(best, evaluated, refinementLevels, stepsPerAxis);
+    return new BeamformingSearchResult(globalBest, evaluated, refinementLevels, stepsPerAxis);
   }
 
   private static BeamformingPoint bestPoint(List<BeamformingPoint> points) {
@@ -156,9 +160,10 @@ public final class AdaptiveBeamformingSearch {
       return evaluatedPoints.size();
     }
 
-    /** Full evaluated confidence surface normalized to the selected best energy. */
+    /** Full evaluated confidence surface normalized to the global maximum energy. */
     public List<BeamformingConfidencePoint> normalizedConfidenceSurface() {
-      double maximumEnergy = best.energy();
+      double maximumEnergy =
+          evaluatedPoints.stream().mapToDouble(BeamformingPoint::energy).max().orElse(0.0);
       return evaluatedPoints.stream()
           .map(
               point ->
