@@ -31,7 +31,9 @@ public final class WorkbenchExperimentExporter {
     experiment
         .profile()
         .liveCaptureConfiguration()
-        .ifPresent(configuration -> appendRow(output, "Capture device", configuration.device().deviceId()));
+        .ifPresent(
+            configuration ->
+                appendRow(output, "Capture device", configuration.device().deviceId()));
     experiment
         .profile()
         .calibrationProfile()
@@ -46,7 +48,8 @@ public final class WorkbenchExperimentExporter {
     Objects.requireNonNull(result, "result");
     return result
         .experimentMetadata()
-        .orElseThrow(() -> new IllegalArgumentException("workbench result has no experiment metadata"));
+        .orElseThrow(
+            () -> new IllegalArgumentException("workbench result has no experiment metadata"));
   }
 
   private static void appendRow(StringBuilder output, String field, Object value) {
