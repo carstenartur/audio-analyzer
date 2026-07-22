@@ -22,7 +22,6 @@ proposals.
 | [`paper-outline.md`](paper-outline.md)                                     | Sections of a publishable description of the system, with cross-references to existing modules and tests.                       | Working outline, references implemented code   |
 | [`experiments.md`](experiments.md)                                         | Reproducible evaluation scenarios, each mapped to a `SimulationScenarios` entry in the `audio-experimental-acoustic` module.    | Describes implemented scenarios                |
 | [`evaluation-metrics.md`](evaluation-metrics.md)                           | Definitions of the metrics used by tests and demos, aligned with `TrackingSnapshot` / `AcousticLocalizationSnapshot`.           | Implemented metrics documented                 |
-| [`localization-algorithms.md`](localization-algorithms.md)                 | Side-by-side TDOA and beamforming families, deterministic noise/reflection evidence, strengths, limitations and non-claims.     | Implemented algorithms and measured bounds     |
 | [`demo-scenarios.md`](demo-scenarios.md)                                   | Demos that can be shown live using the Swing plugin and `AcousticDebugFrame`.                                                   | Describes operational workbench features       |
 | [`predictive-tracking.md`](predictive-tracking.md)                         | Exploratory notes on future-position estimation, latency compensation and confidence-aware prediction.                          | **Future work** — not implemented              |
 | [`event-driven-sensing.md`](event-driven-sensing.md)                       | Generic architecture sketch for using the tracker as a trigger source for an external capture system.                           | **Future work** — architectural proposal only  |
@@ -30,6 +29,10 @@ proposals.
 | [`physics-limitations.md`](physics-limitations.md)                         | Physical and engineering bounds that constrain every claim in this folder.                                                      | Informational — applies to all implementations |
 | [`hardware/microphone-array-setup.md`](hardware/microphone-array-setup.md) | Practical setup notes for real microphone rigs, complementing the simulator.                                                    | Guidance for real-world experiments            |
 | [`simulation-datasets/README.md`](simulation-datasets/README.md)           | JSON scenario descriptors with ground truth, derived from `SimulationScenarios`, for benchmark scripts and external evaluation. | Generated from implemented scenarios           |
+
+The implemented TDOA and beamforming families, deterministic noise/reflection benchmarks, strengths,
+limitations and explicit non-claims are documented in
+[`localization-algorithms.md`](localization-algorithms.md).
 
 ## Related documents
 
