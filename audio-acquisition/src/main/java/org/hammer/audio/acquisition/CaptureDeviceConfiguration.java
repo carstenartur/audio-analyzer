@@ -17,7 +17,7 @@ public record CaptureDeviceConfiguration(
     boolean signed,
     boolean bigEndian) {
 
-  /** Validate one capture-device configuration. */
+  // Validate one capture-device configuration.
   public CaptureDeviceConfiguration {
     Objects.requireNonNull(device, "device");
     Objects.requireNonNull(format, "format");
