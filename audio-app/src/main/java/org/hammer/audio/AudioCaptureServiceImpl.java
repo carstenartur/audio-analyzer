@@ -61,7 +61,6 @@ public class AudioCaptureServiceImpl implements AudioCaptureService {
   private volatile WaveformModel latestModel;
   private volatile AudioBlock latestBlock;
 
-  // Audio configuration
   private final float sampleRate;
   private final int sampleSizeInBits;
   private final int channels;
@@ -72,7 +71,6 @@ public class AudioCaptureServiceImpl implements AudioCaptureService {
   private final AudioRingBuffer<AudioBlock> ringBuffer;
   private final AudioBlockBroadcaster broadcaster = new AudioBlockBroadcaster();
 
-  // Capture state
   private volatile int divisor;
   private volatile int panelWidth;
   private volatile int panelHeight;
@@ -81,13 +79,11 @@ public class AudioCaptureServiceImpl implements AudioCaptureService {
   private AudioFormat format;
   private ExecutorService workerExecutor;
 
-  // Capture buffers (mostly worker-thread owned; volatile for visibility on reconfiguration)
   private volatile byte[] datas;
   private volatile int datasize;
   private volatile int numberOfPoints;
   private final int tickEveryNSample;
 
-  // Audio line provider (for testability)
   private final AudioLineProvider lineProvider;
 
   /** Create a new AudioCaptureServiceImpl with specified audio parameters. */
@@ -169,9 +165,11 @@ public class AudioCaptureServiceImpl implements AudioCaptureService {
                 return thread;
               });
       workerExecutor.submit(this::captureLoop);
+      ActiveAudioCaptureRegistry.activate(this);
       LOGGER.info("AudioCaptureService started successfully");
     } catch (Exception exception) {
       running.set(false);
+      ActiveAudioCaptureRegistry.deactivate(this);
       LOGGER.log(Level.SEVERE, "Failed to start AudioCaptureService", exception);
       throw new IllegalStateException("Failed to start audio capture", exception);
     }
@@ -179,10 +177,10 @@ public class AudioCaptureServiceImpl implements AudioCaptureService {
 
   @Override
   public void stop() {
-    if (!running.get()) {
+    if (!running.getAndSet(false)) {
       return;
     }
-    running.set(false);
+    ActiveAudioCaptureRegistry.deactivate(this);
     if (workerExecutor != null) {
       workerExecutor.shutdownNow();
       try {
@@ -330,7 +328,7 @@ public class AudioCaptureServiceImpl implements AudioCaptureService {
           System.arraycopy(decodeBuffer[channel], 0, blockSamples[channel], 0, currentPoints);
         }
         AudioBlock block = AudioBlock.wrap(descriptor, blockSamples, frameIndex, System.nanoTime());
-        frameIndex += decodedFrames;
+        frameIndex += currentPoints;
 
         ringBuffer.offer(block);
         broadcaster.publish(block);
