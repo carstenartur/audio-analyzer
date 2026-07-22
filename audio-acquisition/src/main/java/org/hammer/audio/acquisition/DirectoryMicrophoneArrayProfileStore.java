@@ -27,8 +27,7 @@ public final class DirectoryMicrophoneArrayProfileStore implements MicrophoneArr
   }
 
   /** Create a store with an explicit codec. */
-  public DirectoryMicrophoneArrayProfileStore(
-      Path directory, MicrophoneArrayProfileCodec codec) {
+  public DirectoryMicrophoneArrayProfileStore(Path directory, MicrophoneArrayProfileCodec codec) {
     this.directory = Objects.requireNonNull(directory, "directory").toAbsolutePath().normalize();
     this.codec = Objects.requireNonNull(codec, "codec");
   }
@@ -99,10 +98,7 @@ public final class DirectoryMicrophoneArrayProfileStore implements MicrophoneArr
   private static void moveAtomicallyWhenSupported(Path source, Path target) throws IOException {
     try {
       Files.move(
-          source,
-          target,
-          StandardCopyOption.ATOMIC_MOVE,
-          StandardCopyOption.REPLACE_EXISTING);
+          source, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
     } catch (AtomicMoveNotSupportedException exception) {
       Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
     }
