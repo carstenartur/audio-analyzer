@@ -1,5 +1,7 @@
 package org.hammer.audio.experimental.acoustic.workbench;
 
+import java.util.Objects;
+
 /**
  * Configurable parameters for an acoustic localization workbench run.
  *
@@ -47,6 +49,7 @@ public record WorkbenchParameters(
 
   // Compact constructor: validates inputs
   public WorkbenchParameters {
+    Objects.requireNonNull(tdoaEstimatorType, "tdoaEstimatorType");
     if (!Double.isFinite(minSnr)) {
       throw new IllegalArgumentException("minSnr must be finite, got " + minSnr);
     }
@@ -143,7 +146,7 @@ public record WorkbenchParameters(
 
     /** Set TDOA estimator type. */
     public Builder tdoaEstimatorType(TdoaEstimatorType v) {
-      this.valTdoaEstimatorType = v;
+      this.valTdoaEstimatorType = Objects.requireNonNull(v, "tdoaEstimatorType");
       return this;
     }
 
