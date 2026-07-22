@@ -26,8 +26,7 @@ public record TdoaConsistencyFinding(
   public TdoaConsistencyFinding {
     Objects.requireNonNull(kind, "kind");
     List<String> requiredIds = Objects.requireNonNull(microphoneIds, "microphoneIds");
-    if (requiredIds.size() < 2
-        || requiredIds.stream().anyMatch(id -> id == null || id.isBlank())) {
+    if (requiredIds.size() < 2 || requiredIds.stream().anyMatch(id -> id == null || id.isBlank())) {
       throw new IllegalArgumentException("microphoneIds must contain at least two non-blank ids");
     }
     microphoneIds = List.copyOf(requiredIds);
