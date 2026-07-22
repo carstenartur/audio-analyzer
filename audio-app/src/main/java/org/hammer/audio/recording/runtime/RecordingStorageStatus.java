@@ -4,7 +4,24 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.Objects;
 
-/** Immutable capacity and write-rate snapshot for one recording destination. */
+/**
+ * Immutable capacity and write-rate snapshot for one recording destination.
+ *
+ * @param destination normalized target recording path
+ * @param storeName backing {@link java.nio.file.FileStore} name when available
+ * @param storeType backing store type when available
+ * @param writable whether the nearest existing destination ancestor is writable
+ * @param usableBytes bytes currently available to this process, or {@code -1}
+ * @param unallocatedBytes unallocated backing-store bytes, or {@code -1}
+ * @param totalBytes total backing-store bytes, or {@code -1}
+ * @param bytesWritten bytes currently serialized by the recorder
+ * @param measuredBytesPerSecond observed write throughput
+ * @param expectedBytesPerSecond format-derived expected growth rate
+ * @param estimatedSafeSecondsRemaining advisory remaining duration, or {@code -1}
+ * @param level normalized storage severity
+ * @param checkedAt capacity observation time
+ * @param errorMessage capacity-query diagnostic, otherwise empty
+ */
 public record RecordingStorageStatus(
     Path destination,
     String storeName,
@@ -21,6 +38,7 @@ public record RecordingStorageStatus(
     Instant checkedAt,
     String errorMessage) {
 
+  // Validate required fields and normalize optional text.
   public RecordingStorageStatus {
     Objects.requireNonNull(destination, "destination");
     storeName = storeName == null ? "" : storeName;
