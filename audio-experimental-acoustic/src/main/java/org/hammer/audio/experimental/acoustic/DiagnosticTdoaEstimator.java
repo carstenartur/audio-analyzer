@@ -4,6 +4,7 @@ import org.hammer.audio.acquisition.MicrophoneArray;
 import org.hammer.audio.core.AudioBlock;
 
 /** TDOA strategy that exposes peak evidence in addition to the compatibility estimate. */
+@FunctionalInterface
 public interface DiagnosticTdoaEstimator extends TdoaEstimator {
 
   /** Estimates TDOA and returns the peak evidence used to derive confidence. */
