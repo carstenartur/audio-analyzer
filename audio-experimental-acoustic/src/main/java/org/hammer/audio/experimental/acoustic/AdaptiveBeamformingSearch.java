@@ -187,11 +187,11 @@ public final class AdaptiveBeamformingSearch {
       double clippedMaximumX = Math.min(maximumX, center.x() + xRadius);
       double clippedMinimumY = Math.max(minimumY, center.y() - yRadius);
       double clippedMaximumY = Math.min(maximumY, center.y() + yRadius);
-      if (clippedMinimumX == clippedMaximumX) {
+      if (clippedMinimumX >= clippedMaximumX) {
         clippedMinimumX = Math.max(minimumX, clippedMinimumX - xRadius);
         clippedMaximumX = Math.min(maximumX, clippedMaximumX + xRadius);
       }
-      if (clippedMinimumY == clippedMaximumY) {
+      if (clippedMinimumY >= clippedMaximumY) {
         clippedMinimumY = Math.max(minimumY, clippedMinimumY - yRadius);
         clippedMaximumY = Math.min(maximumY, clippedMaximumY + yRadius);
       }
