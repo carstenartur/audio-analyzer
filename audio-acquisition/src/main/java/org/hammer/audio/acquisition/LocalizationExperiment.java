@@ -40,9 +40,9 @@ public record LocalizationExperiment(
     if (!profile.supports(inputMode)) {
       throw new IllegalArgumentException("profile does not support experiment input mode");
     }
+    Map<String, String> requiredMetadata = Objects.requireNonNull(metadata, "metadata");
     TreeMap<String, String> ordered = new TreeMap<>();
-    for (Map.Entry<String, String> entry :
-        Objects.requireNonNull(metadata, "metadata").entrySet()) {
+    for (Map.Entry<String, String> entry : requiredMetadata.entrySet()) {
       requireText(entry.getKey(), "metadata key");
       Objects.requireNonNull(entry.getValue(), "metadata value");
       ordered.put(entry.getKey(), entry.getValue());
