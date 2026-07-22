@@ -127,7 +127,14 @@ public final class AdaptiveBeamformingSearch {
     return true;
   }
 
-  /** Rectangular search region in meters. */
+  /**
+   * Rectangular search region in meters.
+   *
+   * @param minimumX inclusive minimum x coordinate
+   * @param maximumX inclusive maximum x coordinate
+   * @param minimumY inclusive minimum y coordinate
+   * @param maximumY inclusive maximum y coordinate
+   */
   public record SearchBounds(double minimumX, double maximumX, double minimumY, double maximumY) {
 
     // Validate finite ordered bounds.
@@ -192,7 +199,14 @@ public final class AdaptiveBeamformingSearch {
     }
   }
 
-  /** Adaptive best point plus every uniquely evaluated confidence-surface point. */
+  /**
+   * Adaptive search result with the global best point and full evaluated surface.
+   *
+   * @param best global best point across all refinement levels
+   * @param evaluatedPoints uniquely evaluated points in deterministic order
+   * @param refinementLevels number of completed refinement levels
+   * @param stepsPerAxis grid steps used in each active region
+   */
   public record BeamformingSearchResult(
       BeamformingPoint best,
       List<BeamformingPoint> evaluatedPoints,
@@ -231,7 +245,13 @@ public final class AdaptiveBeamformingSearch {
     }
   }
 
-  /** One evaluated beamforming point with confidence normalized to the global maximum. */
+  /**
+   * One evaluated beamforming point with confidence normalized to the global maximum.
+   *
+   * @param positionMeters candidate position in meters
+   * @param energy raw beamforming energy
+   * @param normalizedConfidence energy divided by the global maximum in {@code [0,1]}
+   */
   public record BeamformingConfidencePoint(
       Vector2 positionMeters, double energy, double normalizedConfidence) {
 
