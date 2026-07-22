@@ -84,7 +84,9 @@ public record WorkbenchParameters(
     private double valTrackerConfidenceDecay = 0.85;
     private double valTrackerConfidenceGain = 0.4;
 
-    private Builder() {}
+    private Builder() {
+      // use defaults()
+    }
 
     /** Set block size (and default FFT size). */
     public Builder blockSize(int v) {
