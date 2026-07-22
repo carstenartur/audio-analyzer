@@ -1,5 +1,6 @@
 package org.hammer.audio.experimental.acoustic.workbench;
 
+import java.util.Map;
 import java.util.Objects;
 import org.hammer.audio.acquisition.LocalizationExperiment;
 import org.hammer.audio.acquisition.LocalizationExperimentCodec;
@@ -38,7 +39,7 @@ public final class WorkbenchExperimentExporter {
         .profile()
         .calibrationProfile()
         .ifPresent(calibration -> appendRow(output, "Calibration", calibration.profileId()));
-    for (var entry : experiment.metadata().entrySet()) {
+    for (Map.Entry<String, String> entry : experiment.metadata().entrySet()) {
       appendRow(output, "Metadata: " + entry.getKey(), entry.getValue());
     }
     return output.toString();
