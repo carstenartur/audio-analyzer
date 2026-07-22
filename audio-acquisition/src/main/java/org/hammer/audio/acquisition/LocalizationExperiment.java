@@ -5,6 +5,7 @@ import java.util.Collections;
 import java.util.Map;
 import java.util.Objects;
 import java.util.TreeMap;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Reproducible experiment identity shared by simulation, replay and live localization.
@@ -28,7 +29,7 @@ public record LocalizationExperiment(
     LocalizationExperimentStage stage,
     Map<String, String> metadata) {
 
-  /** Validate and defensively copy one experiment. */
+  // Validate and defensively copy one experiment.
   public LocalizationExperiment {
     requireText(experimentId, "experimentId");
     requireText(displayName, "displayName");
@@ -41,13 +42,13 @@ public record LocalizationExperiment(
       throw new IllegalArgumentException("profile does not support experiment input mode");
     }
     Map<String, String> requiredMetadata = Objects.requireNonNull(metadata, "metadata");
-    TreeMap<String, String> ordered = new TreeMap<>();
+    Map<String, String> validated = new ConcurrentHashMap<>();
     for (Map.Entry<String, String> entry : requiredMetadata.entrySet()) {
       requireText(entry.getKey(), "metadata key");
       Objects.requireNonNull(entry.getValue(), "metadata value");
-      ordered.put(entry.getKey(), entry.getValue());
+      validated.put(entry.getKey(), entry.getValue());
     }
-    metadata = Collections.unmodifiableMap(ordered);
+    metadata = Collections.unmodifiableMap(new TreeMap<>(validated));
   }
 
   /** Create a newly defined experiment. */
@@ -92,7 +93,7 @@ public record LocalizationExperiment(
   public LocalizationExperiment withMetadata(String key, String value) {
     requireText(key, "key");
     Objects.requireNonNull(value, "value");
-    Map<String, String> changed = new TreeMap<>(metadata);
+    Map<String, String> changed = new ConcurrentHashMap<>(metadata);
     changed.put(key, value);
     return new LocalizationExperiment(
         experimentId, displayName, profile, inputMode, sourceReference, createdAt, stage, changed);
