@@ -112,9 +112,7 @@ public final class TdoaPairConsistencyAnalyzer {
   }
 
   private static CycleAnalysis analyzeCycles(
-      List<Microphone> microphones,
-      List<OrientedDelay> delays,
-      double cycleToleranceSeconds) {
+      List<Microphone> microphones, List<OrientedDelay> delays, double cycleToleranceSeconds) {
     List<TdoaConsistencyFinding> findings = new ArrayList<>();
     int evaluatedCycles = 0;
     double residualTotal = 0.0;
