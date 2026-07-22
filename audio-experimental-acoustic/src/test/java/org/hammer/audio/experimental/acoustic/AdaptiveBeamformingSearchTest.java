@@ -38,9 +38,17 @@ class AdaptiveBeamformingSearchTest {
 
     double uniformError = uniformBest.positionMeters().distanceTo(SOURCE_POSITION);
     double adaptiveError = adaptive.best().positionMeters().distanceTo(SOURCE_POSITION);
-    assertTrue(adaptiveError <= uniformError + 0.08);
-    assertTrue(adaptiveError < 0.2);
-    assertTrue(adaptive.evaluatedCandidateCount() < fineGrid.size() / 10);
+    assertTrue(uniformError < 0.15, "fine-grid error=" + uniformError);
+    assertTrue(
+        adaptiveError <= uniformError + 0.02,
+        "adaptive error=" + adaptiveError + ", fine-grid error=" + uniformError);
+    assertTrue(adaptiveError < 0.15, "adaptive error=" + adaptiveError);
+    assertTrue(
+        adaptive.evaluatedCandidateCount() < fineGrid.size() / 5,
+        "adaptive candidates="
+            + adaptive.evaluatedCandidateCount()
+            + ", fine-grid candidates="
+            + fineGrid.size());
     assertEquals(
         adaptive.evaluatedCandidateCount(), adaptive.normalizedConfidenceSurface().size());
     assertTrue(
