@@ -98,6 +98,27 @@ The Swing desktop currently offers modeless preview and normalized Save As only;
 executes a document on open. The web workbench offers preview, normalize and explicitly confirmed
 apply.
 
+## Local asset and output bindings
+
+Portable references are deliberately separated from machine-specific paths. `ExperimentLocalBindings`
+contains the selected absolute paths only in local application memory and is not part of the JSON
+model or codec.
+
+`ExperimentLocalBindingService` performs a non-mutating readiness check:
+
+- every required asset ID must have an explicitly selected local file;
+- the selected value must be a regular file;
+- byte size must match the portable requirement;
+- SHA-256 is calculated as a stream, without loading large assets into memory;
+- unused local asset bindings are reported as warnings;
+- requested outputs require a separately selected local directory;
+- the directory, or its nearest existing ancestor, must be writable;
+- validation never creates the output directory or writes an artifact.
+
+Binding readiness also remains false when the document preview itself is incompatible or read-only.
+This model is suitable for later Swing/web binding dialogs without leaking absolute paths back into
+`.audioexp`.
+
 ## Plugin sections
 
 Plugin data is namespaced by the stable `PluginDescriptor.id` and a contribution-local `sectionId`:
@@ -194,7 +215,8 @@ CLI and REST API.
 
 The current slice does not yet provide:
 
-- local hardware and dataset binding;
+- local hardware/device capability binding;
+- a finished Swing/web asset-binding dialog;
 - desktop operating-system file association;
 - selective semantic merge into an existing workflow;
 - a complete evidence package/container;
