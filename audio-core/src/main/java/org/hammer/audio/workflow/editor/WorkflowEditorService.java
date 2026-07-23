@@ -22,8 +22,8 @@ import org.hammer.audio.workflow.store.WorkflowSnapshot;
  * layer; they must not access DSL, JGit, storage internals or mutable UI state as canonical
  * workflow state.
  *
- * <p><b>Thread safety</b>: not thread-safe. Concurrent access must be serialised by the caller
- * (e.g. via a request-scoped lock or a single-threaded actor).
+ * <p><b>Thread safety</b>: public state access is serialised on the service instance. Validation,
+ * dirty-state checks and graph replacement therefore form one atomic editor transition.
  *
  * <p><b>Dependency rules</b>: this class must not depend on Swing, JGit, React, Yjs, Selenium,
  * Playwright, Testcontainers or any web framework. It is a pure Java application service.
@@ -78,7 +78,7 @@ public final class WorkflowEditorService {
    * @throws WorkflowOperationRejectedException if the resulting workflow violates structural rules
    * @throws IllegalArgumentException if the operation references nodes or ports that do not exist
    */
-  public WorkflowProjection applyOperation(WorkflowOperation operation) {
+  public synchronized WorkflowProjection applyOperation(WorkflowOperation operation) {
     Objects.requireNonNull(operation, "operation");
     Workflow candidate = operation.apply(operationLog.currentWorkflow());
     List<String> violations = validator.validate(candidate);
@@ -91,7 +91,7 @@ public final class WorkflowEditorService {
   }
 
   /** Returns whether the editable workflow differs from its last clean load/checkpoint state. */
-  public boolean isDirty() {
+  public synchronized boolean isDirty() {
     return dirty;
   }
 
@@ -100,7 +100,7 @@ public final class WorkflowEditorService {
    *
    * @return current projection
    */
-  public WorkflowProjection currentProjection() {
+  public synchronized WorkflowProjection currentProjection() {
     return WorkflowProjection.fromWorkflow(operationLog.currentWorkflow());
   }
 
@@ -111,18 +111,34 @@ public final class WorkflowEditorService {
    * @return projection of the loaded workflow
    * @throws WorkflowOperationRejectedException if the workflow is structurally invalid
    */
-  public WorkflowProjection loadGraph(Workflow workflow) {
+  public synchronized WorkflowProjection loadGraph(Workflow workflow) {
     return replaceGraph(workflow, false);
   }
 
   /**
-   * Replaces the editable workflow with a confirmed imported setup and marks it unsaved.
+   * Replaces the editable workflow with an already confirmed imported setup and marks it unsaved.
    *
    * @param workflow already previewed workflow to import
    * @return projection of the imported workflow
    * @throws WorkflowOperationRejectedException if the workflow is structurally invalid
    */
-  public WorkflowProjection importGraph(Workflow workflow) {
+  public synchronized WorkflowProjection importGraph(Workflow workflow) {
+    return replaceGraph(workflow, true);
+  }
+
+  /**
+   * Atomically imports a workflow, rejecting unsaved current state unless discard was confirmed.
+   *
+   * @param workflow already previewed workflow to import
+   * @param discardDirty whether the caller explicitly confirmed discarding unsaved state
+   * @return projection of the imported workflow
+   * @throws DirtyWorkflowException when current state is dirty and discard was not confirmed
+   * @throws WorkflowOperationRejectedException if the workflow is structurally invalid
+   */
+  public synchronized WorkflowProjection importGraph(Workflow workflow, boolean discardDirty) {
+    if (dirty && !discardDirty) {
+      throw new DirtyWorkflowException();
+    }
     return replaceGraph(workflow, true);
   }
 
@@ -133,7 +149,7 @@ public final class WorkflowEditorService {
    * @return projection of the loaded workflow
    * @throws IllegalArgumentException if branch is blank or snapshot and DSL workflow IDs diverge
    */
-  public WorkflowProjection loadGraph(String branch) {
+  public synchronized WorkflowProjection loadGraph(String branch) {
     Objects.requireNonNull(branch, "branch");
     if (branch.isBlank()) {
       throw new IllegalArgumentException("branch must not be blank");
@@ -142,7 +158,7 @@ public final class WorkflowEditorService {
     WorkflowSnapshot snapshot = store.loadHead(branch);
     Workflow workflow = parser.parse(snapshot.dslText());
     assertSnapshotIdMatchesDsl(snapshot.workflowId(), workflow.id());
-    return loadGraph(workflow);
+    return replaceGraph(workflow, false);
   }
 
   /**
@@ -152,13 +168,13 @@ public final class WorkflowEditorService {
    * @return projection of the loaded workflow
    * @throws IllegalArgumentException if snapshot and DSL workflow IDs diverge
    */
-  public WorkflowProjection loadGraph(CommitId commitId) {
+  public synchronized WorkflowProjection loadGraph(CommitId commitId) {
     Objects.requireNonNull(commitId, "commitId");
     VersionedWorkflowStore store = requireStore();
     WorkflowSnapshot snapshot = store.loadAtCommit(commitId);
     Workflow workflow = parser.parse(snapshot.dslText());
     assertSnapshotIdMatchesDsl(snapshot.workflowId(), workflow.id());
-    return loadGraph(workflow);
+    return replaceGraph(workflow, false);
   }
 
   /**
@@ -166,7 +182,7 @@ public final class WorkflowEditorService {
    *
    * @return list of structural validation violations; empty when valid
    */
-  public List<String> validate() {
+  public synchronized List<String> validate() {
     return validator.validate(operationLog.currentWorkflow());
   }
 
@@ -182,7 +198,7 @@ public final class WorkflowEditorService {
    * @throws IllegalArgumentException if branch is blank
    * @throws WorkflowOperationRejectedException if the current workflow is structurally invalid
    */
-  public CommitId checkpoint(String branch, CommitMetadata metadata) {
+  public synchronized CommitId checkpoint(String branch, CommitMetadata metadata) {
     Objects.requireNonNull(branch, "branch");
     if (branch.isBlank()) {
       throw new IllegalArgumentException("branch must not be blank");
@@ -208,7 +224,7 @@ public final class WorkflowEditorService {
    * @return reverse-chronological commit summaries
    * @throws IllegalArgumentException if refName is blank or limit is negative
    */
-  public List<CommitInfo> history(String refName, int limit) {
+  public synchronized List<CommitInfo> history(String refName, int limit) {
     Objects.requireNonNull(refName, "refName");
     if (refName.isBlank()) {
       throw new IllegalArgumentException("refName must not be blank");
@@ -228,7 +244,7 @@ public final class WorkflowEditorService {
    *
    * @return immutable workflow snapshot
    */
-  public WorkflowSnapshot executeSnapshot() {
+  public synchronized WorkflowSnapshot executeSnapshot() {
     Workflow workflow = operationLog.currentWorkflow();
     return new WorkflowSnapshot(workflow.id(), serializer.serialize(workflow));
   }
