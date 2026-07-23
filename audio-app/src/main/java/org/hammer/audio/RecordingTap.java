@@ -3,7 +3,6 @@ package org.hammer.audio;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.time.Instant;
-import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -97,11 +96,6 @@ public final class RecordingTap {
       RecordingStorageStatus preflight,
       Instant startedAt)
       throws IOException {
-    Objects.requireNonNull(service, "service");
-    Objects.requireNonNull(file, "file");
-    Objects.requireNonNull(storageProbe, "storageProbe");
-    Objects.requireNonNull(preflight, "preflight");
-    Objects.requireNonNull(startedAt, "startedAt");
     if (queueCapacity < 1) {
       throw new IllegalArgumentException("queueCapacity must be >= 1");
     }
@@ -166,9 +160,8 @@ public final class RecordingTap {
 
   /** Register a status listener and immediately deliver the current snapshot. */
   public void addStatusListener(RecordingStatusListener listener) {
-    RecordingStatusListener required = Objects.requireNonNull(listener, "listener");
-    listeners.add(required);
-    required.onRecordingStatus(currentStatus.get());
+    listeners.add(listener);
+    listener.onRecordingStatus(currentStatus.get());
   }
 
   /** Remove a previously registered listener. */
