@@ -23,7 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Download reports from the successful build
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: github-pages-reports
           path: target/gh-pages
