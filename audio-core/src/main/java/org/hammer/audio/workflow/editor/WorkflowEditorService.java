@@ -35,6 +35,7 @@ public final class WorkflowEditorService {
   private final VersionedWorkflowStore workflowStore;
   private final WorkflowDslSerializer serializer;
   private final WorkflowDslParser parser;
+  private boolean dirty;
 
   /**
    * Creates a service backed by the given operation log and validator.
@@ -85,7 +86,13 @@ public final class WorkflowEditorService {
       throw new WorkflowOperationRejectedException(violations);
     }
     operationLog.apply(operation);
+    dirty = true;
     return WorkflowProjection.fromWorkflow(operationLog.currentWorkflow());
+  }
+
+  /** Returns whether the editable workflow differs from its last clean load/checkpoint state. */
+  public boolean isDirty() {
+    return dirty;
   }
 
   /**
@@ -98,20 +105,25 @@ public final class WorkflowEditorService {
   }
 
   /**
-   * Loads the given workflow into the editor as canonical state.
+   * Loads the given workflow into the editor as a clean canonical state.
    *
    * @param workflow workflow to load
    * @return projection of the loaded workflow
    * @throws WorkflowOperationRejectedException if the workflow is structurally invalid
    */
   public WorkflowProjection loadGraph(Workflow workflow) {
-    Objects.requireNonNull(workflow, "workflow");
-    List<String> violations = validator.validate(workflow);
-    if (!violations.isEmpty()) {
-      throw new WorkflowOperationRejectedException(violations);
-    }
-    this.operationLog.reset(workflow);
-    return WorkflowProjection.fromWorkflow(workflow);
+    return replaceGraph(workflow, false);
+  }
+
+  /**
+   * Replaces the editable workflow with a confirmed imported setup and marks it unsaved.
+   *
+   * @param workflow already previewed workflow to import
+   * @return projection of the imported workflow
+   * @throws WorkflowOperationRejectedException if the workflow is structurally invalid
+   */
+  public WorkflowProjection importGraph(Workflow workflow) {
+    return replaceGraph(workflow, true);
   }
 
   /**
@@ -183,7 +195,9 @@ public final class WorkflowEditorService {
     }
     VersionedWorkflowStore store = requireStore();
     WorkflowSnapshot snapshot = new WorkflowSnapshot(workflow.id(), serializer.serialize(workflow));
-    return store.commit(branch, snapshot, metadata);
+    CommitId commitId = store.commit(branch, snapshot, metadata);
+    dirty = false;
+    return commitId;
   }
 
   /**
@@ -217,6 +231,17 @@ public final class WorkflowEditorService {
   public WorkflowSnapshot executeSnapshot() {
     Workflow workflow = operationLog.currentWorkflow();
     return new WorkflowSnapshot(workflow.id(), serializer.serialize(workflow));
+  }
+
+  private WorkflowProjection replaceGraph(Workflow workflow, boolean imported) {
+    Objects.requireNonNull(workflow, "workflow");
+    List<String> violations = validator.validate(workflow);
+    if (!violations.isEmpty()) {
+      throw new WorkflowOperationRejectedException(violations);
+    }
+    operationLog.reset(workflow);
+    dirty = imported;
+    return WorkflowProjection.fromWorkflow(workflow);
   }
 
   private VersionedWorkflowStore requireStore() {
