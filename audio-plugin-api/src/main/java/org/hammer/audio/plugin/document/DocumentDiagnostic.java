@@ -13,7 +13,7 @@ import java.util.Objects;
 public record DocumentDiagnostic(
     Severity severity, String pointer, String code, String message) {
 
-  /** Validate and normalize diagnostic fields. */
+  // Validate and normalize diagnostic fields.
   public DocumentDiagnostic {
     Objects.requireNonNull(severity, "severity");
     pointer = pointer == null || pointer.isBlank() ? "/" : pointer;
