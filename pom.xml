@@ -24,6 +24,7 @@
     <module>audio-acquisition</module>
     <module>audio-dsp</module>
     <module>audio-plugin-api</module>
+    <module>audio-experiment-document</module>
     <module>audio-experimental-acoustic</module>
     <module>audio-web-editor</module>
     <module>audio-app</module>
@@ -110,6 +111,11 @@
       <dependency>
         <groupId>${project.groupId}</groupId>
         <artifactId>audio-plugin-api</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>${project.groupId}</groupId>
+        <artifactId>audio-experiment-document</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>
