@@ -24,7 +24,7 @@ public sealed interface DocumentValue
 
   /** Create an immutable object value with lexicographically ordered keys. */
   static ObjectValue object(Map<String, ? extends DocumentValue> fields) {
-    TreeMap<String, DocumentValue> copy = new TreeMap<>();
+    Map<String, DocumentValue> copy = new TreeMap<>();
     fields.forEach(copy::put);
     return new ObjectValue(copy);
   }
@@ -61,10 +61,10 @@ public sealed interface DocumentValue
    */
   record ObjectValue(Map<String, DocumentValue> fields) implements DocumentValue {
 
-    /** Validate and defensively copy all fields. */
+    // Validate and defensively copy all fields.
     public ObjectValue {
       Objects.requireNonNull(fields, "fields");
-      TreeMap<String, DocumentValue> copy = new TreeMap<>();
+      Map<String, DocumentValue> copy = new TreeMap<>();
       fields.forEach(
           (key, value) -> {
             Objects.requireNonNull(key, "object field name");
@@ -84,10 +84,10 @@ public sealed interface DocumentValue
    */
   record ArrayValue(List<DocumentValue> values) implements DocumentValue {
 
-    /** Validate and defensively copy all values. */
+    // Validate and defensively copy all values.
     public ArrayValue {
       Objects.requireNonNull(values, "values");
-      ArrayList<DocumentValue> copy = new ArrayList<>(values.size());
+      List<DocumentValue> copy = new ArrayList<>(values.size());
       for (DocumentValue value : values) {
         copy.add(Objects.requireNonNull(value, "array value"));
       }
@@ -102,7 +102,7 @@ public sealed interface DocumentValue
    */
   record StringValue(String value) implements DocumentValue {
 
-    /** Validate the string value. */
+    // Validate the string value.
     public StringValue {
       Objects.requireNonNull(value, "value");
     }
@@ -115,7 +115,7 @@ public sealed interface DocumentValue
    */
   record NumberValue(BigDecimal value) implements DocumentValue {
 
-    /** Normalize equivalent decimal representations. */
+    // Normalize equivalent decimal representations.
     public NumberValue {
       Objects.requireNonNull(value, "value");
       value = value.signum() == 0 ? BigDecimal.ZERO : value.stripTrailingZeros();
