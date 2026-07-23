@@ -4,6 +4,7 @@ import {
   EXPERIMENT_DOCUMENT_EXTENSION,
   EXPERIMENT_DOCUMENT_MEDIA_TYPE,
   ExperimentDocumentApiError,
+  applyExperimentDocument,
   normalizeExperimentDocument,
   previewExperimentDocument,
   type ExperimentDocumentPreviewResponse,
@@ -35,7 +36,7 @@ function download(blob: Blob, filename: string): void {
   }
 }
 
-/** Safe upload, preview and canonical-download surface. It never applies or executes a document. */
+/** Safe upload, preview, normalize and explicitly confirmed apply surface. */
 export function ExperimentDocumentPanel({ onError, onStatus }: ExperimentDocumentPanelProps = {}) {
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<ExperimentDocumentPreviewResponse | null>(null);
@@ -103,12 +104,77 @@ export function ExperimentDocumentPanel({ onError, onStatus }: ExperimentDocumen
     }
   };
 
+  const applyPreview = async () => {
+    if (file === null || preview === null || preview.readOnly || !preview.executionAllowed) {
+      reportError('Only a compatible, writable preview can replace the current workflow');
+      return;
+    }
+    const confirmed = window.confirm(
+      `Replace the current workflow with “${preview.experimentName}”?\n\n` +
+        'This applies the setup but does not execute the experiment.',
+    );
+    if (!confirmed) {
+      reportStatus('Experiment document was not applied');
+      return;
+    }
+
+    setBusy(true);
+    reportError(null);
+    try {
+      await applyWithDirtyConfirmation(file, preview);
+    } catch (failure) {
+      reportError(failureMessage(failure));
+      setBusy(false);
+    }
+  };
+
+  const applyWithDirtyConfirmation = async (
+    selectedFile: File,
+    selectedPreview: ExperimentDocumentPreviewResponse,
+  ) => {
+    try {
+      const applied = await applyExperimentDocument(
+        selectedFile,
+        selectedPreview.canonicalSha256,
+        false,
+      );
+      finishApply(applied.projection.workflowId);
+    } catch (failure) {
+      if (!(failure instanceof ExperimentDocumentApiError) || failure.code !== 'dirty-workflow') {
+        throw failure;
+      }
+      const discard = window.confirm(
+        'The current workflow has unsaved changes. Discard those changes and apply the previewed setup?',
+      );
+      if (!discard) {
+        reportStatus('Experiment document was not applied; unsaved workflow changes were preserved');
+        setBusy(false);
+        return;
+      }
+      const applied = await applyExperimentDocument(
+        selectedFile,
+        selectedPreview.canonicalSha256,
+        true,
+      );
+      finishApply(applied.projection.workflowId);
+    }
+  };
+
+  const finishApply = (workflowId: string) => {
+    reportStatus(`Applied workflow ${workflowId}; reloading the server-authoritative projection`);
+    window.location.reload();
+  };
+
+  const canApply =
+    preview !== null && preview.executionAllowed && !preview.readOnly && file !== null && !busy;
+
   return (
     <details className="experiment-document" data-testid="experiment-document-panel">
       <summary>Experiment document</summary>
       <div className="experiment-document__content">
         <p className="help-text">
-          Preview and normalize a portable setup. Opening never applies or executes it.
+          Previewing never changes the graph. Apply requires confirmation and never executes the
+          experiment.
         </p>
         <label className="field">
           Portable setup
@@ -137,6 +203,15 @@ export function ExperimentDocumentPanel({ onError, onStatus }: ExperimentDocumen
           type="button"
         >
           Download normalized copy
+        </button>
+        <button
+          className="action-button action-button--primary"
+          data-testid="experiment-document-apply"
+          disabled={!canApply}
+          onClick={() => void applyPreview()}
+          type="button"
+        >
+          Apply previewed workflow…
         </button>
         <p aria-live="polite" className="experiment-document__status" data-testid="document-status">
           {status}
