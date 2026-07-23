@@ -2,6 +2,7 @@ package org.hammer;
 
 import java.awt.FlowLayout;
 import java.awt.event.ActionListener;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Locale;
 import java.util.Objects;
@@ -60,7 +61,8 @@ public final class RecordingStatusPanel extends JPanel {
     setVisible(true);
     state.setText(stateLabel(status.state()));
     elapsed.setText(formatDuration(status.elapsed()));
-    destination.setText(status.destination().getFileName().toString());
+    Path fileName = status.destination().getFileName();
+    destination.setText(fileName == null ? status.destination().toString() : fileName.toString());
     destination.setToolTipText(status.destination().toString());
     size.setText(formatBytes(status.bytesWritten()));
     if (status.storage().usableBytes() >= 0L) {
