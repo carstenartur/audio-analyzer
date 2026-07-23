@@ -17,10 +17,9 @@ import org.hammer.audio.snapshot.WaveformSnapshot;
 import org.hammer.audio.ui.WaveformRenderer;
 
 /**
- * {@link AudioCaptureService} that replays a previously recorded {@code .aar} file. Blocks are
- * published at their natural sample-rate pace and exposed exactly like live or demo capture, so the
- * rest of the application (waveform panel, spectrum, diagnosis, evidence export, ...) is unaware of
- * the origin of the audio data.
+ * {@link AudioCaptureService} that replays a previously recorded audio file. Blocks are published
+ * at their natural sample-rate pace and exposed exactly like live or demo capture, so the rest of
+ * the application is unaware of the origin of the audio data.
  *
  * <p>When the recording is exhausted the service automatically stops, mirroring the behavior of
  * pressing "Stop" on a live capture.
@@ -34,6 +33,7 @@ public final class RecordedAudioCaptureService implements AudioCaptureService {
   private final AudioFormat format;
   private final AudioRingBuffer<AudioBlock> ringBuffer =
       new AudioRingBuffer<>(RING_BUFFER_CAPACITY);
+  private final AudioBlockBroadcaster broadcaster = new AudioBlockBroadcaster();
   private final AtomicBoolean running = new AtomicBoolean(false);
   private final boolean loop;
 
@@ -55,21 +55,20 @@ public final class RecordedAudioCaptureService implements AudioCaptureService {
     return new RecordedAudioCaptureService(blocks, loop);
   }
 
-  /**
-   * @param blocks non-empty list of blocks to replay (all must share the same {@link
-   *     AudioFormatDescriptor})
-   * @param loop if true, replay continuously; otherwise stop after the last block
-   */
+  /** Create a replay service from a non-empty, format-consistent block list. */
   public RecordedAudioCaptureService(List<AudioBlock> blocks, boolean loop) {
     Objects.requireNonNull(blocks, "blocks");
     if (blocks.isEmpty()) {
       throw new IllegalArgumentException("blocks must be non-empty");
     }
     this.descriptor = blocks.get(0).format();
-    for (AudioBlock b : blocks) {
-      if (!descriptor.equals(b.format())) {
+    for (AudioBlock block : blocks) {
+      if (!descriptor.equals(block.format())) {
         throw new IllegalArgumentException(
-            "all blocks must share the same format; first=" + descriptor + " block=" + b.format());
+            "all blocks must share the same format; first="
+                + descriptor
+                + " block="
+                + block.format());
       }
     }
     this.blocks = List.copyOf(blocks);
@@ -83,16 +82,12 @@ public final class RecordedAudioCaptureService implements AudioCaptureService {
             false);
   }
 
-  /**
-   * @return true if replay restarts at the beginning after reaching the end
-   */
+  /** Returns whether replay restarts after the final block. */
   public boolean isLooping() {
     return loop;
   }
 
-  /**
-   * @return the number of blocks in this recording
-   */
+  /** Returns the number of blocks in this recording. */
   public int blockCount() {
     return blocks.size();
   }
@@ -110,6 +105,7 @@ public final class RecordedAudioCaptureService implements AudioCaptureService {
               return worker;
             });
     workerExecutor.submit(this::replayLoop);
+    ActiveAudioCaptureRegistry.activate(this);
   }
 
   @Override
@@ -117,6 +113,7 @@ public final class RecordedAudioCaptureService implements AudioCaptureService {
     if (!running.getAndSet(false)) {
       return;
     }
+    ActiveAudioCaptureRegistry.deactivate(this);
     if (workerExecutor != null) {
       workerExecutor.shutdownNow();
       try {
@@ -156,6 +153,11 @@ public final class RecordedAudioCaptureService implements AudioCaptureService {
   }
 
   @Override
+  public AudioBlockSubscription subscribe(AudioBlockListener listener) {
+    return broadcaster.subscribe(listener);
+  }
+
+  @Override
   public AudioRingBuffer<AudioBlock> getRingBuffer() {
     return ringBuffer;
   }
@@ -189,6 +191,7 @@ public final class RecordedAudioCaptureService implements AudioCaptureService {
       AudioBlock block = blocks.get(index);
       latestBlock = block;
       ringBuffer.offer(block);
+      broadcaster.publish(block);
       latestModel = buildLegacyModel(block);
       int sleepMillis =
           Math.max(5, Math.round((1000f * block.frames()) / Math.max(1f, descriptor.sampleRate())));
@@ -202,6 +205,7 @@ public final class RecordedAudioCaptureService implements AudioCaptureService {
       if (index >= blocks.size()) {
         if (!loop) {
           running.set(false);
+          ActiveAudioCaptureRegistry.deactivate(this);
           return;
         }
         index = 0;

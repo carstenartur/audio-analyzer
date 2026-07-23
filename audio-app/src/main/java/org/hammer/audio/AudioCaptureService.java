@@ -9,7 +9,8 @@ import org.hammer.audio.core.AudioFormatDescriptor;
  * Service interface for audio capture and waveform data management.
  *
  * <p>This interface defines the contract for starting/stopping audio capture, retrieving the latest
- * waveform model snapshots, and adjusting capture parameters.
+ * waveform model snapshots, subscribing to the complete block stream and adjusting capture
+ * parameters.
  *
  * <p>Thread-safety: Implementations must ensure thread-safe access to all methods. Model snapshots
  * returned by {@link #getLatestModel()} should be immutable or defensive copies to prevent
@@ -37,11 +38,7 @@ public interface AudioCaptureService {
    */
   void stop();
 
-  /**
-   * Check if audio capture is currently running.
-   *
-   * @return true if capture is active, false otherwise
-   */
+  /** Check if audio capture is currently running. */
   boolean isRunning();
 
   /**
@@ -49,45 +46,23 @@ public interface AudioCaptureService {
    *
    * <p>Returns an immutable snapshot of the current waveform data. This method must be thread-safe
    * and return defensive copies to prevent concurrent modification.
-   *
-   * @return the latest WaveformModel snapshot, never null
    */
   WaveformModel getLatestModel();
 
-  /**
-   * Get the audio format being used for capture.
-   *
-   * @return the AudioFormat, or null if not initialized
-   */
+  /** Get the JavaSound format used for capture, or {@code null} if not initialized. */
   AudioFormat getFormat();
 
   /**
    * Set the divisor for buffer size calculation.
    *
-   * <p>The divisor affects how much data is captured and displayed. Higher values mean smaller
-   * buffers and less data per frame.
-   *
    * @param divisor the divisor value (must be >= 1)
-   * @throws IllegalArgumentException if divisor < 1
    */
   void setDivisor(int divisor);
 
-  /**
-   * Get the current divisor value.
-   *
-   * @return the current divisor
-   */
+  /** Get the current divisor value. */
   int getDivisor();
 
-  /**
-   * Recompute layout/coordinates based on current panel dimensions.
-   *
-   * <p>This should be called when the display panel is resized to adjust the x-coordinates of the
-   * waveform points.
-   *
-   * @param width the panel width in pixels
-   * @param height the panel height in pixels
-   */
+  /** Recompute layout/coordinates based on current panel dimensions. */
   void recomputeLayout(int width, int height);
 
   /**
@@ -104,6 +79,19 @@ public interface AudioCaptureService {
    */
   default AudioBlock getLatestBlock() {
     return null;
+  }
+
+  /**
+   * Subscribe to every block published after registration.
+   *
+   * <p>Listeners run on the source producer thread and must return promptly. A recorder therefore
+   * only enqueues in the callback and performs serialization on its own worker.
+   *
+   * @throws UnsupportedOperationException if an implementation does not expose a complete stream
+   */
+  default AudioBlockSubscription subscribe(AudioBlockListener listener) {
+    throw new UnsupportedOperationException(
+        getClass().getName() + " does not support complete audio-block subscriptions");
   }
 
   /**
