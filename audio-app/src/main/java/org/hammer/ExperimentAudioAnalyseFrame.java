@@ -43,6 +43,7 @@ public final class ExperimentAudioAnalyseFrame extends AudioAnalyseFrame {
   private static final long serialVersionUID = 1L;
   private static final Logger LOGGER =
       Logger.getLogger(ExperimentAudioAnalyseFrame.class.getName());
+  private static final String RECORDING_DIALOG_TITLE = "Experiment recording";
 
   private final RecordingStatusPanel recordingStatusPanel = new RecordingStatusPanel();
   private transient RecordingTap recordingTap;
@@ -120,7 +121,7 @@ public final class ExperimentAudioAnalyseFrame extends AudioAnalyseFrame {
       JOptionPane.showMessageDialog(
           this,
           "A recording is already in progress: " + recordingTap.file(),
-          "Experiment recording",
+          RECORDING_DIALOG_TITLE,
           JOptionPane.WARNING_MESSAGE);
       return;
     }
@@ -129,7 +130,7 @@ public final class ExperimentAudioAnalyseFrame extends AudioAnalyseFrame {
       JOptionPane.showMessageDialog(
           this,
           "Start a live, demo or replay source before starting the experiment recording.",
-          "Experiment recording",
+          RECORDING_DIALOG_TITLE,
           JOptionPane.WARNING_MESSAGE);
       return;
     }
@@ -167,7 +168,7 @@ public final class ExperimentAudioAnalyseFrame extends AudioAnalyseFrame {
       JOptionPane.showMessageDialog(
           this,
           "Recording could not start: " + exception.getMessage(),
-          "Experiment recording",
+          RECORDING_DIALOG_TITLE,
           JOptionPane.ERROR_MESSAGE);
     }
   }
@@ -230,7 +231,7 @@ public final class ExperimentAudioAnalyseFrame extends AudioAnalyseFrame {
       JOptionPane.showMessageDialog(
           this,
           "Recording finalization failed: " + exception.getMessage(),
-          "Experiment recording",
+          RECORDING_DIALOG_TITLE,
           JOptionPane.ERROR_MESSAGE);
     }
   }
@@ -249,7 +250,7 @@ public final class ExperimentAudioAnalyseFrame extends AudioAnalyseFrame {
     JOptionPane.showMessageDialog(
         this,
         summary,
-        "Experiment recording",
+        RECORDING_DIALOG_TITLE,
         status.state() == RecordingState.COMPLETED
             ? JOptionPane.INFORMATION_MESSAGE
             : JOptionPane.WARNING_MESSAGE);
