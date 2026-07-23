@@ -64,15 +64,18 @@ jobs:
               text = text.replace(anchor, anchor + addition, 1)
           path.write_text(text, encoding='utf-8')
 
-          codec = Path('audio-experiment-document/src/main/java/org/hammer/audio/experiment/document/ExperimentDocumentCodec.java')
-          source = codec.read_text(encoding='utf-8')
-          old = '} catch (JsonProcessingException exception) {'
-          new = '} catch (IOException exception) {'
-          if old in source:
-              source = source.replace(old, new, 1)
-              codec.write_text(source, encoding='utf-8')
-          elif new not in source:
-              raise SystemExit('Unexpected strict JSON exception boundary')
+          replacements = {
+              Path('audio-experiment-document/src/main/java/org/hammer/audio/experiment/document/ExperimentDocumentCodec.java'):
+                  ('} catch (JsonProcessingException exception) {', '} catch (IOException exception) {'),
+              Path('audio-experiment-document/src/main/java/org/hammer/audio/experiment/document/LocalJsonSchemaValidator.java'):
+                  ('} catch (JsonProcessingException exception) {', '} catch (IOException exception) {'),
+          }
+          for source_path, (old, new) in replacements.items():
+              source = source_path.read_text(encoding='utf-8')
+              if old in source:
+                  source_path.write_text(source.replace(old, new, 1), encoding='utf-8')
+              elif new not in source:
+                  raise SystemExit(f'Unexpected strict JSON exception boundary in {source_path}')
           PY
 
       - name: Apply repository formatter
