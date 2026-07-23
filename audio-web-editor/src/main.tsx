@@ -6,6 +6,7 @@ import { IndexedWorkflowHistoryPanel } from './IndexedWorkflowHistoryPanel';
 import WorkflowEditorApp from './WorkflowEditorApp';
 import { WorkflowMergePanel } from './WorkflowMergePanel';
 import './styles.css';
+import './experiment-document.css';
 import './indexed-history.css';
 import './workflow-run.css';
 import './workflow-merge.css';
