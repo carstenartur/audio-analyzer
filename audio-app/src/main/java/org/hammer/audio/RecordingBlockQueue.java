@@ -9,11 +9,11 @@ import org.hammer.audio.core.AudioBlock;
 final class RecordingBlockQueue {
 
   private final BlockingQueue<AudioBlock> blocks;
-  private final int capacity;
+  private final int maximumSize;
 
-  RecordingBlockQueue(int capacity) {
-    this.blocks = new ArrayBlockingQueue<>(capacity);
-    this.capacity = capacity;
+  RecordingBlockQueue(int maximumSize) {
+    this.blocks = new ArrayBlockingQueue<>(maximumSize);
+    this.maximumSize = maximumSize;
   }
 
   boolean offer(AudioBlock block) {
@@ -33,6 +33,6 @@ final class RecordingBlockQueue {
   }
 
   int capacity() {
-    return capacity;
+    return maximumSize;
   }
 }
