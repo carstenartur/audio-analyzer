@@ -1,7 +1,6 @@
 package org.hammer.audio.experiment.document;
 
 import com.fasterxml.jackson.core.JsonFactory;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.StreamReadFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -9,7 +8,6 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
@@ -53,8 +51,7 @@ public final class ExperimentDocumentCodec {
           "applicationVersion");
   private static final Set<String> WORKFLOW_FIELDS =
       Set.of("format", "formatVersion", "content", "sha256");
-  private static final Set<String> REQUIREMENT_FIELDS =
-      Set.of("id", "versionRange", "sections");
+  private static final Set<String> REQUIREMENT_FIELDS = Set.of("id", "versionRange", "sections");
   private static final Set<String> PLUGIN_SECTION_FIELDS =
       Set.of("schemaVersion", "algorithmVersion", "data");
   private static final Set<String> ASSET_FIELDS =
@@ -92,7 +89,7 @@ public final class ExperimentDocumentCodec {
     JsonNode parsed;
     try {
       parsed = mapper.readTree(bytes);
-    } catch (JsonProcessingException exception) {
+    } catch (IOException exception) {
       throw failure("/", "invalid-json", "Experiment document is not strict JSON", exception);
     }
     ObjectNode root = requireObject(parsed, "/");
@@ -237,7 +234,8 @@ public final class ExperimentDocumentCodec {
           new ExperimentDocument.PluginRequirement(
               requiredText(item, "id", pointer + "/id"),
               requiredText(item, "versionRange", pointer + "/versionRange"),
-              textArray(requiredArray(item, "sections", pointer + "/sections"), pointer + "/sections")));
+              textArray(
+                  requiredArray(item, "sections", pointer + "/sections"), pointer + "/sections")));
     }
     return result;
   }
@@ -267,7 +265,8 @@ public final class ExperimentDocumentCodec {
             new ExperimentDocument.PluginSection(
                 requiredPositiveInt(section, "schemaVersion", sectionPointer + "/schemaVersion"),
                 requiredText(section, "algorithmVersion", sectionPointer + "/algorithmVersion"),
-                DocumentValueJson.fromJson(requiredNode(section, "data", sectionPointer + "/data"))));
+                DocumentValueJson.fromJson(
+                    requiredNode(section, "data", sectionPointer + "/data"))));
       }
       result.put(pluginId, parsedSections);
     }
@@ -316,11 +315,15 @@ public final class ExperimentDocumentCodec {
     return new ExperimentDocument.Provenance(
         requiredText(node, "creatorDisplayName", "/provenance/creatorDisplayName"),
         optionalText(node, "verifiedAccount", "/provenance/verifiedAccount"),
-        parseInstant(requiredText(node, "createdAt", "/provenance/createdAt"), "/provenance/createdAt"),
-        parseInstant(requiredText(node, "modifiedAt", "/provenance/modifiedAt"), "/provenance/modifiedAt"),
+        parseInstant(
+            requiredText(node, "createdAt", "/provenance/createdAt"), "/provenance/createdAt"),
+        parseInstant(
+            requiredText(node, "modifiedAt", "/provenance/modifiedAt"), "/provenance/modifiedAt"),
         requiredText(node, "softwareVersion", "/provenance/softwareVersion"),
         requiredText(node, "canonicalSha256", "/provenance/canonicalSha256"),
-        textArray(requiredArray(node, "migrationNotes", "/provenance/migrationNotes"), "/provenance/migrationNotes"));
+        textArray(
+            requiredArray(node, "migrationNotes", "/provenance/migrationNotes"),
+            "/provenance/migrationNotes"));
   }
 
   private ExperimentDocument normalizeWorkflow(ExperimentDocument document, boolean verifyHash)
@@ -334,13 +337,16 @@ public final class ExperimentDocumentCodec {
     try {
       workflow = workflowParser.parse(payload.content());
     } catch (RuntimeException exception) {
-      throw failure("/workflow/content", "invalid-workflow", "Embedded workflow DSL is invalid", exception);
+      throw failure(
+          "/workflow/content", "invalid-workflow", "Embedded workflow DSL is invalid", exception);
     }
     String canonical = workflowSerializer.serialize(workflow);
     String hash = DocumentHashes.sha256(canonical);
     if (verifyHash && !hash.equals(payload.sha256())) {
       throw failure(
-          "/workflow/sha256", "workflow-hash-mismatch", "Workflow SHA-256 does not match canonical DSL");
+          "/workflow/sha256",
+          "workflow-hash-mismatch",
+          "Workflow SHA-256 does not match canonical DSL");
     }
     ExperimentDocument.WorkflowPayload normalizedPayload =
         new ExperimentDocument.WorkflowPayload(
@@ -520,8 +526,12 @@ public final class ExperimentDocumentCodec {
   private byte[] writeTree(JsonNode tree) throws ExperimentDocumentException {
     try {
       return mapper.writeValueAsBytes(tree);
-    } catch (JsonProcessingException exception) {
-      throw failure("/", "serialization-failed", "Could not serialize canonical experiment document", exception);
+    } catch (IOException exception) {
+      throw failure(
+          "/",
+          "serialization-failed",
+          "Could not serialize canonical experiment document",
+          exception);
     }
   }
 
@@ -624,11 +634,13 @@ public final class ExperimentDocumentCodec {
   private static void rejectUnknown(ObjectNode node, Set<String> allowed, String pointer)
       throws ExperimentDocumentException {
     HashSet<String> unknown = new HashSet<>();
-    node.fieldNames().forEachRemaining(name -> {
-      if (!allowed.contains(name)) {
-        unknown.add(name);
-      }
-    });
+    node.fieldNames()
+        .forEachRemaining(
+            name -> {
+              if (!allowed.contains(name)) {
+                unknown.add(name);
+              }
+            });
     if (!unknown.isEmpty()) {
       String field = unknown.stream().sorted().findFirst().orElseThrow();
       throw failure(
@@ -663,8 +675,7 @@ public final class ExperimentDocumentCodec {
     }
   }
 
-  private static ExperimentDocumentException failure(
-      String pointer, String code, String message) {
+  private static ExperimentDocumentException failure(String pointer, String code, String message) {
     return new ExperimentDocumentException(pointer, code, message);
   }
 
