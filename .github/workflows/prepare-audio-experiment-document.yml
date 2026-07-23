@@ -1,0 +1,88 @@
+name: Prepare portable experiment document
+
+on:
+  pull_request:
+    branches:
+      - master
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          server-id: github
+          server-username: GITHUB_ACTOR
+          server-password: GITHUB_TOKEN
+
+      - name: Register experiment document module
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('pom.xml')
+          text = path.read_text(encoding='utf-8')
+          module_anchor = '    <module>audio-plugin-api</module>\n'
+          module_insert = module_anchor + '    <module>audio-experiment-document</module>\n'
+          if text.count(module_anchor) != 1:
+              raise SystemExit('Unexpected root module anchor')
+          text = text.replace(module_anchor, module_insert, 1)
+
+          dependency_anchor = '''      <dependency>
+                  <groupId>${project.groupId}</groupId>
+                  <artifactId>audio-plugin-api</artifactId>
+                  <version>${project.version}</version>
+                </dependency>
+          '''
+          dependency_insert = dependency_anchor + '''      <dependency>
+                  <groupId>${project.groupId}</groupId>
+                  <artifactId>audio-experiment-document</artifactId>
+                  <version>${project.version}</version>
+                </dependency>
+          '''
+          if text.count(dependency_anchor) != 1:
+              raise SystemExit('Unexpected dependency-management anchor')
+          path.write_text(text.replace(dependency_anchor, dependency_insert, 1), encoding='utf-8')
+          PY
+
+      - name: Apply repository formatter
+        run: mvn -B spotless:apply -DskipTests
+
+      - name: Verify experiment document slice
+        id: verify
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          mvn -B -pl audio-experiment-document -am verify 2>&1 | tee experiment-document-build.log
+
+      - name: Upload formatted slice and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: portable-experiment-document-sources
+          path: |
+            pom.xml
+            experiment-document-build.log
+            audio-plugin-api/src/main/java/org/hammer/audio/plugin/AudioAnalyzerPlugin.java
+            audio-plugin-api/src/main/java/org/hammer/audio/plugin/document/
+            audio-experiment-document/
+          retention-days: 1
+
+      - name: Preserve verification result
+        if: steps.verify.outcome != 'success'
+        run: exit 1
