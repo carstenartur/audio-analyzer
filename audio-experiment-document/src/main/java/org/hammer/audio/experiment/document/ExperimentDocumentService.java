@@ -38,6 +38,11 @@ public final class ExperimentDocumentService {
     return pluginCatalog.preview(codec.decode(source), codec);
   }
 
+  /** Read, bound and preview one untrusted stream without mutating application state. */
+  public ExperimentDocumentPreview preview(InputStream source) throws IOException {
+    return preview(readBounded(source));
+  }
+
   /** Parse and preview one bounded document from disk without mutating application state. */
   public ExperimentDocumentPreview preview(Path source) throws IOException {
     return pluginCatalog.preview(codec.load(source), codec);
@@ -46,6 +51,11 @@ public final class ExperimentDocumentService {
   /** Return canonical normalized bytes after the same preview and plugin-resolution path. */
   public byte[] normalize(byte[] source) throws ExperimentDocumentException {
     return codec.encode(preview(source).document());
+  }
+
+  /** Read one bounded stream and return its canonical normalized representation. */
+  public byte[] normalize(InputStream source) throws IOException {
+    return normalize(readBounded(source));
   }
 
   /**
@@ -80,11 +90,17 @@ public final class ExperimentDocumentService {
             "Experiment document schema is unavailable: "
                 + ExperimentDocumentFormat.SCHEMA_RESOURCE);
       }
-      byte[] bytes = input.readAllBytes();
-      if (bytes.length > ExperimentDocumentFormat.MAX_DOCUMENT_BYTES) {
-        throw new IOException("Bundled experiment document schema exceeds the byte limit");
-      }
-      return bytes;
+      return readBounded(input);
     }
+  }
+
+  private static byte[] readBounded(InputStream source) throws IOException {
+    Objects.requireNonNull(source, "source");
+    byte[] bytes = source.readNBytes(ExperimentDocumentFormat.MAX_DOCUMENT_BYTES + 1);
+    if (bytes.length > ExperimentDocumentFormat.MAX_DOCUMENT_BYTES) {
+      throw new ExperimentDocumentException(
+          "/", "max-bytes", "Experiment document exceeds the byte limit");
+    }
+    return bytes;
   }
 }
