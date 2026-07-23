@@ -69,9 +69,28 @@ jobs:
         run: mvn -B spotless:apply -DskipTests
 
       - name: Verify experiment document slice
-        run: mvn -B -pl audio-experiment-document -am verify
+        id: verify
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          mvn -B -pl audio-experiment-document -am verify 2>&1 | tee direct-experiment-document-build.log
+
+      - name: Upload direct-branch diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: direct-experiment-document-diagnostics
+          path: |
+            direct-experiment-document-build.log
+            pom.xml
+            audio-plugin-api/src/main/java/org/hammer/audio/plugin/AudioAnalyzerPlugin.java
+            audio-plugin-api/src/main/java/org/hammer/audio/plugin/document/
+            audio-experiment-document/
+          retention-days: 1
 
       - name: Commit verified sources
+        if: steps.verify.outcome == 'success'
         shell: bash
         run: |
           git config user.name github-actions[bot]
@@ -83,3 +102,7 @@ jobs:
           fi
           git commit -m 'Register and format portable experiment document module'
           git push origin HEAD:feature/309-311-portable-experiment-document
+
+      - name: Preserve verification result
+        if: steps.verify.outcome != 'success'
+        run: exit 1
