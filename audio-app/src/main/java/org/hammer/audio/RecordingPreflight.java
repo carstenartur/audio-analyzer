@@ -27,11 +27,7 @@ public final class RecordingPreflight {
    */
   public static RecordingStorageStatus inspect(AudioCaptureService service, Path destination)
       throws IOException {
-    return inspect(
-        service,
-        destination,
-        new FileStoreRecordingStorageProbe(),
-        Instant.now());
+    return inspect(service, destination, new FileStoreRecordingStorageProbe(), Instant.now());
   }
 
   static RecordingStorageStatus inspect(
@@ -50,11 +46,6 @@ public final class RecordingPreflight {
     }
     double expectedBytesPerSecond =
         descriptor.sampleRate() * descriptor.channels() * Float.BYTES * 1.02;
-    return storageProbe.probe(
-        destination,
-        0L,
-        0.0,
-        expectedBytesPerSecond,
-        checkedAt);
+    return storageProbe.probe(destination, 0L, 0.0, expectedBytesPerSecond, checkedAt);
   }
 }
