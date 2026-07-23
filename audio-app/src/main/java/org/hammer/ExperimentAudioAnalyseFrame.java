@@ -22,6 +22,7 @@ import javax.swing.SwingUtilities;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import org.hammer.audio.ActiveAudioCaptureRegistry;
 import org.hammer.audio.AudioCaptureService;
+import org.hammer.audio.RecordingPreflight;
 import org.hammer.audio.RecordingTap;
 import org.hammer.audio.recording.AudioBlockRecordingFormat;
 import org.hammer.audio.recording.AudioBlockRecordingReader;
@@ -29,6 +30,8 @@ import org.hammer.audio.recording.RecordingInspection;
 import org.hammer.audio.recording.RecordingIntegrity;
 import org.hammer.audio.recording.runtime.RecordingState;
 import org.hammer.audio.recording.runtime.RecordingStatus;
+import org.hammer.audio.recording.runtime.RecordingStorageLevel;
+import org.hammer.audio.recording.runtime.RecordingStorageStatus;
 import org.hammer.audio.ui.theme.UiTheme;
 
 /**
@@ -144,6 +147,19 @@ public final class ExperimentAudioAnalyseFrame extends AudioAnalyseFrame {
     File selected =
         ensureExtension(chooser.getSelectedFile(), "." + AudioBlockRecordingFormat.FILE_EXTENSION);
     try {
+      RecordingStorageStatus preflight = RecordingPreflight.inspect(service, selected.toPath());
+      if (!preflight.writable() || preflight.level() == RecordingStorageLevel.CRITICAL) {
+        JOptionPane.showMessageDialog(
+            this,
+            storagePreflightText(preflight),
+            "Recording storage is not ready",
+            JOptionPane.ERROR_MESSAGE);
+        return;
+      }
+      if (preflight.level() == RecordingStorageLevel.WARNING
+          && !confirmStorageWarning(preflight)) {
+        return;
+      }
       recordingTap = RecordingTap.start(service, selected.toPath());
       recordingTap.addStatusListener(
           status -> SwingUtilities.invokeLater(() -> recordingStatusPanel.updateStatus(status)));
@@ -155,6 +171,50 @@ public final class ExperimentAudioAnalyseFrame extends AudioAnalyseFrame {
           "Experiment recording",
           JOptionPane.ERROR_MESSAGE);
     }
+  }
+
+  private boolean confirmStorageWarning(RecordingStorageStatus preflight) {
+    int choice =
+        JOptionPane.showConfirmDialog(
+            this,
+            storagePreflightText(preflight) + "\n\nStart recording despite this warning?",
+            "Recording storage warning",
+            JOptionPane.YES_NO_OPTION,
+            JOptionPane.WARNING_MESSAGE);
+    return choice == JOptionPane.YES_OPTION;
+  }
+
+  private static String storagePreflightText(RecordingStorageStatus preflight) {
+    return String.format(
+        Locale.ROOT,
+        "Destination: %s%nUsable space: %s%nEstimated safe duration: %s%nExpected write rate: %s/s%nStatus: %s%s",
+        preflight.destination(),
+        formatBytes(preflight.usableBytes()),
+        formatDuration(preflight.estimatedSafeSecondsRemaining()),
+        formatBytes(Math.round(preflight.expectedBytesPerSecond())),
+        preflight.level(),
+        preflight.errorMessage().isBlank() ? "" : "%n" + preflight.errorMessage());
+  }
+
+  private static String formatBytes(long bytes) {
+    if (bytes < 0L) {
+      return "unknown";
+    }
+    double gibibytes = bytes / (1024.0 * 1024.0 * 1024.0);
+    if (gibibytes >= 1.0) {
+      return String.format(Locale.ROOT, "%.2f GiB", gibibytes);
+    }
+    return String.format(Locale.ROOT, "%.1f MiB", bytes / (1024.0 * 1024.0));
+  }
+
+  private static String formatDuration(long seconds) {
+    if (seconds < 0L) {
+      return "unknown";
+    }
+    long hours = seconds / 3600L;
+    long minutes = (seconds % 3600L) / 60L;
+    long remainingSeconds = seconds % 60L;
+    return String.format(Locale.ROOT, "%02d:%02d:%02d", hours, minutes, remainingSeconds);
   }
 
   private void stopExperimentRecording() {
