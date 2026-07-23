@@ -1,0 +1,491 @@
+name: Render recording PMD refactor
+
+on:
+  pull_request:
+    branches:
+      - master
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  render:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          server-id: github
+          server-username: GITHUB_ACTOR
+          server-password: GITHUB_TOKEN
+
+      - name: Apply PMD-oriented recording refactor
+        shell: bash
+        run: |
+          cat > audio-app/src/main/java/org/hammer/audio/AudioBlockBroadcaster.java <<'JAVA'
+          package org.hammer.audio;
+
+          import java.util.List;
+          import java.util.Objects;
+          import java.util.concurrent.CopyOnWriteArrayList;
+          import java.util.concurrent.atomic.AtomicBoolean;
+          import java.util.logging.Level;
+          import java.util.logging.Logger;
+          import org.hammer.audio.core.AudioBlock;
+
+          /** Package-private fan-out used by capture-service implementations. */
+          final class AudioBlockBroadcaster {
+
+            private static final Logger LOGGER = Logger.getLogger(AudioBlockBroadcaster.class.getName());
+
+            private final List<Subscription> subscriptions = new CopyOnWriteArrayList<>();
+
+            AudioBlockSubscription subscribe(AudioBlockListener listener) {
+              return new Subscription(Objects.requireNonNull(listener, "listener"));
+            }
+
+            void publish(AudioBlock block) {
+              Objects.requireNonNull(block, "block");
+              for (Subscription subscription : subscriptions) {
+                subscription.publish(block);
+              }
+            }
+
+            private final class Subscription implements AudioBlockSubscription {
+
+              private final AudioBlockListener listener;
+              private final AtomicBoolean closed = new AtomicBoolean(false);
+
+              private Subscription(AudioBlockListener listener) {
+                this.listener = listener;
+                subscriptions.add(this);
+              }
+
+              private void publish(AudioBlock block) {
+                if (closed.get()) {
+                  return;
+                }
+                try {
+                  listener.onAudioBlock(block);
+                } catch (RuntimeException exception) {
+                  LOGGER.log(Level.WARNING, "Audio-block listener failed; removing subscription", exception);
+                  close();
+                }
+              }
+
+              @Override
+              public void close() {
+                if (closed.compareAndSet(false, true)) {
+                  subscriptions.remove(this);
+                }
+              }
+
+              @Override
+              public boolean isClosed() {
+                return closed.get();
+              }
+            }
+          }
+          JAVA
+
+          cat > audio-app/src/main/java/org/hammer/audio/RecordingBlockQueue.java <<'JAVA'
+          package org.hammer.audio;
+
+          import java.util.concurrent.ArrayBlockingQueue;
+          import java.util.concurrent.BlockingQueue;
+          import java.util.concurrent.TimeUnit;
+          import org.hammer.audio.core.AudioBlock;
+
+          /** Bounded queue abstraction that keeps recorder coordination independent of its implementation. */
+          final class RecordingBlockQueue {
+
+            private final BlockingQueue<AudioBlock> blocks;
+            private final int capacity;
+
+            RecordingBlockQueue(int capacity) {
+              this.blocks = new ArrayBlockingQueue<>(capacity);
+              this.capacity = capacity;
+            }
+
+            boolean offer(AudioBlock block) {
+              return blocks.offer(block);
+            }
+
+            AudioBlock poll(long timeout, TimeUnit unit) throws InterruptedException {
+              return blocks.poll(timeout, unit);
+            }
+
+            boolean isEmpty() {
+              return blocks.isEmpty();
+            }
+
+            int size() {
+              return blocks.size();
+            }
+
+            int capacity() {
+              return capacity;
+            }
+          }
+          JAVA
+
+          cat > audio-app/src/main/java/org/hammer/audio/RecordingStatusListeners.java <<'JAVA'
+          package org.hammer.audio;
+
+          import java.util.List;
+          import java.util.Objects;
+          import java.util.concurrent.CopyOnWriteArrayList;
+          import java.util.logging.Level;
+          import java.util.logging.Logger;
+          import org.hammer.audio.recording.runtime.RecordingStatus;
+          import org.hammer.audio.recording.runtime.RecordingStatusListener;
+
+          /** Thread-safe status-listener registry with failure isolation. */
+          final class RecordingStatusListeners {
+
+            private static final Logger LOGGER = Logger.getLogger(RecordingStatusListeners.class.getName());
+
+            private final List<RecordingStatusListener> listeners = new CopyOnWriteArrayList<>();
+
+            void add(RecordingStatusListener listener) {
+              listeners.add(Objects.requireNonNull(listener, "listener"));
+            }
+
+            void remove(RecordingStatusListener listener) {
+              listeners.remove(listener);
+            }
+
+            void publish(RecordingStatus status) {
+              for (RecordingStatusListener listener : listeners) {
+                try {
+                  listener.onRecordingStatus(status);
+                } catch (RuntimeException exception) {
+                  LOGGER.log(Level.WARNING, "Recording status listener failed", exception);
+                }
+              }
+            }
+          }
+          JAVA
+
+          cat > audio-app/src/main/java/org/hammer/audio/RecordingPreflight.java <<'JAVA'
+          package org.hammer.audio;
+
+          import java.io.IOException;
+          import java.nio.file.Path;
+          import java.time.Instant;
+          import java.util.Objects;
+          import org.hammer.audio.core.AudioFormatDescriptor;
+          import org.hammer.audio.recording.runtime.FileStoreRecordingStorageProbe;
+          import org.hammer.audio.recording.runtime.RecordingStorageLevel;
+          import org.hammer.audio.recording.runtime.RecordingStorageProbe;
+          import org.hammer.audio.recording.runtime.RecordingStorageStatus;
+
+          /** Evaluates recording storage readiness before a target or partial file is created. */
+          public final class RecordingPreflight {
+
+            private RecordingPreflight() {
+              // utility class
+            }
+
+            /**
+             * Inspect the selected destination using the configured source format and production filesystem
+             * probe.
+             *
+             * @param service configured audio source
+             * @param destination requested final recording path
+             * @return immutable preflight capacity snapshot
+             * @throws IOException if the source format or destination filesystem cannot be inspected
+             */
+            public static RecordingStorageStatus inspect(AudioCaptureService service, Path destination)
+                throws IOException {
+              return inspect(service, destination, new FileStoreRecordingStorageProbe(), Instant.now());
+            }
+
+            static RecordingStorageStatus inspect(
+                AudioCaptureService service,
+                Path destination,
+                RecordingStorageProbe storageProbe,
+                Instant checkedAt)
+                throws IOException {
+              Objects.requireNonNull(service, "service");
+              Objects.requireNonNull(destination, "destination");
+              Objects.requireNonNull(storageProbe, "storageProbe");
+              Objects.requireNonNull(checkedAt, "checkedAt");
+              AudioFormatDescriptor descriptor = service.getDescriptor();
+              if (descriptor == null) {
+                throw new IOException("Audio source has no format descriptor; start/configure it first.");
+              }
+              return storageProbe.probe(
+                  destination, 0L, 0.0, expectedBytesPerSecond(descriptor), checkedAt);
+            }
+
+            static void requireReady(RecordingStorageStatus preflight) throws IOException {
+              Objects.requireNonNull(preflight, "preflight");
+              if (!preflight.writable()) {
+                throw new IOException(
+                    "Recording destination is not writable: " + preflight.destination());
+              }
+              if (preflight.level() == RecordingStorageLevel.CRITICAL) {
+                throw new IOException(
+                    "Recording destination has insufficient safe capacity: "
+                        + preflight.usableBytes()
+                        + " usable bytes");
+              }
+            }
+
+            private static double expectedBytesPerSecond(AudioFormatDescriptor descriptor) {
+              double samplePayload = descriptor.sampleRate() * descriptor.channels() * Float.BYTES;
+              return samplePayload * 1.02;
+            }
+          }
+          JAVA
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: Path, old: str, new: str) -> None:
+              text = path.read_text(encoding='utf-8')
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected one occurrence, found {count}: {old[:100]!r}')
+              path.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          frame = Path('audio-app/src/main/java/org/hammer/ExperimentAudioAnalyseFrame.java')
+          text = frame.read_text(encoding='utf-8')
+          marker = '  private static final Logger LOGGER =\n      Logger.getLogger(ExperimentAudioAnalyseFrame.class.getName());\n'
+          replacement = marker + '  private static final String RECORDING_DIALOG_TITLE = "Experiment recording";\n'
+          if text.count(marker) != 1:
+              raise SystemExit('Could not locate ExperimentAudioAnalyseFrame logger declaration')
+          text = text.replace(marker, replacement, 1)
+          text = text.replace('"Experiment recording"', 'RECORDING_DIALOG_TITLE')
+          frame.write_text(text, encoding='utf-8')
+
+          tap = Path('audio-app/src/main/java/org/hammer/audio/RecordingTap.java')
+          text = tap.read_text(encoding='utf-8')
+          for line in [
+              'import java.util.concurrent.ArrayBlockingQueue;\n',
+              'import java.util.concurrent.CopyOnWriteArrayList;\n',
+              'import org.hammer.audio.core.AudioFormatDescriptor;\n',
+              'import org.hammer.audio.recording.runtime.FileStoreRecordingStorageProbe;\n',
+              'import org.hammer.audio.recording.runtime.RecordingStorageLevel;\n',
+          ]:
+              if line not in text:
+                  raise SystemExit(f'Missing import in RecordingTap: {line!r}')
+              text = text.replace(line, '', 1)
+          text = text.replace(
+              '  private final ArrayBlockingQueue<AudioBlock> queue;\n',
+              '  private final RecordingBlockQueue queue;\n',
+              1)
+          text = text.replace(
+              '  private final CopyOnWriteArrayList<RecordingStatusListener> listeners =\n'
+              '      new CopyOnWriteArrayList<>();\n',
+              '  private final RecordingStatusListeners listeners = new RecordingStatusListeners();\n',
+              1)
+          text = text.replace(
+              '    return start(\n'
+              '        service, file, DEFAULT_QUEUE_CAPACITY, new FileStoreRecordingStorageProbe(), Instant.now());\n',
+              '    RecordingStorageStatus preflight = RecordingPreflight.inspect(service, file);\n'
+              '    return start(service, file, DEFAULT_QUEUE_CAPACITY, preflight, Instant.now());\n',
+              1)
+          text = text.replace(
+              '      RecordingStorageProbe storageProbe,\n'
+              '      Instant startedAt)\n'
+              '      throws IOException {\n'
+              '    Objects.requireNonNull(service, "service");\n'
+              '    Objects.requireNonNull(file, "file");\n'
+              '    Objects.requireNonNull(storageProbe, "storageProbe");\n'
+              '    Objects.requireNonNull(startedAt, "startedAt");\n'
+              '    if (queueCapacity < 1) {\n'
+              '      throw new IllegalArgumentException("queueCapacity must be >= 1");\n'
+              '    }\n'
+              '    AudioFormatDescriptor descriptor = service.getDescriptor();\n'
+              '    if (descriptor == null) {\n'
+              '      throw new IOException("Audio source has no format descriptor; start/configure it first.");\n'
+              '    }\n'
+              '    double expectedRate = expectedBytesPerSecond(descriptor);\n'
+              '    RecordingStorageStatus preflight = storageProbe.probe(file, 0L, 0.0, expectedRate, startedAt);\n'
+              '    if (!preflight.writable()) {\n'
+              '      throw new IOException("Recording destination is not writable: " + file);\n'
+              '    }\n'
+              '    if (preflight.level() == RecordingStorageLevel.CRITICAL) {\n'
+              '      throw new IOException(\n'
+              '          "Recording destination has insufficient safe capacity: "\n'
+              '              + preflight.usableBytes()\n'
+              '              + " usable bytes");\n'
+              '    }\n',
+              '      RecordingStorageProbe storageProbe,\n'
+              '      Instant startedAt)\n'
+              '      throws IOException {\n'
+              '    RecordingStorageStatus preflight =\n'
+              '        RecordingPreflight.inspect(service, file, storageProbe, startedAt);\n'
+              '    return start(service, file, queueCapacity, preflight, startedAt);\n'
+              '  }\n\n'
+              '  private static RecordingTap start(\n'
+              '      AudioCaptureService service,\n'
+              '      Path file,\n'
+              '      int queueCapacity,\n'
+              '      RecordingStorageStatus preflight,\n'
+              '      Instant startedAt)\n'
+              '      throws IOException {\n'
+              '    Objects.requireNonNull(service, "service");\n'
+              '    Objects.requireNonNull(file, "file");\n'
+              '    Objects.requireNonNull(preflight, "preflight");\n'
+              '    Objects.requireNonNull(startedAt, "startedAt");\n'
+              '    if (queueCapacity < 1) {\n'
+              '      throw new IllegalArgumentException("queueCapacity must be >= 1");\n'
+              '    }\n'
+              '    RecordingPreflight.requireReady(preflight);\n'
+              '    double expectedRate = preflight.expectedBytesPerSecond();\n'
+              '    RecordingStorageProbe storageProbe = new FileStoreRecordingStorageProbe();\n',
+              1)
+          # The production path above still needs the production probe for runtime checks. Re-introduce it
+          # without coupling RecordingTap to the implementation by using a package-private factory.
+          text = text.replace(
+              '    RecordingStorageProbe storageProbe = new FileStoreRecordingStorageProbe();\n',
+              '    RecordingStorageProbe storageProbe = RecordingPreflight.productionProbe();\n',
+              1)
+          text = text.replace('    this.queue = new ArrayBlockingQueue<>(queueCapacity);\n',
+                              '    this.queue = new RecordingBlockQueue(queueCapacity);\n', 1)
+          text = text.replace(
+              '    RecordingStatusListener required = Objects.requireNonNull(listener, "listener");\n'
+              '    listeners.add(required);\n'
+              '    required.onRecordingStatus(currentStatus.get());\n',
+              '    RecordingStatusListener required = Objects.requireNonNull(listener, "listener");\n'
+              '    listeners.add(required);\n'
+              '    required.onRecordingStatus(currentStatus.get());\n',
+              1)
+          text = text.replace(
+              '      storageStatus.set(\n'
+              '          new RecordingStorageStatus(\n'
+              '              file,\n'
+              '              "",\n'
+              '              "",\n'
+              '              false,\n'
+              '              -1L,\n'
+              '              -1L,\n'
+              '              -1L,\n'
+              '              bytesWritten,\n'
+              '              measuredBytesPerSecond,\n'
+              '              expectedBytesPerSecond,\n'
+              '              -1L,\n'
+              '              RecordingStorageLevel.UNKNOWN,\n'
+              '              Instant.now(),\n'
+              '              exception.getMessage()));\n',
+              '      storageStatus.set(\n'
+              '          RecordingStorageStatus.unavailable(\n'
+              '              file,\n'
+              '              bytesWritten,\n'
+              '              measuredBytesPerSecond,\n'
+              '              expectedBytesPerSecond,\n'
+              '              Instant.now(),\n'
+              '              exception.getMessage()));\n',
+              1)
+          text = text.replace(
+              '    for (RecordingStatusListener listener : listeners) {\n'
+              '      try {\n'
+              '        listener.onRecordingStatus(status);\n'
+              '      } catch (RuntimeException exception) {\n'
+              '        LOGGER.log(Level.WARNING, "Recording status listener failed", exception);\n'
+              '      }\n'
+              '    }\n',
+              '    listeners.publish(status);\n',
+              1)
+          text = text.replace('        queue.remainingCapacity() + queue.size(),\n',
+                              '        queue.capacity(),\n', 1)
+          tail = (
+              '\n  private static double expectedBytesPerSecond(AudioFormatDescriptor descriptor) {\n'
+              '    double samplePayload = descriptor.sampleRate() * descriptor.channels() * Float.BYTES;\n'
+              '    return samplePayload * 1.02;\n'
+              '  }\n'
+          )
+          if tail not in text:
+              raise SystemExit('Could not locate RecordingTap expectedBytesPerSecond method')
+          text = text.replace(tail, '\n', 1)
+          tap.write_text(text, encoding='utf-8')
+
+          preflight = Path('audio-app/src/main/java/org/hammer/audio/RecordingPreflight.java')
+          text = preflight.read_text(encoding='utf-8')
+          marker = (
+              '  static RecordingStorageStatus inspect(\n'
+          )
+          insert = (
+              '  static RecordingStorageProbe productionProbe() {\n'
+              '    return new FileStoreRecordingStorageProbe();\n'
+              '  }\n\n'
+          )
+          if text.count(marker) != 1:
+              raise SystemExit('Could not locate RecordingPreflight package-private inspect method')
+          text = text.replace(marker, insert + marker, 1)
+          preflight.write_text(text, encoding='utf-8')
+
+          status = Path('audio-app/src/main/java/org/hammer/audio/recording/runtime/RecordingStorageStatus.java')
+          text = status.read_text(encoding='utf-8')
+          marker = '  /** Returns whether recording should stop before exhausting the backing store. */\n'
+          factory = '''  /** Snapshot used when a runtime capacity refresh cannot inspect the backing store. */
+          public static RecordingStorageStatus unavailable(
+              Path destination,
+              long bytesWritten,
+              double measuredBytesPerSecond,
+              double expectedBytesPerSecond,
+              Instant now,
+              String errorMessage) {
+            return new RecordingStorageStatus(
+                destination,
+                "",
+                "",
+                false,
+                -1L,
+                -1L,
+                -1L,
+                bytesWritten,
+                measuredBytesPerSecond,
+                expectedBytesPerSecond,
+                -1L,
+                RecordingStorageLevel.UNKNOWN,
+                now,
+                errorMessage);
+          }
+
+          '''
+          if text.count(marker) != 1:
+              raise SystemExit('Could not locate RecordingStorageStatus critical method')
+          status.write_text(text.replace(marker, factory + marker, 1), encoding='utf-8')
+
+          probe = Path('audio-app/src/main/java/org/hammer/audio/recording/runtime/FileStoreRecordingStorageProbe.java')
+          text = probe.read_text(encoding='utf-8')
+          old = '    if (!(bytesPerSecond > 0.0) || !Double.isFinite(bytesPerSecond)) {\n'
+          new = '    if (bytesPerSecond <= 0.0 || !Double.isFinite(bytesPerSecond)) {\n'
+          if text.count(old) != 1:
+              raise SystemExit('Could not locate FileStoreRecordingStorageProbe inversion')
+          probe.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
+
+      - name: Apply repository formatter
+        run: mvn -B spotless:apply -DskipTests
+
+      - name: Verify audio-app PMD and compilation
+        run: mvn -B -pl audio-app -am -DskipTests compile pmd:check
+
+      - name: Upload formatted sources
+        uses: actions/upload-artifact@v7
+        with:
+          name: recording-pmd-refactor-sources
+          path: |
+            audio-app/src/main/java/org/hammer/ExperimentAudioAnalyseFrame.java
+            audio-app/src/main/java/org/hammer/audio/AudioBlockBroadcaster.java
+            audio-app/src/main/java/org/hammer/audio/RecordingBlockQueue.java
+            audio-app/src/main/java/org/hammer/audio/RecordingStatusListeners.java
+            audio-app/src/main/java/org/hammer/audio/RecordingPreflight.java
+            audio-app/src/main/java/org/hammer/audio/RecordingTap.java
+            audio-app/src/main/java/org/hammer/audio/recording/runtime/RecordingStorageStatus.java
+            audio-app/src/main/java/org/hammer/audio/recording/runtime/FileStoreRecordingStorageProbe.java
+          retention-days: 1
