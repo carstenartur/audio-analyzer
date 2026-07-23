@@ -266,7 +266,8 @@ public final class ExperimentAudioAnalyseFrame extends AudioAnalyseFrame {
   private static String inspectionText(RecordingInspection inspection) {
     return String.format(
         Locale.ROOT,
-        "Integrity: %s%nFormat version: %d%nBlocks: %d%nFrames: %d%nContinuity gaps: %d%nSHA-256: %s%n%s",
+        "Integrity: %s%nFormat version: %d%nBlocks: %d%nFrames: %d%nContinuity gaps: %d%nSHA-256:"
+            + " %s%n%s",
         inspection.integrity(),
         inspection.formatVersion(),
         inspection.blockCount(),
