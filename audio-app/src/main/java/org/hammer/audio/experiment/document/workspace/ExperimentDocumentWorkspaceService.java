@@ -8,6 +8,7 @@ import java.util.Locale;
 import java.util.Objects;
 import org.hammer.audio.experiment.document.ExperimentDocumentPreview;
 import org.hammer.audio.experiment.document.ExperimentDocumentService;
+import org.hammer.audio.workflow.collaboration.WorkflowSessionRegistry;
 import org.hammer.audio.workflow.editor.WorkflowEditorService;
 import org.hammer.audio.workflow.editor.WorkflowProjection;
 
@@ -16,12 +17,22 @@ public final class ExperimentDocumentWorkspaceService {
 
   private final ExperimentDocumentService documentService;
   private final WorkflowEditorService editorService;
+  private final WorkflowSessionRegistry sessionRegistry;
 
-  /** Create the coordinator from the shared document and editor services. */
+  /** Create a coordinator without collaboration-session awareness for focused tests/tools. */
   public ExperimentDocumentWorkspaceService(
       ExperimentDocumentService documentService, WorkflowEditorService editorService) {
+    this(documentService, editorService, null);
+  }
+
+  /** Create the application coordinator with collaboration-session protection. */
+  public ExperimentDocumentWorkspaceService(
+      ExperimentDocumentService documentService,
+      WorkflowEditorService editorService,
+      WorkflowSessionRegistry sessionRegistry) {
     this.documentService = Objects.requireNonNull(documentService, "documentService");
     this.editorService = Objects.requireNonNull(editorService, "editorService");
+    this.sessionRegistry = sessionRegistry;
   }
 
   /**
@@ -43,6 +54,7 @@ public final class ExperimentDocumentWorkspaceService {
       throw new ExperimentDocumentApplyException(
           "document-read-only", "Experiment document is available for read-only inspection only");
     }
+    assertNoActiveCollaboration();
     String expected = normalizeExpectedHash(expectedCanonicalSha256);
     if (!sameHash(expected, preview.canonicalSha256())) {
       throw new ExperimentDocumentApplyException(
@@ -51,6 +63,19 @@ public final class ExperimentDocumentWorkspaceService {
     WorkflowProjection projection =
         editorService.importGraph(documentService.workflow(preview), discardDirty);
     return new ApplyResult(preview.canonicalSha256(), projection, true);
+  }
+
+  private void assertNoActiveCollaboration() {
+    if (sessionRegistry == null) {
+      return;
+    }
+    boolean active =
+        sessionRegistry.sessions().stream().anyMatch(session -> !session.participants().isEmpty());
+    if (active) {
+      throw new ExperimentDocumentApplyException(
+          "collaboration-active",
+          "Leave active collaboration sessions before replacing the single-user workflow");
+    }
   }
 
   private static String normalizeExpectedHash(String value) {
@@ -63,7 +88,8 @@ public final class ExperimentDocumentWorkspaceService {
       expected = expected.substring(1, expected.length() - 1);
     }
     expected = expected.toLowerCase(Locale.ROOT);
-    if (expected.length() != 64 || !expected.chars().allMatch(ExperimentDocumentWorkspaceService::hex)) {
+    if (expected.length() != 64
+        || !expected.chars().allMatch(ExperimentDocumentWorkspaceService::hex)) {
       throw new ExperimentDocumentApplyException(
           "invalid-document-hash", "If-Match must contain one SHA-256 value");
     }
