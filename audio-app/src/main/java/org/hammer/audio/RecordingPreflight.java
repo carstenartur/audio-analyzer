@@ -6,6 +6,7 @@ import java.time.Instant;
 import java.util.Objects;
 import org.hammer.audio.core.AudioFormatDescriptor;
 import org.hammer.audio.recording.runtime.FileStoreRecordingStorageProbe;
+import org.hammer.audio.recording.runtime.RecordingStorageLevel;
 import org.hammer.audio.recording.runtime.RecordingStorageProbe;
 import org.hammer.audio.recording.runtime.RecordingStorageStatus;
 
@@ -30,6 +31,10 @@ public final class RecordingPreflight {
     return inspect(service, destination, new FileStoreRecordingStorageProbe(), Instant.now());
   }
 
+  static RecordingStorageProbe productionProbe() {
+    return new FileStoreRecordingStorageProbe();
+  }
+
   static RecordingStorageStatus inspect(
       AudioCaptureService service,
       Path destination,
@@ -44,8 +49,24 @@ public final class RecordingPreflight {
     if (descriptor == null) {
       throw new IOException("Audio source has no format descriptor; start/configure it first.");
     }
-    double expectedBytesPerSecond =
-        descriptor.sampleRate() * descriptor.channels() * Float.BYTES * 1.02;
-    return storageProbe.probe(destination, 0L, 0.0, expectedBytesPerSecond, checkedAt);
+    return storageProbe.probe(destination, 0L, 0.0, expectedBytesPerSecond(descriptor), checkedAt);
+  }
+
+  static void requireReady(RecordingStorageStatus preflight) throws IOException {
+    Objects.requireNonNull(preflight, "preflight");
+    if (!preflight.writable()) {
+      throw new IOException("Recording destination is not writable: " + preflight.destination());
+    }
+    if (preflight.level() == RecordingStorageLevel.CRITICAL) {
+      throw new IOException(
+          "Recording destination has insufficient safe capacity: "
+              + preflight.usableBytes()
+              + " usable bytes");
+    }
+  }
+
+  private static double expectedBytesPerSecond(AudioFormatDescriptor descriptor) {
+    double samplePayload = descriptor.sampleRate() * descriptor.channels() * Float.BYTES;
+    return samplePayload * 1.02;
   }
 }
