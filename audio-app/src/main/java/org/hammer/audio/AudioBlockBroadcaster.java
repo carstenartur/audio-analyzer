@@ -1,5 +1,6 @@
 package org.hammer.audio;
 
+import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -12,12 +13,10 @@ final class AudioBlockBroadcaster {
 
   private static final Logger LOGGER = Logger.getLogger(AudioBlockBroadcaster.class.getName());
 
-  private final CopyOnWriteArrayList<Subscription> subscriptions = new CopyOnWriteArrayList<>();
+  private final List<Subscription> subscriptions = new CopyOnWriteArrayList<>();
 
   AudioBlockSubscription subscribe(AudioBlockListener listener) {
-    Subscription subscription = new Subscription(Objects.requireNonNull(listener, "listener"));
-    subscriptions.add(subscription);
-    return subscription;
+    return new Subscription(Objects.requireNonNull(listener, "listener"));
   }
 
   void publish(AudioBlock block) {
@@ -34,6 +33,7 @@ final class AudioBlockBroadcaster {
 
     private Subscription(AudioBlockListener listener) {
       this.listener = listener;
+      subscriptions.add(this);
     }
 
     private void publish(AudioBlock block) {
