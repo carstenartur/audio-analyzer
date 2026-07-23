@@ -380,9 +380,7 @@ public final class RecordingTap {
           terminalFailure.getMessage() == null
               ? terminalFailure.toString()
               : terminalFailure.getMessage();
-    } else if (incomplete.get()
-        || writer.continuityGapCount() > 0L
-        || droppedBlocks.get() > 0L) {
+    } else if (incomplete.get() || writer.continuityGapCount() > 0L || droppedBlocks.get() > 0L) {
       terminalState = RecordingState.INCOMPLETE;
     } else {
       terminalState = RecordingState.COMPLETED;
