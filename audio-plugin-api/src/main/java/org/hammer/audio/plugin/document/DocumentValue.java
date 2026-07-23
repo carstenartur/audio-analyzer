@@ -66,10 +66,13 @@ public sealed interface DocumentValue
       Objects.requireNonNull(fields, "fields");
       TreeMap<String, DocumentValue> copy = new TreeMap<>();
       fields.forEach(
-          (key, value) ->
-              copy.put(
-                  requireNonBlank(key, "object field name"),
-                  Objects.requireNonNull(value, "object field value")));
+          (key, value) -> {
+            Objects.requireNonNull(key, "object field name");
+            if (key.isBlank()) {
+              throw new IllegalArgumentException("object field name must not be blank");
+            }
+            copy.put(key, Objects.requireNonNull(value, "object field value"));
+          });
       fields = Collections.unmodifiableMap(copy);
     }
   }
@@ -132,13 +135,5 @@ public sealed interface DocumentValue
   enum NullValue implements DocumentValue {
     /** The only null value instance. */
     INSTANCE
-  }
-
-  private static String requireNonBlank(String value, String label) {
-    Objects.requireNonNull(value, label);
-    if (value.isBlank()) {
-      throw new IllegalArgumentException(label + " must not be blank");
-    }
-    return value;
   }
 }
