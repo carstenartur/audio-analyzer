@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 
+import { ExperimentDocumentPanelPortal } from './ExperimentDocumentPanelPortal';
 import { IndexedWorkflowHistoryPanel } from './IndexedWorkflowHistoryPanel';
 import WorkflowEditorApp from './WorkflowEditorApp';
 import { WorkflowMergePanel } from './WorkflowMergePanel';
@@ -65,6 +66,7 @@ if (rootElement === null) {
 createRoot(rootElement).render(
   <StrictMode>
     <WorkflowEditorApp />
+    <ExperimentDocumentPanelPortal />
     <IndexedWorkflowHistoryPanel />
     <WorkflowMergePanel />
   </StrictMode>,
