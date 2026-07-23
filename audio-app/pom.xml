@@ -189,7 +189,7 @@
             <manifest>
               <addClasspath>true</addClasspath>
               <classpathPrefix>lib/</classpathPrefix>
-              <mainClass>org.hammer.ExperimentAudioAnalyseFrame</mainClass>
+              <mainClass>org.hammer.ExperimentWorkbenchLauncher</mainClass>
             </manifest>
           </archive>
         </configuration>
