@@ -14,7 +14,6 @@ import org.hammer.audio.core.AudioBlock;
 import org.hammer.audio.recording.AudioBlockRecordingWriter;
 import org.hammer.audio.recording.runtime.RecordingState;
 import org.hammer.audio.recording.runtime.RecordingStatus;
-import org.hammer.audio.recording.runtime.RecordingStatusListener;
 import org.hammer.audio.recording.runtime.RecordingStorageProbe;
 import org.hammer.audio.recording.runtime.RecordingStorageStatus;
 
@@ -23,6 +22,13 @@ import org.hammer.audio.recording.runtime.RecordingStorageStatus;
  * blocking the capture thread and serializes on a dedicated I/O worker.
  */
 public final class RecordingTap {
+
+  /** Receives immutable recording status snapshots. */
+  public interface StatusListener {
+
+    /** Handle one recording status snapshot. */
+    void onRecordingStatus(RecordingStatus status);
+  }
 
   private static final Logger LOGGER = Logger.getLogger(RecordingTap.class.getName());
   private static final int DEFAULT_QUEUE_CAPACITY = 512;
@@ -159,13 +165,13 @@ public final class RecordingTap {
   }
 
   /** Register a status listener and immediately deliver the current snapshot. */
-  public void addStatusListener(RecordingStatusListener listener) {
+  public void addStatusListener(StatusListener listener) {
     listeners.add(listener);
     listener.onRecordingStatus(currentStatus.get());
   }
 
   /** Remove a previously registered listener. */
-  public void removeStatusListener(RecordingStatusListener listener) {
+  public void removeStatusListener(StatusListener listener) {
     listeners.remove(listener);
   }
 
