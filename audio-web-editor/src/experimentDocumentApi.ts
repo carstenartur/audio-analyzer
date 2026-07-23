@@ -1,3 +1,4 @@
+export const EXPERIMENT_DOCUMENT_EXTENSION = 'audioexp';
 export const EXPERIMENT_DOCUMENT_MEDIA_TYPE =
   'application/vnd.carstenartur.audio-analyzer.experiment+json';
 
@@ -125,5 +126,5 @@ export async function normalizeExperimentDocument(
 
 function attachmentFilename(contentDisposition: string | null): string {
   const match = /filename="([^"\\/]+)"/i.exec(contentDisposition ?? '');
-  return match?.[1] ?? 'normalized.audioexp';
+  return match?.[1] ?? `normalized.${EXPERIMENT_DOCUMENT_EXTENSION}`;
 }
