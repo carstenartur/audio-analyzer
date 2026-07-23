@@ -2,6 +2,7 @@ package org.hammer.audio.app;
 
 import java.util.List;
 import org.hammer.audio.experiment.document.ExperimentDocumentService;
+import org.hammer.audio.experiment.document.workspace.ExperimentDocumentWorkspaceService;
 import org.hammer.audio.pluginhost.PluginManager;
 import org.hammer.audio.pluginhost.PluginRegistry;
 import org.hammer.audio.workflow.Edge;
@@ -55,6 +56,13 @@ public class WorkbenchConfiguration implements WebMvcConfigurer {
   @Bean
   public ExperimentDocumentService experimentDocumentService(PluginRegistry pluginRegistry) {
     return new ExperimentDocumentService(pluginRegistry.plugins());
+  }
+
+  /** Coordinates confirmed document application with the server-authoritative editor state. */
+  @Bean
+  public ExperimentDocumentWorkspaceService experimentDocumentWorkspaceService(
+      ExperimentDocumentService documentService, WorkflowEditorService editorService) {
+    return new ExperimentDocumentWorkspaceService(documentService, editorService);
   }
 
   /** Creates the bounded transport-neutral collaboration event hub. */
