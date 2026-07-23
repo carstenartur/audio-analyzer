@@ -1,6 +1,9 @@
+import type { WorkflowProjection } from './api';
+
 export const EXPERIMENT_DOCUMENT_EXTENSION = 'audioexp';
 export const EXPERIMENT_DOCUMENT_MEDIA_TYPE =
   'application/vnd.carstenartur.audio-analyzer.experiment+json';
+export const DISCARD_DIRTY_HEADER = 'X-Audio-Analyzer-Discard-Dirty';
 
 export interface ExperimentDocumentDiagnostic {
   severity: 'INFO' | 'WARNING' | 'ERROR';
@@ -72,12 +75,18 @@ async function throwDocumentError(response: Response): Promise<never> {
   throw new ExperimentDocumentApiError(response.status, code, pointer, message);
 }
 
-async function postDocument(file: File, endpoint: string, accept: string): Promise<Response> {
+async function postDocument(
+  file: File,
+  endpoint: string,
+  accept: string,
+  additionalHeaders: Record<string, string> = {},
+): Promise<Response> {
   const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
       Accept: accept,
       'Content-Type': EXPERIMENT_DOCUMENT_MEDIA_TYPE,
+      ...additionalHeaders,
     },
     body: file,
   });
@@ -122,6 +131,25 @@ export async function normalizeExperimentDocument(
     blob: await response.blob(),
     filename: attachmentFilename(response.headers.get('content-disposition')),
   };
+}
+
+export interface ExperimentDocumentApplyResponse {
+  canonicalSha256: string;
+  projection: WorkflowProjection;
+  dirty: boolean;
+}
+
+/** Reupload and apply a previously previewed document under explicit preconditions. */
+export async function applyExperimentDocument(
+  file: File,
+  canonicalSha256: string,
+  discardDirty: boolean,
+): Promise<ExperimentDocumentApplyResponse> {
+  const response = await postDocument(file, '/experiment-documents/apply', 'application/json', {
+    'If-Match': `"${canonicalSha256}"`,
+    [DISCARD_DIRTY_HEADER]: String(discardDirty),
+  });
+  return (await response.json()) as ExperimentDocumentApplyResponse;
 }
 
 function attachmentFilename(contentDisposition: string | null): string {
