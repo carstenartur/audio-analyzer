@@ -4,8 +4,6 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.Objects;
-import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -17,13 +15,10 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import org.hammer.audio.core.AudioBlock;
-import org.hammer.audio.core.AudioFormatDescriptor;
 import org.hammer.audio.recording.AudioBlockRecordingWriter;
-import org.hammer.audio.recording.runtime.FileStoreRecordingStorageProbe;
 import org.hammer.audio.recording.runtime.RecordingState;
 import org.hammer.audio.recording.runtime.RecordingStatus;
 import org.hammer.audio.recording.runtime.RecordingStatusListener;
-import org.hammer.audio.recording.runtime.RecordingStorageLevel;
 import org.hammer.audio.recording.runtime.RecordingStorageProbe;
 import org.hammer.audio.recording.runtime.RecordingStorageStatus;
 
@@ -41,14 +36,13 @@ public final class RecordingTap {
 
   private final AudioBlockRecordingWriter writer;
   private final Path file;
-  private final ArrayBlockingQueue<AudioBlock> queue;
+  private final RecordingBlockQueue queue;
   private final RecordingStorageProbe storageProbe;
   private final double expectedBytesPerSecond;
   private final Instant startedAt;
   private final ExecutorService writerExecutor;
   private final CountDownLatch completed = new CountDownLatch(1);
-  private final CopyOnWriteArrayList<RecordingStatusListener> listeners =
-      new CopyOnWriteArrayList<>();
+  private final RecordingStatusListeners listeners = new RecordingStatusListeners();
   private final AtomicReference<RecordingStatus> currentStatus;
   private final AtomicReference<RecordingStorageStatus> storageStatus;
   private final AtomicReference<Throwable> failure = new AtomicReference<>();
@@ -82,8 +76,9 @@ public final class RecordingTap {
 
   /** Start a loss-aware recording with production storage probing and queue defaults. */
   public static RecordingTap start(AudioCaptureService service, Path file) throws IOException {
-    return start(
-        service, file, DEFAULT_QUEUE_CAPACITY, new FileStoreRecordingStorageProbe(), Instant.now());
+    Instant startedAt = Instant.now();
+    RecordingStorageProbe storageProbe = RecordingPreflight.productionProbe();
+    return start(service, file, DEFAULT_QUEUE_CAPACITY, storageProbe, startedAt);
   }
 
   static RecordingTap start(
@@ -93,29 +88,29 @@ public final class RecordingTap {
       RecordingStorageProbe storageProbe,
       Instant startedAt)
       throws IOException {
+    RecordingStorageStatus preflight =
+        RecordingPreflight.inspect(service, file, storageProbe, startedAt);
+    return start(service, file, queueCapacity, storageProbe, preflight, startedAt);
+  }
+
+  private static RecordingTap start(
+      AudioCaptureService service,
+      Path file,
+      int queueCapacity,
+      RecordingStorageProbe storageProbe,
+      RecordingStorageStatus preflight,
+      Instant startedAt)
+      throws IOException {
     Objects.requireNonNull(service, "service");
     Objects.requireNonNull(file, "file");
     Objects.requireNonNull(storageProbe, "storageProbe");
+    Objects.requireNonNull(preflight, "preflight");
     Objects.requireNonNull(startedAt, "startedAt");
     if (queueCapacity < 1) {
       throw new IllegalArgumentException("queueCapacity must be >= 1");
     }
-    AudioFormatDescriptor descriptor = service.getDescriptor();
-    if (descriptor == null) {
-      throw new IOException("Audio source has no format descriptor; start/configure it first.");
-    }
-    double expectedRate = expectedBytesPerSecond(descriptor);
-    RecordingStorageStatus preflight = storageProbe.probe(file, 0L, 0.0, expectedRate, startedAt);
-    if (!preflight.writable()) {
-      throw new IOException("Recording destination is not writable: " + file);
-    }
-    if (preflight.level() == RecordingStorageLevel.CRITICAL) {
-      throw new IOException(
-          "Recording destination has insufficient safe capacity: "
-              + preflight.usableBytes()
-              + " usable bytes");
-    }
-
+    RecordingPreflight.requireReady(preflight);
+    double expectedRate = preflight.expectedBytesPerSecond();
     AudioBlockRecordingWriter writer = AudioBlockRecordingWriter.open(file);
     RecordingTap tap =
         new RecordingTap(
@@ -148,7 +143,7 @@ public final class RecordingTap {
       RecordingStorageStatus preflight) {
     this.writer = writer;
     this.file = file;
-    this.queue = new ArrayBlockingQueue<>(queueCapacity);
+    this.queue = new RecordingBlockQueue(queueCapacity);
     this.storageProbe = storageProbe;
     this.expectedBytesPerSecond = expectedBytesPerSecond;
     this.startedAt = startedAt;
@@ -296,19 +291,11 @@ public final class RecordingTap {
               file, bytesWritten, measuredBytesPerSecond, expectedBytesPerSecond, Instant.now()));
     } catch (IOException exception) {
       storageStatus.set(
-          new RecordingStorageStatus(
+          RecordingStorageStatus.unavailable(
               file,
-              "",
-              "",
-              false,
-              -1L,
-              -1L,
-              -1L,
               bytesWritten,
               measuredBytesPerSecond,
               expectedBytesPerSecond,
-              -1L,
-              RecordingStorageLevel.UNKNOWN,
               Instant.now(),
               exception.getMessage()));
     }
@@ -403,13 +390,7 @@ public final class RecordingTap {
     }
     RecordingStatus status = snapshot(state, Instant.now(), stopReason, errorMessage);
     currentStatus.set(status);
-    for (RecordingStatusListener listener : listeners) {
-      try {
-        listener.onRecordingStatus(status);
-      } catch (RuntimeException exception) {
-        LOGGER.log(Level.WARNING, "Recording status listener failed", exception);
-      }
-    }
+    listeners.publish(status);
   }
 
   private RecordingStatus snapshot(
@@ -427,17 +408,12 @@ public final class RecordingTap {
         droppedFrames.get(),
         writer.continuityGapCount(),
         queue.size(),
-        queue.remainingCapacity() + queue.size(),
+        queue.capacity(),
         maximumQueueDepth.get(),
         writer.bytesWritten(),
         measuredBytesPerSecond,
         storageStatus.get(),
         reason,
         errorMessage);
-  }
-
-  private static double expectedBytesPerSecond(AudioFormatDescriptor descriptor) {
-    double samplePayload = descriptor.sampleRate() * descriptor.channels() * Float.BYTES;
-    return samplePayload * 1.02;
   }
 }
