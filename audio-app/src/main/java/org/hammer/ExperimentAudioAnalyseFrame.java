@@ -156,8 +156,7 @@ public final class ExperimentAudioAnalyseFrame extends AudioAnalyseFrame {
             JOptionPane.ERROR_MESSAGE);
         return;
       }
-      if (preflight.level() == RecordingStorageLevel.WARNING
-          && !confirmStorageWarning(preflight)) {
+      if (preflight.level() == RecordingStorageLevel.WARNING && !confirmStorageWarning(preflight)) {
         return;
       }
       recordingTap = RecordingTap.start(service, selected.toPath());
@@ -187,7 +186,8 @@ public final class ExperimentAudioAnalyseFrame extends AudioAnalyseFrame {
   private static String storagePreflightText(RecordingStorageStatus preflight) {
     return String.format(
         Locale.ROOT,
-        "Destination: %s%nUsable space: %s%nEstimated safe duration: %s%nExpected write rate: %s/s%nStatus: %s%s",
+        "Destination: %s%nUsable space: %s%nEstimated safe duration: %s%nExpected write rate:"
+            + " %s/s%nStatus: %s%s",
         preflight.destination(),
         formatBytes(preflight.usableBytes()),
         formatDuration(preflight.estimatedSafeSecondsRemaining()),
