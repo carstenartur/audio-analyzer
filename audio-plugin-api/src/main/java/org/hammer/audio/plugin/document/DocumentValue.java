@@ -124,7 +124,9 @@ public sealed interface DocumentValue
    *
    * @param value boolean value
    */
-  record BooleanValue(boolean value) implements DocumentValue {}
+  record BooleanValue(boolean value) implements DocumentValue {
+    // Boolean values require no normalization.
+  }
 
   /** Singleton null value. */
   enum NullValue implements DocumentValue {
