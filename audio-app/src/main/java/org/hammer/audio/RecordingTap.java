@@ -83,11 +83,7 @@ public final class RecordingTap {
   /** Start a loss-aware recording with production storage probing and queue defaults. */
   public static RecordingTap start(AudioCaptureService service, Path file) throws IOException {
     return start(
-        service,
-        file,
-        DEFAULT_QUEUE_CAPACITY,
-        new FileStoreRecordingStorageProbe(),
-        Instant.now());
+        service, file, DEFAULT_QUEUE_CAPACITY, new FileStoreRecordingStorageProbe(), Instant.now());
   }
 
   static RecordingTap start(
@@ -109,8 +105,7 @@ public final class RecordingTap {
       throw new IOException("Audio source has no format descriptor; start/configure it first.");
     }
     double expectedRate = expectedBytesPerSecond(descriptor);
-    RecordingStorageStatus preflight =
-        storageProbe.probe(file, 0L, 0.0, expectedRate, startedAt);
+    RecordingStorageStatus preflight = storageProbe.probe(file, 0L, 0.0, expectedRate, startedAt);
     if (!preflight.writable()) {
       throw new IOException("Recording destination is not writable: " + file);
     }
@@ -239,8 +234,7 @@ public final class RecordingTap {
           long bytes = writer.bytesWritten();
           long elapsedNanos = nowNanos - previousRateNanos;
           if (elapsedNanos > 0L) {
-            measuredBytesPerSecond =
-                (bytes - previousRateBytes) * 1_000_000_000.0 / elapsedNanos;
+            measuredBytesPerSecond = (bytes - previousRateBytes) * 1_000_000_000.0 / elapsedNanos;
           }
           previousRateBytes = bytes;
           previousRateNanos = nowNanos;
@@ -299,11 +293,7 @@ public final class RecordingTap {
     try {
       storageStatus.set(
           storageProbe.probe(
-              file,
-              bytesWritten,
-              measuredBytesPerSecond,
-              expectedBytesPerSecond,
-              Instant.now()));
+              file, bytesWritten, measuredBytesPerSecond, expectedBytesPerSecond, Instant.now()));
     } catch (IOException exception) {
       storageStatus.set(
           new RecordingStorageStatus(
