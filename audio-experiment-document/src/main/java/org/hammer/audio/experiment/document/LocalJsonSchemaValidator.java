@@ -1,12 +1,12 @@
 package org.hammer.audio.experiment.document;
 
 import com.fasterxml.jackson.core.JsonFactory;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.StreamReadFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -64,13 +64,14 @@ final class LocalJsonSchemaValidator {
       return diagnostics;
     }
     if (!DocumentHashes.sha256(schemaBytes).equals(expectedSha256)) {
-      diagnostics.add(error(pointer, "schema-digest", "Bundled plugin schema digest does not match"));
+      diagnostics.add(
+          error(pointer, "schema-digest", "Bundled plugin schema digest does not match"));
       return diagnostics;
     }
     JsonNode parsed;
     try {
       parsed = mapper.readTree(schemaBytes);
-    } catch (JsonProcessingException exception) {
+    } catch (IOException exception) {
       diagnostics.add(error(pointer, "invalid-schema", "Bundled plugin schema is not strict JSON"));
       return diagnostics;
     }
@@ -144,7 +145,8 @@ final class LocalJsonSchemaValidator {
     }
     JsonNode propertiesNode = schema.get("properties");
     ObjectNode properties = propertiesNode instanceof ObjectNode objectNode ? objectNode : null;
-    boolean additional = !schema.has("additionalProperties") || schema.path("additionalProperties").asBoolean(true);
+    boolean additional =
+        !schema.has("additionalProperties") || schema.path("additionalProperties").asBoolean(true);
     for (Map.Entry<String, DocumentValue> entry : value.fields().entrySet()) {
       String childPointer = DocumentValueJson.pointer(pointer, entry.getKey());
       JsonNode propertySchema = properties == null ? null : properties.get(entry.getKey());
