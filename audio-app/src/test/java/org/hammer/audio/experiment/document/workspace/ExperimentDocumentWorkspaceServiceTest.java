@@ -18,6 +18,9 @@ import org.hammer.audio.plugin.document.DocumentValue;
 import org.hammer.audio.workflow.Workflow;
 import org.hammer.audio.workflow.WorkflowOperationLog;
 import org.hammer.audio.workflow.WorkflowValidator;
+import org.hammer.audio.workflow.collaboration.CollaborationMode;
+import org.hammer.audio.workflow.collaboration.OperationActor;
+import org.hammer.audio.workflow.collaboration.WorkflowSessionRegistry;
 import org.hammer.audio.workflow.editor.DirtyWorkflowException;
 import org.hammer.audio.workflow.editor.WorkflowEditorService;
 import org.junit.jupiter.api.Test;
@@ -102,6 +105,33 @@ class ExperimentDocumentWorkspaceServiceTest {
 
     assertEquals("document-read-only", failure.code());
     assertEquals("current.workflow", editor.currentProjection().workflowId());
+  }
+
+  @Test
+  void activeCollaborationBlocksApplyButRetainedEmptySessionDoesNot() throws Exception {
+    byte[] source = codec.encode(document(Map.of()));
+    String hash = documentService.preview(source).canonicalSha256();
+    WorkflowEditorService editor = editor();
+    WorkflowSessionRegistry registry = new WorkflowSessionRegistry();
+    OperationActor owner = new OperationActor("actor.owner", "user.owner", "Owner");
+    registry.create(
+        "shared-session",
+        CollaborationMode.SHARED_SESSION_PERSONAL_UNDO,
+        owner,
+        new Workflow("shared.workflow", "Shared", List.of(), List.of()));
+    ExperimentDocumentWorkspaceService workspace =
+        new ExperimentDocumentWorkspaceService(documentService, editor, registry);
+
+    ExperimentDocumentApplyException failure =
+        assertThrows(
+            ExperimentDocumentApplyException.class,
+            () -> workspace.apply(stream(source), hash, false));
+    assertEquals("collaboration-active", failure.code());
+    assertEquals("current.workflow", editor.currentProjection().workflowId());
+
+    registry.leave("shared-session", owner.actorId());
+    workspace.apply(stream(source), hash, false);
+    assertEquals("imported.workflow", editor.currentProjection().workflowId());
   }
 
   private static WorkflowEditorService editor() {
