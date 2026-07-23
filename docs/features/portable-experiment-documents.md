@@ -54,7 +54,7 @@ A mismatch is a validation error; the document is never silently accepted or rep
 ## Import safety
 
 All input is untrusted. The shared `ExperimentDocumentService` enforces the same rules for CLI,
-REST and future Swing/web adapters:
+REST, Swing and web adapters:
 
 - maximum document size: 2 MiB;
 - maximum nesting depth: 64;
@@ -80,13 +80,23 @@ These operations intentionally have different semantics:
    application state.
 2. **Normalize / Save As** writes a canonical copy atomically through a sibling partial file. The
    imported source path may not be used as the normalize target.
-3. **Apply** is a separate, explicit operation. It must revalidate the canonical hash, protect dirty
-   state and require user confirmation before replacing the editable workflow.
+3. **Apply** is a separate, explicit operation. The server reparses the uploaded bytes, verifies the
+   previewed canonical hash through `If-Match`, checks plugin compatibility and atomically protects
+   dirty workflow state before replacement.
 4. **Execute** is never implied by open, preview, normalize or apply.
 
-The current implementation provides preview and normalize. Workflow replacement and local
-hardware/dataset binding remain separate application steps so that portability differences cannot
-cause silent substitution.
+Web Apply requires a first confirmation explaining that the workflow is replaced but not executed.
+When the server reports `dirty-workflow`, a second confirmation is required before the client sends
+`X-Audio-Analyzer-Discard-Dirty: true`. A changed file after preview fails with HTTP 412 rather than
+being applied. Weak or malformed hash preconditions are rejected.
+
+The single-user workflow cannot be replaced while a shared collaboration session has active
+participants. This avoids creating two canonical workflow states. A retained session with no current
+participants does not block import.
+
+The Swing desktop currently offers modeless preview and normalized Save As only; it never applies or
+executes a document on open. The web workbench offers preview, normalize and explicitly confirmed
+apply.
 
 ## Plugin sections
 
@@ -150,17 +160,26 @@ The CLI uses the same codec and plugin-resolution service as application adapter
 
 ## REST API
 
-The Spring workbench exposes non-mutating endpoints:
+The Spring workbench exposes these endpoints:
 
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `POST` | `/experiment-documents/preview` | Validate and return a safe summary and diagnostics |
 | `POST` | `/experiment-documents/normalize` | Return canonical `.audioexp` bytes |
+| `POST` | `/experiment-documents/apply` | Revalidate and explicitly replace the editable workflow |
 | `GET` | `/experiment-documents/schema` | Return the bundled local v1 schema |
 
 Preview and normalize accept the dedicated media type and `application/json` for tooling
 compatibility. Normalize responds with the dedicated media type and an `.audioexp` attachment name.
 Errors contain a stable code and JSON Pointer.
+
+Apply additionally requires:
+
+- `If-Match: "<canonical-sha256-from-preview>"`;
+- optional `X-Audio-Analyzer-Discard-Dirty: true` only after explicit user confirmation.
+
+A successful Apply response echoes the canonical hash as an ETag and returns the new workflow
+projection with `dirty: true`, because the imported workflow has not yet been checkpointed.
 
 ## Reference fixtures
 
@@ -175,10 +194,9 @@ CLI and REST API.
 
 The current slice does not yet provide:
 
-- a confirmed workflow replacement endpoint;
-- dirty-document save/discard/cancel UX;
 - local hardware and dataset binding;
 - desktop operating-system file association;
+- selective semantic merge into an existing workflow;
 - a complete evidence package/container;
 - trusted participant identity and signatures.
 
