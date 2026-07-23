@@ -6,6 +6,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.SortedMap;
 import java.util.TreeMap;
 
 /**
@@ -24,7 +25,7 @@ public sealed interface DocumentValue
 
   /** Create an immutable object value with lexicographically ordered keys. */
   static ObjectValue object(Map<String, ? extends DocumentValue> fields) {
-    Map<String, DocumentValue> copy = new TreeMap<>();
+    SortedMap<String, DocumentValue> copy = new TreeMap<>();
     fields.forEach(copy::put);
     return new ObjectValue(copy);
   }
@@ -64,7 +65,7 @@ public sealed interface DocumentValue
     // Validate and defensively copy all fields.
     public ObjectValue {
       Objects.requireNonNull(fields, "fields");
-      Map<String, DocumentValue> copy = new TreeMap<>();
+      SortedMap<String, DocumentValue> copy = new TreeMap<>();
       fields.forEach(
           (key, value) -> {
             Objects.requireNonNull(key, "object field name");
