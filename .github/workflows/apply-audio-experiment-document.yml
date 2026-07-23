@@ -73,9 +73,15 @@ jobs:
           for source_path, (old, new) in replacements.items():
               source = source_path.read_text(encoding='utf-8')
               if old in source:
-                  source_path.write_text(source.replace(old, new, 1), encoding='utf-8')
+                  source = source.replace(old, new, 1)
               elif new not in source:
                   raise SystemExit(f'Unexpected strict JSON exception boundary in {source_path}')
+              if source_path.name == 'LocalJsonSchemaValidator.java' and 'import java.io.IOException;' not in source:
+                  anchor = 'import com.fasterxml.jackson.databind.node.ObjectNode;\n'
+                  if anchor not in source:
+                      raise SystemExit('Unexpected schema-validator import anchor')
+                  source = source.replace(anchor, anchor + 'import java.io.IOException;\n', 1)
+              source_path.write_text(source, encoding='utf-8')
           PY
 
       - name: Apply repository formatter
