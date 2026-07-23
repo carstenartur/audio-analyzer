@@ -24,12 +24,14 @@ public sealed interface DocumentValue
 
   /** Create an immutable object value with lexicographically ordered keys. */
   static ObjectValue object(Map<String, ? extends DocumentValue> fields) {
-    return new ObjectValue(fields);
+    TreeMap<String, DocumentValue> copy = new TreeMap<>();
+    fields.forEach(copy::put);
+    return new ObjectValue(copy);
   }
 
   /** Create an immutable array value. */
   static ArrayValue array(List<? extends DocumentValue> values) {
-    return new ArrayValue(values);
+    return new ArrayValue(new ArrayList<>(values));
   }
 
   /** Create a string value. */
