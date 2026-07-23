@@ -12,6 +12,7 @@ import com.microsoft.playwright.Playwright;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;
@@ -21,7 +22,7 @@ import org.opentest4j.TestAbortedException;
 import org.testcontainers.DockerClientFactory;
 import org.testcontainers.containers.GenericContainer;
 
-/** Packaged-browser verification of safe portable experiment-document preview. */
+/** Packaged-browser verification of safe portable experiment-document preview and apply. */
 @Tag("screenshot")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class ExperimentDocumentWebIT {
@@ -63,15 +64,19 @@ class ExperimentDocumentWebIT {
     }
   }
 
-  /** Uploading a setup previews facts and diagnostics but exposes no apply or execute action. */
+  /** Preview is non-mutating; explicit confirmation applies but never executes the setup. */
   @Test
-  void minimalDocumentCanBePreviewedWithoutApplyingIt() {
+  void minimalDocumentPreviewAndConfirmedApplyUseServerAuthoritativeWorkflow() {
     String baseUrl = WorkbenchContainerFactory.baseUrl(container);
     try (Page page = browser.newPage()) {
       page.setViewportSize(1440, 900);
       page.setDefaultTimeout(PAGE_LOAD_TIMEOUT_MS);
       page.navigate(baseUrl + "/");
       page.waitForLoadState();
+
+      Locator graphNodes = page.locator(".react-flow__node");
+      int initialNodeCount = graphNodes.count();
+      assertTrue(initialNodeCount > 0, "seed workflow should contain graph nodes");
 
       Locator panel = page.locator("[data-testid='experiment-document-panel']");
       panel.waitFor(new Locator.WaitForOptions().setTimeout(PAGE_LOAD_TIMEOUT_MS));
@@ -87,9 +92,24 @@ class ExperimentDocumentWebIT {
       assertTrue(text.contains(EXPECTED_HASH));
       assertTrue(text.contains("available"));
       assertTrue(text.contains("compatible"));
-      assertEquals(0, page.locator("[data-testid='experiment-document-apply']").count());
+      assertEquals(initialNodeCount, graphNodes.count(), "preview must not mutate the graph");
       assertEquals(0, page.locator("[data-testid='experiment-document-execute']").count());
       assertTrue(page.locator("[data-testid='experiment-document-normalize']").isEnabled());
+
+      Locator apply = page.locator("[data-testid='experiment-document-apply']");
+      assertTrue(apply.isEnabled());
+      AtomicBoolean confirmedNoExecution = new AtomicBoolean(false);
+      page.onceDialog(
+          dialog -> {
+            confirmedNoExecution.set(dialog.message().contains("does not execute"));
+            dialog.accept();
+          });
+      apply.click();
+      page.waitForCondition(() -> page.locator(".react-flow__node").count() == 0);
+
+      assertTrue(confirmedNoExecution.get());
+      assertEquals(0, page.locator(".react-flow__node").count());
+      assertEquals(0, page.locator("[data-testid='experiment-document-execute']").count());
     }
   }
 
