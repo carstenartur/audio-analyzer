@@ -17,7 +17,9 @@ import org.hammer.audio.plugin.document.DocumentValue;
 import org.hammer.audio.plugin.document.ExperimentDocumentContribution;
 import org.hammer.audio.plugin.document.ExperimentSectionMigration;
 
-/** Installed-plugin catalog for safe experiment-document inspection, migration and normalization. */
+/**
+ * Installed-plugin catalog for safe experiment-document inspection, migration and normalization.
+ */
 public final class PluginDocumentCatalog {
 
   private final Map<String, RegisteredPlugin> plugins;
@@ -29,11 +31,13 @@ public final class PluginDocumentCatalog {
     TreeMap<String, RegisteredPlugin> collected = new TreeMap<>();
     for (AudioAnalyzerPlugin plugin : installedPlugins) {
       Objects.requireNonNull(plugin, "plugin");
-      PluginDescriptor descriptor = Objects.requireNonNull(plugin.descriptor(), "plugin descriptor");
+      PluginDescriptor descriptor =
+          Objects.requireNonNull(plugin.descriptor(), "plugin descriptor");
       TreeMap<String, ExperimentDocumentContribution> sections = new TreeMap<>();
       for (ExperimentDocumentContribution contribution : plugin.experimentDocumentContributions()) {
         validateContribution(contribution);
-        ExperimentDocumentContribution previous = sections.put(contribution.sectionId(), contribution);
+        ExperimentDocumentContribution previous =
+            sections.put(contribution.sectionId(), contribution);
         if (previous != null) {
           throw new IllegalArgumentException(
               "Duplicate experiment document section "
@@ -62,8 +66,8 @@ public final class PluginDocumentCatalog {
    * <p>The original document is never rewritten. The returned document is a normalized copy whose
    * migration provenance is explicit.
    */
-  public ExperimentDocumentPreview preview(
-      ExperimentDocument input, ExperimentDocumentCodec codec) throws ExperimentDocumentException {
+  public ExperimentDocumentPreview preview(ExperimentDocument input, ExperimentDocumentCodec codec)
+      throws ExperimentDocumentException {
     Objects.requireNonNull(input, "input");
     Objects.requireNonNull(codec, "codec");
     ArrayList<DocumentDiagnostic> diagnostics = new ArrayList<>();
@@ -71,13 +75,11 @@ public final class PluginDocumentCatalog {
     Set<SectionKey> required = requiredSections(input, diagnostics);
     TreeMap<String, Map<String, ExperimentDocument.PluginSection>> normalizedData = new TreeMap<>();
 
-    for (Map.Entry<String, Map<String, ExperimentDocument.PluginSection>> pluginEntry :
-        input.pluginData().entrySet()) {
+    for (var pluginEntry : input.pluginData().entrySet()) {
       String pluginId = pluginEntry.getKey();
       TreeMap<String, ExperimentDocument.PluginSection> normalizedSections = new TreeMap<>();
       RegisteredPlugin installed = plugins.get(pluginId);
-      for (Map.Entry<String, ExperimentDocument.PluginSection> sectionEntry :
-          pluginEntry.getValue().entrySet()) {
+      for (var sectionEntry : pluginEntry.getValue().entrySet()) {
         String sectionId = sectionEntry.getKey();
         SectionKey key = new SectionKey(pluginId, sectionId);
         boolean requiredSection = required.contains(key);
@@ -86,7 +88,9 @@ public final class PluginDocumentCatalog {
         if (installed == null) {
           diagnostics.add(
               diagnostic(
-                  requiredSection ? DocumentDiagnostic.Severity.ERROR : DocumentDiagnostic.Severity.WARNING,
+                  requiredSection
+                      ? DocumentDiagnostic.Severity.ERROR
+                      : DocumentDiagnostic.Severity.WARNING,
                   pointer,
                   "missing-plugin",
                   "Plugin is not installed; section is preserved without interpretation"));
@@ -97,7 +101,9 @@ public final class PluginDocumentCatalog {
         if (contribution == null) {
           diagnostics.add(
               diagnostic(
-                  requiredSection ? DocumentDiagnostic.Severity.ERROR : DocumentDiagnostic.Severity.WARNING,
+                  requiredSection
+                      ? DocumentDiagnostic.Severity.ERROR
+                      : DocumentDiagnostic.Severity.WARNING,
                   pointer,
                   "missing-section",
                   "Installed plugin does not provide this section; data is preserved"));
@@ -119,7 +125,8 @@ public final class PluginDocumentCatalog {
     }
 
     for (SectionKey key : required) {
-      Map<String, ExperimentDocument.PluginSection> sections = input.pluginData().get(key.pluginId());
+      Map<String, ExperimentDocument.PluginSection> sections =
+          input.pluginData().get(key.pluginId());
       if (sections == null || !sections.containsKey(key.sectionId())) {
         diagnostics.add(
             diagnostic(
@@ -133,8 +140,7 @@ public final class PluginDocumentCatalog {
     ExperimentDocument normalized = withPluginData(input, normalizedData, migrations);
     ExperimentDocument canonical = codec.decode(codec.encode(normalized));
     boolean hasErrors =
-        diagnostics.stream()
-            .anyMatch(item -> item.severity() == DocumentDiagnostic.Severity.ERROR);
+        diagnostics.stream().anyMatch(item -> item.severity() == DocumentDiagnostic.Severity.ERROR);
     boolean compatibilityWarning =
         diagnostics.stream()
             .anyMatch(
@@ -202,11 +208,7 @@ public final class PluginDocumentCatalog {
         return original;
       }
       migrations.add(
-          contribution.sectionId()
-              + ":"
-              + migration.fromVersion()
-              + "->"
-              + migration.toVersion());
+          contribution.sectionId() + ":" + migration.fromVersion() + "->" + migration.toVersion());
       version = migration.toVersion();
     }
     diagnostics.addAll(
@@ -320,8 +322,7 @@ public final class PluginDocumentCatalog {
   }
 
   private static String sectionPointer(String pluginId, String sectionId) {
-    return DocumentValueJson.pointer(
-        DocumentValueJson.pointer("/pluginData", pluginId), sectionId);
+    return DocumentValueJson.pointer(DocumentValueJson.pointer("/pluginData", pluginId), sectionId);
   }
 
   private static DocumentDiagnostic diagnostic(
@@ -330,7 +331,11 @@ public final class PluginDocumentCatalog {
   }
 
   private record RegisteredPlugin(
-      PluginDescriptor descriptor, Map<String, ExperimentDocumentContribution> sections) {}
+      PluginDescriptor descriptor, Map<String, ExperimentDocumentContribution> sections) {
+    // Immutable installed plugin descriptor and section registry.
+  }
 
-  private record SectionKey(String pluginId, String sectionId) {}
+  private record SectionKey(String pluginId, String sectionId) {
+    // Immutable namespaced section identity.
+  }
 }
