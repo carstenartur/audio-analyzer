@@ -9,6 +9,7 @@ import com.fasterxml.jackson.databind.node.NullNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.Map;
 import java.util.TreeMap;
 import org.hammer.audio.plugin.document.DocumentValue;
@@ -33,17 +34,13 @@ final class DocumentValueJson {
     if (node.isObject()) {
       requireSize(node.size(), pointer);
       TreeMap<String, DocumentValue> fields = new TreeMap<>();
-      node.fields()
-          .forEachRemaining(
-              entry -> {
-                try {
-                  String childPointer = pointer(pointer, entry.getKey());
-                  requireString(entry.getKey(), childPointer);
-                  fields.put(entry.getKey(), fromJson(entry.getValue(), childPointer, depth + 1));
-                } catch (ExperimentDocumentException exception) {
-                  throw new WrappedDocumentException(exception);
-                }
-              });
+      Iterator<Map.Entry<String, JsonNode>> entries = node.fields();
+      while (entries.hasNext()) {
+        Map.Entry<String, JsonNode> entry = entries.next();
+        String childPointer = pointer(pointer, entry.getKey());
+        requireString(entry.getKey(), childPointer);
+        fields.put(entry.getKey(), fromJson(entry.getValue(), childPointer, depth + 1));
+      }
       return DocumentValue.object(fields);
     }
     if (node.isArray()) {
@@ -116,14 +113,5 @@ final class DocumentValueJson {
           pointer, "max-string", "Document string exceeds the configured limit");
     }
     return value;
-  }
-
-  private static final class WrappedDocumentException extends RuntimeException {
-
-    private static final long serialVersionUID = 1L;
-
-    private WrappedDocumentException(ExperimentDocumentException cause) {
-      super(cause);
-    }
   }
 }
