@@ -58,11 +58,13 @@ public class WorkbenchConfiguration implements WebMvcConfigurer {
     return new ExperimentDocumentService(pluginRegistry.plugins());
   }
 
-  /** Coordinates confirmed document application with the server-authoritative editor state. */
+  /** Coordinates confirmed document application with editor and collaboration state. */
   @Bean
   public ExperimentDocumentWorkspaceService experimentDocumentWorkspaceService(
-      ExperimentDocumentService documentService, WorkflowEditorService editorService) {
-    return new ExperimentDocumentWorkspaceService(documentService, editorService);
+      ExperimentDocumentService documentService,
+      WorkflowEditorService editorService,
+      WorkflowSessionRegistry sessionRegistry) {
+    return new ExperimentDocumentWorkspaceService(documentService, editorService, sessionRegistry);
   }
 
   /** Creates the bounded transport-neutral collaboration event hub. */
