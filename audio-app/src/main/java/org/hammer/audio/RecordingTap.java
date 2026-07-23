@@ -126,7 +126,7 @@ public final class RecordingTap {
             expectedRate,
             startedAt,
             preflight);
-    tap.writerExecutor.submit(tap::writerLoop);
+    tap.writerExecutor.execute(tap::writerLoop);
     try {
       tap.subscription = service.subscribe(tap::acceptBlock);
     } catch (RuntimeException exception) {
