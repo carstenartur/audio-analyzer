@@ -8,7 +8,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.logging.Logger;
 import org.hammer.audio.core.AudioBlock;
 import org.hammer.audio.recording.AudioBlockRecordingWriter;
 import org.hammer.audio.recording.runtime.RecordingState;
@@ -23,7 +22,6 @@ import org.hammer.audio.recording.runtime.RecordingStorageStatus;
  */
 public final class RecordingTap {
 
-  private static final Logger LOGGER = Logger.getLogger(RecordingTap.class.getName());
   private static final int DEFAULT_QUEUE_CAPACITY = 512;
   private static final long STATUS_INTERVAL_NANOS = TimeUnit.MILLISECONDS.toNanos(100L);
   private static final long STORAGE_INTERVAL_NANOS = TimeUnit.SECONDS.toNanos(1L);
@@ -315,7 +313,6 @@ public final class RecordingTap {
     accepting.set(false);
     stopRequested.set(true);
     closeSubscription();
-    LOGGER.warning(() -> reason + ": " + exception);
   }
 
   private void closeSubscription() {
