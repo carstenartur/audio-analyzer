@@ -25,7 +25,11 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * <p>Persistent startup examples are documented in {@code docs/workbench-hibernate-persistence.md}.
  */
 @SpringBootApplication(
-    scanBasePackages = {"org.hammer.audio.app", "org.hammer.audio.workflow.editor.http"})
+    scanBasePackages = {
+      "org.hammer.audio.app",
+      "org.hammer.audio.experiment.document.http",
+      "org.hammer.audio.workflow.editor.http"
+    })
 public class WorkbenchApplication {
 
   /** Starts the Spring Boot workbench application. */
