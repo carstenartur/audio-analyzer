@@ -80,7 +80,7 @@ public final class FileStoreRecordingStorageProbe implements RecordingStoragePro
   }
 
   private static long safeMultiply(double bytesPerSecond, long seconds) {
-    if (!(bytesPerSecond > 0.0) || !Double.isFinite(bytesPerSecond)) {
+    if (bytesPerSecond <= 0.0 || !Double.isFinite(bytesPerSecond)) {
       return 0L;
     }
     double value = bytesPerSecond * seconds;
