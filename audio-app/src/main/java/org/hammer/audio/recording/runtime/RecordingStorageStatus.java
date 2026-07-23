@@ -67,6 +67,31 @@ public record RecordingStorageStatus(
         "Capacity has not been checked yet.");
   }
 
+  /** Snapshot used when a runtime capacity refresh cannot inspect the backing store. */
+  public static RecordingStorageStatus unavailable(
+      Path destination,
+      long bytesWritten,
+      double measuredBytesPerSecond,
+      double expectedBytesPerSecond,
+      Instant now,
+      String errorMessage) {
+    return new RecordingStorageStatus(
+        destination,
+        "",
+        "",
+        false,
+        -1L,
+        -1L,
+        -1L,
+        bytesWritten,
+        measuredBytesPerSecond,
+        expectedBytesPerSecond,
+        -1L,
+        RecordingStorageLevel.UNKNOWN,
+        now,
+        errorMessage);
+  }
+
   /** Returns whether recording should stop before exhausting the backing store. */
   public boolean critical() {
     return level == RecordingStorageLevel.CRITICAL;
