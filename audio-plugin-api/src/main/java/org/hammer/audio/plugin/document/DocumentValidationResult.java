@@ -12,7 +12,7 @@ import java.util.Objects;
 public record DocumentValidationResult(
     DocumentValue normalizedValue, List<DocumentDiagnostic> diagnostics) {
 
-  /** Validate and defensively copy the result. */
+  // Validate and defensively copy the result.
   public DocumentValidationResult {
     Objects.requireNonNull(normalizedValue, "normalizedValue");
     diagnostics = List.copyOf(Objects.requireNonNull(diagnostics, "diagnostics"));
