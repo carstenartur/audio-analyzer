@@ -13,7 +13,9 @@ public final class ActiveAudioCaptureRegistry {
 
   private static final AtomicReference<AudioCaptureService> ACTIVE = new AtomicReference<>();
 
-  private ActiveAudioCaptureRegistry() {}
+  private ActiveAudioCaptureRegistry() {
+    // utility class
+  }
 
   /** Mark a service active after its producer has started successfully. */
   public static void activate(AudioCaptureService service) {
