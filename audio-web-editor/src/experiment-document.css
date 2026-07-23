@@ -1,0 +1,92 @@
+.experiment-document {
+  margin: -2px -2px 18px;
+  color: #cdd6f4;
+  background: #181825;
+  border: 1px solid #313244;
+  border-radius: 8px;
+}
+
+.experiment-document > summary {
+  padding: 11px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.experiment-document[open] > summary {
+  border-bottom: 1px solid #313244;
+}
+
+.experiment-document__content {
+  padding: 12px;
+}
+
+.experiment-document__status,
+.experiment-document__error {
+  margin: 8px 0;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.experiment-document__status {
+  color: #a6e3a1;
+}
+
+.experiment-document__error,
+.experiment-document__diagnostic--error {
+  color: #f38ba8;
+}
+
+.experiment-document__diagnostic--warning {
+  color: #f9e2af;
+}
+
+.experiment-document__diagnostic--info {
+  color: #89b4fa;
+}
+
+.experiment-document__preview {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #313244;
+}
+
+.experiment-document__facts {
+  display: grid;
+  gap: 5px;
+  margin: 0 0 12px;
+  font-size: 11px;
+}
+
+.experiment-document__facts div {
+  display: grid;
+  grid-template-columns: 80px minmax(0, 1fr);
+  gap: 8px;
+}
+
+.experiment-document__facts dt {
+  color: #a6adc8;
+}
+
+.experiment-document__facts dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.experiment-document__hash {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10px;
+}
+
+.experiment-document__list {
+  margin: 0 0 10px;
+  padding-left: 18px;
+  font-size: 11px;
+}
+
+.experiment-document input[type="file"] {
+  font-size: 11px;
+}
