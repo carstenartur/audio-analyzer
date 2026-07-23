@@ -75,6 +75,10 @@
     </dependency>
     <dependency>
       <groupId>${project.groupId}</groupId>
+      <artifactId>audio-experiment-document</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>${project.groupId}</groupId>
       <artifactId>audio-web-editor</artifactId>
       <version>${project.version}</version>
     </dependency>
