@@ -4,9 +4,6 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.Objects;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -40,8 +37,7 @@ public final class RecordingTap {
   private final RecordingStorageProbe storageProbe;
   private final double expectedBytesPerSecond;
   private final Instant startedAt;
-  private final ExecutorService writerExecutor;
-  private final CountDownLatch completed = new CountDownLatch(1);
+  private final RecordingWorker worker;
   private final RecordingStatusListeners listeners = new RecordingStatusListeners();
   private final AtomicReference<RecordingStatus> currentStatus;
   private final AtomicReference<RecordingStorageStatus> storageStatus;
@@ -121,7 +117,7 @@ public final class RecordingTap {
             expectedRate,
             startedAt,
             preflight);
-    tap.writerExecutor.execute(tap::writerLoop);
+    tap.worker.start(tap::writerLoop);
     try {
       tap.subscription = service.subscribe(tap::acceptBlock);
     } catch (RuntimeException exception) {
@@ -148,13 +144,7 @@ public final class RecordingTap {
     this.expectedBytesPerSecond = expectedBytesPerSecond;
     this.startedAt = startedAt;
     this.storageStatus = new AtomicReference<>(preflight);
-    this.writerExecutor =
-        Executors.newSingleThreadExecutor(
-            runnable -> {
-              Thread thread = new Thread(runnable, "ExperimentRecordingWriter");
-              thread.setDaemon(true);
-              return thread;
-            });
+    this.worker = new RecordingWorker("ExperimentRecordingWriter");
     this.currentStatus =
         new AtomicReference<>(snapshot(RecordingState.STARTING, startedAt, "", ""));
   }
@@ -256,8 +246,7 @@ public final class RecordingTap {
       abortWriter();
     } finally {
       finishStatus();
-      completed.countDown();
-      writerExecutor.shutdown();
+      worker.complete();
     }
   }
 
@@ -346,9 +335,9 @@ public final class RecordingTap {
 
   private void awaitCompletion() throws IOException {
     try {
-      if (!completed.await(STOP_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+      if (!worker.await(STOP_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
         incomplete.set(true);
-        writerExecutor.shutdownNow();
+        worker.cancel();
         throw new IOException("Timed out while draining the recording queue");
       }
     } catch (InterruptedException exception) {
