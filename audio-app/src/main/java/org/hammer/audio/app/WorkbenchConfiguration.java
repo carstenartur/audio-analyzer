@@ -1,6 +1,9 @@
 package org.hammer.audio.app;
 
 import java.util.List;
+import org.hammer.audio.experiment.document.ExperimentDocumentService;
+import org.hammer.audio.pluginhost.PluginManager;
+import org.hammer.audio.pluginhost.PluginRegistry;
 import org.hammer.audio.workflow.Edge;
 import org.hammer.audio.workflow.Node;
 import org.hammer.audio.workflow.Workflow;
@@ -40,6 +43,18 @@ public class WorkbenchConfiguration implements WebMvcConfigurer {
     WorkflowOperationLog log = new WorkflowOperationLog(seedWorkflow());
     WorkflowValidator validator = new WorkflowValidator();
     return new WorkflowEditorService(log, validator, storeProvider.getIfAvailable());
+  }
+
+  /** Discovers the installed trusted plugins exactly once for the workbench application. */
+  @Bean
+  public PluginRegistry pluginRegistry() {
+    return new PluginManager().loadPlugins();
+  }
+
+  /** Creates the shared safe experiment-document service from the installed plugin registry. */
+  @Bean
+  public ExperimentDocumentService experimentDocumentService(PluginRegistry pluginRegistry) {
+    return new ExperimentDocumentService(pluginRegistry.plugins());
   }
 
   /** Creates the bounded transport-neutral collaboration event hub. */
