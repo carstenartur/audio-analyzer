@@ -97,8 +97,7 @@ class RecordingTapPipelineTest {
                 checkedAt,
                 "read-only");
 
-    assertThrows(
-        IOException.class, () -> RecordingTap.start(service, file, 16, probe, START));
+    assertThrows(IOException.class, () -> RecordingTap.start(service, file, 16, probe, START));
     assertFalse(java.nio.file.Files.exists(file));
     assertFalse(java.nio.file.Files.exists(file.resolveSibling("unwritable.aarec.partial")));
   }
