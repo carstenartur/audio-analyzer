@@ -82,6 +82,42 @@ jobs:
                       raise SystemExit('Unexpected schema-validator import anchor')
                   source = source.replace(anchor, anchor + 'import java.io.IOException;\n', 1)
               source_path.write_text(source, encoding='utf-8')
+
+          catalog_path = Path(
+              'audio-experiment-document/src/main/java/org/hammer/audio/experiment/document/PluginDocumentCatalog.java')
+          catalog = catalog_path.read_text(encoding='utf-8')
+          catalog_replacements = [
+              (
+                  '    for (Map.Entry<String, Map<String, ExperimentDocument.PluginSection>> pluginEntry :\n'
+                  '        input.pluginData().entrySet()) {',
+                  '    for (var pluginEntry : input.pluginData().entrySet()) {'
+              ),
+              (
+                  '      for (Map.Entry<String, ExperimentDocument.PluginSection> sectionEntry :\n'
+                  '          pluginEntry.getValue().entrySet()) {',
+                  '      for (var sectionEntry : pluginEntry.getValue().entrySet()) {'
+              ),
+              (
+                  '  private record RegisteredPlugin(\n'
+                  '      PluginDescriptor descriptor, Map<String, ExperimentDocumentContribution> sections) {}',
+                  '  private record RegisteredPlugin(\n'
+                  '      PluginDescriptor descriptor, Map<String, ExperimentDocumentContribution> sections) {\n'
+                  '    // Immutable installed plugin descriptor and section registry.\n'
+                  '  }'
+              ),
+              (
+                  '  private record SectionKey(String pluginId, String sectionId) {}',
+                  '  private record SectionKey(String pluginId, String sectionId) {\n'
+                  '    // Immutable namespaced section identity.\n'
+                  '  }'
+              ),
+          ]
+          for old, new in catalog_replacements:
+              if old in catalog:
+                  catalog = catalog.replace(old, new, 1)
+              elif new not in catalog:
+                  raise SystemExit(f'Unexpected plugin catalog structure: {old!r}')
+          catalog_path.write_text(catalog, encoding='utf-8')
           PY
 
       - name: Apply repository formatter
