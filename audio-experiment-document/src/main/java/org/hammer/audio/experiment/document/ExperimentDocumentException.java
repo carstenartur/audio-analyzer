@@ -18,8 +18,7 @@ public final class ExperimentDocumentException extends IOException {
   }
 
   /** Create a pointer-aware document failure with an underlying parser error. */
-  public ExperimentDocumentException(
-      String pointer, String code, String message, Throwable cause) {
+  public ExperimentDocumentException(String pointer, String code, String message, Throwable cause) {
     super(message, cause);
     this.pointer = pointer == null || pointer.isBlank() ? "/" : pointer;
     this.code = ExperimentDocument.requireIdentifier(code, "diagnostic code");
