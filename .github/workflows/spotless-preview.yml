@@ -1,9 +1,7 @@
 name: Spotless Preview
 
 on:
-  push:
-    branches:
-      - feature/309-311-portable-experiment-document
+  pull_request:
     paths:
       - audio-experiment-document/**
       - .github/workflows/spotless-preview.yml
