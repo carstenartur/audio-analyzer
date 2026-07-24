@@ -85,7 +85,8 @@ public record ExperimentDocument(
       tags = normalizedStrings(tags, "tag");
       intent = requireIdentifier(intent, "experiment intent");
       sourceMode = requireIdentifier(sourceMode, "source mode");
-      if (intendedDuration != null && (intendedDuration.isNegative() || intendedDuration.isZero())) {
+      if (intendedDuration != null
+          && (intendedDuration.isNegative() || intendedDuration.isZero())) {
         throw new IllegalArgumentException("intendedDuration must be positive");
       }
       applicationVersion = requireNonBlank(applicationVersion, "applicationVersion");
@@ -140,8 +141,7 @@ public record ExperimentDocument(
    * @param algorithmVersion algorithm compatibility identifier
    * @param data plugin-owned bounded data
    */
-  public record PluginSection(
-      int schemaVersion, String algorithmVersion, DocumentValue data) {
+  public record PluginSection(int schemaVersion, String algorithmVersion, DocumentValue data) {
 
     /** Validate plugin section metadata. */
     public PluginSection {
