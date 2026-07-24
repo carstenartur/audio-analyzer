@@ -41,7 +41,8 @@ class ExperimentDocumentCodecTest {
   void duplicateCoreKeysAreRejected() throws Exception {
     ExperimentDocumentCodec codec = new ExperimentDocumentCodec();
     String json = new String(codec.encode(document(Map.of(), List.of())), StandardCharsets.UTF_8);
-    String malicious = json.replaceFirst("\\\"format\\\":", "\\\"format\\\":\\\"shadow\\\",\\\"format\\\":");
+    String malicious =
+        json.replaceFirst("\\\"format\\\":", "\\\"format\\\":\\\"shadow\\\",\\\"format\\\":");
 
     ExperimentDocumentException exception =
         assertThrows(
@@ -55,7 +56,9 @@ class ExperimentDocumentCodecTest {
   void traversalAndAbsoluteOutputNamesAreRejectedBeforeSave() {
     assertThrows(
         IllegalArgumentException.class,
-        () -> new ExperimentDocument.AssetReference("asset", "../secret.wav", "audio/wav", 1L, zeros()));
+        () ->
+            new ExperimentDocument.AssetReference(
+                "asset", "../secret.wav", "audio/wav", 1L, zeros()));
     assertThrows(
         IllegalArgumentException.class,
         () -> new ExperimentDocument.OutputRequest("report", "text/markdown", "../report.md"));
@@ -65,11 +68,15 @@ class ExperimentDocumentCodecTest {
   void missingRequiredPluginRemainsInspectableButBlocksExecution() throws Exception {
     ExperimentDocument.PluginSection section =
         new ExperimentDocument.PluginSection(
-            1, "algorithm/1", DocumentValue.object(Map.of("value", DocumentValue.number(java.math.BigDecimal.ONE))));
+            1,
+            "algorithm/1",
+            DocumentValue.object(Map.of("value", DocumentValue.number(java.math.BigDecimal.ONE))));
     ExperimentDocument source =
         document(
             Map.of("missing-plugin", Map.of("settings", section)),
-            List.of(new ExperimentDocument.PluginRequirement("missing-plugin", "*", List.of("settings"))));
+            List.of(
+                new ExperimentDocument.PluginRequirement(
+                    "missing-plugin", "*", List.of("settings"))));
     ExperimentDocumentCodec codec = new ExperimentDocumentCodec();
     ExperimentDocument loaded = codec.decode(codec.encode(source));
 
@@ -78,16 +85,22 @@ class ExperimentDocumentCodecTest {
     assertFalse(preview.executionAllowed());
     assertTrue(preview.readOnly());
     assertEquals(section, preview.document().pluginData().get("missing-plugin").get("settings"));
-    assertTrue(preview.diagnostics().stream().anyMatch(item -> item.code().equals("missing-plugin")));
+    assertTrue(
+        preview.diagnostics().stream().anyMatch(item -> item.code().equals("missing-plugin")));
   }
 
   @Test
   void optionalUnknownPluginDataSurvivesCanonicalRoundTrip() throws Exception {
     ExperimentDocument.PluginSection section =
         new ExperimentDocument.PluginSection(
-            7, "future/7", DocumentValue.object(Map.of("opaque", DocumentValue.string("preserve"))));
+            7,
+            "future/7",
+            DocumentValue.object(Map.of("opaque", DocumentValue.string("preserve"))));
     ExperimentDocumentCodec codec = new ExperimentDocumentCodec();
-    ExperimentDocument loaded = codec.decode(codec.encode(document(Map.of("future-plugin", Map.of("opaque-section", section)), List.of())));
+    ExperimentDocument loaded =
+        codec.decode(
+            codec.encode(
+                document(Map.of("future-plugin", Map.of("opaque-section", section)), List.of())));
 
     ExperimentDocumentPreview preview = PluginDocumentCatalog.empty().preview(loaded, codec);
     ExperimentDocument roundTrip = codec.decode(codec.encode(preview.document()));
@@ -106,7 +119,8 @@ class ExperimentDocumentCodecTest {
         new AudioAnalyzerPlugin() {
           @Override
           public PluginDescriptor descriptor() {
-            return new PluginDescriptor("gain-plugin", "Gain", "1.0.0", "Gain settings", null, false);
+            return new PluginDescriptor(
+                "gain-plugin", "Gain", "1.0.0", "Gain settings", null, false);
           }
 
           @Override
@@ -121,9 +135,12 @@ class ExperimentDocumentCodecTest {
             DocumentValue.object(Map.of("gain", DocumentValue.number(java.math.BigDecimal.ONE))));
     ExperimentDocumentCodec codec = new ExperimentDocumentCodec();
     ExperimentDocument loaded =
-        codec.decode(codec.encode(document(Map.of("gain-plugin", Map.of("gain-settings", section)), List.of())));
+        codec.decode(
+            codec.encode(
+                document(Map.of("gain-plugin", Map.of("gain-settings", section)), List.of())));
 
-    ExperimentDocumentPreview preview = new PluginDocumentCatalog(List.of(plugin)).preview(loaded, codec);
+    ExperimentDocumentPreview preview =
+        new PluginDocumentCatalog(List.of(plugin)).preview(loaded, codec);
 
     assertTrue(preview.executionAllowed());
     assertEquals(List.of("gain-settings:1->2"), preview.migrations());
