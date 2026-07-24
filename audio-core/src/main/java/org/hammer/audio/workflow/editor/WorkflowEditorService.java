@@ -230,7 +230,8 @@ public final class WorkflowEditorService {
         throw new WorkflowOperationRejectedException(violations);
       }
       VersionedWorkflowStore store = requireStore();
-      WorkflowSnapshot snapshot = new WorkflowSnapshot(workflow.id(), serializer.serialize(workflow));
+      WorkflowSnapshot snapshot =
+          new WorkflowSnapshot(workflow.id(), serializer.serialize(workflow));
       CommitId commitId = store.commit(branch, snapshot, metadata);
       dirty = false;
       return commitId;
