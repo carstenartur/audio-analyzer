@@ -23,12 +23,9 @@ public record ExperimentLocalBindings(Map<String, Path> assetPaths, Path outputD
         (assetId, path) ->
             copy.put(
                 ExperimentDocument.requireIdentifier(assetId, "asset binding id"),
-                Objects.requireNonNull(path, "asset binding path")
-                    .toAbsolutePath()
-                    .normalize()));
+                Objects.requireNonNull(path, "asset binding path").toAbsolutePath().normalize()));
     assetPaths = Collections.unmodifiableMap(copy);
-    outputDirectory =
-        outputDirectory == null ? null : outputDirectory.toAbsolutePath().normalize();
+    outputDirectory = outputDirectory == null ? null : outputDirectory.toAbsolutePath().normalize();
   }
 
   /** Return the local path selected for one portable asset requirement. */
