@@ -1,9 +1,9 @@
 name: Apply SpotBugs Fixes
 
 on:
-  push:
+  pull_request:
     branches:
-      - feature/309-311-portable-experiment-document
+      - master
     paths:
       - .github/workflows/apply-spotbugs-fixes.yml
 
@@ -14,8 +14,10 @@ jobs:
   apply:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out branch
+      - name: Check out feature branch
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
 
       - name: Set up JDK 21
         uses: actions/setup-java@v5
@@ -168,4 +170,4 @@ jobs:
             audio-experiment-document/src/main/java/org/hammer/audio/experiment/document/ExperimentDocumentCodec.java
           git diff --cached --check
           git commit -m "Fix experiment document representation exposure"
-          git push origin "HEAD:${GITHUB_REF_NAME}"
+          git push origin "HEAD:${{ github.event.pull_request.head.ref }}"
