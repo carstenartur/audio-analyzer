@@ -27,8 +27,7 @@ public final class ExperimentDocumentService {
     this(new ExperimentDocumentCodec(), new PluginDocumentCatalog(installedPlugins));
   }
 
-  ExperimentDocumentService(
-      ExperimentDocumentCodec codec, PluginDocumentCatalog pluginCatalog) {
+  ExperimentDocumentService(ExperimentDocumentCodec codec, PluginDocumentCatalog pluginCatalog) {
     this.codec = Objects.requireNonNull(codec, "codec");
     this.pluginCatalog = Objects.requireNonNull(pluginCatalog, "pluginCatalog");
   }
