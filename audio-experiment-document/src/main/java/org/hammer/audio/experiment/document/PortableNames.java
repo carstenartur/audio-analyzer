@@ -1,7 +1,6 @@
 package org.hammer.audio.experiment.document;
 
 import java.nio.file.Path;
-import java.util.Objects;
 
 /** Strict validators for portable asset references and output basenames. */
 public final class PortableNames {
@@ -29,12 +28,14 @@ public final class PortableNames {
   /** Require a single portable filename component without path separators or traversal. */
   public static String requireBaseName(String value) {
     String checked = ExperimentDocument.requireNonBlank(value, "baseName");
+    Path fileName = Path.of(checked).getFileName();
     if (checked.equals(".")
         || checked.equals("..")
         || checked.indexOf('/') >= 0
         || checked.indexOf('\\') >= 0
         || checked.indexOf(':') >= 0
-        || !Objects.equals(Path.of(checked).getFileName().toString(), checked)) {
+        || fileName == null
+        || !fileName.toString().equals(checked)) {
       throw new IllegalArgumentException("baseName must be one portable filename component");
     }
     return checked;
