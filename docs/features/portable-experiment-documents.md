@@ -7,14 +7,14 @@ large datasets, credentials, local output directories or executable implementati
 
 ## Public identity
 
-| Property | Value |
-| --- | --- |
-| Preferred extension | `.audioexp` |
-| Media type | `application/vnd.carstenartur.audio-analyzer.experiment+json` |
-| Format identifier | `io.github.carstenartur.audio-analyzer.experiment` |
-| Current envelope version | `1` |
-| Embedded workflow format | `io.github.carstenartur.audio-analyzer.workflow-dsl` |
-| Public schema resource | `schemas/audio-analyzer-experiment-v1.schema.json` |
+|         Property          |                             Value                             |
+|--------------------------|---------------------------------------------------------------|
+| Preferred extension      | `.audioexp`                                                    |
+| Media type               | `application/vnd.carstenartur.audio-analyzer.experiment+json` |
+| Format identifier        | `io.github.carstenartur.audio-analyzer.experiment`            |
+| Current envelope version | `1`                                                           |
+| Embedded workflow format | `io.github.carstenartur.audio-analyzer.workflow-dsl`          |
+| Public schema resource   | `schemas/audio-analyzer-experiment-v1.schema.json`            |
 
 The extension and media type are hints only. Every importer verifies `format`, `formatVersion`, the
 checked-in schema identity, the canonical workflow hash and the canonical document hash.
@@ -183,12 +183,12 @@ The CLI uses the same codec and plugin-resolution service as application adapter
 
 The Spring workbench exposes these endpoints:
 
-| Method | Path | Purpose |
-| --- | --- | --- |
-| `POST` | `/experiment-documents/preview` | Validate and return a safe summary and diagnostics |
-| `POST` | `/experiment-documents/normalize` | Return canonical `.audioexp` bytes |
-| `POST` | `/experiment-documents/apply` | Revalidate and explicitly replace the editable workflow |
-| `GET` | `/experiment-documents/schema` | Return the bundled local v1 schema |
+| Method |               Path                |                         Purpose                         |
+|--------|-----------------------------------|---------------------------------------------------------|
+| `POST` | `/experiment-documents/preview`   | Validate and return a safe summary and diagnostics      |
+| `POST` | `/experiment-documents/normalize` | Return canonical `.audioexp` bytes                      |
+| `POST` | `/experiment-documents/apply`     | Revalidate and explicitly replace the editable workflow |
+| `GET`  | `/experiment-documents/schema`    | Return the bundled local v1 schema                       |
 
 Preview and normalize accept the dedicated media type and `application/json` for tooling
 compatibility. Normalize responds with the dedicated media type and an `.audioexp` attachment name.
