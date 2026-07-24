@@ -45,6 +45,51 @@ jobs:
       - name: Validate dependency resolution
         run: mvn -B validate --file pom.xml
 
+      # The submission action performs this Maven operation internally, but only on pushes.
+      # Running the same graph generation in pull requests keeps the technical part locally
+      # reproducible and prevents an invalid reactor graph from reaching the default branch.
+      - name: Verify Maven dependency graph generation
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          set -o pipefail
+          ./mvnw -B -DskipTests \
+            com.github.ferstl:depgraph-maven-plugin:4.0.3:graph \
+            -DgraphFormat=json \
+            -DoutputFileName=maven-dependency-submission-action-depgraph.json \
+            2>&1 | tee dependency-graph-generation.log
+
+      - name: Upload dependency graph diagnostics
+        if: failure() && github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v7
+        with:
+          name: dependency-graph-generation-failure
+          path: |
+            dependency-graph-generation.log
+            **/target/maven-dependency-submission-action-depgraph.json
+          if-no-files-found: warn
+          retention-days: 30
+
+      # Publishing repository metadata is GitHub-specific and must not redefine whether the
+      # Maven project itself is healthy. Generation remains a hard PR gate above; a transient
+      # API/submission failure stays visible as a warning without turning master red.
       - name: Submit resolved dependency graph
+        id: dependency-submission
         if: github.event_name != 'pull_request'
+        continue-on-error: true
         uses: advanced-security/maven-dependency-submission-action@c7818038197dfab7dc48236d43a81d439a84a5f7
+        with:
+          token: ${{ github.token }}
+
+      - name: Report dependency submission warning
+        if: steps.dependency-submission.outcome == 'failure'
+        shell: bash
+        run: |
+          echo '::warning::Maven dependency graph generation or submission failed. The Maven validation succeeded; inspect this step before the next dependency update.'
+          {
+            echo '### Dependency submission warning'
+            echo
+            echo 'The Maven project validated successfully, but GitHub dependency graph publication failed.'
+            echo 'The publication is intentionally non-blocking because it is repository metadata rather than a build or test result.'
+            echo 'Inspect the preceding action log before the next dependency update.'
+          } >> "$GITHUB_STEP_SUMMARY"
