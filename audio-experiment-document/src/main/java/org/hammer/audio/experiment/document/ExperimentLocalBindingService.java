@@ -141,7 +141,9 @@ public final class ExperimentLocalBindingService {
   }
 
   private static String safeMessage(IOException exception) {
-    return exception.getMessage() == null ? exception.getClass().getSimpleName() : exception.getMessage();
+    return exception.getMessage() == null
+        ? exception.getClass().getSimpleName()
+        : exception.getMessage();
   }
 
   private static DocumentDiagnostic error(String pointer, String code, String message) {
