@@ -12,6 +12,9 @@ import java.util.TreeMap;
  *
  * <p>This value is deliberately not serializable into {@code .audioexp}. Absolute asset and output
  * paths remain local application state.
+ *
+ * @param assetPaths local paths selected for portable asset identifiers
+ * @param outputDirectory optional local directory selected for requested outputs
  */
 public record ExperimentLocalBindings(Map<String, Path> assetPaths, Path outputDirectory) {
 
