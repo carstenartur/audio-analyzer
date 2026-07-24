@@ -24,8 +24,7 @@ public final class ExperimentDocumentFormat {
   public static final int WORKFLOW_VERSION = 1;
 
   /** Public schema resource path. */
-  public static final String SCHEMA_RESOURCE =
-      "schemas/audio-analyzer-experiment-v1.schema.json";
+  public static final String SCHEMA_RESOURCE = "schemas/audio-analyzer-experiment-v1.schema.json";
 
   /** Maximum accepted UTF-8 document bytes. */
   public static final int MAX_DOCUMENT_BYTES = 2 * 1024 * 1024;
