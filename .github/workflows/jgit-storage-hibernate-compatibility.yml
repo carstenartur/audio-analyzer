@@ -47,7 +47,22 @@ jobs:
         working-directory: jgit-storage-hibernate
         run: mvn -B -DskipTests install
 
+      - name: Remove candidate source from consumer worktree
+        run: rm -rf jgit-storage-hibernate
+
       - name: Verify complete Audio Analyzer reactor against candidate
-        run: >-
-          mvn -B clean verify
-          -Djgit-storage-hibernate.version=0.1.9-SNAPSHOT
+        shell: bash
+        run: |
+          set -o pipefail
+          mvn -B clean verify \
+            -Djgit-storage-hibernate.version=0.1.9-SNAPSHOT \
+            2>&1 | tee jgit-storage-hibernate-compatibility.log
+
+      - name: Upload compatibility build log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: jgit-storage-hibernate-compatibility-log
+          path: jgit-storage-hibernate-compatibility.log
+          if-no-files-found: error
+          retention-days: 30
