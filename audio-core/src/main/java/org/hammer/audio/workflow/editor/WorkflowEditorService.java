@@ -22,7 +22,7 @@ import org.hammer.audio.workflow.store.WorkflowSnapshot;
  * layer; they must not access DSL, JGit, storage internals or mutable UI state as canonical
  * workflow state.
  *
- * <p><b>Thread safety</b>: public state access is serialised on the service instance. Validation,
+ * <p><b>Thread safety</b>: public state access is serialised on a private lock. Validation,
  * dirty-state checks and graph replacement therefore form one atomic editor transition.
  *
  * <p><b>Dependency rules</b>: this class must not depend on Swing, JGit, React, Yjs, Selenium,
@@ -30,6 +30,7 @@ import org.hammer.audio.workflow.store.WorkflowSnapshot;
  */
 public final class WorkflowEditorService {
 
+  private final Object stateLock = new Object();
   private final WorkflowOperationLog operationLog;
   private final WorkflowValidator validator;
   private final VersionedWorkflowStore workflowStore;
@@ -78,21 +79,25 @@ public final class WorkflowEditorService {
    * @throws WorkflowOperationRejectedException if the resulting workflow violates structural rules
    * @throws IllegalArgumentException if the operation references nodes or ports that do not exist
    */
-  public synchronized WorkflowProjection applyOperation(WorkflowOperation operation) {
-    Objects.requireNonNull(operation, "operation");
-    Workflow candidate = operation.apply(operationLog.currentWorkflow());
-    List<String> violations = validator.validate(candidate);
-    if (!violations.isEmpty()) {
-      throw new WorkflowOperationRejectedException(violations);
+  public WorkflowProjection applyOperation(WorkflowOperation operation) {
+    synchronized (stateLock) {
+      Objects.requireNonNull(operation, "operation");
+      Workflow candidate = operation.apply(operationLog.currentWorkflow());
+      List<String> violations = validator.validate(candidate);
+      if (!violations.isEmpty()) {
+        throw new WorkflowOperationRejectedException(violations);
+      }
+      operationLog.apply(operation);
+      dirty = true;
+      return WorkflowProjection.fromWorkflow(operationLog.currentWorkflow());
     }
-    operationLog.apply(operation);
-    dirty = true;
-    return WorkflowProjection.fromWorkflow(operationLog.currentWorkflow());
   }
 
   /** Returns whether the editable workflow differs from its last clean load/checkpoint state. */
-  public synchronized boolean isDirty() {
-    return dirty;
+  public boolean isDirty() {
+    synchronized (stateLock) {
+      return dirty;
+    }
   }
 
   /**
@@ -100,8 +105,10 @@ public final class WorkflowEditorService {
    *
    * @return current projection
    */
-  public synchronized WorkflowProjection currentProjection() {
-    return WorkflowProjection.fromWorkflow(operationLog.currentWorkflow());
+  public WorkflowProjection currentProjection() {
+    synchronized (stateLock) {
+      return WorkflowProjection.fromWorkflow(operationLog.currentWorkflow());
+    }
   }
 
   /**
@@ -111,8 +118,10 @@ public final class WorkflowEditorService {
    * @return projection of the loaded workflow
    * @throws WorkflowOperationRejectedException if the workflow is structurally invalid
    */
-  public synchronized WorkflowProjection loadGraph(Workflow workflow) {
-    return replaceGraph(workflow, false);
+  public WorkflowProjection loadGraph(Workflow workflow) {
+    synchronized (stateLock) {
+      return replaceGraph(workflow, false);
+    }
   }
 
   /**
@@ -122,8 +131,10 @@ public final class WorkflowEditorService {
    * @return projection of the imported workflow
    * @throws WorkflowOperationRejectedException if the workflow is structurally invalid
    */
-  public synchronized WorkflowProjection importGraph(Workflow workflow) {
-    return replaceGraph(workflow, true);
+  public WorkflowProjection importGraph(Workflow workflow) {
+    synchronized (stateLock) {
+      return replaceGraph(workflow, true);
+    }
   }
 
   /**
@@ -135,11 +146,13 @@ public final class WorkflowEditorService {
    * @throws DirtyWorkflowException when current state is dirty and discard was not confirmed
    * @throws WorkflowOperationRejectedException if the workflow is structurally invalid
    */
-  public synchronized WorkflowProjection importGraph(Workflow workflow, boolean discardDirty) {
-    if (dirty && !discardDirty) {
-      throw new DirtyWorkflowException();
+  public WorkflowProjection importGraph(Workflow workflow, boolean discardDirty) {
+    synchronized (stateLock) {
+      if (dirty && !discardDirty) {
+        throw new DirtyWorkflowException();
+      }
+      return replaceGraph(workflow, true);
     }
-    return replaceGraph(workflow, true);
   }
 
   /**
@@ -149,16 +162,18 @@ public final class WorkflowEditorService {
    * @return projection of the loaded workflow
    * @throws IllegalArgumentException if branch is blank or snapshot and DSL workflow IDs diverge
    */
-  public synchronized WorkflowProjection loadGraph(String branch) {
-    Objects.requireNonNull(branch, "branch");
-    if (branch.isBlank()) {
-      throw new IllegalArgumentException("branch must not be blank");
+  public WorkflowProjection loadGraph(String branch) {
+    synchronized (stateLock) {
+      Objects.requireNonNull(branch, "branch");
+      if (branch.isBlank()) {
+        throw new IllegalArgumentException("branch must not be blank");
+      }
+      VersionedWorkflowStore store = requireStore();
+      WorkflowSnapshot snapshot = store.loadHead(branch);
+      Workflow workflow = parser.parse(snapshot.dslText());
+      assertSnapshotIdMatchesDsl(snapshot.workflowId(), workflow.id());
+      return replaceGraph(workflow, false);
     }
-    VersionedWorkflowStore store = requireStore();
-    WorkflowSnapshot snapshot = store.loadHead(branch);
-    Workflow workflow = parser.parse(snapshot.dslText());
-    assertSnapshotIdMatchesDsl(snapshot.workflowId(), workflow.id());
-    return replaceGraph(workflow, false);
   }
 
   /**
@@ -168,13 +183,15 @@ public final class WorkflowEditorService {
    * @return projection of the loaded workflow
    * @throws IllegalArgumentException if snapshot and DSL workflow IDs diverge
    */
-  public synchronized WorkflowProjection loadGraph(CommitId commitId) {
-    Objects.requireNonNull(commitId, "commitId");
-    VersionedWorkflowStore store = requireStore();
-    WorkflowSnapshot snapshot = store.loadAtCommit(commitId);
-    Workflow workflow = parser.parse(snapshot.dslText());
-    assertSnapshotIdMatchesDsl(snapshot.workflowId(), workflow.id());
-    return replaceGraph(workflow, false);
+  public WorkflowProjection loadGraph(CommitId commitId) {
+    synchronized (stateLock) {
+      Objects.requireNonNull(commitId, "commitId");
+      VersionedWorkflowStore store = requireStore();
+      WorkflowSnapshot snapshot = store.loadAtCommit(commitId);
+      Workflow workflow = parser.parse(snapshot.dslText());
+      assertSnapshotIdMatchesDsl(snapshot.workflowId(), workflow.id());
+      return replaceGraph(workflow, false);
+    }
   }
 
   /**
@@ -182,8 +199,10 @@ public final class WorkflowEditorService {
    *
    * @return list of structural validation violations; empty when valid
    */
-  public synchronized List<String> validate() {
-    return validator.validate(operationLog.currentWorkflow());
+  public List<String> validate() {
+    synchronized (stateLock) {
+      return validator.validate(operationLog.currentWorkflow());
+    }
   }
 
   /**
@@ -198,22 +217,24 @@ public final class WorkflowEditorService {
    * @throws IllegalArgumentException if branch is blank
    * @throws WorkflowOperationRejectedException if the current workflow is structurally invalid
    */
-  public synchronized CommitId checkpoint(String branch, CommitMetadata metadata) {
-    Objects.requireNonNull(branch, "branch");
-    if (branch.isBlank()) {
-      throw new IllegalArgumentException("branch must not be blank");
+  public CommitId checkpoint(String branch, CommitMetadata metadata) {
+    synchronized (stateLock) {
+      Objects.requireNonNull(branch, "branch");
+      if (branch.isBlank()) {
+        throw new IllegalArgumentException("branch must not be blank");
+      }
+      Objects.requireNonNull(metadata, "metadata");
+      Workflow workflow = operationLog.currentWorkflow();
+      List<String> violations = validator.validate(workflow);
+      if (!violations.isEmpty()) {
+        throw new WorkflowOperationRejectedException(violations);
+      }
+      VersionedWorkflowStore store = requireStore();
+      WorkflowSnapshot snapshot = new WorkflowSnapshot(workflow.id(), serializer.serialize(workflow));
+      CommitId commitId = store.commit(branch, snapshot, metadata);
+      dirty = false;
+      return commitId;
     }
-    Objects.requireNonNull(metadata, "metadata");
-    Workflow workflow = operationLog.currentWorkflow();
-    List<String> violations = validator.validate(workflow);
-    if (!violations.isEmpty()) {
-      throw new WorkflowOperationRejectedException(violations);
-    }
-    VersionedWorkflowStore store = requireStore();
-    WorkflowSnapshot snapshot = new WorkflowSnapshot(workflow.id(), serializer.serialize(workflow));
-    CommitId commitId = store.commit(branch, snapshot, metadata);
-    dirty = false;
-    return commitId;
   }
 
   /**
@@ -224,16 +245,18 @@ public final class WorkflowEditorService {
    * @return reverse-chronological commit summaries
    * @throws IllegalArgumentException if refName is blank or limit is negative
    */
-  public synchronized List<CommitInfo> history(String refName, int limit) {
-    Objects.requireNonNull(refName, "refName");
-    if (refName.isBlank()) {
-      throw new IllegalArgumentException("refName must not be blank");
+  public List<CommitInfo> history(String refName, int limit) {
+    synchronized (stateLock) {
+      Objects.requireNonNull(refName, "refName");
+      if (refName.isBlank()) {
+        throw new IllegalArgumentException("refName must not be blank");
+      }
+      if (limit < 0) {
+        throw new IllegalArgumentException("limit must be >= 0");
+      }
+      VersionedWorkflowStore store = requireStore();
+      return store.history(refName, limit);
     }
-    if (limit < 0) {
-      throw new IllegalArgumentException("limit must be >= 0");
-    }
-    VersionedWorkflowStore store = requireStore();
-    return store.history(refName, limit);
   }
 
   /**
@@ -244,9 +267,11 @@ public final class WorkflowEditorService {
    *
    * @return immutable workflow snapshot
    */
-  public synchronized WorkflowSnapshot executeSnapshot() {
-    Workflow workflow = operationLog.currentWorkflow();
-    return new WorkflowSnapshot(workflow.id(), serializer.serialize(workflow));
+  public WorkflowSnapshot executeSnapshot() {
+    synchronized (stateLock) {
+      Workflow workflow = operationLog.currentWorkflow();
+      return new WorkflowSnapshot(workflow.id(), serializer.serialize(workflow));
+    }
   }
 
   private WorkflowProjection replaceGraph(Workflow workflow, boolean imported) {
