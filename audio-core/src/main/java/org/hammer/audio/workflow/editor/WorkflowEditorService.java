@@ -25,8 +25,8 @@ import org.hammer.audio.workflow.store.WorkflowSnapshot;
  * layer; they must not access DSL, JGit, storage internals or mutable UI state as canonical
  * workflow state.
  *
- * <p><b>Thread safety</b>: public state access is serialised on a private reentrant lock. Validation,
- * dirty-state checks and graph replacement therefore form one atomic editor transition.
+ * <p><b>Thread safety</b>: public state access is serialised on a private reentrant lock.
+ * Validation, dirty-state checks and graph replacement therefore form one atomic editor transition.
  *
  * <p><b>Dependency rules</b>: this class must not depend on Swing, JGit, React, Yjs, Selenium,
  * Playwright, Testcontainers or any web framework. It is a pure Java application service.
