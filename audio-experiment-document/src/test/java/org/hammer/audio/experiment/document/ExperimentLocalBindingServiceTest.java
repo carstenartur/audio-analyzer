@@ -69,8 +69,10 @@ class ExperimentLocalBindingServiceTest {
         new ExperimentLocalBindingService().inspect(preview, bindings);
 
     assertFalse(result.ready());
-    assertTrue(result.diagnostics().stream().anyMatch(item -> item.code().equals("asset-size-mismatch")));
-    assertTrue(result.diagnostics().stream().anyMatch(item -> item.code().equals("asset-hash-mismatch")));
+    assertTrue(
+        result.diagnostics().stream().anyMatch(item -> item.code().equals("asset-size-mismatch")));
+    assertTrue(
+        result.diagnostics().stream().anyMatch(item -> item.code().equals("asset-hash-mismatch")));
     assertTrue(
         result.diagnostics().stream()
             .anyMatch(
@@ -113,8 +115,7 @@ class ExperimentLocalBindingServiceTest {
                     sha256)),
             withOutput
                 ? List.of(
-                    new ExperimentDocument.OutputRequest(
-                        "report", "text/markdown", "report.md"))
+                    new ExperimentDocument.OutputRequest("report", "text/markdown", "report.md"))
                 : List.of(),
             new ExperimentDocument.Provenance(
                 "Binding Test",
