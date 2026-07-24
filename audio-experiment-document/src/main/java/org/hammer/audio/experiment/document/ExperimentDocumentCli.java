@@ -41,9 +41,7 @@ public final class ExperimentDocumentCli {
         preview
             .diagnostics()
             .forEach(
-                item ->
-                    out.println(
-                        item.severity() + " " + item.pointer() + " " + item.message()));
+                item -> out.println(item.severity() + " " + item.pointer() + " " + item.message()));
         return preview.executionAllowed() ? 0 : 1;
       }
       if (args[0].equals("normalize") && args.length == 3) {
