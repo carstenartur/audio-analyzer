@@ -1,0 +1,46 @@
+name: Spotless Preview
+
+on:
+  push:
+    branches:
+      - feature/309-311-portable-experiment-document
+    paths:
+      - audio-experiment-document/**
+      - .github/workflows/spotless-preview.yml
+
+permissions:
+  contents: read
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v7
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Apply repository Spotless configuration
+        run: mvn -B -pl audio-experiment-document -am -DskipTests spotless:apply
+
+      - name: Collect exact formatter result
+        run: |
+          mkdir -p target/spotless-preview
+          git diff -- audio-experiment-document > target/spotless-preview/spotless.diff
+          while IFS= read -r file; do
+            mkdir -p "target/spotless-preview/$(dirname "$file")"
+            cp "$file" "target/spotless-preview/$file"
+          done < <(git diff --name-only -- audio-experiment-document)
+          git status --short > target/spotless-preview/status.txt
+
+      - name: Upload formatter result
+        uses: actions/upload-artifact@v7
+        with:
+          name: spotless-preview
+          path: target/spotless-preview
+          if-no-files-found: error
