@@ -2,6 +2,7 @@ package org.hammer;
 
 import java.awt.Cursor;
 import java.nio.file.Path;
+import java.util.Objects;
 import javax.swing.JFrame;
 import javax.swing.JMenu;
 import javax.swing.JMenuBar;
@@ -21,9 +22,8 @@ final class ExperimentDocumentSwingActions {
   private final ExperimentDocumentService documentService;
 
   ExperimentDocumentSwingActions(JFrame owner, ExperimentDocumentService documentService) {
-    this.owner = java.util.Objects.requireNonNull(owner, "owner");
-    this.documentService =
-        java.util.Objects.requireNonNull(documentService, "documentService");
+    this.owner = Objects.requireNonNull(owner, "owner");
+    this.documentService = Objects.requireNonNull(documentService, "documentService");
   }
 
   /** Add one keyboard-accessible inspect/normalize action to the existing File menu. */
@@ -39,11 +39,9 @@ final class ExperimentDocumentSwingActions {
     fileMenu.insert(inspect, Math.min(fileMenu.getItemCount(), 1));
   }
 
-  private void chooseDocument() {
-    Path source = ExperimentDocumentFileChooser.chooseOpen(owner);
-    if (source == null) {
-      return;
-    }
+  /** Validate and preview one explicitly selected document without applying or executing it. */
+  void inspect(Path source) {
+    Objects.requireNonNull(source, "source");
     owner.setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
     new SwingWorker<ExperimentDocumentPreview, Void>() {
       @Override
@@ -64,6 +62,13 @@ final class ExperimentDocumentSwingActions {
         }
       }
     }.execute();
+  }
+
+  private void chooseDocument() {
+    Path source = ExperimentDocumentFileChooser.chooseOpen(owner);
+    if (source != null) {
+      inspect(source);
+    }
   }
 
   private static JMenu findMenu(JMenuBar menuBar, String title) {
