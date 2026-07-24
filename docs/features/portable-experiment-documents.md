@@ -7,9 +7,9 @@ large datasets, credentials, local output directories or executable implementati
 
 ## Public identity
 
-|         Property          |                             Value                             |
+|         Property         |                             Value                             |
 |--------------------------|---------------------------------------------------------------|
-| Preferred extension      | `.audioexp`                                                    |
+| Preferred extension      | `.audioexp`                                                   |
 | Media type               | `application/vnd.carstenartur.audio-analyzer.experiment+json` |
 | Format identifier        | `io.github.carstenartur.audio-analyzer.experiment`            |
 | Current envelope version | `1`                                                           |
@@ -188,7 +188,7 @@ The Spring workbench exposes these endpoints:
 | `POST` | `/experiment-documents/preview`   | Validate and return a safe summary and diagnostics      |
 | `POST` | `/experiment-documents/normalize` | Return canonical `.audioexp` bytes                      |
 | `POST` | `/experiment-documents/apply`     | Revalidate and explicitly replace the editable workflow |
-| `GET`  | `/experiment-documents/schema`    | Return the bundled local v1 schema                       |
+| `GET`  | `/experiment-documents/schema`    | Return the bundled local v1 schema                      |
 
 Preview and normalize accept the dedicated media type and `application/json` for tooling
 compatibility. Normalize responds with the dedicated media type and an `.audioexp` attachment name.
