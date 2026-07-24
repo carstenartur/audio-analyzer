@@ -1,0 +1,53 @@
+name: jgit-storage-hibernate compatibility
+
+on:
+  pull_request:
+    branches:
+      - master
+    paths:
+      - '.github/workflows/jgit-storage-hibernate-compatibility.yml'
+      - 'audio-app/**'
+      - 'pom.xml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  compatibility:
+    name: Build Audio Analyzer against jgit-storage-hibernate 0.1.9-SNAPSHOT
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: Checkout Audio Analyzer
+        uses: actions/checkout@v5
+
+      - name: Checkout merged jgit-storage-hibernate candidate
+        uses: actions/checkout@v5
+        with:
+          repository: carstenartur/jgit-storage-hibernate
+          ref: main
+          path: jgit-storage-hibernate
+
+      - name: Set up Java 21 and GitHub Packages
+        uses: actions/setup-java@v5
+        with:
+          java-version: '21'
+          distribution: temurin
+          cache: maven
+          server-id: github
+          server-username: GITHUB_ACTOR
+          server-password: GITHUB_TOKEN
+
+      - name: Install exact merged library candidate locally
+        working-directory: jgit-storage-hibernate
+        run: mvn -B -DskipTests install
+
+      - name: Verify complete Audio Analyzer reactor against candidate
+        run: >-
+          mvn -B clean verify
+          -Djgit-storage-hibernate.version=0.1.9-SNAPSHOT
