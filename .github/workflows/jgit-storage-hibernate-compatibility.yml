@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   compatibility:
-    name: Build Audio Analyzer against jgit-storage-hibernate 0.1.9-SNAPSHOT
+    name: Build Audio Analyzer against released jgit-storage-hibernate 0.1.9
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
@@ -25,13 +25,6 @@ jobs:
     steps:
       - name: Checkout Audio Analyzer
         uses: actions/checkout@v5
-
-      - name: Checkout merged jgit-storage-hibernate candidate
-        uses: actions/checkout@v5
-        with:
-          repository: carstenartur/jgit-storage-hibernate
-          ref: main
-          path: jgit-storage-hibernate
 
       - name: Set up Java 21 and GitHub Packages
         uses: actions/setup-java@v5
@@ -43,19 +36,12 @@ jobs:
           server-username: GITHUB_ACTOR
           server-password: GITHUB_TOKEN
 
-      - name: Install exact merged library candidate locally
-        working-directory: jgit-storage-hibernate
-        run: mvn -B -DskipTests install
-
-      - name: Remove candidate source from consumer worktree
-        run: rm -rf jgit-storage-hibernate
-
-      - name: Verify complete Audio Analyzer reactor against candidate
+      - name: Verify complete Audio Analyzer reactor against published release
         shell: bash
         run: |
           set -o pipefail
           mvn -B clean verify \
-            -Djgit-storage-hibernate.version=0.1.9-SNAPSHOT \
+            -Djgit-storage-hibernate.version=0.1.9 \
             2>&1 | tee jgit-storage-hibernate-compatibility.log
 
       - name: Upload compatibility build log
