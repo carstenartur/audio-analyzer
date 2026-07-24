@@ -24,7 +24,8 @@ public final class ExperimentDocumentCli {
 
   static int run(String[] args, java.io.PrintStream out, java.io.PrintStream error) {
     if (args.length < 2 || args.length > 3) {
-      error.println("Usage: validate <input.audioexp> | normalize <input.audioexp> <output.audioexp>");
+      error.println(
+          "Usage: validate <input.audioexp> | normalize <input.audioexp> <output.audioexp>");
       return 2;
     }
     ExperimentDocumentCodec codec = new ExperimentDocumentCodec();
@@ -37,7 +38,12 @@ public final class ExperimentDocumentCli {
         out.println("experiment=" + preview.document().experiment().name());
         out.println("executionAllowed=" + preview.executionAllowed());
         out.println("readOnly=" + preview.readOnly());
-        preview.diagnostics().forEach(item -> out.println(item.severity() + " " + item.pointer() + " " + item.message()));
+        preview
+            .diagnostics()
+            .forEach(
+                item ->
+                    out.println(
+                        item.severity() + " " + item.pointer() + " " + item.message()));
         return preview.executionAllowed() ? 0 : 1;
       }
       if (args[0].equals("normalize") && args.length == 3) {
