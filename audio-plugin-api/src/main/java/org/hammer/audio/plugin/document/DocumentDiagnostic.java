@@ -10,8 +10,7 @@ import java.util.Objects;
  * @param code stable machine-readable diagnostic code
  * @param message human-readable diagnostic message
  */
-public record DocumentDiagnostic(
-    Severity severity, String pointer, String code, String message) {
+public record DocumentDiagnostic(Severity severity, String pointer, String code, String message) {
 
   // Validate and normalize diagnostic fields.
   public DocumentDiagnostic {
