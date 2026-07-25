@@ -13,7 +13,7 @@ abstract: >-
   digital signal processing experiments, dataset analysis, benchmarking and
   experimental acoustic localization workflows.
 license: MIT
-version: "0.0.4-SNAPSHOT"
+version: "0.1.0-SNAPSHOT"
 keywords:
   - audio-analysis
   - acoustic-localization

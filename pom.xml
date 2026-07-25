@@ -4,7 +4,7 @@
 
   <groupId>audioin</groupId>
   <artifactId>audioin-parent</artifactId>
-  <version>0.0.4-SNAPSHOT</version>
+  <version>0.1.0-SNAPSHOT</version>
   <packaging>pom</packaging>
 
   <name>Audio Analyzer Parent</name>
@@ -34,7 +34,7 @@
     <maven.compiler.release>${java.version}</maven.compiler.release>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-    <project.build.outputTimestamp>2026-07-04T04:42:57Z</project.build.outputTimestamp>
+    <project.build.outputTimestamp>2026-07-25T08:06:56Z</project.build.outputTimestamp>
 
     <junit.version>6.1.2</junit.version>
     <mockito.version>5.23.0</mockito.version>
