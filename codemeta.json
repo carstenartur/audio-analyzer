@@ -6,7 +6,7 @@
   "codeRepository": "https://github.com/carstenartur/audio-analyzer",
   "issueTracker": "https://github.com/carstenartur/audio-analyzer/issues",
   "license": "https://spdx.org/licenses/MIT",
-  "version": "0.0.4-SNAPSHOT",
+  "version": "0.0.4",
   "programmingLanguage": [
     "Java",
     "Shell",
@@ -44,5 +44,6 @@
   "softwareRequirements": [
     "Java 21+",
     "Maven"
-  ]
+  ],
+  "datePublished": "2026-07-25"
 }
