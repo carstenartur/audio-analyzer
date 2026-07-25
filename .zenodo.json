@@ -30,7 +30,6 @@
       "scheme": "url"
     }
   ],
-  "version": "0.0.4",
-  "language": "eng",
-  "publication_date": "2026-07-25"
+  "version": "0.1.0-SNAPSHOT",
+  "language": "eng"
 }
