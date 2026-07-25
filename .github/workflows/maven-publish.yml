@@ -37,8 +37,6 @@ jobs:
     name: Build and create release
     runs-on: ubuntu-latest
     env:
-      # Maven/Jansi may otherwise add terminal control sequences to help:evaluate output.
-      # release.sh performs exact version comparisons, so the output must be plain text.
       MAVEN_OPTS: >-
         -Dstyle.color=never
         -Djansi.force=false
@@ -68,10 +66,34 @@ jobs:
           restore-keys: ${{ runner.os }}-maven-
 
       - name: Preserve release scripts
+        shell: bash
         run: |
+          set -euo pipefail
           cp .github/scripts/release.sh "$RUNNER_TEMP/release.sh"
           cp .github/scripts/update-release-metadata.py \
             "$RUNNER_TEMP/update-release-metadata.py"
+
+          # release.sh historically queried Maven help:evaluate and compared its raw output.
+          # Replace both lookups in the preserved runner copy with the same deterministic
+          # root-pom reader used by the explicit preflight below. This avoids ANSI/Jansi
+          # bytes or Maven logging from corrupting exact version comparisons.
+          python3 - "$RUNNER_TEMP/release.sh" <<'PY'
+          from pathlib import Path
+          import sys
+
+          path = Path(sys.argv[1])
+          text = path.read_text(encoding='utf-8')
+          lookup = './mvnw -q -DforceStdout help:evaluate -Dexpression=project.version'
+          replacement = "python3 -c \"import xml.etree.ElementTree as ET; root=ET.parse('pom.xml').getroot(); print(root.findtext('{http://maven.apache.org/POM/4.0.0}version').strip())\""
+          occurrences = text.count(lookup)
+          if occurrences != 2:
+              raise SystemExit(
+                  f'Expected exactly two Maven version lookups in release.sh, found {occurrences}'
+              )
+          path.write_text(text.replace(lookup, replacement), encoding='utf-8')
+          PY
+
+          bash -n "$RUNNER_TEMP/release.sh"
           chmod +x "$RUNNER_TEMP/release.sh"
 
       - name: Validate release inputs and Maven version
