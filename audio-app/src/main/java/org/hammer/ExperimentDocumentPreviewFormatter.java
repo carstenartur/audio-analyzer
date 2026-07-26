@@ -6,6 +6,12 @@ import org.hammer.audio.plugin.document.DocumentDiagnostic;
 import org.hammer.audio.workflow.Workflow;
 
 /** Deterministic plain-text projection of a portable experiment-document preview. */
+@SuppressWarnings({
+  "PMD.InsufficientStringBufferDeclaration",
+  "PMD.ConsecutiveAppendsShouldReuse",
+  "PMD.ConsecutiveLiteralAppends",
+  "PMD.AppendCharacterWithChar"
+})
 final class ExperimentDocumentPreviewFormatter {
 
   private ExperimentDocumentPreviewFormatter() {

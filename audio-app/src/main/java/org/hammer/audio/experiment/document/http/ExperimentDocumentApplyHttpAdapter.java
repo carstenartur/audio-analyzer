@@ -112,7 +112,7 @@ public final class ExperimentDocumentApplyHttpAdapter {
   public record ApplyResponse(
       String canonicalSha256, WorkflowProjection projection, boolean dirty) {
 
-    /** Validate immutable response fields. */
+    /* Validate immutable response fields. */
     public ApplyResponse {
       Objects.requireNonNull(canonicalSha256, "canonicalSha256");
       Objects.requireNonNull(projection, "projection");

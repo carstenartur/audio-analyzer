@@ -7,16 +7,16 @@ public final class ExperimentDocumentApplyException extends IllegalStateExceptio
 
   private static final long serialVersionUID = 1L;
 
-  private final String code;
+  private final String diagnosticCode;
 
   /** Create a coded apply rejection. */
   public ExperimentDocumentApplyException(String code, String message) {
     super(message);
-    this.code = Objects.requireNonNull(code, "code");
+    this.diagnosticCode = Objects.requireNonNull(code, "code");
   }
 
   /** Stable machine-readable rejection code. */
   public String code() {
-    return code;
+    return diagnosticCode;
   }
 }

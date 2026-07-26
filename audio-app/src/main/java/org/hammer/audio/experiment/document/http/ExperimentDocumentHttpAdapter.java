@@ -135,7 +135,7 @@ public final class ExperimentDocumentHttpAdapter {
       boolean executionAllowed,
       boolean readOnly) {
 
-    /** Defensively copy response collections. */
+    /* Defensively copy response collections. */
     public PreviewResponse {
       requiredPlugins = List.copyOf(Objects.requireNonNull(requiredPlugins, "requiredPlugins"));
       diagnostics = List.copyOf(Objects.requireNonNull(diagnostics, "diagnostics"));
@@ -152,7 +152,7 @@ public final class ExperimentDocumentHttpAdapter {
    */
   public record ErrorResponse(String code, String pointer, String message) {
 
-    /** Validate required error fields. */
+    /* Validate required error fields. */
     public ErrorResponse {
       Objects.requireNonNull(code, "code");
       Objects.requireNonNull(pointer, "pointer");

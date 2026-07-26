@@ -114,7 +114,7 @@ public final class ExperimentDocumentWorkspaceService {
    */
   public record ApplyResult(String canonicalSha256, WorkflowProjection projection, boolean dirty) {
 
-    /** Validate immutable result values. */
+    /* Validate immutable result values. */
     public ApplyResult {
       Objects.requireNonNull(canonicalSha256, "canonicalSha256");
       Objects.requireNonNull(projection, "projection");
