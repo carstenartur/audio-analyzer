@@ -25,16 +25,16 @@ The desktop and web workbenches share deterministic Java domain models rather th
 
 ## What you can do
 
-|              Goal              |                                        Current support                                         |
-|--------------------------------|------------------------------------------------------------------------------------------------|
-| Reproduce an experiment        | Deterministic demo sources, recording/replay, A/B reports and versioned workflow checkpoints  |
-| Build a workflow visually      | Typed React Flow nodes and ports backed by immutable Java workflow models                     |
-| Collaborate on a workflow      | Shared sessions, ordered SSE updates, presence, revision conflicts and canonical reload       |
-| Undo safely                    | Personal or explicit shared semantic undo/redo with previews, blockers and durable history    |
-| Merge workflow versions        | Exact base/local/remote checkpoints, typed conflicts and validated merge commits              |
-| Inspect a signal               | Waveform, phase, spectrum, spectrogram, RMS/peak measurements and diagnostic findings         |
-| Preserve evidence              | `.aar` recordings, CSV/PNG exports, evidence bundles and versioned workflow checkpoints       |
-| Explore localization research  | Simulated microphone arrays, TDOA, beamforming, tracking and HumBugDB-oriented experiments    |
+|             Goal              |                                       Current support                                       |
+|-------------------------------|---------------------------------------------------------------------------------------------|
+| Reproduce an experiment       | Deterministic demo sources, recording/replay, A/B reports and versioned workflow checkpoints |
+| Build a workflow visually     | Typed React Flow nodes and ports backed by immutable Java workflow models                    |
+| Collaborate on a workflow     | Shared sessions, ordered SSE updates, presence, revision conflicts and canonical reload      |
+| Undo safely                   | Personal or explicit shared semantic undo/redo with previews, blockers and durable history   |
+| Merge workflow versions       | Exact base/local/remote checkpoints, typed conflicts and validated merge commits             |
+| Inspect a signal              | Waveform, phase, spectrum, spectrogram, RMS/peak measurements and diagnostic findings        |
+| Preserve evidence             | `.aar` recordings, CSV/PNG exports, evidence bundles and versioned workflow checkpoints      |
+| Explore localization research | Simulated microphone arrays, TDOA, beamforming, tracking and HumBugDB-oriented experiments   |
 
 ## Two workbenches, one reproducible model
 
