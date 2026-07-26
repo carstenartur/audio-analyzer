@@ -1,7 +1,7 @@
 {
   "title": "Audio Analyzer",
   "upload_type": "software",
-  "description": "Audio Analyzer is a Java 21 research platform for reproducible acoustic analysis, digital signal processing experiments, dataset analysis, benchmarking and experimental acoustic localization workflows. It provides a modular Maven architecture with core audio-domain types, DSP analyzers, recording and evidence export, plugin contracts, and an experimental acoustic-localization module for microphone-array research.",
+  "description": "Audio Analyzer is a Java 21 research and engineering platform for reproducible audio experimentation and versioned digital signal processing workflows. It combines a desktop signal workbench with a collaborative browser-based workflow editor, deterministic domain models, recording and replay, evidence export, semantic history, and versioned checkpoints. An optional acoustic-localization module supports microphone-array simulation and research; it is explicitly experimental rather than a validated detector.",
   "creators": [
     {
       "name": "Hammer, Carsten",
@@ -14,6 +14,11 @@
   "keywords": [
     "audio analysis",
     "digital signal processing",
+    "reproducible research",
+    "workflow engineering",
+    "workflow versioning",
+    "collaborative workflows",
+    "semantic history",
     "acoustic localization",
     "FFT",
     "spectrogram",
