@@ -1,6 +1,7 @@
 package org.hammer.audio.plugin;
 
 import java.util.List;
+import org.hammer.audio.plugin.document.ExperimentDocumentContribution;
 
 /**
  * Central plugin contract for the Audio Analyzer host application.
@@ -110,6 +111,14 @@ public interface AudioAnalyzerPlugin {
    * Markdown, CSV, JSON-lines). Default: empty.
    */
   default List<ExportFormatContribution> exportFormatContributions() {
+    return List.of();
+  }
+
+  /**
+   * Returns namespaced, versioned portable experiment-document sections. The host owns parsing,
+   * limits, schema validation, canonical serialization and migration orchestration. Default: empty.
+   */
+  default List<ExperimentDocumentContribution> experimentDocumentContributions() {
     return List.of();
   }
 }
