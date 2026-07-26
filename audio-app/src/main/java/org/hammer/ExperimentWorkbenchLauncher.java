@@ -14,10 +14,13 @@ import org.hammer.audio.pluginhost.PluginManager;
 import org.hammer.audio.pluginhost.PluginRegistry;
 import org.hammer.audio.ui.theme.UiTheme;
 
-/** Launches the experiment-aware desktop with portable document preview and normalization actions. */
+/**
+ * Launches the experiment-aware desktop with portable document preview and normalization actions.
+ */
 public final class ExperimentWorkbenchLauncher {
 
-  private static final Logger LOGGER = Logger.getLogger(ExperimentWorkbenchLauncher.class.getName());
+  private static final Logger LOGGER =
+      Logger.getLogger(ExperimentWorkbenchLauncher.class.getName());
 
   private ExperimentWorkbenchLauncher() {
     // application entry point
@@ -61,7 +64,9 @@ public final class ExperimentWorkbenchLauncher {
     }
   }
 
-  /** Register already-running application open-file events when the desktop platform supports them. */
+  /**
+   * Register already-running application open-file events when the desktop platform supports them.
+   */
   static void installDesktopOpenFileHandler(Consumer<Path> inspector) {
     Objects.requireNonNull(inspector, "inspector");
     try {

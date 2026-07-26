@@ -34,8 +34,7 @@ class ExperimentDocumentPreviewFormatterTest {
     Workflow workflow = new Workflow("workflow", "Preview workflow", List.of(), List.of());
 
     String text =
-        ExperimentDocumentPreviewFormatter.format(
-            Path.of("example.audioexp"), preview, workflow);
+        ExperimentDocumentPreviewFormatter.format(Path.of("example.audioexp"), preview, workflow);
 
     assertTrue(text.contains("Preview experiment"));
     assertTrue(text.contains("1".repeat(64)));

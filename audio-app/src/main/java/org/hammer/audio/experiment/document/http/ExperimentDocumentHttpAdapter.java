@@ -73,8 +73,7 @@ public final class ExperimentDocumentHttpAdapter {
     return ResponseEntity.ok()
         .contentType(MediaType.parseMediaType(ExperimentDocumentFormat.MEDIA_TYPE))
         .header(
-            HttpHeaders.CONTENT_DISPOSITION,
-            "attachment; filename=\"" + NORMALIZED_FILENAME + "\"")
+            HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + NORMALIZED_FILENAME + "\"")
         .body(bytes);
   }
 

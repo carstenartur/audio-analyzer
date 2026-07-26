@@ -43,8 +43,8 @@ public final class ExperimentDocumentWorkspaceService {
    * @param discardDirty whether unsaved current state may be discarded
    * @return applied projection and immutable document identity
    */
-  public ApplyResult apply(
-      InputStream source, String expectedCanonicalSha256, boolean discardDirty) throws IOException {
+  public ApplyResult apply(InputStream source, String expectedCanonicalSha256, boolean discardDirty)
+      throws IOException {
     ExperimentDocumentPreview preview = documentService.preview(source);
     if (!preview.executionAllowed()) {
       throw new ExperimentDocumentApplyException(
@@ -106,8 +106,7 @@ public final class ExperimentDocumentWorkspaceService {
   }
 
   /** Successful confirmed import response. */
-  public record ApplyResult(
-      String canonicalSha256, WorkflowProjection projection, boolean dirty) {
+  public record ApplyResult(String canonicalSha256, WorkflowProjection projection, boolean dirty) {
 
     /** Validate immutable result values. */
     public ApplyResult {

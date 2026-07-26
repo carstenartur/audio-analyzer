@@ -15,12 +15,9 @@ class ExperimentWorkbenchLauncherTest {
     String invalidPath = "invalid" + Character.MIN_VALUE;
 
     ExperimentWorkbenchLauncher.inspectStartupArguments(
-        new String[] {
-          "first.audioexp", " ", null, invalidPath, "nested/second.audioexp"
-        },
+        new String[] {"first.audioexp", " ", null, invalidPath, "nested/second.audioexp"},
         inspected::add);
 
-    assertEquals(
-        List.of(Path.of("first.audioexp"), Path.of("nested/second.audioexp")), inspected);
+    assertEquals(List.of(Path.of("first.audioexp"), Path.of("nested/second.audioexp")), inspected);
   }
 }

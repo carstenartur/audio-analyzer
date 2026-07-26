@@ -25,8 +25,7 @@ class ExperimentDocumentHttpAdapterTest {
 
   private final ExperimentDocumentCodec codec = new ExperimentDocumentCodec();
   private final ExperimentDocumentService service = new ExperimentDocumentService(List.of());
-  private final ExperimentDocumentHttpAdapter adapter =
-      new ExperimentDocumentHttpAdapter(service);
+  private final ExperimentDocumentHttpAdapter adapter = new ExperimentDocumentHttpAdapter(service);
 
   @Test
   void previewReturnsSafeWorkflowAndDocumentSummary() throws Exception {
@@ -51,10 +50,10 @@ class ExperimentDocumentHttpAdapterTest {
 
     var response = adapter.normalize(request(source));
 
-    assertEquals(ExperimentDocumentFormat.MEDIA_TYPE, response.getHeaders().getContentType().toString());
+    assertEquals(
+        ExperimentDocumentFormat.MEDIA_TYPE, response.getHeaders().getContentType().toString());
     assertArrayEquals(source, response.getBody());
-    assertTrue(
-        response.getHeaders().getContentDisposition().getFilename().endsWith(".audioexp"));
+    assertTrue(response.getHeaders().getContentDisposition().getFilename().endsWith(".audioexp"));
   }
 
   @Test

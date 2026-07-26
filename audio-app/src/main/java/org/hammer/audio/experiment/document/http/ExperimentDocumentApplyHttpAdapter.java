@@ -30,16 +30,15 @@ public final class ExperimentDocumentApplyHttpAdapter {
   private final ExperimentDocumentWorkspaceService workspaceService;
 
   /** Create the adapter with the server-authoritative workspace coordinator. */
-  public ExperimentDocumentApplyHttpAdapter(
-      ExperimentDocumentWorkspaceService workspaceService) {
+  public ExperimentDocumentApplyHttpAdapter(ExperimentDocumentWorkspaceService workspaceService) {
     this.workspaceService = Objects.requireNonNull(workspaceService, "workspaceService");
   }
 
   /**
    * Revalidate and apply a previously previewed setup.
    *
-   * <p>The caller must echo the preview hash through {@code If-Match}. Dirty current state is rejected
-   * unless the dedicated discard header is explicitly true.
+   * <p>The caller must echo the preview hash through {@code If-Match}. Dirty current state is
+   * rejected unless the dedicated discard header is explicitly true.
    */
   @PostMapping(
       path = "/apply",
@@ -51,8 +50,7 @@ public final class ExperimentDocumentApplyHttpAdapter {
       @RequestHeader(name = DISCARD_DIRTY_HEADER, defaultValue = "false") boolean discardDirty)
       throws IOException {
     ExperimentDocumentWorkspaceService.ApplyResult result =
-        workspaceService.apply(
-            request.getInputStream(), expectedCanonicalSha256, discardDirty);
+        workspaceService.apply(request.getInputStream(), expectedCanonicalSha256, discardDirty);
     return ResponseEntity.ok()
         .header(HttpHeaders.ETAG, "\"" + result.canonicalSha256() + "\"")
         .body(new ApplyResponse(result.canonicalSha256(), result.projection(), result.dirty()));

@@ -44,8 +44,7 @@ final class ExperimentDocumentPreviewFormatter {
     return text.toString();
   }
 
-  private static void appendMigrations(
-      StringBuilder text, ExperimentDocumentPreview preview) {
+  private static void appendMigrations(StringBuilder text, ExperimentDocumentPreview preview) {
     if (preview.migrations().isEmpty()) {
       return;
     }
@@ -53,8 +52,7 @@ final class ExperimentDocumentPreviewFormatter {
     preview.migrations().forEach(value -> text.append("- ").append(value).append('\n'));
   }
 
-  private static void appendDiagnostics(
-      StringBuilder text, ExperimentDocumentPreview preview) {
+  private static void appendDiagnostics(StringBuilder text, ExperimentDocumentPreview preview) {
     if (preview.diagnostics().isEmpty()) {
       return;
     }

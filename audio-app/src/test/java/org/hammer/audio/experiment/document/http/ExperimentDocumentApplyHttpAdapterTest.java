@@ -31,7 +31,8 @@ class ExperimentDocumentApplyHttpAdapterTest {
       "workflow\n  id: apply.workflow\n  name: Apply workflow\n  nodes:\n  edges:\n";
 
   private final ExperimentDocumentCodec codec = new ExperimentDocumentCodec();
-  private final ExperimentDocumentService documentService = new ExperimentDocumentService(List.of());
+  private final ExperimentDocumentService documentService =
+      new ExperimentDocumentService(List.of());
 
   @Test
   void applyEchoesCanonicalEtagAndReturnsDirtyImportedProjection() throws Exception {
@@ -72,21 +73,18 @@ class ExperimentDocumentApplyHttpAdapterTest {
     ExperimentDocumentApplyHttpAdapter adapter = adapter(editor());
 
     assertEquals(
-        HttpStatus.CONFLICT,
-        adapter.handleDirty(new DirtyWorkflowException()).getStatusCode());
+        HttpStatus.CONFLICT, adapter.handleDirty(new DirtyWorkflowException()).getStatusCode());
     assertEquals(
         HttpStatus.BAD_REQUEST,
         adapter
             .handleApplyFailure(
-                new ExperimentDocumentApplyException(
-                    "invalid-document-hash", "Invalid If-Match"))
+                new ExperimentDocumentApplyException("invalid-document-hash", "Invalid If-Match"))
             .getStatusCode());
     assertEquals(
         HttpStatus.CONFLICT,
         adapter
             .handleApplyFailure(
-                new ExperimentDocumentApplyException(
-                    "document-read-only", "Read-only document"))
+                new ExperimentDocumentApplyException("document-read-only", "Read-only document"))
             .getStatusCode());
   }
 
@@ -98,8 +96,7 @@ class ExperimentDocumentApplyHttpAdapterTest {
 
   private static WorkflowEditorService editor() {
     Workflow workflow = new Workflow("current.workflow", "Current", List.of(), List.of());
-    return new WorkflowEditorService(
-        new WorkflowOperationLog(workflow), new WorkflowValidator());
+    return new WorkflowEditorService(new WorkflowOperationLog(workflow), new WorkflowValidator());
   }
 
   private static MockHttpServletRequest request(byte[] source) {

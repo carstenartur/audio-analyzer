@@ -31,7 +31,8 @@ class ExperimentDocumentWorkspaceServiceTest {
       "workflow\n  id: imported.workflow\n  name: Imported workflow\n  nodes:\n  edges:\n";
 
   private final ExperimentDocumentCodec codec = new ExperimentDocumentCodec();
-  private final ExperimentDocumentService documentService = new ExperimentDocumentService(List.of());
+  private final ExperimentDocumentService documentService =
+      new ExperimentDocumentService(List.of());
 
   @Test
   void correctQuotedPreviewHashImportsAndMarksWorkflowDirty() throws Exception {
@@ -75,8 +76,7 @@ class ExperimentDocumentWorkspaceServiceTest {
     ExperimentDocumentWorkspaceService workspace =
         new ExperimentDocumentWorkspaceService(documentService, editor);
 
-    assertThrows(
-        DirtyWorkflowException.class, () -> workspace.apply(stream(source), hash, false));
+    assertThrows(DirtyWorkflowException.class, () -> workspace.apply(stream(source), hash, false));
     assertEquals("dirty.workflow", editor.currentProjection().workflowId());
 
     workspace.apply(stream(source), hash, true);
@@ -88,11 +88,8 @@ class ExperimentDocumentWorkspaceServiceTest {
   void unknownOptionalPluginRemainsReadOnlyAndCannotBeApplied() throws Exception {
     ExperimentDocument.PluginSection section =
         new ExperimentDocument.PluginSection(
-            1,
-            "example/1",
-            DocumentValue.object(Map.of("enabled", DocumentValue.bool(true))));
-    byte[] source =
-        codec.encode(document(Map.of("not-installed", Map.of("advisory", section))));
+            1, "example/1", DocumentValue.object(Map.of("enabled", DocumentValue.bool(true))));
+    byte[] source = codec.encode(document(Map.of("not-installed", Map.of("advisory", section))));
     String hash = documentService.preview(source).canonicalSha256();
     WorkflowEditorService editor = editor();
     ExperimentDocumentWorkspaceService workspace =
@@ -136,8 +133,7 @@ class ExperimentDocumentWorkspaceServiceTest {
 
   private static WorkflowEditorService editor() {
     Workflow current = new Workflow("current.workflow", "Current", List.of(), List.of());
-    return new WorkflowEditorService(
-        new WorkflowOperationLog(current), new WorkflowValidator());
+    return new WorkflowEditorService(new WorkflowOperationLog(current), new WorkflowValidator());
   }
 
   private static ByteArrayInputStream stream(byte[] source) {

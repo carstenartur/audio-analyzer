@@ -27,8 +27,7 @@ final class ExperimentDocumentPreviewDialog {
 
   ExperimentDocumentPreviewDialog(JFrame owner, ExperimentDocumentService documentService) {
     this.owner = java.util.Objects.requireNonNull(owner, "owner");
-    this.documentService =
-        java.util.Objects.requireNonNull(documentService, "documentService");
+    this.documentService = java.util.Objects.requireNonNull(documentService, "documentService");
   }
 
   /** Display a modeless preview; no workflow state is applied or executed. */
