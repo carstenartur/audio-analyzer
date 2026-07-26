@@ -9,15 +9,22 @@ authors:
 repository-code: "https://github.com/carstenartur/audio-analyzer"
 url: "https://github.com/carstenartur/audio-analyzer"
 abstract: >-
-  Audio Analyzer is a Java 21 research platform for reproducible acoustic analysis,
-  digital signal processing experiments, dataset analysis, benchmarking and
-  experimental acoustic localization workflows.
+  Audio Analyzer is a Java 21 research and engineering platform for reproducible
+  audio experimentation and versioned digital signal processing workflows. It
+  combines desktop signal analysis, collaborative workflow editing, deterministic
+  domain models, recording and replay, evidence export, semantic history and an
+  explicitly experimental acoustic-localization module.
 license: MIT
 version: "0.1.0-SNAPSHOT"
 keywords:
   - audio-analysis
-  - acoustic-localization
   - digital-signal-processing
+  - reproducible-research
+  - workflow-engineering
+  - workflow-versioning
+  - collaborative-workflows
+  - semantic-history
+  - acoustic-localization
   - fft
   - spectrogram
   - bioacoustics
