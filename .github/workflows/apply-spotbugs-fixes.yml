@@ -1,4 +1,4 @@
-name: Apply SpotBugs Fixes
+name: Apply Experiment Document Fixes
 
 on:
   pull_request:
@@ -31,6 +31,9 @@ jobs:
         run: |
           from pathlib import Path
 
+          def block(*lines: str) -> str:
+              return "\n".join(lines) + "\n"
+
           def replace_once(path: Path, old: str, new: str) -> None:
               text = path.read_text(encoding="utf-8")
               count = text.count(old)
@@ -44,23 +47,26 @@ jobs:
           )
           replace_once(
               codec,
-              '''    java.nio.file.Path parent = normalized.getParent();
-              if (parent == null) {
-                throw new IOException("Experiment document target has no parent: " + normalized);
-              }
-              java.nio.file.Files.createDirectories(parent);
-              java.nio.file.Path temporary =
-                  normalized.resolveSibling(normalized.getFileName().toString() + ".partial");
-          ''',
-              '''    java.nio.file.Path parent = normalized.getParent();
-              java.nio.file.Path fileName = normalized.getFileName();
-              if (parent == null || fileName == null) {
-                throw new IOException("Experiment document target has no parent or filename: " + normalized);
-              }
-              java.nio.file.Files.createDirectories(parent);
-              java.nio.file.Path temporary =
-                  normalized.resolveSibling(fileName.toString() + ".partial");
-          ''',
+              block(
+                  "    java.nio.file.Path parent = normalized.getParent();",
+                  "    if (parent == null) {",
+                  "      throw new IOException(\"Experiment document target has no parent: \" + normalized);",
+                  "    }",
+                  "    java.nio.file.Files.createDirectories(parent);",
+                  "    java.nio.file.Path temporary =",
+                  "        normalized.resolveSibling(normalized.getFileName().toString() + \".partial\");",
+              ),
+              block(
+                  "    java.nio.file.Path parent = normalized.getParent();",
+                  "    java.nio.file.Path fileName = normalized.getFileName();",
+                  "    if (parent == null || fileName == null) {",
+                  "      throw new IOException(",
+                  "          \"Experiment document target has no parent or filename: \" + normalized);",
+                  "    }",
+                  "    java.nio.file.Files.createDirectories(parent);",
+                  "    java.nio.file.Path temporary =",
+                  "        normalized.resolveSibling(fileName.toString() + \".partial\");",
+              ),
           )
 
           document = Path(
@@ -69,97 +75,110 @@ jobs:
           )
           replace_once(
               document,
-              '''    Objects.requireNonNull(provenance, "provenance");
-            }
-
-            /**
-             * Core human-facing experiment metadata.
-          ''',
-              '''    Objects.requireNonNull(provenance, "provenance");
-            }
-
-            /** Return a fresh deeply immutable copy of plugin-owned sections. */
-            @Override
-            public Map<String, Map<String, PluginSection>> pluginData() {
-              return immutablePluginData(pluginData);
-            }
-
-            /**
-             * Core human-facing experiment metadata.
-          ''',
+              block(
+                  "    Objects.requireNonNull(provenance, \"provenance\");",
+                  "  }",
+                  "",
+                  "  /**",
+                  "   * Core human-facing experiment metadata.",
+              ),
+              block(
+                  "    Objects.requireNonNull(provenance, \"provenance\");",
+                  "  }",
+                  "",
+                  "  /** Return a fresh deeply immutable copy of plugin-owned sections. */",
+                  "  @Override",
+                  "  public Map<String, Map<String, PluginSection>> pluginData() {",
+                  "    return immutablePluginData(pluginData);",
+                  "  }",
+                  "",
+                  "  /**",
+                  "   * Core human-facing experiment metadata.",
+              ),
           )
           replace_once(
               document,
-              '''      applicationVersion = requireNonBlank(applicationVersion, "applicationVersion");
-              }
-            }
-
-            /**
-             * Canonical embedded workflow representation.
-          ''',
-              '''      applicationVersion = requireNonBlank(applicationVersion, "applicationVersion");
-              }
-
-              /** Return a fresh immutable copy of the experiment tags. */
-              @Override
-              public List<String> tags() {
-                return List.copyOf(tags);
-              }
-            }
-
-            /**
-             * Canonical embedded workflow representation.
-          ''',
+              block(
+                  "      applicationVersion = requireNonBlank(applicationVersion, \"applicationVersion\");",
+                  "    }",
+                  "  }",
+                  "",
+                  "  /**",
+                  "   * Canonical embedded workflow representation.",
+              ),
+              block(
+                  "      applicationVersion = requireNonBlank(applicationVersion, \"applicationVersion\");",
+                  "    }",
+                  "",
+                  "    /** Return a fresh immutable copy of the experiment tags. */",
+                  "    @Override",
+                  "    public List<String> tags() {",
+                  "      return List.copyOf(tags);",
+                  "    }",
+                  "  }",
+                  "",
+                  "  /**",
+                  "   * Canonical embedded workflow representation.",
+              ),
           )
           replace_once(
               document,
-              '''      if (sections.isEmpty()) {
-                throw new IllegalArgumentException("required plugin must declare at least one section");
-              }
-            }
-
-            /**
-             * One versioned plugin-owned section.
-          ''',
-              '''      if (sections.isEmpty()) {
-                throw new IllegalArgumentException("required plugin must declare at least one section");
-              }
-
-              /** Return a fresh immutable copy of required section identifiers. */
-              @Override
-              public List<String> sections() {
-                return List.copyOf(sections);
-              }
-            }
-
-            /**
-             * One versioned plugin-owned section.
-          ''',
+              block(
+                  "      if (sections.isEmpty()) {",
+                  "        throw new IllegalArgumentException(\"required plugin must declare at least one section\");",
+                  "      }",
+                  "    }",
+                  "  }",
+                  "",
+                  "  /**",
+                  "   * One versioned plugin-owned section.",
+              ),
+              block(
+                  "      if (sections.isEmpty()) {",
+                  "        throw new IllegalArgumentException(\"required plugin must declare at least one section\");",
+                  "      }",
+                  "    }",
+                  "",
+                  "    /** Return a fresh immutable copy of required section identifiers. */",
+                  "    @Override",
+                  "    public List<String> sections() {",
+                  "      return List.copyOf(sections);",
+                  "    }",
+                  "  }",
+                  "",
+                  "  /**",
+                  "   * One versioned plugin-owned section.",
+              ),
           )
           replace_once(
               document,
-              '''      migrationNotes = normalizedStrings(migrationNotes, "migration note");
-              }
-            }
-
-            private static Map<String, Map<String, PluginSection>> immutablePluginData(
-          ''',
-              '''      migrationNotes = normalizedStrings(migrationNotes, "migration note");
-              }
-
-              /** Return a fresh immutable copy of migration notes. */
-              @Override
-              public List<String> migrationNotes() {
-                return List.copyOf(migrationNotes);
-              }
-            }
-
-            private static Map<String, Map<String, PluginSection>> immutablePluginData(
-          ''',
+              block(
+                  "      migrationNotes = normalizedStrings(migrationNotes, \"migration note\");",
+                  "    }",
+                  "  }",
+                  "",
+                  "  private static Map<String, Map<String, PluginSection>> immutablePluginData(",
+              ),
+              block(
+                  "      migrationNotes = normalizedStrings(migrationNotes, \"migration note\");",
+                  "    }",
+                  "",
+                  "    /** Return a fresh immutable copy of migration notes. */",
+                  "    @Override",
+                  "    public List<String> migrationNotes() {",
+                  "      return List.copyOf(migrationNotes);",
+                  "    }",
+                  "  }",
+                  "",
+                  "  private static Map<String, Map<String, PluginSection>> immutablePluginData(",
+              ),
           )
 
       - name: Apply repository formatting
         run: mvn -B -pl audio-experiment-document -am -DskipTests spotless:apply
+
+      - name: Verify fixed module and dependencies
+        run: mvn -B -pl audio-experiment-document -am verify
 
       - name: Commit fixes to the feature branch
         run: |
