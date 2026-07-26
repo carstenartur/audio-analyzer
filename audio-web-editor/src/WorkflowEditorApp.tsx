@@ -17,6 +17,7 @@ import ReactFlow, {
 import 'reactflow/dist/style.css';
 
 import { CollaborationPanel } from './CollaborationPanel';
+import { ExperimentDocumentPanel } from './ExperimentDocumentPanel';
 import {
   getJson,
   postJson,
@@ -437,6 +438,7 @@ export default function WorkflowEditorApp() {
       </header>
 
       <aside className="workbench__panel workbench__panel--left" data-testid="node-palette">
+        <ExperimentDocumentPanel />
         <CollaborationPanel controller={collaboration} />
         <h2>Node palette</h2>
         <p className="help-text">

@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/carstenartur/audio-analyzer/master/audio-experiment-document/src/main/resources/schemas/audio-analyzer-experiment-v1.schema.json",
+  "title": "Audio Analyzer portable experiment document",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "format",
+    "formatVersion",
+    "experiment",
+    "workflow",
+    "profiles",
+    "requiredPlugins",
+    "pluginData",
+    "assets",
+    "outputs",
+    "provenance"
+  ],
+  "properties": {
+    "$schema": {"const": "schemas/audio-analyzer-experiment-v1.schema.json"},
+    "format": {"const": "io.github.carstenartur.audio-analyzer.experiment"},
+    "formatVersion": {"const": 1},
+    "experiment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "description", "tags", "intent", "sourceMode", "intendedDuration", "applicationVersion"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
+        "name": {"type": "string", "minLength": 1},
+        "description": {"type": "string"},
+        "tags": {"type": "array", "items": {"type": "string"}},
+        "intent": {"type": "string"},
+        "sourceMode": {"type": "string"},
+        "intendedDuration": {"type": ["string", "null"]},
+        "applicationVersion": {"type": "string", "minLength": 1}
+      }
+    },
+    "workflow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["format", "formatVersion", "content", "sha256"],
+      "properties": {
+        "format": {"const": "io.github.carstenartur.audio-analyzer.workflow-dsl"},
+        "formatVersion": {"const": 1},
+        "content": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "profiles": {"type": "object"},
+    "requiredPlugins": {"type": "array"},
+    "pluginData": {"type": "object"},
+    "assets": {"type": "array"},
+    "outputs": {"type": "array"},
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["creatorDisplayName", "verifiedAccount", "createdAt", "modifiedAt", "softwareVersion", "canonicalSha256", "migrationNotes"],
+      "properties": {
+        "creatorDisplayName": {"type": "string", "minLength": 1},
+        "verifiedAccount": {"type": "string"},
+        "createdAt": {"type": "string"},
+        "modifiedAt": {"type": "string"},
+        "softwareVersion": {"type": "string", "minLength": 1},
+        "canonicalSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "migrationNotes": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  }
+}
