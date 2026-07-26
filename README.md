@@ -25,8 +25,8 @@ The desktop and web workbenches share deterministic Java domain models rather th
 
 ## What you can do
 
-|             Goal              |                                       Current support                                       |
-|-------------------------------|---------------------------------------------------------------------------------------------|
+|             Goal              |                                       Current support                                        |
+|-------------------------------|----------------------------------------------------------------------------------------------|
 | Reproduce an experiment       | Deterministic demo sources, recording/replay, A/B reports and versioned workflow checkpoints |
 | Build a workflow visually     | Typed React Flow nodes and ports backed by immutable Java workflow models                    |
 | Collaborate on a workflow     | Shared sessions, ordered SSE updates, presence, revision conflicts and canonical reload      |
