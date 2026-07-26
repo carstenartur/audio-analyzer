@@ -5,8 +5,8 @@
 This project is currently in early development (0.1.x). Only the latest
 snapshot version receives security fixes. No older versions are maintained.
 
-| Version | Supported          |
-| ------- | ------------------ |
+| Version |     Supported      |
+|---------|--------------------|
 | 0.1.x   | :white_check_mark: |
 
 ## Reporting a Vulnerability
@@ -15,6 +15,7 @@ Please report security vulnerabilities using [GitHub Security Advisories](https:
 Do not open a public issue for security-related bugs.
 
 When reporting, include:
+
 - A description of the vulnerability and its potential impact
 - Steps to reproduce the issue
 - Any relevant logs, stack traces, or proof-of-concept code
