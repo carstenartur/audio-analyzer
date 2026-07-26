@@ -177,9 +177,6 @@ jobs:
       - name: Apply repository formatting
         run: mvn -B -pl audio-experiment-document -am -DskipTests spotless:apply
 
-      - name: Verify fixed module and dependencies
-        run: mvn -B -pl audio-experiment-document -am verify
-
       - name: Commit fixes to the feature branch
         run: |
           git config user.name "github-actions[bot]"
@@ -190,3 +187,6 @@ jobs:
           git diff --cached --check
           git commit -m "Fix experiment document representation exposure"
           git push origin "HEAD:${{ github.event.pull_request.head.ref }}"
+
+      - name: Verify fixed module and dependencies
+        run: mvn -B -pl audio-experiment-document -am verify
