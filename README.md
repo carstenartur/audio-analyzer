@@ -9,26 +9,34 @@
 [![DOI](https://zenodo.org/badge/7397122.svg)](https://doi.org/10.5281/zenodo.21186367)
 [![SBOM](https://img.shields.io/badge/SBOM-CycloneDX-informational?logo=owasp)](https://github.com/carstenartur/audio-analyzer/dependency-graph/sbom)
 
-**Explore signals, reproduce experiments and design versioned audio-processing workflows in Java.**
+**Reproducible audio experimentation and versioned DSP workflow engineering in Java.**
 
-Audio Analyzer combines a desktop signal workbench with a browser-based workflow editor. It is intended for people who want to inspect audio, compare processing results, build repeatable experiments or collaborate on a signal-processing graph without giving up deterministic Java models and auditable history.
+Audio Analyzer combines a desktop signal workbench with a collaborative browser-based workflow workbench. It is intended for people who want to inspect audio, compare processing results, build repeatable experiments or collaborate on a signal-processing graph while retaining deterministic Java models, semantic operations and auditable history.
 
-The project provides real DSP and measurement foundations, recording and replay, evidence export, a server-authoritative workflow model and an experimental acoustic-localization plugin. It is a research and engineering workbench—not a validated species detector, safety system or turnkey digital audio workstation.
+The project provides stable DSP and measurement foundations, recording and replay, evidence export, server-authoritative workflow collaboration and an experimental acoustic-localization plugin. It is a research and engineering workbench—not a validated species detector, safety system or turnkey digital audio workstation.
+
+> **Project status:** Active development. Signal analysis, recording/replay, deterministic workflow models, collaboration and versioned checkpoints form the stable platform. Acoustic localization remains explicitly experimental and requires measured geometry, hardware calibration and validation before real-world use.
+
+## Why Audio Analyzer?
+
+Many audio tools can visualize signals or execute processing chains. Audio Analyzer also treats the experiment and processing graph as reproducible engineering artifacts: inputs, workflow topology, accepted edits, checkpoints, recordings and evidence can be inspected, replayed, compared and audited.
+
+The desktop and web workbenches share deterministic Java domain models rather than maintaining separate browser-local truths. This connects immediate signal inspection with collaborative workflow engineering and semantic version history.
 
 ## What you can do
 
-|             Goal              |                                       Current support                                       |
-|-------------------------------|---------------------------------------------------------------------------------------------|
-| Inspect a signal              | Waveform, phase, spectrum, spectrogram, RMS/peak measurements and diagnostic findings       |
-| Compare processing behavior   | Deterministic demo sources, averaging, peak hold, recording/replay and Markdown A/B reports |
-| Build a workflow visually     | Typed React Flow nodes and ports backed by immutable Java workflow models                   |
-| Work with other people        | Shared sessions, ordered SSE updates, presence, revision conflicts and canonical reload     |
-| Undo safely                   | Personal or explicit shared semantic undo/redo with previews, blockers and durable history  |
-| Merge workflow versions       | Exact base/local/remote checkpoints, typed conflicts and validated merge commits            |
-| Preserve evidence             | `.aar` recordings, CSV/PNG exports, evidence bundles and versioned workflow checkpoints     |
-| Explore localization research | Simulated microphone arrays, TDOA, beamforming, tracking and HumBugDB-oriented experiments  |
+|             Goal              |                                       Current support                                        |
+|-------------------------------|----------------------------------------------------------------------------------------------|
+| Reproduce an experiment       | Deterministic demo sources, recording/replay, A/B reports and versioned workflow checkpoints |
+| Build a workflow visually     | Typed React Flow nodes and ports backed by immutable Java workflow models                    |
+| Collaborate on a workflow     | Shared sessions, ordered SSE updates, presence, revision conflicts and canonical reload      |
+| Undo safely                   | Personal or explicit shared semantic undo/redo with previews, blockers and durable history   |
+| Merge workflow versions       | Exact base/local/remote checkpoints, typed conflicts and validated merge commits             |
+| Inspect a signal              | Waveform, phase, spectrum, spectrogram, RMS/peak measurements and diagnostic findings        |
+| Preserve evidence             | `.aar` recordings, CSV/PNG exports, evidence bundles and versioned workflow checkpoints      |
+| Explore localization research | Simulated microphone arrays, TDOA, beamforming, tracking and HumBugDB-oriented experiments   |
 
-## Choose your workbench
+## Two workbenches, one reproducible model
 
 ### Desktop signal workbench
 
