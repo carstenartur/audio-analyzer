@@ -99,7 +99,25 @@ public final class ExperimentDocumentHttpAdapter {
         .body(new ErrorResponse("document-input", "/", failure.getMessage()));
   }
 
-  /** Safe preview response used by browser, CLI tooling and API clients. */
+  /**
+   * Safe preview response used by browser, CLI tooling and API clients.
+   *
+   * @param format experiment document format identifier
+   * @param formatVersion experiment document format version
+   * @param experimentId stable experiment identifier
+   * @param experimentName human-readable experiment name
+   * @param sourceMode portable source mode
+   * @param canonicalSha256 canonical document digest
+   * @param workflowId embedded workflow identifier
+   * @param workflowName human-readable workflow name
+   * @param nodeCount embedded workflow node count
+   * @param edgeCount embedded workflow edge count
+   * @param requiredPlugins required plugin declarations
+   * @param diagnostics pointer-aware compatibility diagnostics
+   * @param migrations applied migration descriptions
+   * @param executionAllowed whether execution is allowed with installed plugins
+   * @param readOnly whether the preview can only be inspected and preserved
+   */
   public record PreviewResponse(
       String format,
       int formatVersion,
@@ -125,7 +143,13 @@ public final class ExperimentDocumentHttpAdapter {
     }
   }
 
-  /** Stable pointer-aware REST error response. */
+  /**
+   * Stable pointer-aware REST error response.
+   *
+   * @param code stable machine-readable error code
+   * @param pointer JSON Pointer or semantic error location
+   * @param message human-readable error description
+   */
   public record ErrorResponse(String code, String pointer, String message) {
 
     /** Validate required error fields. */

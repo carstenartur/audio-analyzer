@@ -105,7 +105,13 @@ public final class ExperimentDocumentWorkspaceService {
         left.getBytes(StandardCharsets.US_ASCII), right.getBytes(StandardCharsets.US_ASCII));
   }
 
-  /** Successful confirmed import response. */
+  /**
+   * Successful confirmed import response.
+   *
+   * @param canonicalSha256 canonical imported document digest
+   * @param projection resulting server-authoritative workflow projection
+   * @param dirty whether the imported workflow has uncheckpointed changes
+   */
   public record ApplyResult(String canonicalSha256, WorkflowProjection projection, boolean dirty) {
 
     /** Validate immutable result values. */

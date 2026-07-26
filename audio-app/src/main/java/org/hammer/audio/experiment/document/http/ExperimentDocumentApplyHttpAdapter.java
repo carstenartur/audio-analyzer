@@ -102,7 +102,13 @@ public final class ExperimentDocumentApplyHttpAdapter {
                 "document-input", "/", failure.getMessage()));
   }
 
-  /** Successful confirmed apply response. */
+  /**
+   * Successful confirmed apply response.
+   *
+   * @param canonicalSha256 canonical imported document digest
+   * @param projection resulting server-authoritative workflow projection
+   * @param dirty whether the imported workflow has uncheckpointed changes
+   */
   public record ApplyResponse(
       String canonicalSha256, WorkflowProjection projection, boolean dirty) {
 
