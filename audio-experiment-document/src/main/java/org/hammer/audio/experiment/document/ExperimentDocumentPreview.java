@@ -22,7 +22,7 @@ public record ExperimentDocumentPreview(
     boolean executionAllowed,
     boolean readOnly) {
 
-  /** Validate and defensively copy preview state. */
+  /* Validate and defensively copy preview state. */
   public ExperimentDocumentPreview {
     Objects.requireNonNull(document, "document");
     canonicalSha256 = ExperimentDocument.requireSha256(canonicalSha256, "canonicalSha256");

@@ -3,6 +3,7 @@ package org.hammer.audio.experiment.document;
 import java.nio.file.Path;
 
 /** Strict validators for portable asset references and output basenames. */
+@SuppressWarnings("PMD.LiteralsFirstInComparisons")
 public final class PortableNames {
 
   private PortableNames() {

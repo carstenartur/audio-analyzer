@@ -26,6 +26,12 @@ import org.hammer.audio.plugin.document.DocumentValue;
  * maxLength}, {@code minItems} and {@code maxItems}. Network and implementation references are not
  * supported.
  */
+@SuppressWarnings({
+  "PMD.LooseCoupling",
+  "PMD.AvoidDuplicateLiterals",
+  "PMD.LiteralsFirstInComparisons",
+  "PMD.ConfusingTernary"
+})
 final class LocalJsonSchemaValidator {
 
   private static final int MAX_SCHEMA_BYTES = 256 * 1024;

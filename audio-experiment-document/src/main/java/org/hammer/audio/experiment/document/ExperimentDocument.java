@@ -25,6 +25,7 @@ import org.hammer.audio.plugin.document.DocumentValue;
  * @param outputs requested logical outputs
  * @param provenance creation and migration provenance
  */
+@SuppressWarnings("PMD.LooseCoupling")
 public record ExperimentDocument(
     String schema,
     String format,
@@ -38,7 +39,7 @@ public record ExperimentDocument(
     List<OutputRequest> outputs,
     Provenance provenance) {
 
-  /** Validate and defensively copy all document sections. */
+  /* Validate and defensively copy all document sections. */
   public ExperimentDocument {
     schema = requireNonBlank(schema, "schema");
     format = requireNonBlank(format, "format");
@@ -83,7 +84,7 @@ public record ExperimentDocument(
       Duration intendedDuration,
       String applicationVersion) {
 
-    /** Validate experiment metadata. */
+    /* Validate experiment metadata. */
     public ExperimentInfo {
       id = requireIdentifier(id, "experiment id");
       name = requireNonBlank(name, "experiment name");
@@ -115,7 +116,7 @@ public record ExperimentDocument(
    */
   public record WorkflowPayload(String format, int formatVersion, String content, String sha256) {
 
-    /** Validate workflow payload identity and hash fields. */
+    /* Validate workflow payload identity and hash fields. */
     public WorkflowPayload {
       format = requireNonBlank(format, "workflow format");
       if (formatVersion < 1) {
@@ -135,7 +136,7 @@ public record ExperimentDocument(
    */
   public record PluginRequirement(String id, String versionRange, List<String> sections) {
 
-    /** Validate plugin requirement. */
+    /* Validate plugin requirement. */
     public PluginRequirement {
       id = requireIdentifier(id, "plugin id");
       versionRange = requireNonBlank(versionRange, "versionRange");
@@ -161,7 +162,7 @@ public record ExperimentDocument(
    */
   public record PluginSection(int schemaVersion, String algorithmVersion, DocumentValue data) {
 
-    /** Validate plugin section metadata. */
+    /* Validate plugin section metadata. */
     public PluginSection {
       if (schemaVersion < 1) {
         throw new IllegalArgumentException("plugin schemaVersion must be positive");
@@ -183,7 +184,7 @@ public record ExperimentDocument(
   public record AssetReference(
       String id, String relativePath, String mediaType, long sizeBytes, String sha256) {
 
-    /** Validate asset identity, path and digest. */
+    /* Validate asset identity, path and digest. */
     public AssetReference {
       id = requireIdentifier(id, "asset id");
       relativePath = PortableNames.requireRelativePath(relativePath);
@@ -204,7 +205,7 @@ public record ExperimentDocument(
    */
   public record OutputRequest(String id, String mediaType, String baseName) {
 
-    /** Validate output request. */
+    /* Validate output request. */
     public OutputRequest {
       id = requireIdentifier(id, "output id");
       mediaType = requireNonBlank(mediaType, "output mediaType");
@@ -232,7 +233,7 @@ public record ExperimentDocument(
       String canonicalSha256,
       List<String> migrationNotes) {
 
-    /** Validate provenance fields. */
+    /* Validate provenance fields. */
     public Provenance {
       creatorDisplayName = requireNonBlank(creatorDisplayName, "creatorDisplayName");
       verifiedAccount = verifiedAccount == null ? "" : verifiedAccount;

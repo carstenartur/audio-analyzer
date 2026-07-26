@@ -10,6 +10,7 @@ import java.util.Set;
 import org.hammer.audio.plugin.document.DocumentDiagnostic;
 
 /** Verifies portable asset/output requirements against explicitly selected local resources. */
+@SuppressWarnings("PMD.LooseCoupling")
 public final class ExperimentLocalBindingService {
 
   /**

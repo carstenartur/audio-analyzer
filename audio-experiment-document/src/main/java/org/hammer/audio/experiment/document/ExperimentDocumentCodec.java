@@ -24,6 +24,7 @@ import org.hammer.audio.workflow.dsl.WorkflowDslParser;
 import org.hammer.audio.workflow.dsl.WorkflowDslSerializer;
 
 /** Strict parser, validator, normalizer and canonical serializer for {@code .audioexp} files. */
+@SuppressWarnings({"PMD.CouplingBetweenObjects", "PMD.AvoidDuplicateLiterals", "PMD.LooseCoupling"})
 public final class ExperimentDocumentCodec {
 
   private static final Set<String> ROOT_FIELDS =

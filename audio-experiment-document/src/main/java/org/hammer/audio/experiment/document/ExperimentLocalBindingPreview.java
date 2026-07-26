@@ -14,7 +14,7 @@ import org.hammer.audio.plugin.document.DocumentDiagnostic;
 public record ExperimentLocalBindingPreview(
     ExperimentLocalBindings bindings, List<DocumentDiagnostic> diagnostics, boolean ready) {
 
-  /** Defensively copy local-binding diagnostics. */
+  /* Defensively copy local-binding diagnostics. */
   public ExperimentLocalBindingPreview {
     Objects.requireNonNull(bindings, "bindings");
     diagnostics = List.copyOf(Objects.requireNonNull(diagnostics, "diagnostics"));

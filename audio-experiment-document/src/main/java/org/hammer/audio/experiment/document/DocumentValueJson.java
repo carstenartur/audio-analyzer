@@ -15,6 +15,7 @@ import java.util.TreeMap;
 import org.hammer.audio.plugin.document.DocumentValue;
 
 /** Converts host-owned JSON trees to the framework-neutral plugin value model and back. */
+@SuppressWarnings("PMD.LooseCoupling")
 final class DocumentValueJson {
 
   private DocumentValueJson() {
@@ -89,7 +90,7 @@ final class DocumentValueJson {
 
   static String pointer(String parent, String key) {
     String escaped = key.replace("~", "~0").replace("/", "~1");
-    return parent.equals("/") ? "/" + escaped : parent + "/" + escaped;
+    return "/".equals(parent) ? "/" + escaped : parent + "/" + escaped;
   }
 
   private static void requireDepth(int depth, String pointer) throws ExperimentDocumentException {

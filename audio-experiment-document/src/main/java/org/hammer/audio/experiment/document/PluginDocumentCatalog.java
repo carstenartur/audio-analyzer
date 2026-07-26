@@ -20,6 +20,7 @@ import org.hammer.audio.plugin.document.ExperimentSectionMigration;
 /**
  * Installed-plugin catalog for safe experiment-document inspection, migration and normalization.
  */
+@SuppressWarnings({"PMD.CouplingBetweenObjects", "PMD.LooseCoupling", "PMD.UseExplicitTypes"})
 public final class PluginDocumentCatalog {
 
   private final Map<String, RegisteredPlugin> plugins;

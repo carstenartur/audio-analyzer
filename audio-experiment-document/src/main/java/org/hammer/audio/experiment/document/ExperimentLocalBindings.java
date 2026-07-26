@@ -16,9 +16,10 @@ import java.util.TreeMap;
  * @param assetPaths local paths selected for portable asset identifiers
  * @param outputDirectory optional local directory selected for requested outputs
  */
+@SuppressWarnings("PMD.LooseCoupling")
 public record ExperimentLocalBindings(Map<String, Path> assetPaths, Path outputDirectory) {
 
-  /** Validate identifiers and normalize all local paths. */
+  /* Validate identifiers and normalize all local paths. */
   public ExperimentLocalBindings {
     Objects.requireNonNull(assetPaths, "assetPaths");
     TreeMap<String, Path> copy = new TreeMap<>();

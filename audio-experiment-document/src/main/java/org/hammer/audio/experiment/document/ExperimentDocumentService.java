@@ -82,7 +82,10 @@ public final class ExperimentDocumentService {
 
   /** Return the checked-in public v1 schema without resolving any external URI. */
   public byte[] schemaBytes() throws IOException {
-    ClassLoader loader = ExperimentDocumentService.class.getClassLoader();
+    ClassLoader loader = Thread.currentThread().getContextClassLoader();
+    if (loader == null) {
+      loader = ClassLoader.getSystemClassLoader();
+    }
     try (InputStream input = loader.getResourceAsStream(ExperimentDocumentFormat.SCHEMA_RESOURCE)) {
       if (input == null) {
         throw new IOException(

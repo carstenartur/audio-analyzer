@@ -33,7 +33,7 @@ public final class ExperimentDocumentCli {
     try {
       ExperimentDocument document = codec.load(source);
       ExperimentDocumentPreview preview = PluginDocumentCatalog.empty().preview(document, codec);
-      if (args[0].equals("validate") && args.length == 2) {
+      if ("validate".equals(args[0]) && args.length == 2) {
         out.println("VALID " + preview.canonicalSha256());
         out.println("experiment=" + preview.document().experiment().name());
         out.println("executionAllowed=" + preview.executionAllowed());
@@ -44,7 +44,7 @@ public final class ExperimentDocumentCli {
                 item -> out.println(item.severity() + " " + item.pointer() + " " + item.message()));
         return preview.executionAllowed() ? 0 : 1;
       }
-      if (args[0].equals("normalize") && args.length == 3) {
+      if ("normalize".equals(args[0]) && args.length == 3) {
         codec.save(Path.of(args[2]), preview.document());
         out.println("SAVED " + preview.canonicalSha256());
         return 0;
