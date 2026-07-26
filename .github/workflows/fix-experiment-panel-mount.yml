@@ -35,7 +35,7 @@ jobs:
               text = path.read_text(encoding="utf-8")
               count = text.count(old)
               if count != 1:
-                  raise RuntimeError(f"Expected one match in {path}, found {count}")
+                  raise RuntimeError(f"Expected one match in {path}, found {count}: {old!r}")
               path.write_text(text.replace(old, new), encoding="utf-8")
 
           editor = Path("audio-web-editor/src/WorkflowEditorApp.tsx")
@@ -47,17 +47,17 @@ jobs:
           )
           replace_once(
               editor,
-              """      <aside className="workbench__panel workbench__panel--left" data-testid="node-palette">
-                <CollaborationPanel controller={collaboration} />
-          """,
-              """      <aside className="workbench__panel workbench__panel--left" data-testid="node-palette">
-                <ExperimentDocumentPanel />
-                <CollaborationPanel controller={collaboration} />
-          """,
+              "        <CollaborationPanel controller={collaboration} />\n",
+              "        <ExperimentDocumentPanel />\n"
+              "        <CollaborationPanel controller={collaboration} />\n",
           )
 
           main = Path("audio-web-editor/src/main.tsx")
-          replace_once(main, "import { ExperimentDocumentPanelPortal } from './ExperimentDocumentPanelPortal';\n", "")
+          replace_once(
+              main,
+              "import { ExperimentDocumentPanelPortal } from './ExperimentDocumentPanelPortal';\n",
+              "",
+          )
           replace_once(main, "    <ExperimentDocumentPanelPortal />\n", "")
 
           portal = Path("audio-web-editor/src/ExperimentDocumentPanelPortal.tsx")
