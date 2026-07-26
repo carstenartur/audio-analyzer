@@ -1,0 +1,81 @@
+name: Fix Experiment Panel Mount
+
+on:
+  pull_request:
+    branches:
+      - master
+    paths:
+      - .github/workflows/fix-experiment-panel-mount.yml
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out feature branch
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Replace imperative portal with declarative composition
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def replace_once(path: Path, old: str, new: str) -> None:
+              text = path.read_text(encoding="utf-8")
+              count = text.count(old)
+              if count != 1:
+                  raise RuntimeError(f"Expected one match in {path}, found {count}")
+              path.write_text(text.replace(old, new), encoding="utf-8")
+
+          editor = Path("audio-web-editor/src/WorkflowEditorApp.tsx")
+          replace_once(
+              editor,
+              "import { CollaborationPanel } from './CollaborationPanel';\n",
+              "import { CollaborationPanel } from './CollaborationPanel';\n"
+              "import { ExperimentDocumentPanel } from './ExperimentDocumentPanel';\n",
+          )
+          replace_once(
+              editor,
+              """      <aside className="workbench__panel workbench__panel--left" data-testid="node-palette">
+                <CollaborationPanel controller={collaboration} />
+          """,
+              """      <aside className="workbench__panel workbench__panel--left" data-testid="node-palette">
+                <ExperimentDocumentPanel />
+                <CollaborationPanel controller={collaboration} />
+          """,
+          )
+
+          main = Path("audio-web-editor/src/main.tsx")
+          replace_once(main, "import { ExperimentDocumentPanelPortal } from './ExperimentDocumentPanelPortal';\n", "")
+          replace_once(main, "    <ExperimentDocumentPanelPortal />\n", "")
+
+          portal = Path("audio-web-editor/src/ExperimentDocumentPanelPortal.tsx")
+          if not portal.is_file():
+              raise RuntimeError("Portal source is missing")
+          portal.unlink()
+
+      - name: Apply repository formatting
+        run: ./mvnw -B -pl audio-web-editor,audio-app -am -DskipTests spotless:apply
+
+      - name: Commit mount fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add audio-web-editor
+          git diff --cached --check
+          git commit -m "Render experiment document panel declaratively"
+          git push origin "HEAD:${{ github.event.pull_request.head.ref }}"
+
+      - name: Verify application reactor
+        run: ./mvnw -B -pl audio-web-editor,audio-app -am verify
