@@ -55,6 +55,12 @@ public record ExperimentDocument(
     Objects.requireNonNull(provenance, "provenance");
   }
 
+  /** Return a fresh deeply immutable copy of plugin-owned sections. */
+  @Override
+  public Map<String, Map<String, PluginSection>> pluginData() {
+    return immutablePluginData(pluginData);
+  }
+
   /**
    * Core human-facing experiment metadata.
    *
@@ -90,6 +96,12 @@ public record ExperimentDocument(
         throw new IllegalArgumentException("intendedDuration must be positive");
       }
       applicationVersion = requireNonBlank(applicationVersion, "applicationVersion");
+    }
+
+    /** Return a fresh immutable copy of the experiment tags. */
+    @Override
+    public List<String> tags() {
+      return List.copyOf(tags);
     }
   }
 
@@ -131,6 +143,12 @@ public record ExperimentDocument(
       if (sections.isEmpty()) {
         throw new IllegalArgumentException("required plugin must declare at least one section");
       }
+    }
+
+    /** Return a fresh immutable copy of required section identifiers. */
+    @Override
+    public List<String> sections() {
+      return List.copyOf(sections);
     }
   }
 
@@ -229,6 +247,12 @@ public record ExperimentDocument(
               ? ""
               : requireSha256(canonicalSha256, "canonicalSha256");
       migrationNotes = normalizedStrings(migrationNotes, "migration note");
+    }
+
+    /** Return a fresh immutable copy of migration notes. */
+    @Override
+    public List<String> migrationNotes() {
+      return List.copyOf(migrationNotes);
     }
   }
 

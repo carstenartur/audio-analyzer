@@ -125,12 +125,12 @@ public final class ExperimentDocumentCodec {
     byte[] bytes = encode(document);
     java.nio.file.Path normalized = target.toAbsolutePath().normalize();
     java.nio.file.Path parent = normalized.getParent();
-    if (parent == null) {
-      throw new IOException("Experiment document target has no parent: " + normalized);
+    java.nio.file.Path fileName = normalized.getFileName();
+    if (parent == null || fileName == null) {
+      throw new IOException("Experiment document target has no parent or filename: " + normalized);
     }
     java.nio.file.Files.createDirectories(parent);
-    java.nio.file.Path temporary =
-        normalized.resolveSibling(normalized.getFileName().toString() + ".partial");
+    java.nio.file.Path temporary = normalized.resolveSibling(fileName.toString() + ".partial");
     java.nio.file.Files.write(
         temporary,
         bytes,
