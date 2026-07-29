@@ -75,6 +75,7 @@ class ExperimentDocumentWebIT {
       page.waitForLoadState();
 
       Locator graphNodes = page.locator(".react-flow__node");
+      graphNodes.first().waitFor(new Locator.WaitForOptions().setTimeout(PAGE_LOAD_TIMEOUT_MS));
       int initialNodeCount = graphNodes.count();
       assertTrue(initialNodeCount > 0, "seed workflow should contain graph nodes");
 
