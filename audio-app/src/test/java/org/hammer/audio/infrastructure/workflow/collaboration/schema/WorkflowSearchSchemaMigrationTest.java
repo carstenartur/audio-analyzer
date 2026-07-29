@@ -29,7 +29,7 @@ class WorkflowSearchSchemaMigrationTest {
     WorkflowSchemaMigrationResult result =
         new WorkflowSchemaMigrator(dataSource).migrate(false, false, false);
 
-    assertEquals(2, result.coreMigrationsExecuted());
+    assertEquals(6, result.coreMigrationsExecuted());
     assertEquals(2, result.searchMigrationsExecuted());
     assertEquals(1, result.semanticMigrationsExecuted());
     assertEquals(3, result.collaborationMigrationsExecuted());
