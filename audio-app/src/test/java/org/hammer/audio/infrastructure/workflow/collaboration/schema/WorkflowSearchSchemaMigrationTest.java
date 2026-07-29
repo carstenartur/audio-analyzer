@@ -30,7 +30,7 @@ class WorkflowSearchSchemaMigrationTest {
         new WorkflowSchemaMigrator(dataSource).migrate(false, false, false);
 
     assertEquals(6, result.coreMigrationsExecuted());
-    assertEquals(2, result.searchMigrationsExecuted());
+    assertEquals(3, result.searchMigrationsExecuted());
     assertEquals(1, result.semanticMigrationsExecuted());
     assertEquals(3, result.collaborationMigrationsExecuted());
     assertEquals(1, tableCount(dataSource, "git_commit_index"));
