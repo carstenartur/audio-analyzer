@@ -38,6 +38,8 @@ class CollaborationSchemaMigrationIntegrationTest {
   private static final AtomicInteger TEST_COUNTER = new AtomicInteger();
   private static final String H2_LEGACY_SCHEMA =
       "/db/legacy/audio-analyzer/collaboration/pre-lease/h2/schema.sql";
+  private static final List<String> EXPECTED_CORE_MIGRATIONS =
+      List.of("0.1.4", "0.1.5", "0.1.14", "0.1.14.1", "0.1.14.2", "0.1.17");
   private static final Instant CLAIMED_AT = Instant.parse("2026-07-18T03:00:00Z");
 
   @Test
@@ -58,10 +60,10 @@ class CollaborationSchemaMigrationIntegrationTest {
     WorkflowSchemaMigrationResult migration = migrate(database, false);
 
     assertTrue(migration.applied());
-    assertEquals(2, migration.coreMigrationsExecuted());
+    assertEquals(EXPECTED_CORE_MIGRATIONS.size(), migration.coreMigrationsExecuted());
     assertEquals(3, migration.collaborationMigrationsExecuted());
     assertEquals(
-        List.of("0.1.4", "0.1.5"),
+        EXPECTED_CORE_MIGRATIONS,
         migrationVersions(database, CoreSchemaMigrations.SCHEMA_HISTORY_TABLE));
     assertEquals(
         List.of("1", "2", "3"),
@@ -114,10 +116,10 @@ class CollaborationSchemaMigrationIntegrationTest {
 
     WorkflowSchemaMigrationResult migration = migrate(database, true);
     assertTrue(migration.applied());
-    assertEquals(2, migration.coreMigrationsExecuted());
+    assertEquals(EXPECTED_CORE_MIGRATIONS.size(), migration.coreMigrationsExecuted());
     assertEquals(2, migration.collaborationMigrationsExecuted());
     assertEquals(
-        List.of("0.1.4", "0.1.5"),
+        EXPECTED_CORE_MIGRATIONS,
         migrationVersions(database, CoreSchemaMigrations.SCHEMA_HISTORY_TABLE));
     assertEquals(
         List.of("1", "2", "3"),

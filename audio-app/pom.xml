@@ -10,7 +10,6 @@
   <name>Audio Analyzer App</name>
   <properties>
     <flyway.version>13.0.0</flyway.version>
-    <jgit-storage-hibernate.version>0.1.7</jgit-storage-hibernate.version>
     <postgresql.version>42.7.13</postgresql.version>
     <testcontainers.version>2.0.5</testcontainers.version>
   </properties>
@@ -176,8 +175,14 @@
   </dependencies>
   <repositories>
     <repository>
-      <id>github</id>
-      <url>https://maven.pkg.github.com/carstenartur/jgit-storage-hibernate</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+      <id>jgit-storage-hibernate-public</id>
+      <url>https://raw.githubusercontent.com/carstenartur/jgit-storage-hibernate/maven-repository/</url>
     </repository>
   </repositories>
   <build>
