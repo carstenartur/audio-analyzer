@@ -15,7 +15,7 @@
 
   <properties>
     <checkstyle.skip>true</checkstyle.skip>
-    <frontend-maven-plugin.version>2.0.1</frontend-maven-plugin.version>
+    <frontend-maven-plugin.version>2.0.2</frontend-maven-plugin.version>
     <jacoco.skip>true</jacoco.skip>
     <node.version>v22.14.0</node.version>
     <npm.version>10.9.2</npm.version>
