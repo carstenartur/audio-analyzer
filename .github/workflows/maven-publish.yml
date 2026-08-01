@@ -3,15 +3,20 @@ name: Release Workflow
 on:
   workflow_dispatch:
     inputs:
-      release_version:
-        description: 'Release version without leading v, for example 0.0.1'
-        required: true
-        type: string
       next_development_version:
-        description: 'Next development version, for example 0.0.2-SNAPSHOT. Leave empty to increment patch.'
+        description: 'Optional exact next version (X.Y.Z-SNAPSHOT); leave empty to use the increment choice'
         required: false
         type: string
         default: ''
+      next_version_increment:
+        description: 'Select the conventional next version when no exact version is supplied'
+        required: true
+        type: choice
+        default: patch
+        options:
+          - patch
+          - minor
+          - major
       skip_tests:
         description: 'Skip tests during release build'
         required: false
@@ -29,7 +34,7 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: release-${{ github.ref_name }}
+  group: audio-analyzer-release
   cancel-in-progress: false
 
 jobs:
@@ -43,11 +48,79 @@ jobs:
         -Djansi.passthrough=false
       TERM: dumb
     steps:
-      - name: Checkout repository
+      - name: Checkout authoritative master
         uses: actions/checkout@v7
         with:
+          ref: master
           fetch-depth: 0
           token: ${{ github.token }}
+
+      - name: Resolve release plan from Maven state
+        id: versions
+        env:
+          EXACT_NEXT_VERSION: ${{ inputs.next_development_version }}
+          NEXT_VERSION_INCREMENT: ${{ inputs.next_version_increment }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          import re
+          import xml.etree.ElementTree as ET
+
+          root = ET.parse("pom.xml").getroot()
+          current = root.findtext("{http://maven.apache.org/POM/4.0.0}version")
+          if not current:
+              raise SystemExit("::error::Root pom.xml does not declare a project version")
+          current = current.strip()
+          match = re.fullmatch(r"([0-9]+)\.([0-9]+)\.([0-9]+)-SNAPSHOT", current)
+          if not match:
+              raise SystemExit(
+                  f"::error::Current Maven version must use X.Y.Z-SNAPSHOT, found {current!r}"
+              )
+
+          release_tuple = tuple(map(int, match.groups()))
+          release = ".".join(map(str, release_tuple))
+          exact = os.environ.get("EXACT_NEXT_VERSION", "").strip()
+          if exact:
+              if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+-SNAPSHOT", exact):
+                  raise SystemExit(
+                      "::error::next_development_version must use X.Y.Z-SNAPSHOT"
+                  )
+              next_version = exact
+          else:
+              major, minor, patch = release_tuple
+              increment = os.environ.get("NEXT_VERSION_INCREMENT", "patch") or "patch"
+              if increment == "patch":
+                  patch += 1
+              elif increment == "minor":
+                  minor += 1
+                  patch = 0
+              elif increment == "major":
+                  major += 1
+                  minor = 0
+                  patch = 0
+              else:
+                  raise SystemExit(
+                      f"::error::Unsupported next_version_increment {increment!r}"
+                  )
+              next_version = f"{major}.{minor}.{patch}-SNAPSHOT"
+
+          next_tuple = tuple(
+              map(int, next_version.removesuffix("-SNAPSHOT").split("."))
+          )
+          if next_tuple <= release_tuple:
+              raise SystemExit(
+                  f"::error::Next development version {next_version} must be newer "
+                  f"than release {release}"
+              )
+
+          output = Path(os.environ["GITHUB_OUTPUT"])
+          with output.open("a", encoding="utf-8") as handle:
+              print(f"release_version={release}", file=handle)
+              print(f"next_development_version={next_version}", file=handle)
+          PY
 
       - name: Set up JDK 21
         uses: actions/setup-java@v5
@@ -96,35 +169,15 @@ jobs:
           bash -n "$RUNNER_TEMP/release.sh"
           chmod +x "$RUNNER_TEMP/release.sh"
 
-      - name: Validate release inputs and Maven version
-        shell: bash
-        env:
-          RELEASE_VERSION: ${{ inputs.release_version }}
-        run: |
-          set -euo pipefail
-          CURRENT_VERSION=$(python3 - <<'PY'
-          import xml.etree.ElementTree as ET
-          root = ET.parse('pom.xml').getroot()
-          namespace = {'m': 'http://maven.apache.org/POM/4.0.0'}
-          version = root.findtext('m:version', namespaces=namespace)
-          if not version:
-              raise SystemExit('Root pom.xml does not declare a project version')
-          print(version.strip())
-          PY
-          )
-          echo "Requested release version: ${RELEASE_VERSION}"
-          echo "Current project version: ${CURRENT_VERSION}"
-          test "${CURRENT_VERSION}" = "${RELEASE_VERSION}-SNAPSHOT"
-
       - name: Build, publish and prepare next development version
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_TOKEN: ${{ github.token }}
-          RELEASE_VERSION: ${{ inputs.release_version }}
-          NEXT_VERSION_INPUT: ${{ inputs.next_development_version }}
+          RELEASE_VERSION: ${{ steps.versions.outputs.release_version }}
+          NEXT_VERSION_INPUT: ${{ steps.versions.outputs.next_development_version }}
           SKIP_TESTS: ${{ inputs.skip_tests }}
           DRY_RUN: ${{ inputs.dry_run }}
-          SOURCE_BRANCH: ${{ github.ref_name }}
+          SOURCE_BRANCH: master
           METADATA_HELPER: ${{ runner.temp }}/update-release-metadata.py
         run: |
           git config user.name 'Audio Analyzer Release'
