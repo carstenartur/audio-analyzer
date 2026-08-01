@@ -3,8 +3,13 @@ name: Release Workflow
 on:
   workflow_dispatch:
     inputs:
+      next_development_version:
+        description: 'Optional exact next version (X.Y.Z-SNAPSHOT); leave empty to use the increment choice'
+        required: false
+        type: string
+        default: ''
       next_version_increment:
-        description: 'Select how the development version advances after this release'
+        description: 'Select the conventional next version when no exact version is supplied'
         required: true
         type: choice
         default: patch
@@ -53,6 +58,7 @@ jobs:
       - name: Resolve release plan from Maven state
         id: versions
         env:
+          EXACT_NEXT_VERSION: ${{ inputs.next_development_version }}
           NEXT_VERSION_INCREMENT: ${{ inputs.next_version_increment }}
         shell: bash
         run: |
@@ -74,23 +80,41 @@ jobs:
                   f"::error::Current Maven version must use X.Y.Z-SNAPSHOT, found {current!r}"
               )
 
-          major, minor, patch = map(int, match.groups())
-          release = f"{major}.{minor}.{patch}"
-          increment = os.environ["NEXT_VERSION_INCREMENT"]
-          if increment == "patch":
-              patch += 1
-          elif increment == "minor":
-              minor += 1
-              patch = 0
-          elif increment == "major":
-              major += 1
-              minor = 0
-              patch = 0
+          release_tuple = tuple(map(int, match.groups()))
+          release = ".".join(map(str, release_tuple))
+          exact = os.environ.get("EXACT_NEXT_VERSION", "").strip()
+          if exact:
+              if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+-SNAPSHOT", exact):
+                  raise SystemExit(
+                      "::error::next_development_version must use X.Y.Z-SNAPSHOT"
+                  )
+              next_version = exact
           else:
+              major, minor, patch = release_tuple
+              increment = os.environ.get("NEXT_VERSION_INCREMENT", "patch") or "patch"
+              if increment == "patch":
+                  patch += 1
+              elif increment == "minor":
+                  minor += 1
+                  patch = 0
+              elif increment == "major":
+                  major += 1
+                  minor = 0
+                  patch = 0
+              else:
+                  raise SystemExit(
+                      f"::error::Unsupported next_version_increment {increment!r}"
+                  )
+              next_version = f"{major}.{minor}.{patch}-SNAPSHOT"
+
+          next_tuple = tuple(
+              map(int, next_version.removesuffix("-SNAPSHOT").split("."))
+          )
+          if next_tuple <= release_tuple:
               raise SystemExit(
-                  f"::error::Unsupported next_version_increment {increment!r}"
+                  f"::error::Next development version {next_version} must be newer "
+                  f"than release {release}"
               )
-          next_version = f"{major}.{minor}.{patch}-SNAPSHOT"
 
           output = Path(os.environ["GITHUB_OUTPUT"])
           with output.open("a", encoding="utf-8") as handle:
