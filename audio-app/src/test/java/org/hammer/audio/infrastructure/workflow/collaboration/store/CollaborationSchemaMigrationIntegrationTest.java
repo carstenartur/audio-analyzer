@@ -39,7 +39,7 @@ class CollaborationSchemaMigrationIntegrationTest {
   private static final String H2_LEGACY_SCHEMA =
       "/db/legacy/audio-analyzer/collaboration/pre-lease/h2/schema.sql";
   private static final List<String> EXPECTED_CORE_MIGRATIONS =
-      List.of("0.1.4", "0.1.5", "0.1.14", "0.1.14.1", "0.1.14.2", "0.1.17");
+      List.of("0.1.4", "0.1.5", "0.1.14", "0.1.14.1", "0.1.14.2", "0.1.17", "0.1.18");
   private static final Instant CLAIMED_AT = Instant.parse("2026-07-18T03:00:00Z");
 
   @Test
