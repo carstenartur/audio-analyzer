@@ -10,13 +10,20 @@ DRY_RUN=${DRY_RUN:-false}
 SOURCE_BRANCH=${SOURCE_BRANCH:-master}
 METADATA_HELPER=${METADATA_HELPER:?METADATA_HELPER is required}
 
+python3 .github/scripts/test-release-version-plan.py
+PLAN_FILE=$(mktemp)
+trap 'rm -f "$PLAN_FILE"' EXIT
+python3 .github/scripts/release-version-plan.py \
+  --release "$RELEASE_VERSION" \
+  --next-development-version "$NEXT_VERSION_INPUT" \
+  --github-output "$PLAN_FILE"
+# Planner outputs are strict semantic versions and a derived branch name.
+source "$PLAN_FILE"
+RELEASE_VERSION=$release
+NEXT_VERSION=$next
+
 TAG_NAME="v${RELEASE_VERSION}"
 RELEASE_BRANCH="release/${TAG_NAME}"
-
-if ! [[ "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-  echo "::error::release_version must use X.Y.Z without a leading v"
-  exit 1
-fi
 
 if [[ "$SOURCE_BRANCH" != "master" && "$DRY_RUN" != "true" ]]; then
   echo "::error::Real releases must be dispatched from master, not $SOURCE_BRANCH"
@@ -30,17 +37,6 @@ if [[ "$CURRENT_VERSION" != *-SNAPSHOT ]]; then
 fi
 if [[ "${CURRENT_VERSION%-SNAPSHOT}" != "$RELEASE_VERSION" ]]; then
   echo "::error::Release $RELEASE_VERSION does not match current version $CURRENT_VERSION"
-  exit 1
-fi
-
-if [[ -n "$NEXT_VERSION_INPUT" ]]; then
-  NEXT_VERSION=$NEXT_VERSION_INPUT
-else
-  IFS='.' read -r MAJOR MINOR PATCH <<< "$RELEASE_VERSION"
-  NEXT_VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))-SNAPSHOT"
-fi
-if ! [[ "$NEXT_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+-SNAPSHOT$ ]]; then
-  echo "::error::next_development_version must use X.Y.Z-SNAPSHOT"
   exit 1
 fi
 
