@@ -2,6 +2,7 @@ package org.hammer.audio.infrastructure.workflow.collaboration.schema;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.github.carstenartur.jgit.storage.hibernate.config.HibernateSessionFactoryProvider;
 import io.github.carstenartur.jgit.storage.hibernate.search.entity.GitCommitIndex;
@@ -29,8 +30,12 @@ class WorkflowSearchSchemaMigrationTest {
     WorkflowSchemaMigrationResult result =
         new WorkflowSchemaMigrator(dataSource).migrate(false, false, false);
 
-    assertEquals(7, result.coreMigrationsExecuted());
-    assertEquals(3, result.searchMigrationsExecuted());
+    assertTrue(
+        result.coreMigrationsExecuted() >= 7,
+        "An upstream candidate must retain every released core migration");
+    assertTrue(
+        result.searchMigrationsExecuted() >= 3,
+        "An upstream candidate must retain every released search migration");
     assertEquals(1, result.semanticMigrationsExecuted());
     assertEquals(3, result.collaborationMigrationsExecuted());
     assertEquals(1, tableCount(dataSource, "git_commit_index"));
