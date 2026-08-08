@@ -1,0 +1,67 @@
+name: JGit Storage Consumer Contract
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [ master ]
+    paths:
+      - '.github/jgit-storage-hibernate-contract.sh'
+      - '.github/workflows/jgit-storage-hibernate-contract.yml'
+      - 'pom.xml'
+      - 'audio-core/**'
+      - 'audio-app/**'
+  push:
+    branches: [ master ]
+    paths:
+      - '.github/jgit-storage-hibernate-contract.sh'
+      - '.github/workflows/jgit-storage-hibernate-contract.yml'
+      - 'pom.xml'
+      - 'audio-core/**'
+      - 'audio-app/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  baseline:
+    name: Audio runtime and workflow-history contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - name: Checkout Audio Analyzer
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: |
+            pom.xml
+            audio-core/pom.xml
+            audio-app/pom.xml
+
+      - name: Validate and run the consumer-owned contract
+        shell: bash
+        env:
+          JGIT_STORAGE_HIBERNATE_CONTRACT_MODE: baseline
+        run: |
+          set -euo pipefail
+          bash -n .github/jgit-storage-hibernate-contract.sh
+          .github/jgit-storage-hibernate-contract.sh
+
+      - name: Upload contract evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: audio-analyzer-jgit-storage-hibernate-contract
+          path: |
+            target/jgit-storage-hibernate-contract/**
+            audio-app/target/*.jar
+            audio-*/target/surefire-reports/**
+          if-no-files-found: error
