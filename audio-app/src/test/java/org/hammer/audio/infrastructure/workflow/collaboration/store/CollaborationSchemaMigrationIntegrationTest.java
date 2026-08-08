@@ -60,11 +60,8 @@ class CollaborationSchemaMigrationIntegrationTest {
     WorkflowSchemaMigrationResult migration = migrate(database, false);
 
     assertTrue(migration.applied());
-    assertEquals(EXPECTED_CORE_MIGRATIONS.size(), migration.coreMigrationsExecuted());
+    assertCoreMigrationPrefix(database, migration);
     assertEquals(3, migration.collaborationMigrationsExecuted());
-    assertEquals(
-        EXPECTED_CORE_MIGRATIONS,
-        migrationVersions(database, CoreSchemaMigrations.SCHEMA_HISTORY_TABLE));
     assertEquals(
         List.of("1", "2", "3"),
         migrationVersions(database, CollaborationSchemaMigrations.SCHEMA_HISTORY_TABLE));
@@ -116,11 +113,8 @@ class CollaborationSchemaMigrationIntegrationTest {
 
     WorkflowSchemaMigrationResult migration = migrate(database, true);
     assertTrue(migration.applied());
-    assertEquals(EXPECTED_CORE_MIGRATIONS.size(), migration.coreMigrationsExecuted());
+    assertCoreMigrationPrefix(database, migration);
     assertEquals(2, migration.collaborationMigrationsExecuted());
-    assertEquals(
-        EXPECTED_CORE_MIGRATIONS,
-        migrationVersions(database, CoreSchemaMigrations.SCHEMA_HISTORY_TABLE));
     assertEquals(
         List.of("1", "2", "3"),
         migrationVersions(database, CollaborationSchemaMigrations.SCHEMA_HISTORY_TABLE));
@@ -167,6 +161,20 @@ class CollaborationSchemaMigrationIntegrationTest {
       assertEquals(3, published.attemptCount());
       assertFalse(published.pending());
     }
+  }
+
+  private static void assertCoreMigrationPrefix(
+      TestDatabase database, WorkflowSchemaMigrationResult migration) throws SQLException {
+    List<String> actualCoreMigrations =
+        migrationVersions(database, CoreSchemaMigrations.SCHEMA_HISTORY_TABLE);
+    assertEquals(actualCoreMigrations.size(), migration.coreMigrationsExecuted());
+    assertTrue(
+        actualCoreMigrations.size() >= EXPECTED_CORE_MIGRATIONS.size(),
+        "An upstream candidate must retain every released Core migration");
+    assertEquals(
+        EXPECTED_CORE_MIGRATIONS,
+        actualCoreMigrations.subList(0, EXPECTED_CORE_MIGRATIONS.size()),
+        "Released Core migrations must remain an unchanged prefix");
   }
 
   private static WorkflowSchemaMigrationResult migrate(
