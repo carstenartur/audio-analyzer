@@ -3,6 +3,7 @@ package org.hammer.audio.infrastructure.workflow.store;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
+import io.github.carstenartur.jgit.storage.hibernate.config.HibernateSessionFactoryProvider;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -31,7 +32,7 @@ class HibernateJGitVersionedWorkflowStoreTest {
     CommitId secondCommit;
 
     try {
-      try (var provider = provider(properties)) {
+      try (HibernateSessionFactoryProvider provider = provider(properties)) {
         persistProbe(provider.getSessionFactory());
         try (HibernateJGitVersionedWorkflowStore store =
             new HibernateJGitVersionedWorkflowStore(
@@ -41,7 +42,7 @@ class HibernateJGitVersionedWorkflowStoreTest {
         }
       }
 
-      try (var provider = provider(properties)) {
+      try (HibernateSessionFactoryProvider provider = provider(properties)) {
         WorkflowPersistenceProbeEntity probe =
             loadProbe(provider.getSessionFactory(), "session-probe");
         assertNotNull(probe);
@@ -61,9 +62,9 @@ class HibernateJGitVersionedWorkflowStoreTest {
     }
   }
 
-  private static AutoCloseableSessionFactoryProvider provider(Properties properties) {
-    return new AutoCloseableSessionFactoryProvider(
-        SearchableWorkflowTestSessionFactory.provider(properties, WorkflowPersistenceProbeEntity.class));
+  private static HibernateSessionFactoryProvider provider(Properties properties) {
+    return SearchableWorkflowTestSessionFactory.provider(
+        properties, WorkflowPersistenceProbeEntity.class);
   }
 
   private static void persistProbe(SessionFactory sessionFactory) {
@@ -125,24 +126,6 @@ class HibernateJGitVersionedWorkflowStoreTest {
       Files.deleteIfExists(path);
     } catch (IOException exception) {
       throw new IllegalStateException("Failed to delete test database path " + path, exception);
-    }
-  }
-
-  private static final class AutoCloseableSessionFactoryProvider implements AutoCloseable {
-    private final io.github.carstenartur.jgit.storage.hibernate.config.HibernateSessionFactoryProvider delegate;
-
-    private AutoCloseableSessionFactoryProvider(
-        io.github.carstenartur.jgit.storage.hibernate.config.HibernateSessionFactoryProvider delegate) {
-      this.delegate = delegate;
-    }
-
-    SessionFactory getSessionFactory() {
-      return delegate.getSessionFactory();
-    }
-
-    @Override
-    public void close() {
-      delegate.close();
     }
   }
 }
