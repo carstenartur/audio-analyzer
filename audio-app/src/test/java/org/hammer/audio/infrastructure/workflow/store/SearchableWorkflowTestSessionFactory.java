@@ -23,7 +23,8 @@ final class SearchableWorkflowTestSessionFactory {
     searchableProperties.putIfAbsent("hibernate.search.backend.directory.type", "local-heap");
 
     Set<Class<?>> entities = new LinkedHashSet<>();
-    SearchEntities.annotatedClasses().forEach(entity -> entities.add(requireAnnotatedClass(entity)));
+    SearchEntities.annotatedClasses()
+        .forEach(entity -> entities.add(requireAnnotatedClass(entity)));
     WorkflowSemanticPersistenceEntities.annotatedClasses()
         .forEach(entity -> entities.add(requireAnnotatedClass(entity)));
     for (Class<?> additionalAnnotatedClass :
