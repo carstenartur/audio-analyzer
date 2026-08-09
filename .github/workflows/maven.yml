@@ -16,6 +16,7 @@ permissions:
 
 jobs:
   build:
+    name: Maven verification
     runs-on: ubuntu-latest
     env:
       JAVA_VERSION: '21'
