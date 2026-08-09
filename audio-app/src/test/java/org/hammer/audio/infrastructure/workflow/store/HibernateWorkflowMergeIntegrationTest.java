@@ -3,7 +3,6 @@ package org.hammer.audio.infrastructure.workflow.store;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import io.github.carstenartur.jgit.storage.hibernate.config.HibernateSessionFactoryProvider;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -32,8 +31,7 @@ class HibernateWorkflowMergeIntegrationTest {
 
   @Test
   void mergesExactHibernateBackedBranchesAndReloadsTheAuditCommit() {
-    try (HibernateSessionFactoryProvider provider =
-            new HibernateSessionFactoryProvider(properties());
+    try (var provider = SearchableWorkflowTestSessionFactory.provider(properties());
         HibernateJGitVersionedWorkflowStore store =
             new HibernateJGitVersionedWorkflowStore(
                 provider.getSessionFactory(), "workflow-merge-integration")) {

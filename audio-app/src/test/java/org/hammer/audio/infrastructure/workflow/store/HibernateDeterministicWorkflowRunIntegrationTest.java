@@ -2,7 +2,6 @@ package org.hammer.audio.infrastructure.workflow.store;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-import io.github.carstenartur.jgit.storage.hibernate.config.HibernateSessionFactoryProvider;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -39,8 +38,7 @@ class HibernateDeterministicWorkflowRunIntegrationTest {
   @Test
   void exactHibernateBackedCommitRunsThroughRealComputationBackend() {
     Properties properties = h2Properties();
-    try (HibernateSessionFactoryProvider provider =
-            new HibernateSessionFactoryProvider(properties);
+    try (var provider = SearchableWorkflowTestSessionFactory.provider(properties);
         HibernateJGitVersionedWorkflowStore store =
             new HibernateJGitVersionedWorkflowStore(
                 provider.getSessionFactory(), "deterministic-workflow-runs")) {

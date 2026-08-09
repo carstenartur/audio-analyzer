@@ -63,8 +63,8 @@ class HibernateJGitVersionedWorkflowStoreTest {
   }
 
   private static HibernateSessionFactoryProvider provider(Properties properties) {
-    return new HibernateSessionFactoryProvider(
-        properties, List.of(WorkflowPersistenceProbeEntity.class));
+    return SearchableWorkflowTestSessionFactory.provider(
+        properties, WorkflowPersistenceProbeEntity.class);
   }
 
   private static void persistProbe(SessionFactory sessionFactory) {
