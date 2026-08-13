@@ -43,7 +43,7 @@
     <jackson.version>2.22.1</jackson.version>
     <jgit.version>7.7.1.202607240634-r</jgit.version>
     <hibernate.version>7.4.5.Final</hibernate.version>
-    <jgit-storage-hibernate.version>0.1.18</jgit-storage-hibernate.version>
+    <jgit-storage-hibernate.version>0.10.0</jgit-storage-hibernate.version>
     <spring-boot.version>4.1.0</spring-boot.version>
 
     <maven-compiler-plugin.version>3.15.0</maven-compiler-plugin.version>
