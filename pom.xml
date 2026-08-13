@@ -60,7 +60,7 @@
     <maven-pmd-plugin.version>3.28.0</maven-pmd-plugin.version>
     <spotless-maven-plugin.version>3.9.0</spotless-maven-plugin.version>
     <jmh.version>1.37</jmh.version>
-    <archunit.version>1.4.2</archunit.version>
+    <archunit.version>1.5.0</archunit.version>
   </properties>
 
   <dependencyManagement>
