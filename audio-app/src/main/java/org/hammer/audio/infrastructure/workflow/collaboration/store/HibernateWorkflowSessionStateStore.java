@@ -83,6 +83,12 @@ public final class HibernateWorkflowSessionStateStore implements WorkflowSession
     Objects.requireNonNull(command, "command");
     try {
       return inTransaction(session -> appendWithinTransaction(session, command));
+    } catch (WorkflowSessionRevisionConflictException failure) {
+      WorkflowSessionAppendResult duplicate = duplicateAfterConcurrentFailure(command);
+      if (duplicate != null) {
+        return duplicate;
+      }
+      throw failure;
     } catch (OptimisticLockException | StaleStateException | ConstraintViolationException failure) {
       return recoverConcurrentAppend(command, failure);
     }
