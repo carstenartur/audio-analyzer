@@ -1,26 +1,30 @@
 name: Apply issue 350 concurrent append recovery
 
 on:
-  push:
-    branches:
-      - fix/350-concurrent-append-recovery
+  pull_request:
+    branches: [ master ]
+    types: [opened, reopened, synchronize]
 
 permissions:
   contents: write
 
 concurrency:
-  group: apply-issue350-concurrent-append-recovery
+  group: apply-issue350-${{ github.event.pull_request.number }}
   cancel-in-progress: false
 
 jobs:
   apply:
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    env:
+      HEAD_REF: ${{ github.event.pull_request.head.ref }}
 
     steps:
       - name: Checkout repair branch
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ env.HEAD_REF }}
           fetch-depth: 0
 
       - name: Set up JDK 21
@@ -35,6 +39,9 @@ jobs:
 
       - name: Apply bounded recovery repair
         run: python3 .github/scripts/apply-issue350-concurrent-append-fix.py
+
+      - name: Format repaired Java sources
+        run: mvn -B -pl audio-app -am spotless:apply -DskipTests
 
       - name: Build application dependencies
         run: mvn -B -pl audio-app -am install -DskipTests
@@ -66,4 +73,4 @@ jobs:
             exit 1
           fi
           git commit -m 'Synchronize concurrent append recovery'
-          git push origin "HEAD:${GITHUB_REF_NAME}"
+          git push origin "HEAD:${HEAD_REF}"
