@@ -6,6 +6,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.github.carstenartur.jgit.storage.hibernate.config.HibernateSessionFactoryProvider;
 import jakarta.persistence.OptimisticLockException;
+import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.MethodType;
 import java.time.Instant;
 import java.util.List;
 import java.util.Properties;
@@ -76,8 +79,8 @@ class HibernateWorkflowSessionStateStorePostgreSqlConcurrencyTest {
             executor.submit(
                 () -> {
                   recoveryStarted.countDown();
-                  return store.recoverConcurrentAppend(
-                      command, new OptimisticLockException("simulated losing append"));
+                  return invokeConcurrentAppendRecovery(
+                      store, command, new OptimisticLockException("simulated losing append"));
                 });
 
         await(recoveryStarted);
@@ -100,6 +103,21 @@ class HibernateWorkflowSessionStateStorePostgreSqlConcurrencyTest {
       }
     } finally {
       executor.shutdownNow();
+    }
+  }
+
+  private static WorkflowSessionAppendResult invokeConcurrentAppendRecovery(
+      HibernateWorkflowSessionStateStore store,
+      WorkflowSessionAppendCommand command,
+      RuntimeException failure) {
+    try {
+      return (WorkflowSessionAppendResult)
+          ConcurrentAppendRecoveryHandle.HANDLE.invokeExact(store, command, failure);
+    } catch (RuntimeException | Error exception) {
+      throw exception;
+    } catch (Throwable failureToInvoke) {
+      throw new AssertionError(
+          "Could not invoke private concurrent append recovery", failureToInvoke);
     }
   }
 
@@ -279,6 +297,28 @@ class HibernateWorkflowSessionStateStorePostgreSqlConcurrencyTest {
     boolean conflicted() {
       return conflict != null;
     }
+  }
+
+  private static final class ConcurrentAppendRecoveryHandle {
+    private static final MethodHandle HANDLE = create();
+
+    private static MethodHandle create() {
+      try {
+        return MethodHandles.privateLookupIn(
+                HibernateWorkflowSessionStateStore.class, MethodHandles.lookup())
+            .findVirtual(
+                HibernateWorkflowSessionStateStore.class,
+                "recoverConcurrentAppend",
+                MethodType.methodType(
+                    WorkflowSessionAppendResult.class,
+                    WorkflowSessionAppendCommand.class,
+                    RuntimeException.class));
+      } catch (IllegalAccessException | NoSuchMethodException exception) {
+        throw new ExceptionInInitializerError(exception);
+      }
+    }
+
+    private ConcurrentAppendRecoveryHandle() {}
   }
 
   @FunctionalInterface

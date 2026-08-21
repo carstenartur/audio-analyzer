@@ -273,7 +273,7 @@ public final class HibernateWorkflowSessionStateStore implements WorkflowSession
         aggregate.toStoredSession(), existing.toStoredOperation(), outbox.toStoredEntry(), true);
   }
 
-  WorkflowSessionAppendResult recoverConcurrentAppend(
+  private WorkflowSessionAppendResult recoverConcurrentAppend(
       WorkflowSessionAppendCommand command, RuntimeException failure) {
     return inTransaction(
         session -> {
