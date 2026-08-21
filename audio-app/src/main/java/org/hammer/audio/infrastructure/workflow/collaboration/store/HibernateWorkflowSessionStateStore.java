@@ -1,5 +1,6 @@
 package org.hammer.audio.infrastructure.workflow.collaboration.store;
 
+import jakarta.persistence.LockModeType;
 import jakarta.persistence.OptimisticLockException;
 import java.time.Instant;
 import java.util.List;
@@ -274,28 +275,32 @@ public final class HibernateWorkflowSessionStateStore implements WorkflowSession
 
   private WorkflowSessionAppendResult recoverConcurrentAppend(
       WorkflowSessionAppendCommand command, RuntimeException failure) {
-    WorkflowSessionAppendResult duplicate = duplicateAfterConcurrentFailure(command);
-    if (duplicate != null) {
-      return duplicate;
-    }
-
-    long actualRevision = currentRevision(command.sessionId());
-    if (actualRevision != command.expectedRevision()) {
-      throw new WorkflowSessionRevisionConflictException(
-          command.sessionId(), command.expectedRevision(), actualRevision, failure);
-    }
-    throw new IllegalStateException(
-        "Durable append constraint failed without advancing session " + command.sessionId(),
-        failure);
-  }
-
-  private WorkflowSessionAppendResult duplicateAfterConcurrentFailure(
-      WorkflowSessionAppendCommand command) {
     return inTransaction(
         session -> {
+          // The failed append may race a still-uncommitted winner. Locking the aggregate
+          // first makes the duplicate lookup and revision classification observe one
+          // committed database state without polling or timing sleeps.
+          WorkflowSessionEntity aggregate =
+              session.find(
+                  WorkflowSessionEntity.class, command.sessionId(), LockModeType.PESSIMISTIC_WRITE);
+          if (aggregate == null) {
+            throw new NoSuchElementException("Unknown workflow session: " + command.sessionId());
+          }
+
           WorkflowOperationEntity existing =
               findOperation(session, command.operation().operationId());
-          return existing == null ? null : duplicateResult(session, existing, command);
+          if (existing != null) {
+            return duplicateResult(session, existing, command);
+          }
+
+          long actualRevision = aggregate.semanticRevision();
+          if (actualRevision != command.expectedRevision()) {
+            throw new WorkflowSessionRevisionConflictException(
+                command.sessionId(), command.expectedRevision(), actualRevision, failure);
+          }
+          throw new IllegalStateException(
+              "Durable append constraint failed without advancing session " + command.sessionId(),
+              failure);
         });
   }
 
@@ -340,10 +345,6 @@ public final class HibernateWorkflowSessionStateStore implements WorkflowSession
   private StoredWorkflowSession requireStoredSession(String sessionId) {
     return find(sessionId)
         .orElseThrow(() -> new NoSuchElementException("Unknown workflow session: " + sessionId));
-  }
-
-  private long currentRevision(String sessionId) {
-    return requireStoredSession(sessionId).revision();
   }
 
   private <T> T inTransaction(Function<Session, T> work) {
