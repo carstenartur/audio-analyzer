@@ -56,7 +56,7 @@
     <maven-site-plugin.version>3.22.0</maven-site-plugin.version>
     <jacoco-maven-plugin.version>0.8.15</jacoco-maven-plugin.version>
     <maven-checkstyle-plugin.version>3.6.0</maven-checkstyle-plugin.version>
-    <spotbugs-maven-plugin.version>4.10.3.0</spotbugs-maven-plugin.version>
+    <spotbugs-maven-plugin.version>4.10.4.0</spotbugs-maven-plugin.version>
     <maven-pmd-plugin.version>3.28.0</maven-pmd-plugin.version>
     <spotless-maven-plugin.version>3.10.0</spotless-maven-plugin.version>
     <jmh.version>1.37</jmh.version>
