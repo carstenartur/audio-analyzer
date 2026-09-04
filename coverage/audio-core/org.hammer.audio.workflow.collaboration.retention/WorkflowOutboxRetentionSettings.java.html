@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WorkflowOutboxRetentionSettings.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Core</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.collaboration.retention</a> &gt; <span class="el_source">WorkflowOutboxRetentionSettings.java</span></div><h1>WorkflowOutboxRetentionSettings.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.collaboration.retention;
+
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Objects;
+
+/**
+ * Conservative settings for bounded published-outbox retention.
+ *
+ * &lt;p&gt;This contract does not delete session aggregates, accepted operations or Git checkpoints.
+ * Command ids therefore remain available indefinitely unless a separate, explicitly proven
+ * operation-compaction policy is introduced later.
+ *
+ * @param publishedRetention minimum age of a successfully published event before eligibility
+ * @param batchSize maximum candidates captured by one immutable plan
+ */
+public record WorkflowOutboxRetentionSettings(Duration publishedRetention, int batchSize) {
+
+  /** Default published-event diagnostic horizon. */
+<span class="fc" id="L20">  public static final Duration DEFAULT_PUBLISHED_RETENTION = Duration.ofDays(30);</span>
+
+  /** Conservative default batch size. */
+  public static final int DEFAULT_BATCH_SIZE = 100;
+
+  /** Hard upper bound preventing accidental unbounded cleanup transactions. */
+  public static final int MAXIMUM_BATCH_SIZE = 1000;
+
+<span class="fc" id="L28">  public WorkflowOutboxRetentionSettings {</span>
+    // Validate settings once before they can participate in candidate selection.
+<span class="fc" id="L30">    Objects.requireNonNull(publishedRetention, &quot;publishedRetention&quot;);</span>
+<span class="pc bpc" id="L31" title="1 of 4 branches missed.">    if (publishedRetention.isZero() || publishedRetention.isNegative()) {</span>
+<span class="fc" id="L32">      throw new IllegalArgumentException(&quot;publishedRetention must be positive&quot;);</span>
+    }
+<span class="pc bpc" id="L34" title="1 of 4 branches missed.">    if (batchSize &lt;= 0 || batchSize &gt; MAXIMUM_BATCH_SIZE) {</span>
+<span class="fc" id="L35">      throw new IllegalArgumentException(&quot;batchSize must be between 1 and &quot; + MAXIMUM_BATCH_SIZE);</span>
+    }
+<span class="fc" id="L37">  }</span>
+
+  /** Returns settings that retain published rows for 30 days and delete at most 100 per batch. */
+  public static WorkflowOutboxRetentionSettings conservativeDefaults() {
+<span class="fc" id="L41">    return new WorkflowOutboxRetentionSettings(DEFAULT_PUBLISHED_RETENTION, DEFAULT_BATCH_SIZE);</span>
+  }
+
+  /** Computes the inclusive publication cutoff for one logical cleanup time. */
+  public Instant publishedCutoffAt(Instant plannedAt) {
+<span class="fc" id="L46">    return Objects.requireNonNull(plannedAt, &quot;plannedAt&quot;).minus(publishedRetention);</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

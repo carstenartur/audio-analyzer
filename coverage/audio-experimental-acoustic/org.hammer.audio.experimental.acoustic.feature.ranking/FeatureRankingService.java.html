@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>FeatureRankingService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.feature.ranking</a> &gt; <span class="el_source">FeatureRankingService.java</span></div><h1>FeatureRankingService.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.feature.ranking;
+
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import org.hammer.audio.experimental.acoustic.feature.evaluation.FeatureEvaluationEntry;
+import org.hammer.audio.experimental.acoustic.feature.evaluation.FeatureEvaluationReport;
+
+/**
+ * Ranks features by applying all registered {@link FeatureScorer}s to a {@link
+ * FeatureEvaluationReport}.
+ *
+ * &lt;p&gt;The resulting list is sorted by descending mean score across all scorers. Adding a new scoring
+ * strategy requires only implementing {@link FeatureScorer} and passing it to the constructor.
+ *
+ * &lt;p&gt;This service is stateless and may be called concurrently.
+ */
+public final class FeatureRankingService {
+
+  private final List&lt;FeatureScorer&gt; scorers;
+
+  /**
+   * Create a service with the given scorers.
+   *
+   * @param scorers list of scorers to apply; must not be {@code null} or empty
+   */
+<span class="fc" id="L29">  public FeatureRankingService(List&lt;FeatureScorer&gt; scorers) {</span>
+<span class="fc" id="L30">    Objects.requireNonNull(scorers, &quot;scorers&quot;);</span>
+<span class="pc bpc" id="L31" title="1 of 2 branches missed.">    if (scorers.isEmpty()) {</span>
+<span class="nc" id="L32">      throw new IllegalArgumentException(&quot;scorers must not be empty&quot;);</span>
+    }
+<span class="fc" id="L34">    this.scorers = List.copyOf(scorers);</span>
+<span class="fc" id="L35">  }</span>
+
+  /**
+   * Create a service with the three built-in scorers: {@link VarianceBetweenClassesScorer}, {@link
+   * FisherScorer}, and {@link InformationGainScorer}.
+   *
+   * @return default service instance; never {@code null}
+   */
+  public static FeatureRankingService defaultService() {
+<span class="fc" id="L44">    return new FeatureRankingService(</span>
+<span class="fc" id="L45">        List.of(</span>
+            new VarianceBetweenClassesScorer(), new FisherScorer(), new InformationGainScorer()));
+  }
+
+  /**
+   * Rank all features in the report by descending mean score.
+   *
+   * @param report feature evaluation report; must not be {@code null}
+   * @return sorted list of ranking entries, best features first; never {@code null}
+   */
+  @SuppressWarnings(&quot;PMD.UseConcurrentHashMap&quot;)
+  public List&lt;FeatureRankingEntry&gt; rank(FeatureEvaluationReport report) {
+<span class="fc" id="L57">    Objects.requireNonNull(report, &quot;report&quot;);</span>
+
+<span class="fc" id="L59">    List&lt;FeatureRankingEntry&gt; entries = new ArrayList&lt;&gt;(report.entries().size());</span>
+<span class="fc bfc" id="L60" title="All 2 branches covered.">    for (FeatureEvaluationEntry evalEntry : report.entries()) {</span>
+<span class="fc" id="L61">      Map&lt;String, Double&gt; scores = new LinkedHashMap&lt;&gt;();</span>
+<span class="fc bfc" id="L62" title="All 2 branches covered.">      for (FeatureScorer scorer : scorers) {</span>
+<span class="fc" id="L63">        scores.put(scorer.name(), scorer.score(evalEntry));</span>
+<span class="fc" id="L64">      }</span>
+<span class="fc" id="L65">      entries.add(new FeatureRankingEntry(evalEntry.featureName(), scores));</span>
+<span class="fc" id="L66">    }</span>
+
+<span class="fc" id="L68">    entries.sort((a, b) -&gt; Double.compare(b.meanScore(), a.meanScore()));</span>
+<span class="fc" id="L69">    return List.copyOf(entries);</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

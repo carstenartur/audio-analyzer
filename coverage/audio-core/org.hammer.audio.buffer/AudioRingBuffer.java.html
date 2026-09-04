@@ -1,0 +1,248 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>AudioRingBuffer.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Core</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.buffer</a> &gt; <span class="el_source">AudioRingBuffer.java</span></div><h1>AudioRingBuffer.java</h1><pre class="source lang-java linenums">package org.hammer.audio.buffer;
+
+import java.util.concurrent.atomic.AtomicLong;
+
+/**
+ * Bounded, lock-free single-producer / single-consumer (SPSC) ring buffer.
+ *
+ * &lt;p&gt;This buffer is designed for realtime audio workloads where the audio capture thread is the
+ * sole producer and a downstream DSP/analysis thread is the sole consumer. It avoids locks on the
+ * hot path entirely: synchronization is performed via two {@link AtomicLong} sequences using
+ * acquire/release semantics implicit in {@link AtomicLong#get()} / {@link AtomicLong#lazySet(long)}
+ * /{@link AtomicLong#set(long)}.
+ *
+ * &lt;p&gt;&lt;strong&gt;Capacity&lt;/strong&gt; is rounded up to the next power of two so that the index calculation
+ * can use a bitmask instead of modulo.
+ *
+ * &lt;p&gt;&lt;strong&gt;Allocation&lt;/strong&gt;: zero allocations on the hot path. The internal storage array is
+ * allocated once at construction; {@link #offer(Object)} and {@link #poll()} only update sequence
+ * counters.
+ *
+ * &lt;p&gt;&lt;strong&gt;Concurrency contract&lt;/strong&gt;: at most one producer thread may call {@link
+ * #offer(Object)}, and at most one consumer thread may call {@link #poll()}. Read-only inspection
+ * methods ({@link #size()}, {@link #isEmpty()}, {@link #isFull()}, {@link #capacity()}) are safe to
+ * call from any thread.
+ *
+ * &lt;p&gt;This is intentionally specialized for SPSC: it is faster than a general-purpose queue and
+ * matches the producer/consumer topology of an audio capture pipeline. For multi-producer or
+ * multi-consumer scenarios use {@link java.util.concurrent.LinkedBlockingQueue} or similar.
+ *
+ * @param &lt;T&gt; element type; typically {@link org.hammer.audio.core.AudioBlock}
+ * @author refactoring
+ */
+public final class AudioRingBuffer&lt;T&gt; {
+
+  private final Object[] elements;
+  private final int mask;
+  private final int capacity;
+
+  /** Next index a producer will write to (modulo capacity). Producer-write, consumer-read. */
+<span class="fc" id="L40">  private final AtomicLong tail = new AtomicLong(0);</span>
+
+  /** Next index a consumer will read from (modulo capacity). Consumer-write, producer-read. */
+<span class="fc" id="L43">  private final AtomicLong head = new AtomicLong(0);</span>
+
+  /**
+   * Create a new SPSC ring buffer with at least the requested capacity.
+   *
+   * @param requestedCapacity minimum capacity; will be rounded up to the next power of two. Must be
+   *     {@code &gt;= 1} and {@code &lt;= 2^30}.
+   * @throws IllegalArgumentException if {@code requestedCapacity} is out of range
+   */
+<span class="fc" id="L52">  public AudioRingBuffer(int requestedCapacity) {</span>
+<span class="fc bfc" id="L53" title="All 2 branches covered.">    if (requestedCapacity &lt; 1) {</span>
+<span class="fc" id="L54">      throw new IllegalArgumentException(&quot;requestedCapacity must be &gt;= 1&quot;);</span>
+    }
+<span class="pc bpc" id="L56" title="1 of 2 branches missed.">    if (requestedCapacity &gt; (1 &lt;&lt; 30)) {</span>
+<span class="nc" id="L57">      throw new IllegalArgumentException(&quot;requestedCapacity too large (max 2^30)&quot;);</span>
+    }
+<span class="fc" id="L59">    int cap = 1;</span>
+<span class="fc bfc" id="L60" title="All 2 branches covered.">    while (cap &lt; requestedCapacity) {</span>
+<span class="fc" id="L61">      cap &lt;&lt;= 1;</span>
+    }
+<span class="fc" id="L63">    this.capacity = cap;</span>
+<span class="fc" id="L64">    this.mask = cap - 1;</span>
+<span class="fc" id="L65">    this.elements = new Object[cap];</span>
+<span class="fc" id="L66">  }</span>
+
+  /**
+   * @return the actual capacity (next power of two &amp;ge; the requested value)
+   */
+  public int capacity() {
+<span class="fc" id="L72">    return capacity;</span>
+  }
+
+  /**
+   * Approximate current number of elements in the buffer. Safe to call from any thread; may be
+   * slightly stale because head and tail are not read atomically together.
+   *
+   * @return number of elements currently buffered
+   */
+  public int size() {
+<span class="fc" id="L82">    long t = tail.get();</span>
+<span class="fc" id="L83">    long h = head.get();</span>
+<span class="fc" id="L84">    long s = t - h;</span>
+<span class="pc bpc" id="L85" title="1 of 2 branches missed.">    if (s &lt; 0) {</span>
+<span class="nc" id="L86">      return 0;</span>
+    }
+<span class="pc bpc" id="L88" title="1 of 2 branches missed.">    return s &gt; capacity ? capacity : (int) s;</span>
+  }
+
+  /**
+   * @return {@code true} if empty (snapshot, may be stale)
+   */
+  public boolean isEmpty() {
+<span class="pc bpc" id="L95" title="1 of 2 branches missed.">    return tail.get() == head.get();</span>
+  }
+
+  /**
+   * @return {@code true} if full (snapshot, may be stale)
+   */
+  public boolean isFull() {
+<span class="pc bpc" id="L102" title="1 of 2 branches missed.">    return (tail.get() - head.get()) &gt;= capacity;</span>
+  }
+
+  /**
+   * Offer an element to the buffer. Producer-only operation.
+   *
+   * &lt;p&gt;This method never blocks. If the buffer is full the element is rejected and {@code false} is
+   * returned: realtime audio capture should drop the oldest data only via an explicit overwrite
+   * strategy (see {@link #offerOverwrite(Object)}), never silently stall.
+   *
+   * @param element element to enqueue; must not be {@code null}
+   * @return {@code true} if accepted, {@code false} if the buffer is full
+   * @throws NullPointerException if {@code element} is {@code null}
+   */
+  public boolean offer(T element) {
+<span class="fc bfc" id="L117" title="All 2 branches covered.">    if (element == null) {</span>
+<span class="fc" id="L118">      throw new NullPointerException(&quot;element&quot;);</span>
+    }
+<span class="fc" id="L120">    long t = tail.get();</span>
+<span class="fc" id="L121">    long h = head.get();</span>
+<span class="fc bfc" id="L122" title="All 2 branches covered.">    if (t - h &gt;= capacity) {</span>
+<span class="fc" id="L123">      return false;</span>
+    }
+<span class="fc" id="L125">    elements[(int) (t &amp; mask)] = element;</span>
+<span class="fc" id="L126">    tail.lazySet(t + 1);</span>
+<span class="fc" id="L127">    return true;</span>
+  }
+
+  /**
+   * Offer an element to the buffer, dropping the oldest element if the buffer is full.
+   *
+   * &lt;p&gt;&lt;strong&gt;Concurrency restriction.&lt;/strong&gt; This method writes to {@code head} from the
+   * producer thread (it advances {@code head} past the dropped element). The strict SPSC contract
+   * documented on this class — where {@code head} is consumer-write and {@code tail} is
+   * producer-write — therefore &lt;em&gt;does not&lt;/em&gt; hold while {@code offerOverwrite} is in use:
+   *
+   * &lt;ul&gt;
+   *   &lt;li&gt;&lt;strong&gt;Safe&lt;/strong&gt;: single-threaded usage, or any topology where the consumer is
+   *       &lt;em&gt;not&lt;/em&gt; concurrently calling {@link #poll()} / {@link #drainTo(Object[], int)} /
+   *       {@link #clear()}. Typical example: a producer that owns the buffer and drains it from the
+   *       same thread (capture loop publishing to a &quot;latest-wins&quot; cache it later reads).
+   *   &lt;li&gt;&lt;strong&gt;Not safe&lt;/strong&gt;: a separate consumer thread concurrently calling {@link
+   *       #poll()} or {@link #drainTo(Object[], int)}. Use {@link #offer(Object)} and let the
+   *       caller handle the {@code false} return instead.
+   * &lt;/ul&gt;
+   *
+   * &lt;p&gt;If you need &quot;drop oldest&quot; semantics with a concurrent consumer, prefer publishing the latest
+   * element through a separate {@code volatile} reference (see {@link
+   * org.hammer.audio.AudioCaptureServiceImpl#getLatestBlock()}) while calling {@link
+   * #offer(Object)} on this buffer.
+   *
+   * @param element element to enqueue; must not be {@code null}
+   * @return the element dropped because the buffer was full, or {@code null} if nothing was dropped
+   * @throws NullPointerException if {@code element} is {@code null}
+   */
+  @SuppressWarnings(&quot;unchecked&quot;)
+  public T offerOverwrite(T element) {
+<span class="fc bfc" id="L159" title="All 2 branches covered.">    if (element == null) {</span>
+<span class="fc" id="L160">      throw new NullPointerException(&quot;element&quot;);</span>
+    }
+<span class="fc" id="L162">    long t = tail.get();</span>
+<span class="fc" id="L163">    long h = head.get();</span>
+<span class="fc" id="L164">    T dropped = null;</span>
+<span class="pc bpc" id="L165" title="1 of 2 branches missed.">    if (t - h &gt;= capacity) {</span>
+<span class="fc" id="L166">      long desiredHead = t - capacity + 1;</span>
+      // Best-effort advance: only move head forward.
+      while (true) {
+<span class="fc" id="L169">        long curHead = head.get();</span>
+<span class="pc bpc" id="L170" title="1 of 2 branches missed.">        if (curHead &gt;= desiredHead) {</span>
+<span class="nc" id="L171">          break;</span>
+        }
+<span class="pc bpc" id="L173" title="1 of 2 branches missed.">        if (head.compareAndSet(curHead, desiredHead)) {</span>
+<span class="fc" id="L174">          dropped = (T) elements[(int) (curHead &amp; mask)];</span>
+<span class="fc" id="L175">          break;</span>
+        }
+<span class="nc" id="L177">      }</span>
+    }
+<span class="fc" id="L179">    elements[(int) (t &amp; mask)] = element;</span>
+<span class="fc" id="L180">    tail.lazySet(t + 1);</span>
+<span class="fc" id="L181">    return dropped;</span>
+  }
+
+  /**
+   * Remove and return the oldest element, or {@code null} if the buffer is empty.
+   *
+   * &lt;p&gt;Consumer-only operation.
+   *
+   * @return the dequeued element, or {@code null} if the buffer is empty
+   */
+  @SuppressWarnings(&quot;unchecked&quot;)
+  public T poll() {
+<span class="fc" id="L193">    long h = head.get();</span>
+<span class="fc" id="L194">    long t = tail.get();</span>
+<span class="fc bfc" id="L195" title="All 2 branches covered.">    if (h &gt;= t) {</span>
+<span class="fc" id="L196">      return null;</span>
+    }
+<span class="fc" id="L198">    int idx = (int) (h &amp; mask);</span>
+<span class="fc" id="L199">    T element = (T) elements[idx];</span>
+<span class="fc" id="L200">    elements[idx] = null; // help GC</span>
+<span class="fc" id="L201">    head.lazySet(h + 1);</span>
+<span class="fc" id="L202">    return element;</span>
+  }
+
+  /**
+   * Drain up to {@code max} elements into the supplied destination array, starting at index 0.
+   * Consumer-only operation.
+   *
+   * @param dest destination array; must not be {@code null} and must have length {@code &gt;= max}
+   * @param max maximum number of elements to drain
+   * @return number of elements actually drained ({@code 0..max})
+   * @throws IllegalArgumentException if {@code max &lt; 0} or {@code dest.length &lt; max}
+   */
+  @SuppressWarnings(&quot;unchecked&quot;)
+  public int drainTo(T[] dest, int max) {
+<span class="pc bpc" id="L216" title="1 of 2 branches missed.">    if (max &lt; 0) {</span>
+<span class="nc" id="L217">      throw new IllegalArgumentException(&quot;max must be &gt;= 0&quot;);</span>
+    }
+<span class="pc bpc" id="L219" title="1 of 2 branches missed.">    if (dest.length &lt; max) {</span>
+<span class="nc" id="L220">      throw new IllegalArgumentException(&quot;dest is too small&quot;);</span>
+    }
+<span class="fc" id="L222">    int drained = 0;</span>
+<span class="fc" id="L223">    long h = head.get();</span>
+<span class="fc" id="L224">    long t = tail.get();</span>
+<span class="pc bpc" id="L225" title="1 of 4 branches missed.">    while (drained &lt; max &amp;&amp; h &lt; t) {</span>
+<span class="fc" id="L226">      int idx = (int) (h &amp; mask);</span>
+<span class="fc" id="L227">      dest[drained++] = (T) elements[idx];</span>
+<span class="fc" id="L228">      elements[idx] = null;</span>
+<span class="fc" id="L229">      h++;</span>
+<span class="fc" id="L230">    }</span>
+<span class="fc" id="L231">    head.lazySet(h);</span>
+<span class="fc" id="L232">    return drained;</span>
+  }
+
+  /**
+   * Reset the buffer to empty. Not safe to call concurrently with {@link #offer} or {@link #poll}.
+   */
+  public void clear() {
+<span class="fc" id="L239">    long h = head.get();</span>
+<span class="fc" id="L240">    long t = tail.get();</span>
+<span class="fc bfc" id="L241" title="All 2 branches covered.">    while (h &lt; t) {</span>
+<span class="fc" id="L242">      elements[(int) (h &amp; mask)] = null;</span>
+<span class="fc" id="L243">      h++;</span>
+    }
+<span class="fc" id="L245">    head.set(t);</span>
+<span class="fc" id="L246">  }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ScenarioTrajectory.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.scenario</a> &gt; <span class="el_source">ScenarioTrajectory.java</span></div><h1>ScenarioTrajectory.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.scenario;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+import org.hammer.audio.geometry.Vector2;
+
+/**
+ * Trajectory ground truth for an acoustic source in a scenario.
+ *
+ * &lt;p&gt;{@link #timestamps()} and {@link #positions()} are always required and must have equal length.
+ * {@link #velocities()} and {@link #orientations()} may be {@code null} for partial ground truth
+ * (e.g. a dataset that records positions but not velocities).
+ *
+ * &lt;p&gt;Use {@link #linear(Vector2, Vector2, double, int)} to construct a uniformly sampled linear
+ * trajectory from a start position and constant velocity.
+ *
+ * @param timestamps strictly increasing timestamp sequence in seconds
+ * @param positions source positions aligned to {@code timestamps}
+ * @param velocities optional source velocities aligned to {@code timestamps}
+ * @param orientations optional source orientations aligned to {@code timestamps}
+ */
+public record ScenarioTrajectory(
+    List&lt;Double&gt; timestamps,
+    List&lt;Vector2&gt; positions,
+    List&lt;Vector2&gt; velocities,
+    List&lt;Double&gt; orientations) {
+
+  /* Validate sizes and defensively copy all provided lists. */
+<span class="fc" id="L30">  public ScenarioTrajectory {</span>
+<span class="fc" id="L31">    Objects.requireNonNull(timestamps, &quot;timestamps&quot;);</span>
+<span class="fc" id="L32">    Objects.requireNonNull(positions, &quot;positions&quot;);</span>
+<span class="pc bpc" id="L33" title="1 of 2 branches missed.">    if (timestamps.isEmpty()) {</span>
+<span class="nc" id="L34">      throw new IllegalArgumentException(&quot;timestamps must not be empty&quot;);</span>
+    }
+<span class="fc bfc" id="L36" title="All 2 branches covered.">    if (timestamps.size() != positions.size()) {</span>
+<span class="fc" id="L37">      throw new IllegalArgumentException(</span>
+          &quot;timestamps and positions must have the same size; got &quot;
+<span class="fc" id="L39">              + timestamps.size()</span>
+              + &quot; vs &quot;
+<span class="fc" id="L41">              + positions.size());</span>
+    }
+<span class="pc bpc" id="L43" title="1 of 4 branches missed.">    if (velocities != null &amp;&amp; velocities.size() != timestamps.size()) {</span>
+<span class="nc" id="L44">      throw new IllegalArgumentException(</span>
+          &quot;velocities must have the same size as timestamps when provided&quot;);
+    }
+<span class="pc bpc" id="L47" title="1 of 4 branches missed.">    if (orientations != null &amp;&amp; orientations.size() != timestamps.size()) {</span>
+<span class="nc" id="L48">      throw new IllegalArgumentException(</span>
+          &quot;orientations must have the same size as timestamps when provided&quot;);
+    }
+<span class="fc" id="L51">    double previousTimestamp = Double.NEGATIVE_INFINITY;</span>
+<span class="fc bfc" id="L52" title="All 2 branches covered.">    for (int i = 0; i &lt; timestamps.size(); i++) {</span>
+<span class="fc" id="L53">      Double timestamp = timestamps.get(i);</span>
+<span class="pc bpc" id="L54" title="1 of 4 branches missed.">      if (timestamp == null || !Double.isFinite(timestamp)) {</span>
+<span class="fc" id="L55">        throw new IllegalArgumentException(&quot;timestamps must contain only finite values&quot;);</span>
+      }
+<span class="fc bfc" id="L57" title="All 4 branches covered.">      if (i &gt; 0 &amp;&amp; timestamp &lt;= previousTimestamp) {</span>
+<span class="fc" id="L58">        throw new IllegalArgumentException(&quot;timestamps must be strictly increasing&quot;);</span>
+      }
+<span class="fc" id="L60">      previousTimestamp = timestamp;</span>
+    }
+<span class="fc bfc" id="L62" title="All 2 branches covered.">    if (orientations != null) {</span>
+<span class="pc bpc" id="L63" title="1 of 2 branches missed.">      for (Double orientation : orientations) {</span>
+<span class="pc bpc" id="L64" title="2 of 4 branches missed.">        if (orientation == null || !Double.isFinite(orientation)) {</span>
+<span class="fc" id="L65">          throw new IllegalArgumentException(&quot;orientations must contain only finite values&quot;);</span>
+        }
+<span class="nc" id="L67">      }</span>
+    }
+<span class="fc" id="L69">    timestamps = List.copyOf(timestamps);</span>
+<span class="fc" id="L70">    positions = List.copyOf(positions);</span>
+<span class="fc bfc" id="L71" title="All 2 branches covered.">    velocities = velocities != null ? List.copyOf(velocities) : null;</span>
+<span class="pc bpc" id="L72" title="1 of 2 branches missed.">    orientations = orientations != null ? List.copyOf(orientations) : null;</span>
+<span class="fc" id="L73">  }</span>
+
+  /**
+   * Create a uniformly sampled linear trajectory.
+   *
+   * &lt;p&gt;The trajectory is sampled at {@code sampleCount} evenly spaced time steps over {@code
+   * durationSeconds}, starting at {@code startPositionMeters} and moving with constant {@code
+   * velocityMetersPerSecond}. Velocities are included; orientations are not.
+   *
+   * @param startPositionMeters initial position in meters
+   * @param velocityMetersPerSecond constant 2-D velocity in m/s
+   * @param durationSeconds total scenario duration; must be positive
+   * @param sampleCount number of sample points; must be at least 2
+   */
+  public static ScenarioTrajectory linear(
+      Vector2 startPositionMeters,
+      Vector2 velocityMetersPerSecond,
+      double durationSeconds,
+      int sampleCount) {
+<span class="fc" id="L92">    Objects.requireNonNull(startPositionMeters, &quot;startPositionMeters&quot;);</span>
+<span class="fc" id="L93">    Objects.requireNonNull(velocityMetersPerSecond, &quot;velocityMetersPerSecond&quot;);</span>
+<span class="pc bpc" id="L94" title="1 of 4 branches missed.">    if (durationSeconds &lt;= 0.0 || !Double.isFinite(durationSeconds)) {</span>
+<span class="fc" id="L95">      throw new IllegalArgumentException(&quot;durationSeconds must be finite and &gt; 0&quot;);</span>
+    }
+<span class="fc bfc" id="L97" title="All 2 branches covered.">    if (sampleCount &lt; 2) {</span>
+<span class="fc" id="L98">      throw new IllegalArgumentException(&quot;sampleCount must be &gt;= 2&quot;);</span>
+    }
+<span class="fc" id="L100">    List&lt;Double&gt; timestamps = new ArrayList&lt;&gt;(sampleCount);</span>
+<span class="fc" id="L101">    List&lt;Vector2&gt; positions = new ArrayList&lt;&gt;(sampleCount);</span>
+<span class="fc" id="L102">    List&lt;Vector2&gt; velocities = new ArrayList&lt;&gt;(sampleCount);</span>
+<span class="fc" id="L103">    double step = durationSeconds / (sampleCount - 1);</span>
+<span class="fc bfc" id="L104" title="All 2 branches covered.">    for (int i = 0; i &lt; sampleCount; i++) {</span>
+<span class="fc" id="L105">      double t = i * step;</span>
+<span class="fc" id="L106">      timestamps.add(t);</span>
+<span class="fc" id="L107">      positions.add(startPositionMeters.plus(velocityMetersPerSecond.scale(t)));</span>
+<span class="fc" id="L108">      velocities.add(velocityMetersPerSecond);</span>
+    }
+<span class="fc" id="L110">    return new ScenarioTrajectory(timestamps, positions, velocities, null);</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

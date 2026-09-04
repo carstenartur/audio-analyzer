@@ -1,0 +1,688 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ExperimentDocumentCodec.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experiment Document</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experiment.document</a> &gt; <span class="el_source">ExperimentDocumentCodec.java</span></div><h1>ExperimentDocumentCodec.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experiment.document;
+
+import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.core.StreamReadFeature;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import java.io.IOException;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeMap;
+import org.hammer.audio.plugin.document.DocumentValue;
+import org.hammer.audio.workflow.Workflow;
+import org.hammer.audio.workflow.dsl.WorkflowDslParser;
+import org.hammer.audio.workflow.dsl.WorkflowDslSerializer;
+
+/** Strict parser, validator, normalizer and canonical serializer for {@code .audioexp} files. */
+@SuppressWarnings({&quot;PMD.CouplingBetweenObjects&quot;, &quot;PMD.AvoidDuplicateLiterals&quot;, &quot;PMD.LooseCoupling&quot;})
+public final class ExperimentDocumentCodec {
+
+<span class="fc" id="L30">  private static final Set&lt;String&gt; ROOT_FIELDS =</span>
+<span class="fc" id="L31">      Set.of(</span>
+          &quot;$schema&quot;,
+          &quot;format&quot;,
+          &quot;formatVersion&quot;,
+          &quot;experiment&quot;,
+          &quot;workflow&quot;,
+          &quot;profiles&quot;,
+          &quot;requiredPlugins&quot;,
+          &quot;pluginData&quot;,
+          &quot;assets&quot;,
+          &quot;outputs&quot;,
+          &quot;provenance&quot;);
+<span class="fc" id="L43">  private static final Set&lt;String&gt; EXPERIMENT_FIELDS =</span>
+<span class="fc" id="L44">      Set.of(</span>
+          &quot;id&quot;,
+          &quot;name&quot;,
+          &quot;description&quot;,
+          &quot;tags&quot;,
+          &quot;intent&quot;,
+          &quot;sourceMode&quot;,
+          &quot;intendedDuration&quot;,
+          &quot;applicationVersion&quot;);
+<span class="fc" id="L53">  private static final Set&lt;String&gt; WORKFLOW_FIELDS =</span>
+<span class="fc" id="L54">      Set.of(&quot;format&quot;, &quot;formatVersion&quot;, &quot;content&quot;, &quot;sha256&quot;);</span>
+<span class="fc" id="L55">  private static final Set&lt;String&gt; REQUIREMENT_FIELDS = Set.of(&quot;id&quot;, &quot;versionRange&quot;, &quot;sections&quot;);</span>
+<span class="fc" id="L56">  private static final Set&lt;String&gt; PLUGIN_SECTION_FIELDS =</span>
+<span class="fc" id="L57">      Set.of(&quot;schemaVersion&quot;, &quot;algorithmVersion&quot;, &quot;data&quot;);</span>
+<span class="fc" id="L58">  private static final Set&lt;String&gt; ASSET_FIELDS =</span>
+<span class="fc" id="L59">      Set.of(&quot;id&quot;, &quot;relativePath&quot;, &quot;mediaType&quot;, &quot;sizeBytes&quot;, &quot;sha256&quot;);</span>
+<span class="fc" id="L60">  private static final Set&lt;String&gt; OUTPUT_FIELDS = Set.of(&quot;id&quot;, &quot;mediaType&quot;, &quot;baseName&quot;);</span>
+<span class="fc" id="L61">  private static final Set&lt;String&gt; PROVENANCE_FIELDS =</span>
+<span class="fc" id="L62">      Set.of(</span>
+          &quot;creatorDisplayName&quot;,
+          &quot;verifiedAccount&quot;,
+          &quot;createdAt&quot;,
+          &quot;modifiedAt&quot;,
+          &quot;softwareVersion&quot;,
+          &quot;canonicalSha256&quot;,
+          &quot;migrationNotes&quot;);
+
+  private final ObjectMapper mapper;
+<span class="fc" id="L72">  private final WorkflowDslParser workflowParser = new WorkflowDslParser();</span>
+<span class="fc" id="L73">  private final WorkflowDslSerializer workflowSerializer = new WorkflowDslSerializer();</span>
+
+  /** Create a codec with duplicate-key detection and no polymorphic deserialization. */
+<span class="fc" id="L76">  public ExperimentDocumentCodec() {</span>
+    JsonFactory factory =
+<span class="fc" id="L78">        JsonFactory.builder().enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION).build();</span>
+<span class="fc" id="L79">    mapper = new ObjectMapper(factory);</span>
+<span class="fc" id="L80">  }</span>
+
+  /** Parse, validate and normalize bounded UTF-8 JSON bytes. */
+  public ExperimentDocument decode(byte[] bytes) throws ExperimentDocumentException {
+<span class="pc bpc" id="L84" title="2 of 4 branches missed.">    if (bytes == null || bytes.length == 0) {</span>
+<span class="nc" id="L85">      throw failure(&quot;/&quot;, &quot;empty-document&quot;, &quot;Experiment document is empty&quot;);</span>
+    }
+<span class="pc bpc" id="L87" title="1 of 2 branches missed.">    if (bytes.length &gt; ExperimentDocumentFormat.MAX_DOCUMENT_BYTES) {</span>
+<span class="nc" id="L88">      throw failure(&quot;/&quot;, &quot;max-bytes&quot;, &quot;Experiment document exceeds the byte limit&quot;);</span>
+    }
+    JsonNode parsed;
+    try {
+<span class="fc" id="L92">      parsed = mapper.readTree(bytes);</span>
+<span class="fc" id="L93">    } catch (IOException exception) {</span>
+<span class="fc" id="L94">      throw failure(&quot;/&quot;, &quot;invalid-json&quot;, &quot;Experiment document is not strict JSON&quot;, exception);</span>
+<span class="fc" id="L95">    }</span>
+<span class="fc" id="L96">    ObjectNode root = requireObject(parsed, &quot;/&quot;);</span>
+<span class="fc" id="L97">    rejectUnknown(root, ROOT_FIELDS, &quot;/&quot;);</span>
+<span class="fc" id="L98">    ExperimentDocument document = parseDocument(root);</span>
+<span class="fc" id="L99">    ExperimentDocument normalized = normalizeWorkflow(document, true);</span>
+<span class="fc" id="L100">    String expectedHash = canonicalHash(normalized);</span>
+<span class="pc bpc" id="L101" title="1 of 2 branches missed.">    if (!expectedHash.equals(normalized.provenance().canonicalSha256())) {</span>
+<span class="nc" id="L102">      throw failure(</span>
+          &quot;/provenance/canonicalSha256&quot;,
+          &quot;document-hash-mismatch&quot;,
+          &quot;Canonical document SHA-256 does not match its contents&quot;);
+    }
+<span class="fc" id="L107">    return normalized;</span>
+  }
+
+  /** Normalize and serialize a document to byte-stable canonical UTF-8 JSON. */
+  public byte[] encode(ExperimentDocument document) throws ExperimentDocumentException {
+<span class="fc" id="L112">    ExperimentDocument normalized = normalizeWorkflow(document, false);</span>
+<span class="fc" id="L113">    String hash = canonicalHash(normalized);</span>
+<span class="fc" id="L114">    ExperimentDocument withHash = withCanonicalHash(normalized, hash);</span>
+<span class="fc" id="L115">    return writeTree(toTree(withHash, true));</span>
+  }
+
+  /** Return the canonical hash without modifying the supplied document. */
+  public String canonicalHash(ExperimentDocument document) throws ExperimentDocumentException {
+<span class="fc" id="L120">    ExperimentDocument withoutHash = withCanonicalHash(document, &quot;&quot;);</span>
+<span class="fc" id="L121">    return DocumentHashes.sha256(writeTree(toTree(withoutHash, false)));</span>
+  }
+
+  /** Atomically normalize and save to the requested path through a sibling temporary file. */
+  public void save(java.nio.file.Path target, ExperimentDocument document) throws IOException {
+<span class="fc" id="L126">    byte[] bytes = encode(document);</span>
+<span class="fc" id="L127">    java.nio.file.Path normalized = target.toAbsolutePath().normalize();</span>
+<span class="fc" id="L128">    java.nio.file.Path parent = normalized.getParent();</span>
+<span class="fc" id="L129">    java.nio.file.Path fileName = normalized.getFileName();</span>
+<span class="pc bpc" id="L130" title="2 of 4 branches missed.">    if (parent == null || fileName == null) {</span>
+<span class="nc" id="L131">      throw new IOException(&quot;Experiment document target has no parent or filename: &quot; + normalized);</span>
+    }
+<span class="fc" id="L133">    java.nio.file.Files.createDirectories(parent);</span>
+<span class="fc" id="L134">    java.nio.file.Path temporary = normalized.resolveSibling(fileName.toString() + &quot;.partial&quot;);</span>
+<span class="fc" id="L135">    java.nio.file.Files.write(</span>
+        temporary,
+        bytes,
+        java.nio.file.StandardOpenOption.CREATE,
+        java.nio.file.StandardOpenOption.TRUNCATE_EXISTING,
+        java.nio.file.StandardOpenOption.WRITE);
+    try {
+<span class="fc" id="L142">      java.nio.file.Files.move(</span>
+          temporary,
+          normalized,
+          java.nio.file.StandardCopyOption.ATOMIC_MOVE,
+          java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+<span class="nc" id="L147">    } catch (java.nio.file.AtomicMoveNotSupportedException exception) {</span>
+<span class="nc" id="L148">      java.nio.file.Files.move(</span>
+          temporary, normalized, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+<span class="fc" id="L150">    }</span>
+<span class="fc" id="L151">  }</span>
+
+  /** Read and decode one bounded document from disk. */
+  public ExperimentDocument load(java.nio.file.Path source) throws IOException {
+<span class="fc" id="L155">    long size = java.nio.file.Files.size(source);</span>
+<span class="pc bpc" id="L156" title="1 of 2 branches missed.">    if (size &gt; ExperimentDocumentFormat.MAX_DOCUMENT_BYTES) {</span>
+<span class="nc" id="L157">      throw failure(&quot;/&quot;, &quot;max-bytes&quot;, &quot;Experiment document exceeds the byte limit&quot;);</span>
+    }
+<span class="fc" id="L159">    return decode(java.nio.file.Files.readAllBytes(source));</span>
+  }
+
+  private ExperimentDocument parseDocument(ObjectNode root) throws ExperimentDocumentException {
+<span class="fc" id="L163">    String schema = requiredText(root, &quot;$schema&quot;, &quot;/$schema&quot;);</span>
+<span class="fc" id="L164">    String format = requiredText(root, &quot;format&quot;, &quot;/format&quot;);</span>
+<span class="fc" id="L165">    int version = requiredPositiveInt(root, &quot;formatVersion&quot;, &quot;/formatVersion&quot;);</span>
+<span class="pc bpc" id="L166" title="1 of 2 branches missed.">    if (!ExperimentDocumentFormat.FORMAT_ID.equals(format)) {</span>
+<span class="nc" id="L167">      throw failure(&quot;/format&quot;, &quot;unsupported-format&quot;, &quot;Unsupported experiment document format&quot;);</span>
+    }
+<span class="pc bpc" id="L169" title="1 of 2 branches missed.">    if (version != ExperimentDocumentFormat.VERSION) {</span>
+<span class="nc" id="L170">      throw failure(</span>
+          &quot;/formatVersion&quot;,
+          &quot;unsupported-version&quot;,
+          &quot;Unsupported experiment document version: &quot; + version);
+    }
+<span class="pc bpc" id="L175" title="1 of 2 branches missed.">    if (!ExperimentDocumentFormat.SCHEMA_RESOURCE.equals(schema)) {</span>
+<span class="nc" id="L176">      throw failure(&quot;/$schema&quot;, &quot;unsupported-schema&quot;, &quot;Unsupported experiment document schema&quot;);</span>
+    }
+<span class="fc" id="L178">    return new ExperimentDocument(</span>
+        schema,
+        format,
+        version,
+<span class="fc" id="L182">        parseExperiment(requiredObject(root, &quot;experiment&quot;, &quot;/experiment&quot;)),</span>
+<span class="fc" id="L183">        parseWorkflow(requiredObject(root, &quot;workflow&quot;, &quot;/workflow&quot;)),</span>
+<span class="fc" id="L184">        parseProfiles(requiredObject(root, &quot;profiles&quot;, &quot;/profiles&quot;)),</span>
+<span class="fc" id="L185">        parseRequirements(requiredArray(root, &quot;requiredPlugins&quot;, &quot;/requiredPlugins&quot;)),</span>
+<span class="fc" id="L186">        parsePluginData(requiredObject(root, &quot;pluginData&quot;, &quot;/pluginData&quot;)),</span>
+<span class="fc" id="L187">        parseAssets(requiredArray(root, &quot;assets&quot;, &quot;/assets&quot;)),</span>
+<span class="fc" id="L188">        parseOutputs(requiredArray(root, &quot;outputs&quot;, &quot;/outputs&quot;)),</span>
+<span class="fc" id="L189">        parseProvenance(requiredObject(root, &quot;provenance&quot;, &quot;/provenance&quot;)));</span>
+  }
+
+  private ExperimentDocument.ExperimentInfo parseExperiment(ObjectNode node)
+      throws ExperimentDocumentException {
+<span class="fc" id="L194">    rejectUnknown(node, EXPERIMENT_FIELDS, &quot;/experiment&quot;);</span>
+<span class="fc" id="L195">    String duration = optionalText(node, &quot;intendedDuration&quot;, &quot;/experiment/intendedDuration&quot;);</span>
+<span class="fc" id="L196">    return new ExperimentDocument.ExperimentInfo(</span>
+<span class="fc" id="L197">        requiredText(node, &quot;id&quot;, &quot;/experiment/id&quot;),</span>
+<span class="fc" id="L198">        requiredText(node, &quot;name&quot;, &quot;/experiment/name&quot;),</span>
+<span class="fc" id="L199">        optionalText(node, &quot;description&quot;, &quot;/experiment/description&quot;),</span>
+<span class="fc" id="L200">        textArray(requiredArray(node, &quot;tags&quot;, &quot;/experiment/tags&quot;), &quot;/experiment/tags&quot;),</span>
+<span class="fc" id="L201">        requiredText(node, &quot;intent&quot;, &quot;/experiment/intent&quot;),</span>
+<span class="fc" id="L202">        requiredText(node, &quot;sourceMode&quot;, &quot;/experiment/sourceMode&quot;),</span>
+<span class="pc bpc" id="L203" title="1 of 2 branches missed.">        duration.isBlank() ? null : parseDuration(duration, &quot;/experiment/intendedDuration&quot;),</span>
+<span class="fc" id="L204">        requiredText(node, &quot;applicationVersion&quot;, &quot;/experiment/applicationVersion&quot;));</span>
+  }
+
+  private ExperimentDocument.WorkflowPayload parseWorkflow(ObjectNode node)
+      throws ExperimentDocumentException {
+<span class="fc" id="L209">    rejectUnknown(node, WORKFLOW_FIELDS, &quot;/workflow&quot;);</span>
+<span class="fc" id="L210">    return new ExperimentDocument.WorkflowPayload(</span>
+<span class="fc" id="L211">        requiredText(node, &quot;format&quot;, &quot;/workflow/format&quot;),</span>
+<span class="fc" id="L212">        requiredPositiveInt(node, &quot;formatVersion&quot;, &quot;/workflow/formatVersion&quot;),</span>
+<span class="fc" id="L213">        requiredText(node, &quot;content&quot;, &quot;/workflow/content&quot;),</span>
+<span class="fc" id="L214">        requiredText(node, &quot;sha256&quot;, &quot;/workflow/sha256&quot;));</span>
+  }
+
+  private DocumentValue.ObjectValue parseProfiles(ObjectNode node)
+      throws ExperimentDocumentException {
+<span class="fc" id="L219">    DocumentValue value = DocumentValueJson.fromJson(node);</span>
+<span class="pc bpc" id="L220" title="1 of 2 branches missed.">    if (value instanceof DocumentValue.ObjectValue objectValue) {</span>
+<span class="fc" id="L221">      return objectValue;</span>
+    }
+<span class="nc" id="L223">    throw failure(&quot;/profiles&quot;, &quot;expected-object&quot;, &quot;profiles must be an object&quot;);</span>
+  }
+
+  private List&lt;ExperimentDocument.PluginRequirement&gt; parseRequirements(ArrayNode array)
+      throws ExperimentDocumentException {
+<span class="fc" id="L228">    requireCollectionLimit(array.size(), &quot;/requiredPlugins&quot;);</span>
+<span class="fc" id="L229">    ArrayList&lt;ExperimentDocument.PluginRequirement&gt; result = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L230" title="All 2 branches covered.">    for (int index = 0; index &lt; array.size(); index++) {</span>
+<span class="fc" id="L231">      String pointer = &quot;/requiredPlugins/&quot; + index;</span>
+<span class="fc" id="L232">      ObjectNode item = requireObject(array.get(index), pointer);</span>
+<span class="fc" id="L233">      rejectUnknown(item, REQUIREMENT_FIELDS, pointer);</span>
+<span class="fc" id="L234">      result.add(</span>
+          new ExperimentDocument.PluginRequirement(
+<span class="fc" id="L236">              requiredText(item, &quot;id&quot;, pointer + &quot;/id&quot;),</span>
+<span class="fc" id="L237">              requiredText(item, &quot;versionRange&quot;, pointer + &quot;/versionRange&quot;),</span>
+<span class="fc" id="L238">              textArray(</span>
+<span class="fc" id="L239">                  requiredArray(item, &quot;sections&quot;, pointer + &quot;/sections&quot;), pointer + &quot;/sections&quot;)));</span>
+    }
+<span class="fc" id="L241">    return result;</span>
+  }
+
+  private Map&lt;String, Map&lt;String, ExperimentDocument.PluginSection&gt;&gt; parsePluginData(
+      ObjectNode plugins) throws ExperimentDocumentException {
+<span class="fc" id="L246">    requireCollectionLimit(plugins.size(), &quot;/pluginData&quot;);</span>
+<span class="fc" id="L247">    TreeMap&lt;String, Map&lt;String, ExperimentDocument.PluginSection&gt;&gt; result = new TreeMap&lt;&gt;();</span>
+<span class="fc" id="L248">    Iterator&lt;Map.Entry&lt;String, JsonNode&gt;&gt; pluginFields = plugins.fields();</span>
+<span class="fc bfc" id="L249" title="All 2 branches covered.">    while (pluginFields.hasNext()) {</span>
+<span class="fc" id="L250">      Map.Entry&lt;String, JsonNode&gt; pluginEntry = pluginFields.next();</span>
+<span class="fc" id="L251">      String pluginId = ExperimentDocument.requireIdentifier(pluginEntry.getKey(), &quot;plugin id&quot;);</span>
+<span class="fc" id="L252">      String pluginPointer = DocumentValueJson.pointer(&quot;/pluginData&quot;, pluginId);</span>
+<span class="fc" id="L253">      ObjectNode sections = requireObject(pluginEntry.getValue(), pluginPointer);</span>
+<span class="fc" id="L254">      requireCollectionLimit(sections.size(), pluginPointer);</span>
+<span class="fc" id="L255">      TreeMap&lt;String, ExperimentDocument.PluginSection&gt; parsedSections = new TreeMap&lt;&gt;();</span>
+<span class="fc" id="L256">      Iterator&lt;Map.Entry&lt;String, JsonNode&gt;&gt; sectionFields = sections.fields();</span>
+<span class="fc bfc" id="L257" title="All 2 branches covered.">      while (sectionFields.hasNext()) {</span>
+<span class="fc" id="L258">        Map.Entry&lt;String, JsonNode&gt; sectionEntry = sectionFields.next();</span>
+<span class="fc" id="L259">        String sectionId =</span>
+<span class="fc" id="L260">            ExperimentDocument.requireIdentifier(sectionEntry.getKey(), &quot;plugin section id&quot;);</span>
+<span class="fc" id="L261">        String sectionPointer = DocumentValueJson.pointer(pluginPointer, sectionId);</span>
+<span class="fc" id="L262">        ObjectNode section = requireObject(sectionEntry.getValue(), sectionPointer);</span>
+<span class="fc" id="L263">        rejectUnknown(section, PLUGIN_SECTION_FIELDS, sectionPointer);</span>
+<span class="fc" id="L264">        parsedSections.put(</span>
+            sectionId,
+            new ExperimentDocument.PluginSection(
+<span class="fc" id="L267">                requiredPositiveInt(section, &quot;schemaVersion&quot;, sectionPointer + &quot;/schemaVersion&quot;),</span>
+<span class="fc" id="L268">                requiredText(section, &quot;algorithmVersion&quot;, sectionPointer + &quot;/algorithmVersion&quot;),</span>
+<span class="fc" id="L269">                DocumentValueJson.fromJson(</span>
+<span class="fc" id="L270">                    requiredNode(section, &quot;data&quot;, sectionPointer + &quot;/data&quot;))));</span>
+<span class="fc" id="L271">      }</span>
+<span class="fc" id="L272">      result.put(pluginId, parsedSections);</span>
+<span class="fc" id="L273">    }</span>
+<span class="fc" id="L274">    return result;</span>
+  }
+
+  private List&lt;ExperimentDocument.AssetReference&gt; parseAssets(ArrayNode array)
+      throws ExperimentDocumentException {
+<span class="fc" id="L279">    requireCollectionLimit(array.size(), &quot;/assets&quot;);</span>
+<span class="fc" id="L280">    ArrayList&lt;ExperimentDocument.AssetReference&gt; result = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L281" title="All 2 branches covered.">    for (int index = 0; index &lt; array.size(); index++) {</span>
+<span class="fc" id="L282">      String pointer = &quot;/assets/&quot; + index;</span>
+<span class="fc" id="L283">      ObjectNode item = requireObject(array.get(index), pointer);</span>
+<span class="fc" id="L284">      rejectUnknown(item, ASSET_FIELDS, pointer);</span>
+<span class="fc" id="L285">      result.add(</span>
+          new ExperimentDocument.AssetReference(
+<span class="fc" id="L287">              requiredText(item, &quot;id&quot;, pointer + &quot;/id&quot;),</span>
+<span class="fc" id="L288">              requiredText(item, &quot;relativePath&quot;, pointer + &quot;/relativePath&quot;),</span>
+<span class="fc" id="L289">              requiredText(item, &quot;mediaType&quot;, pointer + &quot;/mediaType&quot;),</span>
+<span class="fc" id="L290">              requiredNonNegativeLong(item, &quot;sizeBytes&quot;, pointer + &quot;/sizeBytes&quot;),</span>
+<span class="fc" id="L291">              requiredText(item, &quot;sha256&quot;, pointer + &quot;/sha256&quot;)));</span>
+    }
+<span class="fc" id="L293">    return result;</span>
+  }
+
+  private List&lt;ExperimentDocument.OutputRequest&gt; parseOutputs(ArrayNode array)
+      throws ExperimentDocumentException {
+<span class="fc" id="L298">    requireCollectionLimit(array.size(), &quot;/outputs&quot;);</span>
+<span class="fc" id="L299">    ArrayList&lt;ExperimentDocument.OutputRequest&gt; result = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L300" title="All 2 branches covered.">    for (int index = 0; index &lt; array.size(); index++) {</span>
+<span class="fc" id="L301">      String pointer = &quot;/outputs/&quot; + index;</span>
+<span class="fc" id="L302">      ObjectNode item = requireObject(array.get(index), pointer);</span>
+<span class="fc" id="L303">      rejectUnknown(item, OUTPUT_FIELDS, pointer);</span>
+<span class="fc" id="L304">      result.add(</span>
+          new ExperimentDocument.OutputRequest(
+<span class="fc" id="L306">              requiredText(item, &quot;id&quot;, pointer + &quot;/id&quot;),</span>
+<span class="fc" id="L307">              requiredText(item, &quot;mediaType&quot;, pointer + &quot;/mediaType&quot;),</span>
+<span class="fc" id="L308">              requiredText(item, &quot;baseName&quot;, pointer + &quot;/baseName&quot;)));</span>
+    }
+<span class="fc" id="L310">    return result;</span>
+  }
+
+  private ExperimentDocument.Provenance parseProvenance(ObjectNode node)
+      throws ExperimentDocumentException {
+<span class="fc" id="L315">    rejectUnknown(node, PROVENANCE_FIELDS, &quot;/provenance&quot;);</span>
+<span class="fc" id="L316">    return new ExperimentDocument.Provenance(</span>
+<span class="fc" id="L317">        requiredText(node, &quot;creatorDisplayName&quot;, &quot;/provenance/creatorDisplayName&quot;),</span>
+<span class="fc" id="L318">        optionalText(node, &quot;verifiedAccount&quot;, &quot;/provenance/verifiedAccount&quot;),</span>
+<span class="fc" id="L319">        parseInstant(</span>
+<span class="fc" id="L320">            requiredText(node, &quot;createdAt&quot;, &quot;/provenance/createdAt&quot;), &quot;/provenance/createdAt&quot;),</span>
+<span class="fc" id="L321">        parseInstant(</span>
+<span class="fc" id="L322">            requiredText(node, &quot;modifiedAt&quot;, &quot;/provenance/modifiedAt&quot;), &quot;/provenance/modifiedAt&quot;),</span>
+<span class="fc" id="L323">        requiredText(node, &quot;softwareVersion&quot;, &quot;/provenance/softwareVersion&quot;),</span>
+<span class="fc" id="L324">        requiredText(node, &quot;canonicalSha256&quot;, &quot;/provenance/canonicalSha256&quot;),</span>
+<span class="fc" id="L325">        textArray(</span>
+<span class="fc" id="L326">            requiredArray(node, &quot;migrationNotes&quot;, &quot;/provenance/migrationNotes&quot;),</span>
+            &quot;/provenance/migrationNotes&quot;));
+  }
+
+  private ExperimentDocument normalizeWorkflow(ExperimentDocument document, boolean verifyHash)
+      throws ExperimentDocumentException {
+<span class="fc" id="L332">    ExperimentDocument.WorkflowPayload payload = document.workflow();</span>
+<span class="pc bpc" id="L333" title="1 of 2 branches missed.">    if (!ExperimentDocumentFormat.WORKFLOW_FORMAT_ID.equals(payload.format())</span>
+<span class="pc bpc" id="L334" title="1 of 2 branches missed.">        || payload.formatVersion() != ExperimentDocumentFormat.WORKFLOW_VERSION) {</span>
+<span class="nc" id="L335">      throw failure(&quot;/workflow&quot;, &quot;unsupported-workflow&quot;, &quot;Unsupported embedded workflow format&quot;);</span>
+    }
+    Workflow workflow;
+    try {
+<span class="fc" id="L339">      workflow = workflowParser.parse(payload.content());</span>
+<span class="nc" id="L340">    } catch (RuntimeException exception) {</span>
+<span class="nc" id="L341">      throw failure(</span>
+          &quot;/workflow/content&quot;, &quot;invalid-workflow&quot;, &quot;Embedded workflow DSL is invalid&quot;, exception);
+<span class="fc" id="L343">    }</span>
+<span class="fc" id="L344">    String canonical = workflowSerializer.serialize(workflow);</span>
+<span class="fc" id="L345">    String hash = DocumentHashes.sha256(canonical);</span>
+<span class="pc bpc" id="L346" title="1 of 4 branches missed.">    if (verifyHash &amp;&amp; !hash.equals(payload.sha256())) {</span>
+<span class="nc" id="L347">      throw failure(</span>
+          &quot;/workflow/sha256&quot;,
+          &quot;workflow-hash-mismatch&quot;,
+          &quot;Workflow SHA-256 does not match canonical DSL&quot;);
+    }
+<span class="fc" id="L352">    ExperimentDocument.WorkflowPayload normalizedPayload =</span>
+        new ExperimentDocument.WorkflowPayload(
+            ExperimentDocumentFormat.WORKFLOW_FORMAT_ID,
+            ExperimentDocumentFormat.WORKFLOW_VERSION,
+            canonical,
+            hash);
+<span class="fc" id="L358">    return new ExperimentDocument(</span>
+<span class="fc" id="L359">        document.schema(),</span>
+<span class="fc" id="L360">        document.format(),</span>
+<span class="fc" id="L361">        document.formatVersion(),</span>
+<span class="fc" id="L362">        document.experiment(),</span>
+        normalizedPayload,
+<span class="fc" id="L364">        document.profiles(),</span>
+<span class="fc" id="L365">        document.requiredPlugins(),</span>
+<span class="fc" id="L366">        document.pluginData(),</span>
+<span class="fc" id="L367">        document.assets(),</span>
+<span class="fc" id="L368">        document.outputs(),</span>
+<span class="fc" id="L369">        document.provenance());</span>
+  }
+
+  private ExperimentDocument withCanonicalHash(ExperimentDocument document, String hash) {
+<span class="fc" id="L373">    ExperimentDocument.Provenance current = document.provenance();</span>
+<span class="fc" id="L374">    ExperimentDocument.Provenance provenance =</span>
+        new ExperimentDocument.Provenance(
+<span class="fc" id="L376">            current.creatorDisplayName(),</span>
+<span class="fc" id="L377">            current.verifiedAccount(),</span>
+<span class="fc" id="L378">            current.createdAt(),</span>
+<span class="fc" id="L379">            current.modifiedAt(),</span>
+<span class="fc" id="L380">            current.softwareVersion(),</span>
+            hash,
+<span class="fc" id="L382">            current.migrationNotes());</span>
+<span class="fc" id="L383">    return new ExperimentDocument(</span>
+<span class="fc" id="L384">        document.schema(),</span>
+<span class="fc" id="L385">        document.format(),</span>
+<span class="fc" id="L386">        document.formatVersion(),</span>
+<span class="fc" id="L387">        document.experiment(),</span>
+<span class="fc" id="L388">        document.workflow(),</span>
+<span class="fc" id="L389">        document.profiles(),</span>
+<span class="fc" id="L390">        document.requiredPlugins(),</span>
+<span class="fc" id="L391">        document.pluginData(),</span>
+<span class="fc" id="L392">        document.assets(),</span>
+<span class="fc" id="L393">        document.outputs(),</span>
+        provenance);
+  }
+
+  private ObjectNode toTree(ExperimentDocument document, boolean includeHash) {
+<span class="fc" id="L398">    ObjectNode root = JsonNodeFactory.instance.objectNode();</span>
+<span class="fc" id="L399">    root.put(&quot;$schema&quot;, document.schema());</span>
+<span class="fc" id="L400">    root.put(&quot;format&quot;, document.format());</span>
+<span class="fc" id="L401">    root.put(&quot;formatVersion&quot;, document.formatVersion());</span>
+<span class="fc" id="L402">    root.set(&quot;experiment&quot;, experimentNode(document.experiment()));</span>
+<span class="fc" id="L403">    root.set(&quot;workflow&quot;, workflowNode(document.workflow()));</span>
+<span class="fc" id="L404">    root.set(&quot;profiles&quot;, DocumentValueJson.toJson(document.profiles()));</span>
+<span class="fc" id="L405">    root.set(&quot;requiredPlugins&quot;, requirementsNode(document.requiredPlugins()));</span>
+<span class="fc" id="L406">    root.set(&quot;pluginData&quot;, pluginDataNode(document.pluginData()));</span>
+<span class="fc" id="L407">    root.set(&quot;assets&quot;, assetsNode(document.assets()));</span>
+<span class="fc" id="L408">    root.set(&quot;outputs&quot;, outputsNode(document.outputs()));</span>
+<span class="fc" id="L409">    root.set(&quot;provenance&quot;, provenanceNode(document.provenance(), includeHash));</span>
+<span class="fc" id="L410">    return root;</span>
+  }
+
+  private ObjectNode experimentNode(ExperimentDocument.ExperimentInfo value) {
+<span class="fc" id="L414">    ObjectNode node = JsonNodeFactory.instance.objectNode();</span>
+<span class="fc" id="L415">    node.put(&quot;id&quot;, value.id());</span>
+<span class="fc" id="L416">    node.put(&quot;name&quot;, value.name());</span>
+<span class="fc" id="L417">    node.put(&quot;description&quot;, value.description());</span>
+<span class="fc" id="L418">    node.set(&quot;tags&quot;, stringArray(value.tags()));</span>
+<span class="fc" id="L419">    node.put(&quot;intent&quot;, value.intent());</span>
+<span class="fc" id="L420">    node.put(&quot;sourceMode&quot;, value.sourceMode());</span>
+<span class="pc bpc" id="L421" title="1 of 2 branches missed.">    if (value.intendedDuration() == null) {</span>
+<span class="fc" id="L422">      node.putNull(&quot;intendedDuration&quot;);</span>
+    } else {
+<span class="nc" id="L424">      node.put(&quot;intendedDuration&quot;, value.intendedDuration().toString());</span>
+    }
+<span class="fc" id="L426">    node.put(&quot;applicationVersion&quot;, value.applicationVersion());</span>
+<span class="fc" id="L427">    return node;</span>
+  }
+
+  private ObjectNode workflowNode(ExperimentDocument.WorkflowPayload value) {
+<span class="fc" id="L431">    ObjectNode node = JsonNodeFactory.instance.objectNode();</span>
+<span class="fc" id="L432">    node.put(&quot;format&quot;, value.format());</span>
+<span class="fc" id="L433">    node.put(&quot;formatVersion&quot;, value.formatVersion());</span>
+<span class="fc" id="L434">    node.put(&quot;content&quot;, value.content());</span>
+<span class="fc" id="L435">    node.put(&quot;sha256&quot;, value.sha256());</span>
+<span class="fc" id="L436">    return node;</span>
+  }
+
+  private ArrayNode requirementsNode(List&lt;ExperimentDocument.PluginRequirement&gt; values) {
+<span class="fc" id="L440">    ArrayNode result = JsonNodeFactory.instance.arrayNode();</span>
+<span class="fc" id="L441">    values.stream()</span>
+<span class="fc" id="L442">        .sorted(java.util.Comparator.comparing(ExperimentDocument.PluginRequirement::id))</span>
+<span class="fc" id="L443">        .forEach(</span>
+            value -&gt; {
+<span class="fc" id="L445">              ObjectNode node = JsonNodeFactory.instance.objectNode();</span>
+<span class="fc" id="L446">              node.put(&quot;id&quot;, value.id());</span>
+<span class="fc" id="L447">              node.put(&quot;versionRange&quot;, value.versionRange());</span>
+<span class="fc" id="L448">              node.set(&quot;sections&quot;, stringArray(value.sections()));</span>
+<span class="fc" id="L449">              result.add(node);</span>
+<span class="fc" id="L450">            });</span>
+<span class="fc" id="L451">    return result;</span>
+  }
+
+  private ObjectNode pluginDataNode(
+      Map&lt;String, Map&lt;String, ExperimentDocument.PluginSection&gt;&gt; values) {
+<span class="fc" id="L456">    ObjectNode plugins = JsonNodeFactory.instance.objectNode();</span>
+<span class="fc" id="L457">    new TreeMap&lt;&gt;(values)</span>
+<span class="fc" id="L458">        .forEach(</span>
+            (pluginId, sections) -&gt; {
+<span class="fc" id="L460">              ObjectNode sectionNode = JsonNodeFactory.instance.objectNode();</span>
+<span class="fc" id="L461">              new TreeMap&lt;&gt;(sections)</span>
+<span class="fc" id="L462">                  .forEach(</span>
+                      (sectionId, value) -&gt; {
+<span class="fc" id="L464">                        ObjectNode node = JsonNodeFactory.instance.objectNode();</span>
+<span class="fc" id="L465">                        node.put(&quot;schemaVersion&quot;, value.schemaVersion());</span>
+<span class="fc" id="L466">                        node.put(&quot;algorithmVersion&quot;, value.algorithmVersion());</span>
+<span class="fc" id="L467">                        node.set(&quot;data&quot;, DocumentValueJson.toJson(value.data()));</span>
+<span class="fc" id="L468">                        sectionNode.set(sectionId, node);</span>
+<span class="fc" id="L469">                      });</span>
+<span class="fc" id="L470">              plugins.set(pluginId, sectionNode);</span>
+<span class="fc" id="L471">            });</span>
+<span class="fc" id="L472">    return plugins;</span>
+  }
+
+  private ArrayNode assetsNode(List&lt;ExperimentDocument.AssetReference&gt; values) {
+<span class="fc" id="L476">    ArrayNode result = JsonNodeFactory.instance.arrayNode();</span>
+<span class="fc" id="L477">    values.stream()</span>
+<span class="fc" id="L478">        .sorted(java.util.Comparator.comparing(ExperimentDocument.AssetReference::id))</span>
+<span class="fc" id="L479">        .forEach(</span>
+            value -&gt; {
+<span class="fc" id="L481">              ObjectNode node = JsonNodeFactory.instance.objectNode();</span>
+<span class="fc" id="L482">              node.put(&quot;id&quot;, value.id());</span>
+<span class="fc" id="L483">              node.put(&quot;relativePath&quot;, value.relativePath());</span>
+<span class="fc" id="L484">              node.put(&quot;mediaType&quot;, value.mediaType());</span>
+<span class="fc" id="L485">              node.put(&quot;sizeBytes&quot;, value.sizeBytes());</span>
+<span class="fc" id="L486">              node.put(&quot;sha256&quot;, value.sha256());</span>
+<span class="fc" id="L487">              result.add(node);</span>
+<span class="fc" id="L488">            });</span>
+<span class="fc" id="L489">    return result;</span>
+  }
+
+  private ArrayNode outputsNode(List&lt;ExperimentDocument.OutputRequest&gt; values) {
+<span class="fc" id="L493">    ArrayNode result = JsonNodeFactory.instance.arrayNode();</span>
+<span class="fc" id="L494">    values.stream()</span>
+<span class="fc" id="L495">        .sorted(java.util.Comparator.comparing(ExperimentDocument.OutputRequest::id))</span>
+<span class="fc" id="L496">        .forEach(</span>
+            value -&gt; {
+<span class="fc" id="L498">              ObjectNode node = JsonNodeFactory.instance.objectNode();</span>
+<span class="fc" id="L499">              node.put(&quot;id&quot;, value.id());</span>
+<span class="fc" id="L500">              node.put(&quot;mediaType&quot;, value.mediaType());</span>
+<span class="fc" id="L501">              node.put(&quot;baseName&quot;, value.baseName());</span>
+<span class="fc" id="L502">              result.add(node);</span>
+<span class="fc" id="L503">            });</span>
+<span class="fc" id="L504">    return result;</span>
+  }
+
+  private ObjectNode provenanceNode(ExperimentDocument.Provenance value, boolean includeHash) {
+<span class="fc" id="L508">    ObjectNode node = JsonNodeFactory.instance.objectNode();</span>
+<span class="fc" id="L509">    node.put(&quot;creatorDisplayName&quot;, value.creatorDisplayName());</span>
+<span class="fc" id="L510">    node.put(&quot;verifiedAccount&quot;, value.verifiedAccount());</span>
+<span class="fc" id="L511">    node.put(&quot;createdAt&quot;, value.createdAt().toString());</span>
+<span class="fc" id="L512">    node.put(&quot;modifiedAt&quot;, value.modifiedAt().toString());</span>
+<span class="fc" id="L513">    node.put(&quot;softwareVersion&quot;, value.softwareVersion());</span>
+<span class="fc bfc" id="L514" title="All 2 branches covered.">    if (includeHash) {</span>
+<span class="fc" id="L515">      node.put(&quot;canonicalSha256&quot;, value.canonicalSha256());</span>
+    }
+<span class="fc" id="L517">    node.set(&quot;migrationNotes&quot;, stringArray(value.migrationNotes()));</span>
+<span class="fc" id="L518">    return node;</span>
+  }
+
+  private ArrayNode stringArray(List&lt;String&gt; values) {
+<span class="fc" id="L522">    ArrayNode array = JsonNodeFactory.instance.arrayNode();</span>
+<span class="fc" id="L523">    values.forEach(array::add);</span>
+<span class="fc" id="L524">    return array;</span>
+  }
+
+  private byte[] writeTree(JsonNode tree) throws ExperimentDocumentException {
+    try {
+<span class="fc" id="L529">      return mapper.writeValueAsBytes(tree);</span>
+<span class="nc" id="L530">    } catch (IOException exception) {</span>
+<span class="nc" id="L531">      throw failure(</span>
+          &quot;/&quot;,
+          &quot;serialization-failed&quot;,
+          &quot;Could not serialize canonical experiment document&quot;,
+          exception);
+    }
+  }
+
+  private static ObjectNode requiredObject(ObjectNode parent, String field, String pointer)
+      throws ExperimentDocumentException {
+<span class="fc" id="L541">    return requireObject(requiredNode(parent, field, pointer), pointer);</span>
+  }
+
+  private static ObjectNode requireObject(JsonNode value, String pointer)
+      throws ExperimentDocumentException {
+<span class="pc bpc" id="L546" title="1 of 2 branches missed.">    if (value instanceof ObjectNode objectNode) {</span>
+<span class="fc" id="L547">      return objectNode;</span>
+    }
+<span class="nc" id="L549">    throw failure(pointer, &quot;expected-object&quot;, &quot;Expected a JSON object&quot;);</span>
+  }
+
+  private static ArrayNode requiredArray(ObjectNode parent, String field, String pointer)
+      throws ExperimentDocumentException {
+<span class="fc" id="L554">    JsonNode value = requiredNode(parent, field, pointer);</span>
+<span class="pc bpc" id="L555" title="1 of 2 branches missed.">    if (value instanceof ArrayNode arrayNode) {</span>
+<span class="fc" id="L556">      return arrayNode;</span>
+    }
+<span class="nc" id="L558">    throw failure(pointer, &quot;expected-array&quot;, &quot;Expected a JSON array&quot;);</span>
+  }
+
+  private static JsonNode requiredNode(ObjectNode parent, String field, String pointer)
+      throws ExperimentDocumentException {
+<span class="fc" id="L563">    JsonNode value = parent.get(field);</span>
+<span class="pc bpc" id="L564" title="1 of 2 branches missed.">    if (value == null) {</span>
+<span class="nc" id="L565">      throw failure(pointer, &quot;missing-field&quot;, &quot;Missing required field: &quot; + field);</span>
+    }
+<span class="fc" id="L567">    return value;</span>
+  }
+
+  private static String requiredText(ObjectNode parent, String field, String pointer)
+      throws ExperimentDocumentException {
+<span class="fc" id="L572">    JsonNode value = requiredNode(parent, field, pointer);</span>
+<span class="pc bpc" id="L573" title="1 of 2 branches missed.">    if (!value.isTextual()) {</span>
+<span class="nc" id="L574">      throw failure(pointer, &quot;expected-string&quot;, &quot;Expected a JSON string&quot;);</span>
+    }
+<span class="fc" id="L576">    String text = value.textValue();</span>
+<span class="pc bpc" id="L577" title="1 of 2 branches missed.">    if (text.length() &gt; ExperimentDocumentFormat.MAX_STRING_LENGTH) {</span>
+<span class="nc" id="L578">      throw failure(pointer, &quot;max-string&quot;, &quot;String exceeds the configured limit&quot;);</span>
+    }
+<span class="fc" id="L580">    return text;</span>
+  }
+
+  private static String optionalText(ObjectNode parent, String field, String pointer)
+      throws ExperimentDocumentException {
+<span class="fc" id="L585">    JsonNode value = parent.get(field);</span>
+<span class="pc bpc" id="L586" title="1 of 4 branches missed.">    if (value == null || value.isNull()) {</span>
+<span class="fc" id="L587">      return &quot;&quot;;</span>
+    }
+<span class="pc bpc" id="L589" title="1 of 2 branches missed.">    if (!value.isTextual()) {</span>
+<span class="nc" id="L590">      throw failure(pointer, &quot;expected-string&quot;, &quot;Expected a JSON string or null&quot;);</span>
+    }
+<span class="fc" id="L592">    String text = value.textValue();</span>
+<span class="pc bpc" id="L593" title="1 of 2 branches missed.">    if (text.length() &gt; ExperimentDocumentFormat.MAX_STRING_LENGTH) {</span>
+<span class="nc" id="L594">      throw failure(pointer, &quot;max-string&quot;, &quot;String exceeds the configured limit&quot;);</span>
+    }
+<span class="fc" id="L596">    return text;</span>
+  }
+
+  private static int requiredPositiveInt(ObjectNode parent, String field, String pointer)
+      throws ExperimentDocumentException {
+<span class="fc" id="L601">    JsonNode value = requiredNode(parent, field, pointer);</span>
+<span class="pc bpc" id="L602" title="2 of 4 branches missed.">    if (!value.canConvertToInt() || value.intValue() &lt; 1) {</span>
+<span class="nc" id="L603">      throw failure(pointer, &quot;expected-positive-integer&quot;, &quot;Expected a positive integer&quot;);</span>
+    }
+<span class="fc" id="L605">    return value.intValue();</span>
+  }
+
+  private static long requiredNonNegativeLong(ObjectNode parent, String field, String pointer)
+      throws ExperimentDocumentException {
+<span class="fc" id="L610">    JsonNode value = requiredNode(parent, field, pointer);</span>
+<span class="pc bpc" id="L611" title="2 of 4 branches missed.">    if (!value.canConvertToLong() || value.longValue() &lt; 0L) {</span>
+<span class="nc" id="L612">      throw failure(pointer, &quot;expected-nonnegative-integer&quot;, &quot;Expected a non-negative integer&quot;);</span>
+    }
+<span class="fc" id="L614">    return value.longValue();</span>
+  }
+
+  private static List&lt;String&gt; textArray(ArrayNode array, String pointer)
+      throws ExperimentDocumentException {
+<span class="fc" id="L619">    requireCollectionLimit(array.size(), pointer);</span>
+<span class="fc" id="L620">    ArrayList&lt;String&gt; result = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L621" title="All 2 branches covered.">    for (int index = 0; index &lt; array.size(); index++) {</span>
+<span class="fc" id="L622">      JsonNode value = array.get(index);</span>
+<span class="pc bpc" id="L623" title="1 of 2 branches missed.">      if (!value.isTextual()) {</span>
+<span class="nc" id="L624">        throw failure(pointer + &quot;/&quot; + index, &quot;expected-string&quot;, &quot;Expected a JSON string&quot;);</span>
+      }
+<span class="fc" id="L626">      String text = value.textValue();</span>
+<span class="pc bpc" id="L627" title="1 of 2 branches missed.">      if (text.length() &gt; ExperimentDocumentFormat.MAX_STRING_LENGTH) {</span>
+<span class="nc" id="L628">        throw failure(pointer + &quot;/&quot; + index, &quot;max-string&quot;, &quot;String exceeds the configured limit&quot;);</span>
+      }
+<span class="fc" id="L630">      result.add(text);</span>
+    }
+<span class="fc" id="L632">    return result;</span>
+  }
+
+  private static void rejectUnknown(ObjectNode node, Set&lt;String&gt; allowed, String pointer)
+      throws ExperimentDocumentException {
+<span class="fc" id="L637">    HashSet&lt;String&gt; unknown = new HashSet&lt;&gt;();</span>
+<span class="fc" id="L638">    node.fieldNames()</span>
+<span class="fc" id="L639">        .forEachRemaining(</span>
+            name -&gt; {
+<span class="pc bpc" id="L641" title="1 of 2 branches missed.">              if (!allowed.contains(name)) {</span>
+<span class="nc" id="L642">                unknown.add(name);</span>
+              }
+<span class="fc" id="L644">            });</span>
+<span class="pc bpc" id="L645" title="1 of 2 branches missed.">    if (!unknown.isEmpty()) {</span>
+<span class="nc" id="L646">      String field = unknown.stream().sorted().findFirst().orElseThrow();</span>
+<span class="nc" id="L647">      throw failure(</span>
+<span class="nc" id="L648">          DocumentValueJson.pointer(pointer, field),</span>
+          &quot;unknown-field&quot;,
+          &quot;Unknown core field: &quot; + field);
+    }
+<span class="fc" id="L652">  }</span>
+
+  private static void requireCollectionLimit(int size, String pointer)
+      throws ExperimentDocumentException {
+<span class="pc bpc" id="L656" title="1 of 2 branches missed.">    if (size &gt; ExperimentDocumentFormat.MAX_COLLECTION_SIZE) {</span>
+<span class="nc" id="L657">      throw failure(pointer, &quot;max-collection&quot;, &quot;Collection exceeds the configured limit&quot;);</span>
+    }
+<span class="fc" id="L659">  }</span>
+
+  private static Duration parseDuration(String value, String pointer)
+      throws ExperimentDocumentException {
+    try {
+<span class="nc" id="L664">      return Duration.parse(value);</span>
+<span class="nc" id="L665">    } catch (DateTimeParseException exception) {</span>
+<span class="nc" id="L666">      throw failure(pointer, &quot;invalid-duration&quot;, &quot;Expected an ISO-8601 duration&quot;, exception);</span>
+    }
+  }
+
+  private static Instant parseInstant(String value, String pointer)
+      throws ExperimentDocumentException {
+    try {
+<span class="fc" id="L673">      return Instant.parse(value);</span>
+<span class="nc" id="L674">    } catch (DateTimeParseException exception) {</span>
+<span class="nc" id="L675">      throw failure(pointer, &quot;invalid-instant&quot;, &quot;Expected an ISO-8601 instant&quot;, exception);</span>
+    }
+  }
+
+  private static ExperimentDocumentException failure(String pointer, String code, String message) {
+<span class="nc" id="L680">    return new ExperimentDocumentException(pointer, code, message);</span>
+  }
+
+  private static ExperimentDocumentException failure(
+      String pointer, String code, String message, Throwable cause) {
+<span class="fc" id="L685">    return new ExperimentDocumentException(pointer, code, message, cause);</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>AudioBlockEvidence.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer DSP and Analysis</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.dsp.workflow</a> &gt; <span class="el_source">AudioBlockEvidence.java</span></div><h1>AudioBlockEvidence.java</h1><pre class="source lang-java linenums">package org.hammer.audio.dsp.workflow;
+
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.Map;
+import java.util.Objects;
+import java.util.StringJoiner;
+import java.util.concurrent.ConcurrentHashMap;
+import org.hammer.audio.core.AudioBlock;
+import org.hammer.audio.core.AudioFormatDescriptor;
+
+/** Produces canonical digests and stable numerical summaries for immutable audio blocks. */
+final class AudioBlockEvidence {
+
+  static final String DIGEST_ALGORITHM = &quot;SHA-256&quot;;
+  static final String DIGEST_ENCODING = &quot;audio-block-f32be-planar-v1&quot;;
+  private static final int PREVIEW_FRAMES = 16;
+
+<span class="nc" id="L19">  private AudioBlockEvidence() {</span>
+<span class="nc" id="L20">    throw new UnsupportedOperationException(&quot;Utility class&quot;);</span>
+  }
+
+  static Map&lt;String, String&gt; artifacts(AudioBlock block, String outputNodeId, String outputPortId) {
+<span class="fc" id="L24">    Objects.requireNonNull(block, &quot;block&quot;);</span>
+<span class="fc" id="L25">    Map&lt;String, String&gt; artifacts = new ConcurrentHashMap&lt;&gt;();</span>
+<span class="fc" id="L26">    artifacts.put(DeterministicAudioArtifacts.OUTPUT_NODE_ID, outputNodeId);</span>
+<span class="fc" id="L27">    artifacts.put(DeterministicAudioArtifacts.OUTPUT_PORT_ID, outputPortId);</span>
+<span class="fc" id="L28">    artifacts.put(DeterministicAudioArtifacts.OUTPUT_DIGEST_ALGORITHM, DIGEST_ALGORITHM);</span>
+<span class="fc" id="L29">    artifacts.put(DeterministicAudioArtifacts.OUTPUT_DIGEST_ENCODING, DIGEST_ENCODING);</span>
+<span class="fc" id="L30">    artifacts.put(DeterministicAudioArtifacts.OUTPUT_DIGEST_SHA256, digest(block));</span>
+<span class="fc" id="L31">    artifacts.put(</span>
+        DeterministicAudioArtifacts.OUTPUT_SAMPLE_RATE_HZ,
+<span class="fc" id="L33">        Float.toString(block.format().sampleRate()));</span>
+<span class="fc" id="L34">    artifacts.put(DeterministicAudioArtifacts.OUTPUT_CHANNELS, Integer.toString(block.channels()));</span>
+<span class="fc" id="L35">    artifacts.put(DeterministicAudioArtifacts.OUTPUT_FRAMES, Integer.toString(block.frames()));</span>
+<span class="fc" id="L36">    Summary summary = summarize(block);</span>
+<span class="fc" id="L37">    artifacts.put(DeterministicAudioArtifacts.OUTPUT_MIN, Float.toHexString(summary.minimum()));</span>
+<span class="fc" id="L38">    artifacts.put(DeterministicAudioArtifacts.OUTPUT_MAX, Float.toHexString(summary.maximum()));</span>
+<span class="fc" id="L39">    artifacts.put(DeterministicAudioArtifacts.OUTPUT_MEAN, Double.toHexString(summary.mean()));</span>
+<span class="fc" id="L40">    artifacts.put(DeterministicAudioArtifacts.OUTPUT_RMS, Double.toHexString(summary.rms()));</span>
+<span class="fc" id="L41">    artifacts.put(</span>
+<span class="fc" id="L42">        DeterministicAudioArtifacts.OUTPUT_CHANNEL_ZERO_PREVIEW, channelZeroPreview(block));</span>
+<span class="fc" id="L43">    return Map.copyOf(artifacts);</span>
+  }
+
+  private static String digest(AudioBlock block) {
+<span class="fc" id="L47">    MessageDigest digest = sha256();</span>
+<span class="fc" id="L48">    AudioFormatDescriptor format = block.format();</span>
+<span class="fc" id="L49">    updateInt(digest, Float.floatToIntBits(format.sampleRate()));</span>
+<span class="fc" id="L50">    updateInt(digest, format.channels());</span>
+<span class="fc" id="L51">    updateInt(digest, format.sourceSampleSizeInBits());</span>
+<span class="fc" id="L52">    updateInt(digest, block.frames());</span>
+<span class="fc bfc" id="L53" title="All 2 branches covered.">    for (int channel = 0; channel &lt; block.channels(); channel++) {</span>
+<span class="fc bfc" id="L54" title="All 2 branches covered.">      for (float sample : block.channelView(channel)) {</span>
+<span class="fc" id="L55">        updateInt(digest, Float.floatToIntBits(sample));</span>
+      }
+    }
+<span class="fc" id="L58">    return hex(digest.digest());</span>
+  }
+
+  private static Summary summarize(AudioBlock block) {
+<span class="fc" id="L62">    float minimum = Float.POSITIVE_INFINITY;</span>
+<span class="fc" id="L63">    float maximum = Float.NEGATIVE_INFINITY;</span>
+<span class="fc" id="L64">    double sum = 0.0d;</span>
+<span class="fc" id="L65">    double sumOfSquares = 0.0d;</span>
+<span class="fc" id="L66">    long sampleCount = 0L;</span>
+<span class="fc bfc" id="L67" title="All 2 branches covered.">    for (int channel = 0; channel &lt; block.channels(); channel++) {</span>
+<span class="fc bfc" id="L68" title="All 2 branches covered.">      for (float sample : block.channelView(channel)) {</span>
+<span class="pc bpc" id="L69" title="1 of 2 branches missed.">        if (!Float.isFinite(sample)) {</span>
+<span class="nc" id="L70">          throw new IllegalArgumentException(&quot;Audio output contains non-finite samples&quot;);</span>
+        }
+<span class="fc" id="L72">        minimum = Math.min(minimum, sample);</span>
+<span class="fc" id="L73">        maximum = Math.max(maximum, sample);</span>
+<span class="fc" id="L74">        sum += sample;</span>
+<span class="fc" id="L75">        sumOfSquares += (double) sample * sample;</span>
+<span class="fc" id="L76">        sampleCount++;</span>
+      }
+    }
+<span class="fc" id="L79">    return new Summary(minimum, maximum, sum / sampleCount, Math.sqrt(sumOfSquares / sampleCount));</span>
+  }
+
+  private static String channelZeroPreview(AudioBlock block) {
+<span class="fc" id="L83">    StringJoiner preview = new StringJoiner(&quot;,&quot;);</span>
+<span class="fc" id="L84">    float[] samples = block.channelView(0);</span>
+<span class="fc" id="L85">    int previewLength = Math.min(samples.length, PREVIEW_FRAMES);</span>
+<span class="fc bfc" id="L86" title="All 2 branches covered.">    for (int frame = 0; frame &lt; previewLength; frame++) {</span>
+<span class="fc" id="L87">      preview.add(Float.toHexString(samples[frame]));</span>
+    }
+<span class="fc" id="L89">    return preview.toString();</span>
+  }
+
+  private static MessageDigest sha256() {
+    try {
+<span class="fc" id="L94">      return MessageDigest.getInstance(DIGEST_ALGORITHM);</span>
+<span class="nc" id="L95">    } catch (NoSuchAlgorithmException exception) {</span>
+<span class="nc" id="L96">      throw new IllegalStateException(&quot;SHA-256 is unavailable&quot;, exception);</span>
+    }
+  }
+
+  private static void updateInt(MessageDigest digest, int value) {
+<span class="fc" id="L101">    digest.update((byte) (value &gt;&gt;&gt; 24));</span>
+<span class="fc" id="L102">    digest.update((byte) (value &gt;&gt;&gt; 16));</span>
+<span class="fc" id="L103">    digest.update((byte) (value &gt;&gt;&gt; 8));</span>
+<span class="fc" id="L104">    digest.update((byte) value);</span>
+<span class="fc" id="L105">  }</span>
+
+  private static String hex(byte[] bytes) {
+<span class="fc" id="L108">    StringBuilder text = new StringBuilder(bytes.length * 2);</span>
+<span class="fc bfc" id="L109" title="All 2 branches covered.">    for (byte value : bytes) {</span>
+<span class="fc" id="L110">      text.append(Character.forDigit((value &gt;&gt;&gt; 4) &amp; 0x0f, 16))</span>
+<span class="fc" id="L111">          .append(Character.forDigit(value &amp; 0x0f, 16));</span>
+    }
+<span class="fc" id="L113">    return text.toString();</span>
+  }
+
+  private record Summary(float minimum, float maximum, double mean, double rms) {
+<span class="fc" id="L117">    Summary {</span>
+<span class="pc bpc" id="L118" title="1 of 2 branches missed.">      if (!Float.isFinite(minimum)</span>
+<span class="pc bpc" id="L119" title="1 of 2 branches missed.">          || !Float.isFinite(maximum)</span>
+<span class="pc bpc" id="L120" title="1 of 2 branches missed.">          || !Double.isFinite(mean)</span>
+<span class="pc bpc" id="L121" title="1 of 2 branches missed.">          || !Double.isFinite(rms)) {</span>
+<span class="nc" id="L122">        throw new IllegalArgumentException(&quot;Audio evidence summary must remain finite&quot;);</span>
+      }
+<span class="fc" id="L124">    }</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

@@ -1,0 +1,159 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>MosquitoLocalizationPipeline.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic</a> &gt; <span class="el_source">MosquitoLocalizationPipeline.java</span></div><h1>MosquitoLocalizationPipeline.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+import org.hammer.audio.acquisition.MicrophoneArray;
+import org.hammer.audio.acquisition.SynchronizationAssessment;
+import org.hammer.audio.core.AudioBlock;
+import org.hammer.audio.experimental.acoustic.DelayAndSumBeamformer.BeamformingPoint;
+import org.hammer.audio.geometry.LocalizationConstraint2D;
+import org.hammer.audio.geometry.Vector2;
+
+/** Example experimental pipeline combining frequency tracking, TDOA and beamforming. */
+public final class MosquitoLocalizationPipeline {
+
+  private final WingbeatFrequencyTracker frequencyTracker;
+  private final TdoaEstimator tdoaEstimator;
+  private final DelayAndSumBeamformer beamformer;
+  private final List&lt;Vector2&gt; candidateGrid;
+  private final int frequencyReferenceChannel;
+  private final boolean aggregateFrequencyAcrossChannels;
+  private final TdoaPairingMode tdoaPairingMode;
+
+  /** Create a pipeline from interchangeable experimental stages. */
+  public MosquitoLocalizationPipeline(
+      WingbeatFrequencyTracker frequencyTracker,
+      TdoaEstimator tdoaEstimator,
+      DelayAndSumBeamformer beamformer,
+      List&lt;Vector2&gt; candidateGrid) {
+<span class="fc" id="L30">    this(</span>
+        frequencyTracker,
+        tdoaEstimator,
+        beamformer,
+        candidateGrid,
+        0,
+        false,
+        TdoaPairingMode.ALL_PAIRS);
+<span class="fc" id="L38">  }</span>
+
+  /**
+   * Create a configurable pipeline.
+   *
+   * &lt;p&gt;By default, production callers should prefer {@link TdoaPairingMode#ALL_PAIRS}. Reference
+   * channel pairing is retained for controlled experiments where one calibrated microphone is the
+   * timing anchor.
+   */
+  public MosquitoLocalizationPipeline(
+      WingbeatFrequencyTracker frequencyTracker,
+      TdoaEstimator tdoaEstimator,
+      DelayAndSumBeamformer beamformer,
+      List&lt;Vector2&gt; candidateGrid,
+      int frequencyReferenceChannel,
+      boolean aggregateFrequencyAcrossChannels,
+<span class="fc" id="L54">      TdoaPairingMode tdoaPairingMode) {</span>
+<span class="fc" id="L55">    this.frequencyTracker = Objects.requireNonNull(frequencyTracker, &quot;frequencyTracker&quot;);</span>
+<span class="fc" id="L56">    this.tdoaEstimator = Objects.requireNonNull(tdoaEstimator, &quot;tdoaEstimator&quot;);</span>
+<span class="fc" id="L57">    this.beamformer = Objects.requireNonNull(beamformer, &quot;beamformer&quot;);</span>
+<span class="fc" id="L58">    this.candidateGrid = List.copyOf(Objects.requireNonNull(candidateGrid, &quot;candidateGrid&quot;));</span>
+<span class="fc bfc" id="L59" title="All 2 branches covered.">    if (this.candidateGrid.isEmpty()) {</span>
+<span class="fc" id="L60">      throw new IllegalArgumentException(&quot;candidateGrid must not be empty&quot;);</span>
+    }
+<span class="pc bpc" id="L62" title="1 of 2 branches missed.">    if (this.candidateGrid.stream().anyMatch(Objects::isNull)) {</span>
+<span class="nc" id="L63">      throw new IllegalArgumentException(&quot;candidateGrid must not contain null entries&quot;);</span>
+    }
+<span class="fc bfc" id="L65" title="All 2 branches covered.">    if (frequencyReferenceChannel &lt; 0) {</span>
+<span class="fc" id="L66">      throw new IllegalArgumentException(&quot;frequencyReferenceChannel must be &gt;= 0&quot;);</span>
+    }
+<span class="fc" id="L68">    this.frequencyReferenceChannel = frequencyReferenceChannel;</span>
+<span class="fc" id="L69">    this.aggregateFrequencyAcrossChannels = aggregateFrequencyAcrossChannels;</span>
+<span class="fc" id="L70">    this.tdoaPairingMode = Objects.requireNonNull(tdoaPairingMode, &quot;tdoaPairingMode&quot;);</span>
+<span class="fc" id="L71">  }</span>
+
+  /** Analyze one synchronized multichannel block. */
+  public AcousticLocalizationSnapshot analyze(AudioBlock block, MicrophoneArray array) {
+<span class="fc" id="L75">    Objects.requireNonNull(block, &quot;block&quot;);</span>
+<span class="fc" id="L76">    Objects.requireNonNull(array, &quot;array&quot;);</span>
+<span class="pc bpc" id="L77" title="1 of 2 branches missed.">    if (block.channels() != array.channels()) {</span>
+<span class="nc" id="L78">      throw new IllegalArgumentException(&quot;block channel count must match microphone array&quot;);</span>
+    }
+<span class="fc bfc" id="L80" title="All 2 branches covered.">    if (frequencyReferenceChannel &gt;= array.channels()) {</span>
+<span class="fc" id="L81">      throw new IllegalArgumentException(</span>
+          &quot;frequencyReferenceChannel must exist in microphone array&quot;);
+    }
+<span class="fc" id="L84">    SynchronizationAssessment synchronization = synchronizationAssessment(block, array);</span>
+<span class="pc bpc" id="L85" title="1 of 2 branches missed.">    if (!synchronization.usable()) {</span>
+<span class="nc" id="L86">      throw new UnusableSynchronizationException(String.join(&quot; &quot;, synchronization.diagnostics()));</span>
+    }
+<span class="fc" id="L88">    SpectralPeak peak = trackFrequency(block, array);</span>
+<span class="fc" id="L89">    List&lt;TdoaEstimate&gt; estimates = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L90">    List&lt;LocalizationConstraint2D&gt; constraints = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L91" title="All 2 branches covered.">    for (int[] pair : channelPairs(array.channels())) {</span>
+<span class="fc" id="L92">      TdoaEstimate estimate = tdoaEstimator.estimate(block, array, pair[0], pair[1]);</span>
+<span class="fc" id="L93">      estimates.add(estimate);</span>
+<span class="fc" id="L94">      constraints.add(estimate.asConstraint());</span>
+<span class="fc" id="L95">    }</span>
+<span class="fc" id="L96">    List&lt;BeamformingPoint&gt; heatmap = beamformer.scan(block, array, candidateGrid);</span>
+<span class="fc" id="L97">    Vector2 bestPosition = beamformer.best(block, array, candidateGrid).positionMeters();</span>
+<span class="fc" id="L98">    return new AcousticLocalizationSnapshot(</span>
+<span class="fc" id="L99">        block.frameIndex(),</span>
+<span class="fc" id="L100">        block.timestampNanos(),</span>
+        peak,
+        estimates,
+        constraints,
+        heatmap,
+        bestPosition,
+        synchronization);
+  }
+
+  private SynchronizationAssessment synchronizationAssessment(
+      AudioBlock block, MicrophoneArray array) {
+<span class="pc bpc" id="L111" title="1 of 2 branches missed.">    if (tdoaEstimator instanceof SynchronizationAwareTdoaEstimator aware) {</span>
+<span class="nc" id="L112">      return aware.synchronizationAssessment(block, array);</span>
+    }
+<span class="fc" id="L114">    return SynchronizationAssessment.nominalSharedClock();</span>
+  }
+
+  private SpectralPeak trackFrequency(AudioBlock block, MicrophoneArray array) {
+<span class="fc bfc" id="L118" title="All 2 branches covered.">    if (!aggregateFrequencyAcrossChannels) {</span>
+<span class="fc" id="L119">      return frequencyTracker.track(block, frequencyReferenceChannel);</span>
+    }
+<span class="fc" id="L121">    SpectralPeak bestPeak = frequencyTracker.track(block, 0);</span>
+<span class="fc bfc" id="L122" title="All 2 branches covered.">    for (int channel = 1; channel &lt; array.channels(); channel++) {</span>
+<span class="fc" id="L123">      SpectralPeak peak = frequencyTracker.track(block, channel);</span>
+<span class="pc bpc" id="L124" title="1 of 2 branches missed.">      if (peak.confidence() &gt; bestPeak.confidence()</span>
+<span class="nc bnc" id="L125" title="All 2 branches missed.">          || (peak.confidence() == bestPeak.confidence()</span>
+<span class="nc bnc" id="L126" title="All 2 branches missed.">              &amp;&amp; peak.magnitude() &gt; bestPeak.magnitude())) {</span>
+<span class="fc" id="L127">        bestPeak = peak;</span>
+      }
+    }
+<span class="fc" id="L130">    return bestPeak;</span>
+  }
+
+  private List&lt;int[]&gt; channelPairs(int channels) {
+<span class="fc" id="L134">    List&lt;int[]&gt; pairs = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L135" title="All 2 branches covered.">    if (tdoaPairingMode == TdoaPairingMode.REFERENCE_CHANNEL) {</span>
+<span class="fc bfc" id="L136" title="All 2 branches covered.">      for (int channel = 0; channel &lt; channels; channel++) {</span>
+<span class="fc bfc" id="L137" title="All 2 branches covered.">        if (channel != frequencyReferenceChannel) {</span>
+<span class="fc" id="L138">          pairs.add(new int[] {frequencyReferenceChannel, channel});</span>
+        }
+      }
+<span class="fc" id="L141">      return pairs;</span>
+    }
+<span class="fc bfc" id="L143" title="All 2 branches covered.">    for (int first = 0; first &lt; channels; first++) {</span>
+<span class="fc bfc" id="L144" title="All 2 branches covered.">      for (int second = first + 1; second &lt; channels; second++) {</span>
+<span class="fc" id="L145">        pairs.add(new int[] {first, second});</span>
+      }
+    }
+<span class="fc" id="L148">    return pairs;</span>
+  }
+
+  /** Pairing strategy for experimental TDOA estimation. */
+<span class="fc" id="L152">  public enum TdoaPairingMode {</span>
+    /** Estimate all unique microphone pairs for maximum geometric constraints. */
+<span class="fc" id="L154">    ALL_PAIRS,</span>
+    /** Estimate pairs from one calibrated reference channel to every other channel. */
+<span class="fc" id="L156">    REFERENCE_CHANNEL</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

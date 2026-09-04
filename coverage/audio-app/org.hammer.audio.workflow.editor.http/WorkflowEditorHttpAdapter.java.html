@@ -1,0 +1,264 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WorkflowEditorHttpAdapter.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.editor.http</a> &gt; <span class="el_source">WorkflowEditorHttpAdapter.java</span></div><h1>WorkflowEditorHttpAdapter.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.editor.http;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.Objects;
+import org.hammer.audio.workflow.Node;
+import org.hammer.audio.workflow.Workflow;
+import org.hammer.audio.workflow.WorkflowOperation;
+import org.hammer.audio.workflow.catalog.ExperimentNodeCatalog;
+import org.hammer.audio.workflow.editor.WorkflowEditorService;
+import org.hammer.audio.workflow.editor.WorkflowOperationRejectedException;
+import org.hammer.audio.workflow.editor.WorkflowProjection;
+import org.hammer.audio.workflow.store.CommitId;
+import org.hammer.audio.workflow.store.CommitInfo;
+import org.hammer.audio.workflow.store.CommitMetadata;
+import org.hammer.audio.workflow.store.WorkflowSnapshot;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import tools.jackson.databind.JsonNode;
+
+/** Spring MVC REST controller for the workflow editor MVP (ADR-007 / issue #210). */
+@RestController
+@RequestMapping(&quot;/workflow&quot;)
+public final class WorkflowEditorHttpAdapter {
+
+  private static final String DEFAULT_BRANCH = &quot;main&quot;;
+  private static final int DEFAULT_HISTORY_LIMIT = 20;
+  private static final String DEFAULT_HISTORY_LIMIT_STR = &quot;20&quot;;
+  private static final String JSON_FIELD_COMMIT_ID = &quot;commitId&quot;;
+  private static final String JSON_FIELD_TIMESTAMP = &quot;timestamp&quot;;
+
+  private final WorkflowEditorService editorService;
+
+  /**
+   * Creates an adapter backed by the given workflow editor service.
+   *
+   * @param editorService the server-authoritative editor service
+   */
+<span class="fc" id="L46">  public WorkflowEditorHttpAdapter(WorkflowEditorService editorService) {</span>
+<span class="fc" id="L47">    this.editorService = Objects.requireNonNull(editorService, &quot;editorService&quot;);</span>
+<span class="fc" id="L48">  }</span>
+
+  /** Returns the current workflow projection. */
+  @GetMapping(&quot;/projection&quot;)
+  public WorkflowProjection projection() {
+<span class="nc" id="L53">    return editorService.currentProjection();</span>
+  }
+
+  /** Returns the full node palette. */
+  @GetMapping(&quot;/catalog&quot;)
+  public List&lt;CatalogEntry&gt; catalog() {
+<span class="nc" id="L59">    return catalogEntries();</span>
+  }
+
+  /** Returns the current structural validation status. */
+  @GetMapping(&quot;/validation&quot;)
+  public ViolationsResponse validation() {
+<span class="nc" id="L65">    return new ViolationsResponse(editorService.validate());</span>
+  }
+
+  /**
+   * Applies a workflow operation and returns the updated projection.
+   *
+   * @param json operation descriptor
+   * @return updated projection on success, or 422 with violations on rejection
+   */
+  @PostMapping(&quot;/operations&quot;)
+  public ResponseEntity&lt;?&gt; operations(@RequestBody JsonNode json) {
+<span class="nc" id="L76">    WorkflowOperation operation = WorkflowOperationHttpParser.parse(json, &quot;web-editor&quot;);</span>
+<span class="nc" id="L77">    WorkflowProjection projection = editorService.applyOperation(operation);</span>
+<span class="nc" id="L78">    return ResponseEntity.ok(projection);</span>
+  }
+
+  /**
+   * Creates a checkpoint and returns the new commit identifier.
+   *
+   * @param json checkpoint metadata (branch, author, message, timestamp)
+   * @return checkpoint response on success, or 422 with violations on rejection
+   */
+  @PostMapping(&quot;/checkpoints&quot;)
+  public ResponseEntity&lt;?&gt; checkpoints(@RequestBody JsonNode json) {
+<span class="nc" id="L89">    String branch = textOrDefault(json, &quot;branch&quot;, DEFAULT_BRANCH);</span>
+<span class="nc" id="L90">    String author = textOrDefault(json, &quot;author&quot;, &quot;web-editor&quot;);</span>
+<span class="nc" id="L91">    String message = textOrDefault(json, &quot;message&quot;, &quot;Workbench checkpoint&quot;);</span>
+    Instant timestamp =
+<span class="nc bnc" id="L93" title="All 2 branches missed.">        json.has(JSON_FIELD_TIMESTAMP)</span>
+<span class="nc" id="L94">            ? Instant.parse(json.get(JSON_FIELD_TIMESTAMP).asText())</span>
+<span class="nc" id="L95">            : Instant.now();</span>
+<span class="nc" id="L96">    CommitMetadata metadata = new CommitMetadata(author, message, timestamp);</span>
+<span class="nc" id="L97">    CommitId commitId = editorService.checkpoint(branch, metadata);</span>
+<span class="nc" id="L98">    return ResponseEntity.ok(new CheckpointResponse(commitId.value()));</span>
+  }
+
+  /**
+   * Returns commit history for a branch.
+   *
+   * @param branch branch name (default: {@code main})
+   * @param limit maximum number of entries (default: 20)
+   * @return list of history entries
+   */
+  @GetMapping(&quot;/history&quot;)
+  public List&lt;HistoryEntry&gt; history(
+      @RequestParam(name = &quot;branch&quot;, defaultValue = DEFAULT_BRANCH) String branch,
+      @RequestParam(name = &quot;limit&quot;, defaultValue = DEFAULT_HISTORY_LIMIT_STR) int limit) {
+<span class="fc" id="L112">    return editorService.history(branch, limit).stream().map(HistoryEntry::from).toList();</span>
+  }
+
+  /**
+   * Loads a workflow snapshot by commit identifier or branch name.
+   *
+   * @param json load descriptor ({@code commitId} or {@code branch})
+   * @return updated projection on success, or 422 with violations on rejection
+   */
+  @PostMapping(&quot;/load&quot;)
+  public ResponseEntity&lt;?&gt; load(@RequestBody JsonNode json) {
+    WorkflowProjection projection;
+<span class="nc bnc" id="L124" title="All 4 branches missed.">    if (json.has(JSON_FIELD_COMMIT_ID) &amp;&amp; !json.get(JSON_FIELD_COMMIT_ID).asText().isBlank()) {</span>
+<span class="nc" id="L125">      projection = editorService.loadGraph(new CommitId(json.get(JSON_FIELD_COMMIT_ID).asText()));</span>
+    } else {
+<span class="nc" id="L127">      projection = editorService.loadGraph(textOrDefault(json, &quot;branch&quot;, DEFAULT_BRANCH));</span>
+    }
+<span class="nc" id="L129">    return ResponseEntity.ok(projection);</span>
+  }
+
+  /** Returns the current workflow execution snapshot. */
+  @GetMapping(&quot;/snapshot&quot;)
+  public WorkflowSnapshot snapshot() {
+<span class="nc" id="L135">    return editorService.executeSnapshot();</span>
+  }
+
+  // -------------------------------------------------------------------------
+  // Exception mapping
+  // -------------------------------------------------------------------------
+
+  @ExceptionHandler(WorkflowOperationRejectedException.class)
+  public ResponseEntity&lt;ViolationsResponse&gt; handleRejected(WorkflowOperationRejectedException ex) {
+<span class="nc" id="L144">    return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)</span>
+<span class="nc" id="L145">        .body(new ViolationsResponse(ex.violations()));</span>
+  }
+
+  @ExceptionHandler({IllegalArgumentException.class, IllegalStateException.class})
+  public ResponseEntity&lt;String&gt; handleBadRequest(RuntimeException ex) {
+<span class="nc" id="L150">    return ResponseEntity.badRequest().body(ex.getMessage());</span>
+  }
+
+  private static List&lt;CatalogEntry&gt; catalogEntries() {
+<span class="nc" id="L154">    return List.of(</span>
+<span class="nc" id="L155">        CatalogEntry.from(</span>
+<span class="nc" id="L156">            &quot;recording-input&quot;, ExperimentNodeCatalog.recordingInput(&quot;catalog.recording&quot;)),</span>
+<span class="nc" id="L157">        CatalogEntry.from(</span>
+            &quot;synthetic-signal-generator&quot;,
+<span class="nc" id="L159">            ExperimentNodeCatalog.syntheticSignalGenerator(&quot;catalog.synthetic&quot;)),</span>
+<span class="nc" id="L160">        CatalogEntry.from(</span>
+<span class="nc" id="L161">            &quot;humbug-db-import&quot;, ExperimentNodeCatalog.humBugDbImport(&quot;catalog.humbug&quot;)),</span>
+<span class="nc" id="L162">        CatalogEntry.from(&quot;gain&quot;, ExperimentNodeCatalog.gain(&quot;catalog.gain&quot;)),</span>
+<span class="nc" id="L163">        CatalogEntry.from(</span>
+<span class="nc" id="L164">            &quot;bandpass-filter&quot;, ExperimentNodeCatalog.bandpassFilter(&quot;catalog.bandpass&quot;)),</span>
+<span class="nc" id="L165">        CatalogEntry.from(&quot;fft&quot;, ExperimentNodeCatalog.fft(&quot;catalog.fft&quot;)),</span>
+<span class="nc" id="L166">        CatalogEntry.from(</span>
+            &quot;wingbeat-feature-extraction&quot;,
+<span class="nc" id="L168">            ExperimentNodeCatalog.wingbeatFeatureExtraction(&quot;catalog.features&quot;)),</span>
+<span class="nc" id="L169">        CatalogEntry.from(&quot;classifier&quot;, ExperimentNodeCatalog.classifier(&quot;catalog.classifier&quot;)),</span>
+<span class="nc" id="L170">        CatalogEntry.from(</span>
+<span class="nc" id="L171">            &quot;localization&quot;, ExperimentNodeCatalog.localization(&quot;catalog.localization&quot;)),</span>
+<span class="nc" id="L172">        CatalogEntry.from(&quot;benchmark&quot;, ExperimentNodeCatalog.benchmark(&quot;catalog.benchmark&quot;)),</span>
+<span class="nc" id="L173">        CatalogEntry.from(&quot;report&quot;, ExperimentNodeCatalog.report(&quot;catalog.report&quot;)),</span>
+<span class="nc" id="L174">        CatalogEntry.from(</span>
+<span class="nc" id="L175">            &quot;evidence-export&quot;, ExperimentNodeCatalog.evidenceExport(&quot;catalog.evidence&quot;)));</span>
+  }
+
+  private static String textOrDefault(JsonNode node, String field, String fallback) {
+<span class="nc" id="L179">    JsonNode value = node.get(field);</span>
+<span class="nc bnc" id="L180" title="All 6 branches missed.">    if (value == null || value.isNull() || value.asText().isBlank()) {</span>
+<span class="nc" id="L181">      return fallback;</span>
+    }
+<span class="nc" id="L183">    return value.asText();</span>
+  }
+
+  // -------------------------------------------------------------------------
+  // Response value objects
+  // -------------------------------------------------------------------------
+
+  /**
+   * JSON response body for rejected operations or current validation status.
+   *
+   * @param violations list of structural violation messages
+   */
+  public record ViolationsResponse(List&lt;String&gt; violations) {
+
+<span class="nc" id="L197">    public ViolationsResponse {</span>
+<span class="nc" id="L198">      violations = List.copyOf(Objects.requireNonNull(violations, &quot;violations&quot;));</span>
+<span class="nc" id="L199">    }</span>
+  }
+
+  /**
+   * JSON response body for a created checkpoint.
+   *
+   * @param commitId stable identifier of the created commit
+   */
+  public record CheckpointResponse(String commitId) {
+<span class="nc" id="L208">    public CheckpointResponse {</span>
+<span class="nc" id="L209">      Objects.requireNonNull(</span>
+<span class="nc" id="L210">          commitId, () -&gt; &quot;CheckpointResponse parameter commitId must not be null&quot;);</span>
+<span class="nc" id="L211">    }</span>
+  }
+
+  /**
+   * JSON response entry for checkpoint history.
+   *
+   * @param commitId stable identifier of the commit
+   * @param workflowId domain identifier of the workflow
+   * @param author author of the commit
+   * @param message human-readable commit message
+   * @param timestamp instant at which the commit was created
+   */
+<span class="nc" id="L223">  public record HistoryEntry(</span>
+      String commitId, String workflowId, String author, String message, Instant timestamp) {
+
+    static HistoryEntry from(CommitInfo info) {
+<span class="nc" id="L227">      return new HistoryEntry(</span>
+<span class="nc" id="L228">          info.commitId().value(),</span>
+<span class="nc" id="L229">          info.workflowId(),</span>
+<span class="nc" id="L230">          info.metadata().author(),</span>
+<span class="nc" id="L231">          info.metadata().message(),</span>
+<span class="nc" id="L232">          info.metadata().timestamp());</span>
+    }
+  }
+
+  /**
+   * JSON response entry for node palette items.
+   *
+   * @param type node type identifier
+   * @param label human-readable node label
+   * @param inputHandles typed input port handles
+   * @param outputHandles typed output port handles
+   */
+  public record CatalogEntry(
+      String type,
+      String label,
+      List&lt;WorkflowProjection.HandleProjection&gt; inputHandles,
+      List&lt;WorkflowProjection.HandleProjection&gt; outputHandles) {
+
+<span class="nc" id="L250">    public CatalogEntry {</span>
+<span class="nc" id="L251">      inputHandles = List.copyOf(Objects.requireNonNull(inputHandles, &quot;inputHandles&quot;));</span>
+<span class="nc" id="L252">      outputHandles = List.copyOf(Objects.requireNonNull(outputHandles, &quot;outputHandles&quot;));</span>
+<span class="nc" id="L253">    }</span>
+
+    static CatalogEntry from(String type, Node node) {
+<span class="nc" id="L256">      Workflow catalogWorkflow = new Workflow(&quot;catalog&quot;, &quot;Catalog&quot;, List.of(node), List.of());</span>
+<span class="nc" id="L257">      WorkflowProjection.NodeProjection nodeProjection =</span>
+<span class="nc" id="L258">          WorkflowProjection.fromWorkflow(catalogWorkflow).nodes().get(0);</span>
+<span class="nc" id="L259">      return new CatalogEntry(</span>
+<span class="nc" id="L260">          type, node.label(), nodeProjection.inputHandles(), nodeProjection.outputHandles());</span>
+    }
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

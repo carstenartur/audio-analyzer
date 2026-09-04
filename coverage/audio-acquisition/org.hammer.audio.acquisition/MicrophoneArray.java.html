@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>MicrophoneArray.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Acquisition</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.acquisition</a> &gt; <span class="el_source">MicrophoneArray.java</span></div><h1>MicrophoneArray.java</h1><pre class="source lang-java linenums">package org.hammer.audio.acquisition;
+
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+
+/** Immutable description of a microphone array tied to a synchronized multichannel source. */
+public final class MicrophoneArray {
+
+  private final List&lt;Microphone&gt; microphones;
+
+  /** Create a microphone array from unique microphone ids and channels. */
+<span class="fc" id="L13">  public MicrophoneArray(List&lt;Microphone&gt; microphones) {</span>
+<span class="pc bpc" id="L14" title="2 of 4 branches missed.">    if (microphones == null || microphones.isEmpty()) {</span>
+<span class="nc" id="L15">      throw new IllegalArgumentException(&quot;microphones must not be empty&quot;);</span>
+    }
+<span class="fc" id="L17">    List&lt;Microphone&gt; copy = new ArrayList&lt;&gt;(microphones);</span>
+<span class="fc" id="L18">    copy.sort(Comparator.comparingInt(Microphone::channel));</span>
+<span class="fc bfc" id="L19" title="All 2 branches covered.">    for (int i = 0; i &lt; copy.size(); i++) {</span>
+<span class="fc" id="L20">      Microphone mic = copy.get(i);</span>
+<span class="pc bpc" id="L21" title="1 of 2 branches missed.">      if (mic.channel() != i) {</span>
+<span class="nc" id="L22">        throw new IllegalArgumentException(&quot;channels must be contiguous from 0&quot;);</span>
+      }
+<span class="fc bfc" id="L24" title="All 2 branches covered.">      for (int j = i + 1; j &lt; copy.size(); j++) {</span>
+<span class="pc bpc" id="L25" title="1 of 2 branches missed.">        if (mic.id().equals(copy.get(j).id())) {</span>
+<span class="nc" id="L26">          throw new IllegalArgumentException(&quot;duplicate microphone id: &quot; + mic.id());</span>
+        }
+      }
+    }
+<span class="fc" id="L30">    this.microphones = List.copyOf(copy);</span>
+<span class="fc" id="L31">  }</span>
+
+  /** Return microphones ordered by channel. */
+  public List&lt;Microphone&gt; microphones() {
+<span class="fc" id="L35">    return microphones;</span>
+  }
+
+  /** Number of synchronized channels. */
+  public int channels() {
+<span class="fc" id="L40">    return microphones.size();</span>
+  }
+
+  /** Microphone metadata for a channel. */
+  public Microphone microphone(int channel) {
+<span class="fc" id="L45">    return microphones.get(channel);</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

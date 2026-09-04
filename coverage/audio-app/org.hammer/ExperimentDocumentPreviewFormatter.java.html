@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ExperimentDocumentPreviewFormatter.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer</a> &gt; <span class="el_source">ExperimentDocumentPreviewFormatter.java</span></div><h1>ExperimentDocumentPreviewFormatter.java</h1><pre class="source lang-java linenums">package org.hammer;
+
+import java.nio.file.Path;
+import org.hammer.audio.experiment.document.ExperimentDocumentPreview;
+import org.hammer.audio.plugin.document.DocumentDiagnostic;
+import org.hammer.audio.workflow.Workflow;
+
+/** Deterministic plain-text projection of a portable experiment-document preview. */
+@SuppressWarnings({
+  &quot;PMD.InsufficientStringBufferDeclaration&quot;,
+  &quot;PMD.ConsecutiveAppendsShouldReuse&quot;,
+  &quot;PMD.ConsecutiveLiteralAppends&quot;,
+  &quot;PMD.AppendCharacterWithChar&quot;
+})
+final class ExperimentDocumentPreviewFormatter {
+
+  private ExperimentDocumentPreviewFormatter() {
+    // utility class
+  }
+
+  /** Format a copyable preview without exposing plugin implementation objects. */
+  static String format(Path source, ExperimentDocumentPreview preview, Workflow workflow) {
+<span class="fc" id="L23">    StringBuilder text = new StringBuilder();</span>
+<span class="fc" id="L24">    text.append(&quot;Source: &quot;).append(source.toAbsolutePath().normalize()).append('\n');</span>
+<span class="fc" id="L25">    text.append(&quot;Experiment: &quot;).append(preview.document().experiment().name()).append('\n');</span>
+<span class="fc" id="L26">    text.append(&quot;Experiment ID: &quot;).append(preview.document().experiment().id()).append('\n');</span>
+<span class="fc" id="L27">    text.append(&quot;Format: &quot;)</span>
+<span class="fc" id="L28">        .append(preview.document().format())</span>
+<span class="fc" id="L29">        .append(&quot; v&quot;)</span>
+<span class="fc" id="L30">        .append(preview.document().formatVersion())</span>
+<span class="fc" id="L31">        .append('\n');</span>
+<span class="fc" id="L32">    text.append(&quot;Canonical SHA-256: &quot;).append(preview.canonicalSha256()).append('\n');</span>
+<span class="fc" id="L33">    text.append(&quot;Source mode: &quot;).append(preview.document().experiment().sourceMode()).append('\n');</span>
+<span class="fc" id="L34">    text.append(&quot;Workflow: &quot;)</span>
+<span class="fc" id="L35">        .append(workflow.name())</span>
+<span class="fc" id="L36">        .append(&quot; (&quot;)</span>
+<span class="fc" id="L37">        .append(workflow.nodes().size())</span>
+<span class="fc" id="L38">        .append(&quot; nodes, &quot;)</span>
+<span class="fc" id="L39">        .append(workflow.edges().size())</span>
+<span class="fc" id="L40">        .append(&quot; edges)\n&quot;);</span>
+<span class="fc" id="L41">    text.append(&quot;Execution allowed: &quot;).append(preview.executionAllowed()).append('\n');</span>
+<span class="fc" id="L42">    text.append(&quot;Read-only: &quot;).append(preview.readOnly()).append('\n');</span>
+<span class="fc" id="L43">    appendMigrations(text, preview);</span>
+<span class="fc" id="L44">    appendDiagnostics(text, preview);</span>
+<span class="pc bpc" id="L45" title="1 of 2 branches missed.">    if (preview.readOnly()) {</span>
+<span class="fc" id="L46">      text.append(</span>
+          &quot;\nThis document may be inspected and preserved, but it cannot be applied or executed&quot;
+              + &quot; with the current plugin environment.\n&quot;);
+    }
+<span class="fc" id="L50">    return text.toString();</span>
+  }
+
+  private static void appendMigrations(StringBuilder text, ExperimentDocumentPreview preview) {
+<span class="pc bpc" id="L54" title="1 of 2 branches missed.">    if (preview.migrations().isEmpty()) {</span>
+<span class="nc" id="L55">      return;</span>
+    }
+<span class="fc" id="L57">    text.append(&quot;\nMigrations:\n&quot;);</span>
+<span class="fc" id="L58">    preview.migrations().forEach(value -&gt; text.append(&quot;- &quot;).append(value).append('\n'));</span>
+<span class="fc" id="L59">  }</span>
+
+  private static void appendDiagnostics(StringBuilder text, ExperimentDocumentPreview preview) {
+<span class="pc bpc" id="L62" title="1 of 2 branches missed.">    if (preview.diagnostics().isEmpty()) {</span>
+<span class="nc" id="L63">      return;</span>
+    }
+<span class="fc" id="L65">    text.append(&quot;\nDiagnostics:\n&quot;);</span>
+<span class="fc bfc" id="L66" title="All 2 branches covered.">    for (DocumentDiagnostic diagnostic : preview.diagnostics()) {</span>
+<span class="fc" id="L67">      text.append(&quot;- [&quot;)</span>
+<span class="fc" id="L68">          .append(diagnostic.severity())</span>
+<span class="fc" id="L69">          .append(&quot;] &quot;)</span>
+<span class="fc" id="L70">          .append(diagnostic.pointer())</span>
+<span class="fc" id="L71">          .append(&quot; &quot;)</span>
+<span class="fc" id="L72">          .append(diagnostic.code())</span>
+<span class="fc" id="L73">          .append(&quot;: &quot;)</span>
+<span class="fc" id="L74">          .append(diagnostic.message())</span>
+<span class="fc" id="L75">          .append('\n');</span>
+<span class="fc" id="L76">    }</span>
+<span class="fc" id="L77">  }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

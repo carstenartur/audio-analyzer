@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WorkflowHistoryTextQuery.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Core</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.history</a> &gt; <span class="el_source">WorkflowHistoryTextQuery.java</span></div><h1>WorkflowHistoryTextQuery.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.history;
+
+import java.time.Instant;
+
+/**
+ * Bounded indexed workflow-history query using only application-facing value types.
+ *
+ * @param text user-entered full-text expression; blank selects the latest indexed commits
+ * @param authorEmail optional exact author email
+ * @param pathText optional analyzed changed-path expression
+ * @param from optional inclusive lower commit-time bound
+ * @param to optional inclusive upper commit-time bound
+ * @param limit maximum result count between 1 and 200
+ */
+public record WorkflowHistoryTextQuery(
+    String text, String authorEmail, String pathText, Instant from, Instant to, int limit) {
+
+<span class="fc" id="L18">  public WorkflowHistoryTextQuery {</span>
+<span class="fc" id="L19">    text = normalize(text, &quot;&quot;);</span>
+<span class="fc" id="L20">    authorEmail = normalize(authorEmail, null);</span>
+<span class="fc" id="L21">    pathText = normalize(pathText, null);</span>
+<span class="pc bpc" id="L22" title="2 of 6 branches missed.">    if (from != null &amp;&amp; to != null &amp;&amp; from.isAfter(to)) {</span>
+<span class="fc" id="L23">      throw new IllegalArgumentException(&quot;from must not be after to&quot;);</span>
+    }
+<span class="pc bpc" id="L25" title="2 of 4 branches missed.">    if (limit &lt;= 0 || limit &gt; 200) {</span>
+<span class="nc" id="L26">      throw new IllegalArgumentException(&quot;limit must be between 1 and 200&quot;);</span>
+    }
+<span class="fc" id="L28">  }</span>
+
+  /** Preserves the original full-text-only construction API. */
+  public WorkflowHistoryTextQuery(String text, int limit) {
+<span class="fc" id="L32">    this(text, null, null, null, null, limit);</span>
+<span class="fc" id="L33">  }</span>
+
+  private static String normalize(String value, String emptyValue) {
+<span class="fc bfc" id="L36" title="All 4 branches covered.">    if (value == null || value.isBlank()) {</span>
+<span class="fc" id="L37">      return emptyValue;</span>
+    }
+<span class="fc" id="L39">    return value.trim();</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

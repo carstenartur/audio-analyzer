@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ExperimentNodeParameters.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Core</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.catalog</a> &gt; <span class="el_source">ExperimentNodeParameters.java</span></div><h1>ExperimentNodeParameters.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.catalog;
+
+/** Stable metadata keys and values for executable experiment-node parameters. */
+public final class ExperimentNodeParameters {
+
+  /** Waveform selector on {@code synthetic-signal-generator} nodes. */
+  public static final String SIGNAL_WAVEFORM = &quot;signal.waveform&quot;;
+
+  /** Supported deterministic sine waveform value. */
+  public static final String WAVEFORM_SINE = &quot;sine&quot;;
+
+  /** Oscillator frequency in hertz. */
+  public static final String SIGNAL_FREQUENCY_HZ = &quot;signal.frequency-hz&quot;;
+
+  /** Initial oscillator phase in radians. */
+  public static final String SIGNAL_PHASE_RADIANS = &quot;signal.phase-radians&quot;;
+
+  /** Peak normalized oscillator amplitude. */
+  public static final String SIGNAL_AMPLITUDE = &quot;signal.amplitude&quot;;
+
+  /** Output sample rate in hertz. */
+  public static final String SIGNAL_SAMPLE_RATE_HZ = &quot;signal.sample-rate-hz&quot;;
+
+  /** Number of planar output channels. */
+  public static final String SIGNAL_CHANNELS = &quot;signal.channels&quot;;
+
+  /** Number of generated audio frames per channel. */
+  public static final String SIGNAL_FRAME_COUNT = &quot;signal.frame-count&quot;;
+
+  /** Linear multiplier on {@code gain} nodes. */
+  public static final String GAIN_FACTOR = &quot;gain.factor&quot;;
+
+<span class="nc" id="L33">  private ExperimentNodeParameters() {</span>
+<span class="nc" id="L34">    throw new UnsupportedOperationException(&quot;Utility class&quot;);</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

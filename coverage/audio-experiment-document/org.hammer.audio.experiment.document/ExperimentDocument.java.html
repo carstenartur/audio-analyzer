@@ -1,0 +1,321 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ExperimentDocument.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experiment Document</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experiment.document</a> &gt; <span class="el_source">ExperimentDocument.java</span></div><h1>ExperimentDocument.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experiment.document;
+
+import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.TreeMap;
+import org.hammer.audio.plugin.document.DocumentValue;
+
+/**
+ * Immutable portable experiment setup and reproducibility contract.
+ *
+ * @param schema schema identifier
+ * @param format stable document format identifier
+ * @param formatVersion outer envelope version
+ * @param experiment core experiment metadata
+ * @param workflow canonical workflow payload
+ * @param profiles portable core profile data
+ * @param requiredPlugins required plugin declarations
+ * @param pluginData namespaced plugin sections
+ * @param assets bounded external asset references
+ * @param outputs requested logical outputs
+ * @param provenance creation and migration provenance
+ */
+@SuppressWarnings(&quot;PMD.LooseCoupling&quot;)
+public record ExperimentDocument(
+    String schema,
+    String format,
+    int formatVersion,
+    ExperimentInfo experiment,
+    WorkflowPayload workflow,
+    DocumentValue.ObjectValue profiles,
+    List&lt;PluginRequirement&gt; requiredPlugins,
+    Map&lt;String, Map&lt;String, PluginSection&gt;&gt; pluginData,
+    List&lt;AssetReference&gt; assets,
+    List&lt;OutputRequest&gt; outputs,
+    Provenance provenance) {
+
+  /* Validate and defensively copy all document sections. */
+<span class="fc" id="L43">  public ExperimentDocument {</span>
+<span class="fc" id="L44">    schema = requireNonBlank(schema, &quot;schema&quot;);</span>
+<span class="fc" id="L45">    format = requireNonBlank(format, &quot;format&quot;);</span>
+<span class="pc bpc" id="L46" title="1 of 2 branches missed.">    if (formatVersion &lt; 1) {</span>
+<span class="nc" id="L47">      throw new IllegalArgumentException(&quot;formatVersion must be positive&quot;);</span>
+    }
+<span class="fc" id="L49">    Objects.requireNonNull(experiment, &quot;experiment&quot;);</span>
+<span class="fc" id="L50">    Objects.requireNonNull(workflow, &quot;workflow&quot;);</span>
+<span class="fc" id="L51">    Objects.requireNonNull(profiles, &quot;profiles&quot;);</span>
+<span class="fc" id="L52">    requiredPlugins = List.copyOf(Objects.requireNonNull(requiredPlugins, &quot;requiredPlugins&quot;));</span>
+<span class="fc" id="L53">    pluginData = immutablePluginData(pluginData);</span>
+<span class="fc" id="L54">    assets = List.copyOf(Objects.requireNonNull(assets, &quot;assets&quot;));</span>
+<span class="fc" id="L55">    outputs = List.copyOf(Objects.requireNonNull(outputs, &quot;outputs&quot;));</span>
+<span class="fc" id="L56">    Objects.requireNonNull(provenance, &quot;provenance&quot;);</span>
+<span class="fc" id="L57">  }</span>
+
+  /** Return a fresh deeply immutable copy of plugin-owned sections. */
+  @Override
+  public Map&lt;String, Map&lt;String, PluginSection&gt;&gt; pluginData() {
+<span class="fc" id="L62">    return immutablePluginData(pluginData);</span>
+  }
+
+  /**
+   * Core human-facing experiment metadata.
+   *
+   * @param id stable experiment id
+   * @param name human-readable name
+   * @param description experiment description
+   * @param tags immutable tags
+   * @param intent experiment lifecycle intent/type
+   * @param sourceMode portable source mode
+   * @param intendedDuration optional intended duration
+   * @param applicationVersion creating application version
+   */
+  public record ExperimentInfo(
+      String id,
+      String name,
+      String description,
+      List&lt;String&gt; tags,
+      String intent,
+      String sourceMode,
+      Duration intendedDuration,
+      String applicationVersion) {
+
+    /* Validate experiment metadata. */
+<span class="fc" id="L88">    public ExperimentInfo {</span>
+<span class="fc" id="L89">      id = requireIdentifier(id, &quot;experiment id&quot;);</span>
+<span class="fc" id="L90">      name = requireNonBlank(name, &quot;experiment name&quot;);</span>
+<span class="pc bpc" id="L91" title="1 of 2 branches missed.">      description = description == null ? &quot;&quot; : description;</span>
+<span class="fc" id="L92">      tags = normalizedStrings(tags, &quot;tag&quot;);</span>
+<span class="fc" id="L93">      intent = requireIdentifier(intent, &quot;experiment intent&quot;);</span>
+<span class="fc" id="L94">      sourceMode = requireIdentifier(sourceMode, &quot;source mode&quot;);</span>
+<span class="pc bpc" id="L95" title="1 of 2 branches missed.">      if (intendedDuration != null</span>
+<span class="nc bnc" id="L96" title="All 4 branches missed.">          &amp;&amp; (intendedDuration.isNegative() || intendedDuration.isZero())) {</span>
+<span class="nc" id="L97">        throw new IllegalArgumentException(&quot;intendedDuration must be positive&quot;);</span>
+      }
+<span class="fc" id="L99">      applicationVersion = requireNonBlank(applicationVersion, &quot;applicationVersion&quot;);</span>
+<span class="fc" id="L100">    }</span>
+
+    /** Return a fresh immutable copy of the experiment tags. */
+    @Override
+    public List&lt;String&gt; tags() {
+<span class="fc" id="L105">      return List.copyOf(tags);</span>
+    }
+  }
+
+  /**
+   * Canonical embedded workflow representation.
+   *
+   * @param format workflow representation identifier
+   * @param formatVersion workflow representation version
+   * @param content canonical workflow DSL
+   * @param sha256 lower-case canonical SHA-256
+   */
+  public record WorkflowPayload(String format, int formatVersion, String content, String sha256) {
+
+    /* Validate workflow payload identity and hash fields. */
+<span class="fc" id="L120">    public WorkflowPayload {</span>
+<span class="fc" id="L121">      format = requireNonBlank(format, &quot;workflow format&quot;);</span>
+<span class="pc bpc" id="L122" title="1 of 2 branches missed.">      if (formatVersion &lt; 1) {</span>
+<span class="nc" id="L123">        throw new IllegalArgumentException(&quot;workflow formatVersion must be positive&quot;);</span>
+      }
+<span class="fc" id="L125">      content = requireNonBlank(content, &quot;workflow content&quot;);</span>
+<span class="fc" id="L126">      sha256 = requireSha256(sha256, &quot;workflow sha256&quot;);</span>
+<span class="fc" id="L127">    }</span>
+  }
+
+  /**
+   * Required plugin declaration.
+   *
+   * @param id stable plugin id
+   * @param versionRange declared package compatibility range
+   * @param sections required section ids
+   */
+  public record PluginRequirement(String id, String versionRange, List&lt;String&gt; sections) {
+
+    /* Validate plugin requirement. */
+<span class="fc" id="L140">    public PluginRequirement {</span>
+<span class="fc" id="L141">      id = requireIdentifier(id, &quot;plugin id&quot;);</span>
+<span class="fc" id="L142">      versionRange = requireNonBlank(versionRange, &quot;versionRange&quot;);</span>
+<span class="fc" id="L143">      sections = normalizedIdentifiers(sections, &quot;plugin section id&quot;);</span>
+<span class="pc bpc" id="L144" title="1 of 2 branches missed.">      if (sections.isEmpty()) {</span>
+<span class="nc" id="L145">        throw new IllegalArgumentException(&quot;required plugin must declare at least one section&quot;);</span>
+      }
+<span class="fc" id="L147">    }</span>
+
+    /** Return a fresh immutable copy of required section identifiers. */
+    @Override
+    public List&lt;String&gt; sections() {
+<span class="fc" id="L152">      return List.copyOf(sections);</span>
+    }
+  }
+
+  /**
+   * One versioned plugin-owned section.
+   *
+   * @param schemaVersion plugin parameter schema version
+   * @param algorithmVersion algorithm compatibility identifier
+   * @param data plugin-owned bounded data
+   */
+  public record PluginSection(int schemaVersion, String algorithmVersion, DocumentValue data) {
+
+    /* Validate plugin section metadata. */
+<span class="fc" id="L166">    public PluginSection {</span>
+<span class="pc bpc" id="L167" title="1 of 2 branches missed.">      if (schemaVersion &lt; 1) {</span>
+<span class="nc" id="L168">        throw new IllegalArgumentException(&quot;plugin schemaVersion must be positive&quot;);</span>
+      }
+<span class="fc" id="L170">      algorithmVersion = requireNonBlank(algorithmVersion, &quot;algorithmVersion&quot;);</span>
+<span class="fc" id="L171">      Objects.requireNonNull(data, &quot;data&quot;);</span>
+<span class="fc" id="L172">    }</span>
+  }
+
+  /**
+   * Portable reference to an external recording or dataset.
+   *
+   * @param id stable asset id
+   * @param relativePath bounded relative path
+   * @param mediaType expected media type
+   * @param sizeBytes expected size
+   * @param sha256 expected SHA-256
+   */
+  public record AssetReference(
+      String id, String relativePath, String mediaType, long sizeBytes, String sha256) {
+
+    /* Validate asset identity, path and digest. */
+<span class="fc" id="L188">    public AssetReference {</span>
+<span class="fc" id="L189">      id = requireIdentifier(id, &quot;asset id&quot;);</span>
+<span class="fc" id="L190">      relativePath = PortableNames.requireRelativePath(relativePath);</span>
+<span class="fc" id="L191">      mediaType = requireNonBlank(mediaType, &quot;mediaType&quot;);</span>
+<span class="pc bpc" id="L192" title="1 of 2 branches missed.">      if (sizeBytes &lt; 0L) {</span>
+<span class="nc" id="L193">        throw new IllegalArgumentException(&quot;asset sizeBytes must not be negative&quot;);</span>
+      }
+<span class="fc" id="L195">      sha256 = requireSha256(sha256, &quot;asset sha256&quot;);</span>
+<span class="fc" id="L196">    }</span>
+  }
+
+  /**
+   * Requested logical output.
+   *
+   * @param id stable output id
+   * @param mediaType requested media type
+   * @param baseName portable basename without path separators
+   */
+  public record OutputRequest(String id, String mediaType, String baseName) {
+
+    /* Validate output request. */
+<span class="fc" id="L209">    public OutputRequest {</span>
+<span class="fc" id="L210">      id = requireIdentifier(id, &quot;output id&quot;);</span>
+<span class="fc" id="L211">      mediaType = requireNonBlank(mediaType, &quot;output mediaType&quot;);</span>
+<span class="fc" id="L212">      baseName = PortableNames.requireBaseName(baseName);</span>
+<span class="fc" id="L213">    }</span>
+  }
+
+  /**
+   * Portable document provenance.
+   *
+   * @param creatorDisplayName creator display identity
+   * @param verifiedAccount optional verified account reference
+   * @param createdAt creation instant
+   * @param modifiedAt modification instant
+   * @param softwareVersion software version
+   * @param canonicalSha256 canonical document hash
+   * @param migrationNotes immutable migration notes
+   */
+  public record Provenance(
+      String creatorDisplayName,
+      String verifiedAccount,
+      Instant createdAt,
+      Instant modifiedAt,
+      String softwareVersion,
+      String canonicalSha256,
+      List&lt;String&gt; migrationNotes) {
+
+    /* Validate provenance fields. */
+<span class="fc" id="L237">    public Provenance {</span>
+<span class="fc" id="L238">      creatorDisplayName = requireNonBlank(creatorDisplayName, &quot;creatorDisplayName&quot;);</span>
+<span class="pc bpc" id="L239" title="1 of 2 branches missed.">      verifiedAccount = verifiedAccount == null ? &quot;&quot; : verifiedAccount;</span>
+<span class="fc" id="L240">      Objects.requireNonNull(createdAt, &quot;createdAt&quot;);</span>
+<span class="fc" id="L241">      Objects.requireNonNull(modifiedAt, &quot;modifiedAt&quot;);</span>
+<span class="pc bpc" id="L242" title="1 of 2 branches missed.">      if (modifiedAt.isBefore(createdAt)) {</span>
+<span class="nc" id="L243">        throw new IllegalArgumentException(&quot;modifiedAt must not be before createdAt&quot;);</span>
+      }
+<span class="fc" id="L245">      softwareVersion = requireNonBlank(softwareVersion, &quot;softwareVersion&quot;);</span>
+      canonicalSha256 =
+<span class="pc bpc" id="L247" title="1 of 4 branches missed.">          canonicalSha256 == null || canonicalSha256.isBlank()</span>
+<span class="fc" id="L248">              ? &quot;&quot;</span>
+<span class="fc" id="L249">              : requireSha256(canonicalSha256, &quot;canonicalSha256&quot;);</span>
+<span class="fc" id="L250">      migrationNotes = normalizedStrings(migrationNotes, &quot;migration note&quot;);</span>
+<span class="fc" id="L251">    }</span>
+
+    /** Return a fresh immutable copy of migration notes. */
+    @Override
+    public List&lt;String&gt; migrationNotes() {
+<span class="fc" id="L256">      return List.copyOf(migrationNotes);</span>
+    }
+  }
+
+  private static Map&lt;String, Map&lt;String, PluginSection&gt;&gt; immutablePluginData(
+      Map&lt;String, Map&lt;String, PluginSection&gt;&gt; source) {
+<span class="fc" id="L262">    Objects.requireNonNull(source, &quot;pluginData&quot;);</span>
+<span class="fc" id="L263">    TreeMap&lt;String, Map&lt;String, PluginSection&gt;&gt; plugins = new TreeMap&lt;&gt;();</span>
+<span class="fc" id="L264">    source.forEach(</span>
+        (pluginId, sections) -&gt; {
+<span class="fc" id="L266">          String validPluginId = requireIdentifier(pluginId, &quot;plugin data id&quot;);</span>
+<span class="fc" id="L267">          Objects.requireNonNull(sections, &quot;plugin sections&quot;);</span>
+<span class="fc" id="L268">          TreeMap&lt;String, PluginSection&gt; copiedSections = new TreeMap&lt;&gt;();</span>
+<span class="fc" id="L269">          sections.forEach(</span>
+              (sectionId, section) -&gt;
+<span class="fc" id="L271">                  copiedSections.put(</span>
+<span class="fc" id="L272">                      requireIdentifier(sectionId, &quot;plugin section id&quot;),</span>
+<span class="fc" id="L273">                      Objects.requireNonNull(section, &quot;plugin section&quot;)));</span>
+<span class="fc" id="L274">          plugins.put(validPluginId, Collections.unmodifiableMap(copiedSections));</span>
+<span class="fc" id="L275">        });</span>
+<span class="fc" id="L276">    return Collections.unmodifiableMap(plugins);</span>
+  }
+
+  private static List&lt;String&gt; normalizedIdentifiers(List&lt;String&gt; values, String label) {
+<span class="fc" id="L280">    ArrayList&lt;String&gt; normalized = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L281" title="All 2 branches covered.">    for (String value : Objects.requireNonNull(values, label + &quot;s&quot;)) {</span>
+<span class="fc" id="L282">      normalized.add(requireIdentifier(value, label));</span>
+<span class="fc" id="L283">    }</span>
+<span class="fc" id="L284">    normalized.sort(String::compareTo);</span>
+<span class="fc" id="L285">    return List.copyOf(normalized);</span>
+  }
+
+  private static List&lt;String&gt; normalizedStrings(List&lt;String&gt; values, String label) {
+<span class="fc" id="L289">    ArrayList&lt;String&gt; normalized = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L290" title="All 2 branches covered.">    for (String value : Objects.requireNonNull(values, label + &quot;s&quot;)) {</span>
+<span class="fc" id="L291">      normalized.add(requireNonBlank(value, label));</span>
+<span class="fc" id="L292">    }</span>
+<span class="fc" id="L293">    normalized.sort(String::compareTo);</span>
+<span class="fc" id="L294">    return List.copyOf(normalized);</span>
+  }
+
+  static String requireIdentifier(String value, String label) {
+<span class="fc" id="L298">    String checked = requireNonBlank(value, label);</span>
+<span class="pc bpc" id="L299" title="1 of 2 branches missed.">    if (!checked.matches(&quot;[A-Za-z0-9][A-Za-z0-9._-]{0,127}&quot;)) {</span>
+<span class="nc" id="L300">      throw new IllegalArgumentException(label + &quot; is not a portable identifier: &quot; + checked);</span>
+    }
+<span class="fc" id="L302">    return checked;</span>
+  }
+
+  static String requireSha256(String value, String label) {
+<span class="fc" id="L306">    String checked = requireNonBlank(value, label).toLowerCase(java.util.Locale.ROOT);</span>
+<span class="pc bpc" id="L307" title="1 of 2 branches missed.">    if (!checked.matches(&quot;[0-9a-f]{64}&quot;)) {</span>
+<span class="nc" id="L308">      throw new IllegalArgumentException(label + &quot; must be a lower-case SHA-256&quot;);</span>
+    }
+<span class="fc" id="L310">    return checked;</span>
+  }
+
+  static String requireNonBlank(String value, String label) {
+<span class="fc" id="L314">    Objects.requireNonNull(value, label);</span>
+<span class="pc bpc" id="L315" title="1 of 2 branches missed.">    if (value.isBlank()) {</span>
+<span class="nc" id="L316">      throw new IllegalArgumentException(label + &quot; must not be blank&quot;);</span>
+    }
+<span class="fc" id="L318">    return value;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ClassifierBenchmarkRunner.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.benchmark.classifier</a> &gt; <span class="el_source">ClassifierBenchmarkRunner.java</span></div><h1>ClassifierBenchmarkRunner.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.benchmark.classifier;
+
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import org.hammer.audio.experimental.acoustic.wingbeat.WingbeatFeatureVector;
+
+/**
+ * Runs multiple {@link ClassifierBenchmark} implementations against the same labelled dataset and
+ * collects their results.
+ *
+ * &lt;p&gt;Adding a new classifier to the comparison requires only implementing {@link
+ * ClassifierBenchmark} and including it in the list passed to this runner.
+ *
+ * &lt;p&gt;This service is stateless and may be called concurrently as long as the registered benchmarks
+ * are also stateless.
+ */
+@SuppressWarnings(&quot;PMD.UseConcurrentHashMap&quot;)
+public final class ClassifierBenchmarkRunner {
+
+  private final List&lt;ClassifierBenchmark&gt; benchmarks;
+
+  /**
+   * Create a runner with the given benchmarks.
+   *
+   * @param benchmarks benchmarks to run; must not be {@code null} or empty
+   */
+<span class="fc" id="L30">  public ClassifierBenchmarkRunner(List&lt;ClassifierBenchmark&gt; benchmarks) {</span>
+<span class="fc" id="L31">    Objects.requireNonNull(benchmarks, &quot;benchmarks&quot;);</span>
+<span class="pc bpc" id="L32" title="1 of 2 branches missed.">    if (benchmarks.isEmpty()) {</span>
+<span class="nc" id="L33">      throw new IllegalArgumentException(&quot;benchmarks must not be empty&quot;);</span>
+    }
+<span class="fc" id="L35">    this.benchmarks = List.copyOf(benchmarks);</span>
+<span class="fc" id="L36">  }</span>
+
+  /**
+   * Create a runner containing the {@link RuleBasedClassifierBenchmark} as the sole default
+   * benchmark.
+   *
+   * @return default runner instance; never {@code null}
+   */
+  public static ClassifierBenchmarkRunner defaultRunner() {
+<span class="fc" id="L45">    return new ClassifierBenchmarkRunner(List.of(new RuleBasedClassifierBenchmark()));</span>
+  }
+
+  /**
+   * Run all registered benchmarks on the given labelled dataset.
+   *
+   * @param vectors feature vectors; must not be {@code null} or empty
+   * @param labels ground-truth labels, one per vector; must not be {@code null}; must have the same
+   *     size as {@code vectors}
+   * @return map of benchmark name to result; order mirrors the registration order; never {@code
+   *     null}
+   */
+  public Map&lt;String, ClassifierBenchmarkResult&gt; run(
+      List&lt;WingbeatFeatureVector&gt; vectors, List&lt;String&gt; labels) {
+<span class="fc" id="L59">    Objects.requireNonNull(vectors, &quot;vectors&quot;);</span>
+<span class="fc" id="L60">    Objects.requireNonNull(labels, &quot;labels&quot;);</span>
+<span class="pc bpc" id="L61" title="1 of 2 branches missed.">    if (vectors.isEmpty()) {</span>
+<span class="nc" id="L62">      throw new IllegalArgumentException(&quot;vectors must not be empty&quot;);</span>
+    }
+<span class="pc bpc" id="L64" title="1 of 2 branches missed.">    if (vectors.size() != labels.size()) {</span>
+<span class="nc" id="L65">      throw new IllegalArgumentException(&quot;vectors and labels must have the same size&quot;);</span>
+    }
+
+<span class="fc" id="L68">    Map&lt;String, ClassifierBenchmarkResult&gt; results = new LinkedHashMap&lt;&gt;();</span>
+<span class="fc bfc" id="L69" title="All 2 branches covered.">    for (ClassifierBenchmark benchmark : benchmarks) {</span>
+<span class="fc" id="L70">      results.put(benchmark.name(), benchmark.run(vectors, labels));</span>
+<span class="fc" id="L71">    }</span>
+<span class="fc" id="L72">    return Collections.unmodifiableMap(results);</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

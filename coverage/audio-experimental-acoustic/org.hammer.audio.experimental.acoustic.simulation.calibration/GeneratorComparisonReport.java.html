@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>GeneratorComparisonReport.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.simulation.calibration</a> &gt; <span class="el_source">GeneratorComparisonReport.java</span></div><h1>GeneratorComparisonReport.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.simulation.calibration;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+import org.hammer.audio.experimental.acoustic.feature.comparison.FeatureDifference;
+import org.hammer.audio.experimental.acoustic.feature.comparison.SyntheticRealComparisonReport;
+
+/**
+ * Benchmark comparison between the original and calibrated generator.
+ *
+ * &lt;p&gt;Wraps the {@link SyntheticRealComparisonReport comparison reports} produced before and after
+ * calibration and exposes improvement metrics:
+ *
+ * &lt;ul&gt;
+ *   &lt;li&gt;{@link #meanRelativeDifferenceBefore()} / {@link #meanRelativeDifferenceAfter()} — overall
+ *       deviation from real data for each generator
+ *   &lt;li&gt;{@link #overallImprovement()} — relative reduction in mean deviation
+ *   &lt;li&gt;{@link #perFeatureImprovement()} — per-feature absolute reduction in relative difference
+ * &lt;/ul&gt;
+ *
+ * @param beforeCalibration comparison report for the original (baseline) generator; must not be
+ *     {@code null}
+ * @param afterCalibration comparison report for the calibrated generator; must not be {@code null}
+ */
+public record GeneratorComparisonReport(
+    SyntheticRealComparisonReport beforeCalibration,
+    SyntheticRealComparisonReport afterCalibration) {
+
+  // Validate fields.
+<span class="fc" id="L31">  public GeneratorComparisonReport {</span>
+<span class="fc" id="L32">    Objects.requireNonNull(beforeCalibration, &quot;beforeCalibration&quot;);</span>
+<span class="fc" id="L33">    Objects.requireNonNull(afterCalibration, &quot;afterCalibration&quot;);</span>
+<span class="fc" id="L34">  }</span>
+
+  /**
+   * Create a {@link GeneratorComparisonReport} from a {@link CalibrationResult}.
+   *
+   * @param result calibration result; must not be {@code null}
+   * @return comparison report; never {@code null}
+   */
+  public static GeneratorComparisonReport of(CalibrationResult result) {
+<span class="fc" id="L43">    Objects.requireNonNull(result, &quot;result&quot;);</span>
+<span class="fc" id="L44">    return new GeneratorComparisonReport(result.beforeCalibration(), result.afterCalibration());</span>
+  }
+
+  /**
+   * Return the mean relative difference across all features before calibration.
+   *
+   * @return mean relative difference; {@code &gt;= 0}
+   */
+  public double meanRelativeDifferenceBefore() {
+<span class="fc" id="L53">    return beforeCalibration.differences().stream()</span>
+<span class="fc" id="L54">        .mapToDouble(FeatureDifference::relativeDifference)</span>
+<span class="fc" id="L55">        .average()</span>
+<span class="fc" id="L56">        .orElse(0.0);</span>
+  }
+
+  /**
+   * Return the mean relative difference across all features after calibration.
+   *
+   * @return mean relative difference; {@code &gt;= 0}
+   */
+  public double meanRelativeDifferenceAfter() {
+<span class="fc" id="L65">    return afterCalibration.differences().stream()</span>
+<span class="fc" id="L66">        .mapToDouble(FeatureDifference::relativeDifference)</span>
+<span class="fc" id="L67">        .average()</span>
+<span class="fc" id="L68">        .orElse(0.0);</span>
+  }
+
+  /**
+   * Return the overall improvement as {@code (before − after) / before}.
+   *
+   * &lt;p&gt;A positive value means the calibrated generator is closer to real data. Returns {@code 0}
+   * when the before-calibration mean difference is zero.
+   *
+   * @return improvement fraction; positive = better
+   */
+  public double overallImprovement() {
+<span class="fc" id="L80">    double before = meanRelativeDifferenceBefore();</span>
+<span class="fc bfc" id="L81" title="All 2 branches covered.">    if (before == 0.0) {</span>
+<span class="fc" id="L82">      return 0.0;</span>
+    }
+<span class="fc" id="L84">    return (before - meanRelativeDifferenceAfter()) / before;</span>
+  }
+
+  /**
+   * Return per-feature improvement as the absolute reduction in relative difference ({@code before
+   * − after}) for each feature.
+   *
+   * &lt;p&gt;The list is ordered identically to {@link SyntheticRealComparisonReport#differences()}.
+   * Positive values indicate features that improved; negative values indicate features that got
+   * worse.
+   *
+   * @return per-feature improvement list; never {@code null}
+   */
+  public List&lt;Double&gt; perFeatureImprovement() {
+<span class="fc" id="L98">    List&lt;FeatureDifference&gt; before = beforeCalibration.differences();</span>
+<span class="fc" id="L99">    List&lt;FeatureDifference&gt; after = afterCalibration.differences();</span>
+<span class="fc" id="L100">    int size = Math.min(before.size(), after.size());</span>
+<span class="fc" id="L101">    List&lt;Double&gt; improvements = new ArrayList&lt;&gt;(size);</span>
+<span class="fc bfc" id="L102" title="All 2 branches covered.">    for (int i = 0; i &lt; size; i++) {</span>
+<span class="fc" id="L103">      improvements.add(before.get(i).relativeDifference() - after.get(i).relativeDifference());</span>
+    }
+<span class="fc" id="L105">    return List.copyOf(improvements);</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

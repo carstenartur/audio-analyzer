@@ -1,0 +1,380 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>TrackingPipeline.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.tracking</a> &gt; <span class="el_source">TrackingPipeline.java</span></div><h1>TrackingPipeline.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.tracking;
+
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import org.hammer.audio.acquisition.MicrophoneArray;
+import org.hammer.audio.acquisition.SynchronizationAssessment;
+import org.hammer.audio.core.AudioBlock;
+import org.hammer.audio.experimental.acoustic.DelayAndSumBeamformer;
+import org.hammer.audio.experimental.acoustic.SynchronizationAwareTdoaEstimator;
+import org.hammer.audio.experimental.acoustic.TdoaConsistencyReport;
+import org.hammer.audio.experimental.acoustic.TdoaEstimate;
+import org.hammer.audio.experimental.acoustic.TdoaEstimator;
+import org.hammer.audio.experimental.acoustic.TdoaPairConsistencyAnalyzer;
+import org.hammer.audio.experimental.acoustic.UnusableSynchronizationException;
+import org.hammer.audio.experimental.acoustic.doppler.FrequencyTrack;
+import org.hammer.audio.experimental.acoustic.doppler.MultiSensorDopplerEstimator;
+import org.hammer.audio.experimental.acoustic.doppler.RadialVelocityEstimate;
+import org.hammer.audio.experimental.acoustic.doppler.SimpleMultiSensorDopplerEstimator;
+import org.hammer.audio.experimental.acoustic.doppler.SourceObservation;
+import org.hammer.audio.experimental.acoustic.doppler.VelocityReconstructor;
+import org.hammer.audio.geometry.Vector2;
+import org.hammer.audio.geometry.Vector3;
+
+/**
+ * Coherent real-time multi-source tracking pipeline.
+ *
+ * &lt;p&gt;For each input {@link AudioBlock} the pipeline executes the following stages, in order:
+ *
+ * &lt;ol&gt;
+ *   &lt;li&gt;Per-channel multi-peak FFT detection ({@link MultiPeakDetector}).
+ *   &lt;li&gt;Cross-channel frequency clustering ({@link FrequencyClusterer}).
+ *   &lt;li&gt;One pairwise TDOA pass across all microphones plus physical/cycle-consistency analysis.
+ *   &lt;li&gt;Localization via delay-and-sum beamforming ({@link DelayAndSumBeamformer}) over a
+ *       caller-supplied 2D candidate grid; one best position per cluster.
+ *   &lt;li&gt;Temporal tracking via {@link SourceTracker} (identity persistence + Kalman smoothing).
+ * &lt;/ol&gt;
+ *
+ * &lt;p&gt;Real-time readiness is supported via {@link FrameSchedule} and {@link ProcessingBudget}. The
+ * pipeline never allocates unbounded data structures per frame; the only per-frame allocations are
+ * the small lists carried in the produced {@link TrackingSnapshot}.
+ *
+ * &lt;p&gt;Instances are single-threaded and stateful: the {@link SourceTracker} carries information
+ * between frames. Create one pipeline per processing thread.
+ */
+public final class TrackingPipeline {
+
+  private static final double DEFAULT_SPEED_OF_SOUND_METERS_PER_SECOND = 343.0;
+  private static final double DEFAULT_CYCLE_TOLERANCE_SAMPLES = 0.75;
+  private static final double DEFAULT_PHYSICAL_TOLERANCE_SAMPLES = 0.25;
+  private static final double FREQUENCY_TRACK_MATCH_TOLERANCE_HZ = 25.0;
+  private static final int FREQUENCY_TRACK_HISTORY_FRAMES = 8;
+  private static final double FREQUENCY_TRACK_SMOOTHING_ALPHA = 0.2;
+  private static final long FREQUENCY_TRACK_MAX_IDLE_FRAMES = 32L;
+  private static final int FREQUENCY_TRACK_MAX_ACTIVE = 64;
+
+  private final MultiPeakDetector peakDetector;
+  private final FrequencyClusterer clusterer;
+  private final TdoaEstimator tdoaEstimator;
+  private final TdoaPairConsistencyAnalyzer consistencyAnalyzer;
+  private final DelayAndSumBeamformer beamformer;
+  private final SourceTracker tracker;
+  private final MultiSensorDopplerEstimator dopplerEstimator;
+  private final VelocityReconstructor velocityReconstructor;
+  private final List&lt;Vector2&gt; candidateGrid;
+  private final FrameSchedule schedule;
+<span class="fc" id="L70">  private final List&lt;PipelineFrequencyTrack&gt; frequencyTracks = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L71">  private List&lt;DopplerDiagnostics&gt; lastDopplerDiagnostics = List.of();</span>
+<span class="fc" id="L72">  private TdoaConsistencyReport lastTdoaConsistency = TdoaConsistencyReport.notEvaluated();</span>
+  private int nextFrequencyTrackId;
+
+  /** Configure a pipeline. {@code schedule} may be {@code null} to disable budget reporting. */
+  public TrackingPipeline(
+      MultiPeakDetector peakDetector,
+      FrequencyClusterer clusterer,
+      TdoaEstimator tdoaEstimator,
+      DelayAndSumBeamformer beamformer,
+      SourceTracker tracker,
+      List&lt;Vector2&gt; candidateGrid,
+      FrameSchedule schedule) {
+<span class="fc" id="L84">    this(</span>
+        peakDetector,
+        clusterer,
+        new LocalizationComponents(
+            tdoaEstimator,
+            new TdoaPairConsistencyAnalyzer(
+                DEFAULT_SPEED_OF_SOUND_METERS_PER_SECOND,
+                DEFAULT_CYCLE_TOLERANCE_SAMPLES,
+                DEFAULT_PHYSICAL_TOLERANCE_SAMPLES),
+            beamformer,
+<span class="fc" id="L94">            SimpleMultiSensorDopplerEstimator.withDefaults(),</span>
+            new VelocityReconstructor()),
+        tracker,
+        candidateGrid,
+        schedule);
+<span class="fc" id="L99">  }</span>
+
+  /** Configure a pipeline with explicit localization and Doppler components. */
+  public TrackingPipeline(
+      MultiPeakDetector peakDetector,
+      FrequencyClusterer clusterer,
+      LocalizationComponents localization,
+      SourceTracker tracker,
+      List&lt;Vector2&gt; candidateGrid,
+<span class="fc" id="L108">      FrameSchedule schedule) {</span>
+<span class="fc" id="L109">    this.peakDetector = Objects.requireNonNull(peakDetector, &quot;peakDetector&quot;);</span>
+<span class="fc" id="L110">    this.clusterer = Objects.requireNonNull(clusterer, &quot;clusterer&quot;);</span>
+<span class="fc" id="L111">    LocalizationComponents requiredLocalization =</span>
+<span class="fc" id="L112">        Objects.requireNonNull(localization, &quot;localization&quot;);</span>
+<span class="fc" id="L113">    this.tdoaEstimator = requiredLocalization.tdoaEstimator();</span>
+<span class="fc" id="L114">    this.consistencyAnalyzer = requiredLocalization.consistencyAnalyzer();</span>
+<span class="fc" id="L115">    this.beamformer = requiredLocalization.beamformer();</span>
+<span class="fc" id="L116">    this.tracker = Objects.requireNonNull(tracker, &quot;tracker&quot;);</span>
+<span class="fc" id="L117">    this.dopplerEstimator = requiredLocalization.dopplerEstimator();</span>
+<span class="fc" id="L118">    this.velocityReconstructor = requiredLocalization.velocityReconstructor();</span>
+<span class="fc" id="L119">    Objects.requireNonNull(candidateGrid, &quot;candidateGrid&quot;);</span>
+<span class="pc bpc" id="L120" title="1 of 2 branches missed.">    if (candidateGrid.isEmpty()) {</span>
+<span class="nc" id="L121">      throw new IllegalArgumentException(&quot;candidateGrid must not be empty&quot;);</span>
+    }
+<span class="fc" id="L123">    this.candidateGrid = List.copyOf(candidateGrid);</span>
+<span class="fc" id="L124">    this.schedule = schedule;</span>
+<span class="fc" id="L125">  }</span>
+
+  /** Process one synchronized multichannel block and emit a tracking snapshot. */
+  public TrackingSnapshot process(AudioBlock block, MicrophoneArray array) {
+<span class="fc" id="L129">    Objects.requireNonNull(block, &quot;block&quot;);</span>
+<span class="fc" id="L130">    Objects.requireNonNull(array, &quot;array&quot;);</span>
+<span class="pc bpc" id="L131" title="1 of 2 branches missed.">    if (block.channels() != array.channels()) {</span>
+<span class="nc" id="L132">      throw new IllegalArgumentException(&quot;block channel count must match microphone array&quot;);</span>
+    }
+<span class="fc" id="L134">    SynchronizationAssessment synchronization = synchronizationAssessment(block, array);</span>
+<span class="pc bpc" id="L135" title="1 of 2 branches missed.">    if (!synchronization.usable()) {</span>
+<span class="nc" id="L136">      throw new UnusableSynchronizationException(String.join(&quot; &quot;, synchronization.diagnostics()));</span>
+    }
+<span class="fc" id="L138">    long startNanos = System.nanoTime();</span>
+<span class="fc" id="L139">    List&lt;List&lt;DetectedPeak&gt;&gt; perChannel = peakDetector.detectAllChannels(block);</span>
+<span class="fc" id="L140">    List&lt;FrequencyCluster&gt; clusters = clusterer.clusterPerChannel(perChannel);</span>
+<span class="fc" id="L141">    List&lt;TdoaEstimate&gt; pairEstimates = estimatePairs(block, array);</span>
+<span class="fc" id="L142">    TdoaConsistencyReport consistency =</span>
+<span class="fc" id="L143">        consistencyAnalyzer.analyze(array, pairEstimates, block.format().sampleRate());</span>
+<span class="fc" id="L144">    lastTdoaConsistency = consistency;</span>
+<span class="fc" id="L145">    evictStaleFrequencyTracks(block.frameIndex());</span>
+
+<span class="fc" id="L147">    List&lt;SourceTracker.Observation&gt; observations = new ArrayList&lt;&gt;(clusters.size());</span>
+<span class="fc" id="L148">    List&lt;DopplerDiagnostics&gt; dopplerDiagnostics = new ArrayList&lt;&gt;(clusters.size());</span>
+<span class="fc" id="L149">    Set&lt;Integer&gt; usedFrequencyTracks = new HashSet&lt;&gt;();</span>
+<span class="fc bfc" id="L150" title="All 2 branches covered.">    for (FrequencyCluster cluster : clusters) {</span>
+<span class="fc" id="L151">      DelayAndSumBeamformer.BeamformingPoint best = beamformer.best(block, array, candidateGrid);</span>
+<span class="fc" id="L152">      PipelineFrequencyTrack pipelineFrequencyTrack =</span>
+<span class="fc" id="L153">          frequencyTrackFor(cluster.centerFrequencyHz(), block.frameIndex(), usedFrequencyTracks);</span>
+<span class="fc" id="L154">      FrequencyTrack frequencyTrack = pipelineFrequencyTrack.track;</span>
+<span class="fc" id="L155">      double stableFrequency = frequencyTrack.update(cluster.centerFrequencyHz());</span>
+<span class="fc" id="L156">      pipelineFrequencyTrack.lastObservedFrequencyHz = cluster.centerFrequencyHz();</span>
+<span class="fc" id="L157">      SourceObservation sourceObservation =</span>
+          new SourceObservation(
+<span class="fc" id="L159">              cluster.centerFrequencyHz(), stableFrequency, best.positionMeters(), cluster.peaks());</span>
+<span class="fc" id="L160">      List&lt;RadialVelocityEstimate&gt; radialVelocities =</span>
+<span class="fc" id="L161">          dopplerEstimator.estimateRadialVelocities(sourceObservation);</span>
+<span class="fc" id="L162">      Vector3 velocity =</span>
+<span class="fc" id="L163">          velocityReconstructor.reconstruct(radialVelocities, array, best.positionMeters());</span>
+<span class="fc" id="L164">      double radialVelocity = velocityReconstructor.fusedRadialVelocity(radialVelocities);</span>
+<span class="fc" id="L165">      double radialVelocityStdDev =</span>
+<span class="fc" id="L166">          velocityReconstructor.radialVelocityStandardDeviation(radialVelocities);</span>
+<span class="fc" id="L167">      observations.add(</span>
+          new SourceTracker.Observation(
+              stableFrequency,
+<span class="fc" id="L170">              cluster.centerFrequencyHz(),</span>
+<span class="fc" id="L171">              best.positionMeters(),</span>
+              velocity,
+              radialVelocity,
+<span class="fc" id="L174">              frequencyTrack.variance(),</span>
+              radialVelocityStdDev));
+<span class="fc" id="L176">      dopplerDiagnostics.add(</span>
+          new DopplerDiagnostics(
+              stableFrequency,
+<span class="fc" id="L179">              cluster.centerFrequencyHz(),</span>
+<span class="fc" id="L180">              best.positionMeters(),</span>
+              radialVelocities,
+<span class="fc" id="L182">              frequencyTrack.variance(),</span>
+              radialVelocityStdDev));
+<span class="fc" id="L184">    }</span>
+<span class="fc" id="L185">    lastDopplerDiagnostics = List.copyOf(dopplerDiagnostics);</span>
+
+<span class="fc" id="L187">    double timestampSeconds = block.timestampNanos() / 1.0e9;</span>
+<span class="fc" id="L188">    List&lt;TrackedSource&gt; tracks = tracker.update(block.frameIndex(), timestampSeconds, observations);</span>
+<span class="fc" id="L189">    long processingNanos = System.nanoTime() - startNanos;</span>
+<span class="fc" id="L190">    return new TrackingSnapshot(</span>
+<span class="fc" id="L191">        block.frameIndex(),</span>
+<span class="fc" id="L192">        block.timestampNanos(),</span>
+        clusters,
+        tracks,
+        processingNanos,
+<span class="fc" id="L196">        Map.of(),</span>
+        synchronization,
+        consistency);
+  }
+
+  /** Snapshot the underlying tracker without consuming a new block. */
+  public List&lt;TrackedSource&gt; currentTracks() {
+<span class="nc" id="L203">    return tracker.snapshot();</span>
+  }
+
+  /** Snapshot of the last per-source Doppler diagnostics emitted by {@link #process}. */
+  public List&lt;DopplerDiagnostics&gt; currentDopplerDiagnostics() {
+<span class="nc" id="L208">    return lastDopplerDiagnostics;</span>
+  }
+
+  /** Physical and cycle-consistency evidence from the most recently processed frame. */
+  public TdoaConsistencyReport currentTdoaConsistency() {
+<span class="nc" id="L213">    return lastTdoaConsistency;</span>
+  }
+
+  /** Reset internal tracking state. */
+  public void reset() {
+<span class="nc" id="L218">    tracker.reset();</span>
+<span class="nc" id="L219">    frequencyTracks.clear();</span>
+<span class="nc" id="L220">    lastDopplerDiagnostics = List.of();</span>
+<span class="nc" id="L221">    lastTdoaConsistency = TdoaConsistencyReport.notEvaluated();</span>
+<span class="nc" id="L222">    nextFrequencyTrackId = 0;</span>
+<span class="nc" id="L223">  }</span>
+
+  /** Frame schedule the pipeline was configured against, or {@code null} when unspecified. */
+  public FrameSchedule schedule() {
+<span class="fc" id="L227">    return schedule;</span>
+  }
+
+  private List&lt;TdoaEstimate&gt; estimatePairs(AudioBlock block, MicrophoneArray array) {
+<span class="fc" id="L231">    List&lt;TdoaEstimate&gt; estimates = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L232" title="All 2 branches covered.">    for (int first = 0; first &lt; array.channels(); first++) {</span>
+<span class="fc bfc" id="L233" title="All 2 branches covered.">      for (int second = first + 1; second &lt; array.channels(); second++) {</span>
+<span class="fc" id="L234">        estimates.add(tdoaEstimator.estimate(block, array, first, second));</span>
+      }
+    }
+<span class="fc" id="L237">    return List.copyOf(estimates);</span>
+  }
+
+  private SynchronizationAssessment synchronizationAssessment(
+      AudioBlock block, MicrophoneArray array) {
+<span class="pc bpc" id="L242" title="1 of 2 branches missed.">    if (tdoaEstimator instanceof SynchronizationAwareTdoaEstimator aware) {</span>
+<span class="nc" id="L243">      return aware.synchronizationAssessment(block, array);</span>
+    }
+<span class="fc" id="L245">    return SynchronizationAssessment.nominalSharedClock();</span>
+  }
+
+  private PipelineFrequencyTrack frequencyTrackFor(
+      double frequencyHz, long frameIndex, Set&lt;Integer&gt; usedFrequencyTrackIds) {
+<span class="fc" id="L250">    PipelineFrequencyTrack best = null;</span>
+<span class="fc" id="L251">    double bestDistance = FREQUENCY_TRACK_MATCH_TOLERANCE_HZ;</span>
+<span class="fc bfc" id="L252" title="All 2 branches covered.">    for (PipelineFrequencyTrack candidate : frequencyTracks) {</span>
+<span class="pc bpc" id="L253" title="1 of 2 branches missed.">      if (usedFrequencyTrackIds.contains(candidate.id)) {</span>
+<span class="fc" id="L254">        continue;</span>
+      }
+<span class="nc" id="L256">      double distance = Math.abs(candidate.lastObservedFrequencyHz - frequencyHz);</span>
+<span class="nc bnc" id="L257" title="All 2 branches missed.">      if (distance &lt;= bestDistance) {</span>
+<span class="nc" id="L258">        bestDistance = distance;</span>
+<span class="nc" id="L259">        best = candidate;</span>
+      }
+<span class="nc" id="L261">    }</span>
+<span class="pc bpc" id="L262" title="1 of 2 branches missed.">    if (best == null) {</span>
+<span class="fc" id="L263">      best =</span>
+          new PipelineFrequencyTrack(
+              nextFrequencyTrackId++,
+              new FrequencyTrack(FREQUENCY_TRACK_HISTORY_FRAMES, FREQUENCY_TRACK_SMOOTHING_ALPHA),
+              frequencyHz,
+              frameIndex);
+<span class="fc" id="L269">      frequencyTracks.add(best);</span>
+<span class="fc" id="L270">      trimFrequencyTrackCapacity();</span>
+    }
+<span class="fc" id="L272">    best.lastTouchedFrameIndex = frameIndex;</span>
+<span class="fc" id="L273">    usedFrequencyTrackIds.add(best.id);</span>
+<span class="fc" id="L274">    return best;</span>
+  }
+
+  private void evictStaleFrequencyTracks(long frameIndex) {
+<span class="fc" id="L278">    frequencyTracks.removeIf(</span>
+<span class="pc bpc" id="L279" title="1 of 2 branches missed.">        track -&gt; frameIndex - track.lastTouchedFrameIndex &gt; FREQUENCY_TRACK_MAX_IDLE_FRAMES);</span>
+<span class="fc" id="L280">  }</span>
+
+  private void trimFrequencyTrackCapacity() {
+<span class="pc bpc" id="L283" title="1 of 2 branches missed.">    if (frequencyTracks.size() &lt;= FREQUENCY_TRACK_MAX_ACTIVE) {</span>
+<span class="fc" id="L284">      return;</span>
+    }
+<span class="nc bnc" id="L286" title="All 2 branches missed.">    while (frequencyTracks.size() &gt; FREQUENCY_TRACK_MAX_ACTIVE) {</span>
+<span class="nc" id="L287">      int oldestIndex = 0;</span>
+<span class="nc bnc" id="L288" title="All 2 branches missed.">      for (int index = 1; index &lt; frequencyTracks.size(); index++) {</span>
+<span class="nc" id="L289">        if (frequencyTracks.get(index).lastTouchedFrameIndex</span>
+<span class="nc bnc" id="L290" title="All 2 branches missed.">            &lt; frequencyTracks.get(oldestIndex).lastTouchedFrameIndex) {</span>
+<span class="nc" id="L291">          oldestIndex = index;</span>
+        }
+      }
+<span class="nc" id="L294">      frequencyTracks.remove(oldestIndex);</span>
+<span class="nc" id="L295">    }</span>
+<span class="nc" id="L296">  }</span>
+
+  /**
+   * Interchangeable localization and Doppler stages configured as one coherent pipeline component.
+   *
+   * @param tdoaEstimator pairwise time-difference estimator
+   * @param consistencyAnalyzer physical and cycle-consistency analyzer
+   * @param beamformer candidate-grid localizer
+   * @param dopplerEstimator per-microphone radial-velocity estimator
+   * @param velocityReconstructor fused velocity reconstructor
+   */
+  public record LocalizationComponents(
+      TdoaEstimator tdoaEstimator,
+      TdoaPairConsistencyAnalyzer consistencyAnalyzer,
+      DelayAndSumBeamformer beamformer,
+      MultiSensorDopplerEstimator dopplerEstimator,
+      VelocityReconstructor velocityReconstructor) {
+
+    // Validate all localization stages.
+<span class="fc" id="L315">    public LocalizationComponents {</span>
+<span class="fc" id="L316">      Objects.requireNonNull(tdoaEstimator, &quot;tdoaEstimator&quot;);</span>
+<span class="fc" id="L317">      Objects.requireNonNull(consistencyAnalyzer, &quot;consistencyAnalyzer&quot;);</span>
+<span class="fc" id="L318">      Objects.requireNonNull(beamformer, &quot;beamformer&quot;);</span>
+<span class="fc" id="L319">      Objects.requireNonNull(dopplerEstimator, &quot;dopplerEstimator&quot;);</span>
+<span class="fc" id="L320">      Objects.requireNonNull(velocityReconstructor, &quot;velocityReconstructor&quot;);</span>
+<span class="fc" id="L321">    }</span>
+  }
+
+  /** Frequency reference state matched by nearest observed frequency with per-frame exclusivity. */
+  private static final class PipelineFrequencyTrack {
+    final int id;
+    final FrequencyTrack track;
+    double lastObservedFrequencyHz;
+    long lastTouchedFrameIndex;
+
+    PipelineFrequencyTrack(
+<span class="fc" id="L332">        int id, FrequencyTrack track, double lastObservedFrequencyHz, long lastTouchedFrameIndex) {</span>
+<span class="fc" id="L333">      this.id = id;</span>
+<span class="fc" id="L334">      this.track = track;</span>
+<span class="fc" id="L335">      this.lastObservedFrequencyHz = lastObservedFrequencyHz;</span>
+<span class="fc" id="L336">      this.lastTouchedFrameIndex = lastTouchedFrameIndex;</span>
+<span class="fc" id="L337">    }</span>
+  }
+
+  /**
+   * Per-source Doppler diagnostics from the most recently processed frame.
+   *
+   * @param referenceFrequencyHz smoothed source reference frequency
+   * @param observedFrequencyHz current observed source frequency
+   * @param positionMeters estimated source position used by the Doppler stage
+   * @param perMicrophoneRadialVelocities immutable radial-velocity estimates
+   * @param frequencyVarianceHzSquared variance of the tracked frequency reference
+   * @param radialVelocityStdDevMetersPerSecond spread of the radial-velocity estimates
+   */
+  public record DopplerDiagnostics(
+      double referenceFrequencyHz,
+      double observedFrequencyHz,
+      Vector2 positionMeters,
+      List&lt;RadialVelocityEstimate&gt; perMicrophoneRadialVelocities,
+      double frequencyVarianceHzSquared,
+      double radialVelocityStdDevMetersPerSecond) {
+
+    /** Validate diagnostic fields. */
+<span class="fc" id="L359">    public DopplerDiagnostics {</span>
+<span class="fc" id="L360">      Objects.requireNonNull(positionMeters, &quot;positionMeters&quot;);</span>
+<span class="fc" id="L361">      Objects.requireNonNull(perMicrophoneRadialVelocities, &quot;perMicrophoneRadialVelocities&quot;);</span>
+<span class="fc" id="L362">      perMicrophoneRadialVelocities = List.copyOf(perMicrophoneRadialVelocities);</span>
+<span class="pc bpc" id="L363" title="2 of 4 branches missed.">      if (!(referenceFrequencyHz &gt; 0.0) || !Double.isFinite(referenceFrequencyHz)) {</span>
+<span class="nc" id="L364">        throw new IllegalArgumentException(&quot;referenceFrequencyHz must be finite and &gt; 0&quot;);</span>
+      }
+<span class="pc bpc" id="L366" title="2 of 4 branches missed.">      if (!Double.isFinite(observedFrequencyHz) || observedFrequencyHz &lt; 0.0) {</span>
+<span class="nc" id="L367">        throw new IllegalArgumentException(&quot;observedFrequencyHz must be finite and &gt;= 0&quot;);</span>
+      }
+<span class="pc bpc" id="L369" title="2 of 4 branches missed.">      if (!Double.isFinite(frequencyVarianceHzSquared) || frequencyVarianceHzSquared &lt; 0.0) {</span>
+<span class="nc" id="L370">        throw new IllegalArgumentException(&quot;frequencyVarianceHzSquared must be finite and &gt;= 0&quot;);</span>
+      }
+<span class="pc bpc" id="L372" title="2 of 4 branches missed.">      if (!Double.isFinite(radialVelocityStdDevMetersPerSecond)</span>
+          || radialVelocityStdDevMetersPerSecond &lt; 0.0) {
+<span class="nc" id="L374">        throw new IllegalArgumentException(</span>
+            &quot;radialVelocityStdDevMetersPerSecond must be finite and &gt;= 0&quot;);
+      }
+<span class="fc" id="L377">    }</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>BenchmarkMeasurements.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.benchmark</a> &gt; <span class="el_source">BenchmarkMeasurements.java</span></div><h1>BenchmarkMeasurements.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.benchmark;
+
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import org.hammer.audio.acquisition.MicrophoneArray;
+import org.hammer.audio.experimental.acoustic.tracking.TrackingSnapshot;
+
+/**
+ * Measured outputs that can be compared against a scenario ground truth.
+ *
+ * @param array microphone-array metadata used to produce the measurements
+ * @param snapshots ordered tracking snapshots captured for the scenario run
+ * @param classificationPredictions optional per-source classification predictions
+ */
+public record BenchmarkMeasurements(
+    MicrophoneArray array,
+    List&lt;TrackingSnapshot&gt; snapshots,
+    Map&lt;String, ClassificationPrediction&gt; classificationPredictions) {
+
+<span class="fc" id="L21">  public BenchmarkMeasurements {</span>
+<span class="fc" id="L22">    Objects.requireNonNull(array, &quot;array&quot;);</span>
+<span class="fc" id="L23">    Objects.requireNonNull(snapshots, &quot;snapshots&quot;);</span>
+<span class="fc" id="L24">    Objects.requireNonNull(classificationPredictions, &quot;classificationPredictions&quot;);</span>
+<span class="fc" id="L25">    snapshots = List.copyOf(snapshots);</span>
+<span class="fc" id="L26">    classificationPredictions = Map.copyOf(classificationPredictions);</span>
+<span class="fc" id="L27">  }</span>
+
+  /** Create measurements without classification outputs. */
+  public static BenchmarkMeasurements of(MicrophoneArray array, List&lt;TrackingSnapshot&gt; snapshots) {
+<span class="fc" id="L31">    return new BenchmarkMeasurements(array, snapshots, Map.of());</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

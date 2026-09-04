@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>PluginManager.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.pluginhost</a> &gt; <span class="el_source">PluginManager.java</span></div><h1>PluginManager.java</h1><pre class="source lang-java linenums">package org.hammer.audio.pluginhost;
+
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Objects;
+import java.util.ServiceConfigurationError;
+import java.util.ServiceLoader;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import org.hammer.audio.plugin.AudioAnalyzerPlugin;
+import org.hammer.audio.plugin.PluginDescriptor;
+
+/**
+ * Discovers and loads {@link AudioAnalyzerPlugin} implementations via {@link ServiceLoader}.
+ *
+ * &lt;p&gt;Each plugin is initialized in isolation: a faulty descriptor or constructor cannot prevent
+ * other plugins from loading, and never crashes the host application. Failed plugins are still
+ * surfaced through the returned {@link PluginRegistry} so the UI/log can show them.
+ *
+ * &lt;p&gt;This is the only entry point the host application uses to discover plugins. It deliberately
+ * does not import or reference any concrete plugin class.
+ */
+public final class PluginManager {
+
+<span class="fc" id="L26">  private static final Logger LOGGER = Logger.getLogger(PluginManager.class.getName());</span>
+
+  private final ClassLoader classLoader;
+
+  /** Use the current thread's context class loader (or this class' loader as fallback). */
+  public PluginManager() {
+<span class="nc" id="L32">    this(defaultClassLoader());</span>
+<span class="nc" id="L33">  }</span>
+
+  /** Use the supplied class loader for service discovery. */
+<span class="fc" id="L36">  public PluginManager(ClassLoader classLoader) {</span>
+<span class="fc" id="L37">    this.classLoader = Objects.requireNonNull(classLoader, &quot;classLoader&quot;);</span>
+<span class="fc" id="L38">  }</span>
+
+  /**
+   * Discover all plugins on the configured class loader and return a populated {@link
+   * PluginRegistry}. Never throws; failures are isolated into individual {@link PluginLoadResult}
+   * entries.
+   */
+  public PluginRegistry loadPlugins() {
+<span class="fc" id="L46">    List&lt;PluginLoadResult&gt; results = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L47">    ServiceLoader&lt;AudioAnalyzerPlugin&gt; loader =</span>
+<span class="fc" id="L48">        ServiceLoader.load(AudioAnalyzerPlugin.class, classLoader);</span>
+    Iterator&lt;ServiceLoader.Provider&lt;AudioAnalyzerPlugin&gt;&gt; providers;
+    try {
+<span class="fc" id="L51">      providers = loader.stream().iterator();</span>
+<span class="nc" id="L52">    } catch (ServiceConfigurationError ex) {</span>
+<span class="nc" id="L53">      LOGGER.log(Level.WARNING, &quot;Plugin service discovery failed&quot;, ex);</span>
+<span class="nc" id="L54">      results.add(PluginLoadResult.failure(&quot;&lt;discovery&gt;&quot;, ex));</span>
+<span class="nc" id="L55">      return new PluginRegistry(results);</span>
+<span class="fc" id="L56">    }</span>
+    while (true) {
+<span class="fc" id="L58">      String providerClassName = &quot;&lt;unknown&gt;&quot;;</span>
+      try {
+<span class="fc bfc" id="L60" title="All 2 branches covered.">        if (!providers.hasNext()) {</span>
+<span class="fc" id="L61">          break;</span>
+        }
+<span class="fc" id="L63">        ServiceLoader.Provider&lt;AudioAnalyzerPlugin&gt; provider = providers.next();</span>
+<span class="fc" id="L64">        providerClassName = safeProviderName(provider);</span>
+<span class="fc" id="L65">        AudioAnalyzerPlugin plugin = provider.get();</span>
+        // Force descriptor evaluation once and reuse it for validation, registration and logging
+        // so a flaky descriptor() implementation is exercised exactly once per plugin.
+<span class="fc" id="L68">        PluginDescriptor descriptor = Objects.requireNonNull(plugin.descriptor(), &quot;descriptor&quot;);</span>
+<span class="fc" id="L69">        results.add(PluginLoadResult.success(plugin, descriptor));</span>
+<span class="fc" id="L70">        LOGGER.log(</span>
+            Level.INFO,
+            &quot;Loaded plugin: {0} ({1} {2})&quot;,
+<span class="fc" id="L73">            new Object[] {descriptor.id(), descriptor.name(), descriptor.version()});</span>
+<span class="fc" id="L74">      } catch (ServiceConfigurationError | RuntimeException ex) {</span>
+<span class="fc" id="L75">        LOGGER.log(Level.WARNING, &quot;Failed to load plugin &quot; + providerClassName, ex);</span>
+<span class="fc" id="L76">        results.add(PluginLoadResult.failure(providerClassName, ex));</span>
+<span class="fc" id="L77">      }</span>
+<span class="fc" id="L78">    }</span>
+<span class="fc" id="L79">    return new PluginRegistry(results);</span>
+  }
+
+  private static String safeProviderName(ServiceLoader.Provider&lt;AudioAnalyzerPlugin&gt; provider) {
+    try {
+<span class="fc" id="L84">      return provider.type().getName();</span>
+<span class="nc" id="L85">    } catch (RuntimeException ex) {</span>
+<span class="nc" id="L86">      return &quot;&lt;unknown&gt;&quot;;</span>
+    }
+  }
+
+  private static ClassLoader defaultClassLoader() {
+<span class="nc" id="L91">    ClassLoader contextLoader = Thread.currentThread().getContextClassLoader();</span>
+<span class="nc bnc" id="L92" title="All 2 branches missed.">    if (contextLoader != null) {</span>
+<span class="nc" id="L93">      return contextLoader;</span>
+    }
+<span class="nc" id="L95">    return PluginManager.class.getClassLoader();</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

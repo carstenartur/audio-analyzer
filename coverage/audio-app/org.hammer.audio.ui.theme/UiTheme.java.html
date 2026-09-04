@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>UiTheme.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.ui.theme</a> &gt; <span class="el_source">UiTheme.java</span></div><h1>UiTheme.java</h1><pre class="source lang-java linenums">package org.hammer.audio.ui.theme;
+
+import com.formdev.flatlaf.FlatDarkLaf;
+import java.awt.Font;
+import javax.swing.BorderFactory;
+import javax.swing.JComponent;
+import javax.swing.UIManager;
+import javax.swing.border.Border;
+import javax.swing.border.CompoundBorder;
+import javax.swing.border.EmptyBorder;
+import javax.swing.border.LineBorder;
+
+/** Shared Swing look-and-feel and component styling helpers. */
+public final class UiTheme {
+
+<span class="nc" id="L16">  private static final Font BASE_FONT = new Font(Font.SANS_SERIF, Font.PLAIN, 13);</span>
+
+  private UiTheme() {}
+
+  /** Installs dark FlatLaf and applies global defaults. */
+  public static void installDarkTheme() {
+<span class="nc" id="L22">    FlatDarkLaf.setup();</span>
+<span class="nc" id="L23">    UIManager.put(&quot;defaultFont&quot;, BASE_FONT);</span>
+<span class="nc" id="L24">    UIManager.put(&quot;Component.arc&quot;, 8);</span>
+<span class="nc" id="L25">    UIManager.put(&quot;TextComponent.arc&quot;, 8);</span>
+<span class="nc" id="L26">    UIManager.put(&quot;Button.arc&quot;, 10);</span>
+<span class="nc" id="L27">    UIManager.put(&quot;ScrollBar.thumbArc&quot;, 999);</span>
+<span class="nc" id="L28">    UIManager.put(&quot;TabbedPane.showTabSeparators&quot;, true);</span>
+<span class="nc" id="L29">  }</span>
+
+  /** Applies compact, consistent padding to controls. */
+  public static void applyCompactPadding(
+      JComponent component, int top, int left, int bottom, int right) {
+<span class="nc" id="L34">    Border current = component.getBorder();</span>
+<span class="nc" id="L35">    EmptyBorder padding = new EmptyBorder(top, left, bottom, right);</span>
+<span class="nc bnc" id="L36" title="All 2 branches missed.">    if (current == null) {</span>
+<span class="nc" id="L37">      component.setBorder(padding);</span>
+<span class="nc" id="L38">      return;</span>
+    }
+<span class="nc" id="L40">    component.setBorder(new CompoundBorder(current, padding));</span>
+<span class="nc" id="L41">  }</span>
+
+  /** Creates a subtle panel border suitable for dashboard cards. */
+  public static Border createPanelBorder() {
+<span class="nc" id="L45">    return BorderFactory.createCompoundBorder(</span>
+        new LineBorder(PlotRenderTheme.AXIS_COLOR, 1, true), new EmptyBorder(6, 8, 6, 8));
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

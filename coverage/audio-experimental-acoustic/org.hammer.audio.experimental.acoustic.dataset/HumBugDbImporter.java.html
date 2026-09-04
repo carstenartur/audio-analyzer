@@ -1,0 +1,446 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>HumBugDbImporter.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.dataset</a> &gt; <span class="el_source">HumBugDbImporter.java</span></div><h1>HumBugDbImporter.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.dataset;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.stream.Stream;
+
+/**
+ * Imports a local HumBugDB dataset export into the normalized dataset abstraction.
+ *
+ * &lt;p&gt;The importer is intentionally tolerant: it looks for metadata CSV files under {@code
+ * data/metadata} (falling back to any CSVs in the dataset root), resolves audio files from the
+ * local export, preserves all available metadata, and creates whole-clip annotations when no
+ * explicit span columns are present.
+ */
+@SuppressWarnings(&quot;PMD.UseConcurrentHashMap&quot;)
+<span class="fc" id="L30">public final class HumBugDbImporter implements DatasetImporter {</span>
+
+<span class="fc" id="L32">  private static final URI HUMBUG_DB_SOURCE =</span>
+<span class="fc" id="L33">      URI.create(&quot;https://github.com/HumBug-Mosquito/HumBugDB&quot;);</span>
+  private static final String HUMBUGDB_LICENSE = &quot;CC BY 4.0&quot;;
+  private static final String SOUND_TYPE = &quot;sound_type&quot;;
+  private static final String SPECIES = &quot;species&quot;;
+  private static final String GENDER = &quot;gender&quot;;
+<span class="fc" id="L38">  private static final Set&lt;String&gt; LABEL_COLUMNS =</span>
+<span class="fc" id="L39">      Set.of(SOUND_TYPE, SPECIES, GENDER, &quot;fed&quot;, &quot;plurality&quot;, &quot;age&quot;);</span>
+<span class="fc" id="L40">  private static final Set&lt;String&gt; AUDIO_PATH_COLUMNS =</span>
+<span class="fc" id="L41">      Set.of(&quot;name&quot;, &quot;filename&quot;, &quot;file&quot;, &quot;path&quot;, &quot;audio_path&quot;);</span>
+<span class="fc" id="L42">  private static final Set&lt;String&gt; DURATION_COLUMNS =</span>
+<span class="fc" id="L43">      Set.of(&quot;length&quot;, &quot;duration&quot;, &quot;duration_seconds&quot;, &quot;clip_duration_seconds&quot;);</span>
+<span class="fc" id="L44">  private static final Set&lt;String&gt; SAMPLE_RATE_COLUMNS =</span>
+<span class="fc" id="L45">      Set.of(&quot;sample_rate&quot;, &quot;sampling_rate&quot;, &quot;sample_rate_hz&quot;);</span>
+<span class="fc" id="L46">  private static final Set&lt;String&gt; ANNOTATION_START_COLUMNS =</span>
+<span class="fc" id="L47">      Set.of(&quot;start_time&quot;, &quot;start_seconds&quot;, &quot;offset_seconds&quot;, &quot;begin_seconds&quot;);</span>
+<span class="fc" id="L48">  private static final Set&lt;String&gt; ANNOTATION_END_COLUMNS = Set.of(&quot;end_time&quot;, &quot;end_seconds&quot;);</span>
+<span class="fc" id="L49">  private static final Set&lt;String&gt; ANNOTATION_LENGTH_COLUMNS =</span>
+<span class="fc" id="L50">      Set.of(</span>
+          &quot;annotation_length&quot;,
+          &quot;annotation_duration&quot;,
+          &quot;annotation_duration_seconds&quot;,
+          &quot;event_length_seconds&quot;,
+          &quot;event_duration_seconds&quot;);
+<span class="fc" id="L56">  private static final Set&lt;String&gt; ANNOTATION_LABEL_COLUMNS =</span>
+<span class="fc" id="L57">      Set.of(&quot;event_label&quot;, &quot;annotation_label&quot;, SOUND_TYPE, SPECIES);</span>
+<span class="fc" id="L58">  private static final Set&lt;String&gt; RESERVED_COLUMNS = buildReservedColumns();</span>
+
+  @Override
+  public String datasetId() {
+<span class="fc" id="L62">    return &quot;humbugdb&quot;;</span>
+  }
+
+  @Override
+  public DatasetManifest importFrom(Path localRootPath) throws IOException {
+<span class="fc" id="L67">    Objects.requireNonNull(localRootPath, &quot;localRootPath&quot;);</span>
+<span class="fc" id="L68">    Path root = localRootPath.toAbsolutePath().normalize();</span>
+<span class="pc bpc" id="L69" title="1 of 2 branches missed.">    if (!Files.isDirectory(root)) {</span>
+<span class="nc" id="L70">      throw new IOException(&quot;HumBugDB root is not a directory: &quot; + root);</span>
+    }
+<span class="fc" id="L72">    List&lt;Path&gt; metadataCsvFiles = metadataCsvFiles(root);</span>
+<span class="pc bpc" id="L73" title="1 of 2 branches missed.">    if (metadataCsvFiles.isEmpty()) {</span>
+<span class="nc" id="L74">      throw new IOException(&quot;No metadata CSV files found under &quot; + root);</span>
+    }
+<span class="fc" id="L76">    AudioFileIndex audioFileIndex = AudioFileIndex.build(root);</span>
+<span class="fc" id="L77">    Map&lt;String, DatasetRecording&gt; recordings = new LinkedHashMap&lt;&gt;();</span>
+<span class="fc" id="L78">    Set&lt;String&gt; usedRecordingIds = new LinkedHashSet&lt;&gt;();</span>
+<span class="fc bfc" id="L79" title="All 2 branches covered.">    for (Path csvFile : metadataCsvFiles) {</span>
+<span class="fc" id="L80">      importCsv(root, csvFile, audioFileIndex, recordings, usedRecordingIds);</span>
+<span class="fc" id="L81">    }</span>
+<span class="pc bpc" id="L82" title="1 of 2 branches missed.">    if (recordings.isEmpty()) {</span>
+<span class="nc" id="L83">      throw new IOException(&quot;No HumBugDB recordings could be resolved from &quot; + root);</span>
+    }
+<span class="fc" id="L85">    DatasetDescriptor descriptor =</span>
+        new DatasetDescriptor(
+<span class="fc" id="L87">            datasetId(), &quot;HumBugDB&quot;, HUMBUG_DB_SOURCE, HUMBUGDB_LICENSE, root, metadataSchema());</span>
+<span class="fc" id="L88">    return new DatasetManifest(descriptor, List.copyOf(recordings.values()));</span>
+  }
+
+  private static void importCsv(
+      Path root,
+      Path csvFile,
+      AudioFileIndex audioFileIndex,
+      Map&lt;String, DatasetRecording&gt; recordings,
+      Set&lt;String&gt; usedRecordingIds)
+      throws IOException {
+<span class="fc" id="L98">    try (BufferedReader reader = Files.newBufferedReader(csvFile, StandardCharsets.UTF_8)) {</span>
+<span class="fc" id="L99">      String headerLine = reader.readLine();</span>
+<span class="pc bpc" id="L100" title="2 of 4 branches missed.">      if (headerLine == null || headerLine.isBlank()) {</span>
+<span class="nc" id="L101">        return;</span>
+      }
+<span class="fc" id="L103">      List&lt;String&gt; headers = parseCsvLine(headerLine);</span>
+<span class="fc" id="L104">      int rowNumber = 1;</span>
+<span class="fc" id="L105">      String line = reader.readLine();</span>
+<span class="fc bfc" id="L106" title="All 2 branches covered.">      while (line != null) {</span>
+<span class="fc" id="L107">        rowNumber++;</span>
+<span class="pc bpc" id="L108" title="1 of 2 branches missed.">        if (line.isBlank()) {</span>
+<span class="nc" id="L109">          line = reader.readLine();</span>
+<span class="nc" id="L110">          continue;</span>
+        }
+<span class="fc" id="L112">        Map&lt;String, String&gt; row = row(headers, parseCsvLine(line));</span>
+<span class="fc" id="L113">        Path audioPath = resolveAudioPath(root, audioFileIndex, row);</span>
+<span class="pc bpc" id="L114" title="1 of 2 branches missed.">        if (audioPath == null) {</span>
+<span class="nc" id="L115">          continue;</span>
+        }
+<span class="fc" id="L117">        DatasetAudioLoader.AudioFileInfo audioInfo = DatasetAudioLoader.inspect(audioPath);</span>
+<span class="fc" id="L118">        String recordingId = uniqueRecordingId(row, audioPath, rowNumber, usedRecordingIds);</span>
+<span class="fc" id="L119">        DatasetRecording recording =</span>
+            new DatasetRecording(
+                recordingId,
+<span class="fc" id="L122">                root.relativize(audioPath),</span>
+<span class="fc" id="L123">                sampleRateHz(row, audioInfo),</span>
+<span class="fc" id="L124">                durationSeconds(row, audioInfo),</span>
+<span class="fc" id="L125">                labels(row),</span>
+<span class="fc" id="L126">                annotations(row, durationSeconds(row, audioInfo)),</span>
+<span class="fc" id="L127">                metadata(row, root, csvFile));</span>
+<span class="fc" id="L128">        recordings.put(recordingId, recording);</span>
+<span class="fc" id="L129">        line = reader.readLine();</span>
+<span class="fc" id="L130">      }</span>
+<span class="nc bnc" id="L131" title="All 2 branches missed.">    }</span>
+<span class="fc" id="L132">  }</span>
+
+  private static String uniqueRecordingId(
+      Map&lt;String, String&gt; row, Path audioPath, int rowNumber, Set&lt;String&gt; usedRecordingIds) {
+<span class="fc" id="L136">    String baseId =</span>
+<span class="fc" id="L137">        firstNonBlank(</span>
+<span class="fc" id="L138">            row.get(&quot;id&quot;),</span>
+<span class="fc" id="L139">            stripExtension(fileName(row)),</span>
+<span class="fc" id="L140">            stripExtension(lastPathSegment(audioPath.toString())),</span>
+            &quot;recording-&quot; + rowNumber);
+<span class="fc" id="L142">    String candidate = sanitizeId(baseId);</span>
+<span class="fc" id="L143">    int suffix = 2;</span>
+<span class="pc bpc" id="L144" title="1 of 2 branches missed.">    while (!usedRecordingIds.add(candidate)) {</span>
+<span class="nc" id="L145">      candidate = sanitizeId(baseId) + &quot;-&quot; + suffix;</span>
+<span class="nc" id="L146">      suffix++;</span>
+    }
+<span class="fc" id="L148">    return candidate;</span>
+  }
+
+  private static String sanitizeId(String value) {
+<span class="fc" id="L152">    return value.trim().replaceAll(&quot;[^A-Za-z0-9._-]+&quot;, &quot;-&quot;);</span>
+  }
+
+  private static double sampleRateHz(
+      Map&lt;String, String&gt; row, DatasetAudioLoader.AudioFileInfo audioInfo) {
+<span class="fc" id="L157">    Double parsed = parseDouble(firstPresent(row, SAMPLE_RATE_COLUMNS));</span>
+<span class="pc bpc" id="L158" title="1 of 4 branches missed.">    return parsed != null &amp;&amp; parsed &gt; 0.0 ? parsed : audioInfo.sampleRateHz();</span>
+  }
+
+  private static double durationSeconds(
+      Map&lt;String, String&gt; row, DatasetAudioLoader.AudioFileInfo audioInfo) {
+<span class="fc" id="L163">    Double parsed = parseDouble(firstPresent(row, DURATION_COLUMNS));</span>
+<span class="pc bpc" id="L164" title="1 of 4 branches missed.">    if (parsed != null &amp;&amp; parsed &gt;= 0.0) {</span>
+<span class="fc" id="L165">      return parsed;</span>
+    }
+<span class="fc" id="L167">    Double start = parseDouble(firstPresent(row, ANNOTATION_START_COLUMNS));</span>
+<span class="fc" id="L168">    Double end = parseDouble(firstPresent(row, ANNOTATION_END_COLUMNS));</span>
+<span class="pc bpc" id="L169" title="3 of 6 branches missed.">    if (start != null &amp;&amp; end != null &amp;&amp; end &gt;= start) {</span>
+<span class="fc" id="L170">      return Math.max(audioInfo.durationSeconds(), end);</span>
+    }
+<span class="nc" id="L172">    return audioInfo.durationSeconds();</span>
+  }
+
+  private static Map&lt;String, String&gt; labels(Map&lt;String, String&gt; row) {
+<span class="fc" id="L176">    Map&lt;String, String&gt; labels = new LinkedHashMap&lt;&gt;();</span>
+<span class="fc bfc" id="L177" title="All 2 branches covered.">    for (String column : LABEL_COLUMNS) {</span>
+<span class="fc" id="L178">      String value = row.get(column);</span>
+<span class="fc bfc" id="L179" title="All 4 branches covered.">      if (value != null &amp;&amp; !value.isBlank()) {</span>
+<span class="fc" id="L180">        labels.put(column, value);</span>
+      }
+<span class="fc" id="L182">    }</span>
+<span class="fc" id="L183">    return labels;</span>
+  }
+
+  private static List&lt;DatasetAnnotation&gt; annotations(
+      Map&lt;String, String&gt; row, double durationSeconds) {
+<span class="fc" id="L188">    Double start = parseDouble(firstPresent(row, ANNOTATION_START_COLUMNS));</span>
+<span class="fc" id="L189">    Double end = parseDouble(firstPresent(row, ANNOTATION_END_COLUMNS));</span>
+<span class="fc bfc" id="L190" title="All 2 branches covered.">    if (start != null) {</span>
+<span class="pc bpc" id="L191" title="1 of 2 branches missed.">      if (end == null) {</span>
+<span class="nc" id="L192">        Double length = parseDouble(firstPresent(row, ANNOTATION_LENGTH_COLUMNS));</span>
+<span class="nc bnc" id="L193" title="All 2 branches missed.">        end = length == null ? durationSeconds : start + length;</span>
+      }
+<span class="pc bpc" id="L195" title="1 of 2 branches missed.">      if (end &gt;= start) {</span>
+<span class="fc" id="L196">        return List.of(</span>
+<span class="fc" id="L197">            new DatasetAnnotation(start, end, annotationLabel(row), annotationMetadata(row)));</span>
+      }
+    }
+<span class="pc bpc" id="L200" title="1 of 2 branches missed.">    if (durationSeconds &gt; 0.0) {</span>
+<span class="fc" id="L201">      String label = annotationLabel(row);</span>
+<span class="pc bpc" id="L202" title="1 of 2 branches missed.">      if (!label.isBlank()) {</span>
+<span class="fc" id="L203">        return List.of(new DatasetAnnotation(0.0, durationSeconds, label, annotationMetadata(row)));</span>
+      }
+    }
+<span class="nc" id="L206">    return List.of();</span>
+  }
+
+  private static String annotationLabel(Map&lt;String, String&gt; row) {
+<span class="fc" id="L210">    return firstNonBlank(</span>
+<span class="fc" id="L211">        row.get(&quot;event_label&quot;),</span>
+<span class="fc" id="L212">        row.get(&quot;annotation_label&quot;),</span>
+<span class="fc" id="L213">        row.get(SOUND_TYPE),</span>
+<span class="fc" id="L214">        row.get(SPECIES),</span>
+        &quot;recording&quot;);
+  }
+
+  private static Map&lt;String, String&gt; annotationMetadata(Map&lt;String, String&gt; row) {
+<span class="fc" id="L219">    Map&lt;String, String&gt; metadata = new LinkedHashMap&lt;&gt;();</span>
+<span class="fc" id="L220">    putIfPresent(metadata, &quot;row_id&quot;, row.get(&quot;id&quot;));</span>
+<span class="fc" id="L221">    putIfPresent(metadata, SOUND_TYPE, row.get(SOUND_TYPE));</span>
+<span class="fc" id="L222">    putIfPresent(metadata, SPECIES, row.get(SPECIES));</span>
+<span class="fc" id="L223">    putIfPresent(metadata, GENDER, row.get(GENDER));</span>
+<span class="fc" id="L224">    return metadata;</span>
+  }
+
+  private static Map&lt;String, String&gt; metadata(Map&lt;String, String&gt; row, Path root, Path csvFile) {
+<span class="fc" id="L228">    Map&lt;String, String&gt; metadata = new TreeMap&lt;&gt;();</span>
+<span class="fc" id="L229">    putIfPresent(metadata, &quot;metadata_csv&quot;, root.relativize(csvFile).toString());</span>
+<span class="fc bfc" id="L230" title="All 2 branches covered.">    for (Map.Entry&lt;String, String&gt; entry : row.entrySet()) {</span>
+<span class="fc bfc" id="L231" title="All 2 branches covered.">      if (RESERVED_COLUMNS.contains(entry.getKey())) {</span>
+<span class="fc" id="L232">        continue;</span>
+      }
+<span class="fc" id="L234">      String value = entry.getValue();</span>
+<span class="pc bpc" id="L235" title="2 of 4 branches missed.">      if (value != null &amp;&amp; !value.isBlank()) {</span>
+<span class="fc" id="L236">        metadata.put(entry.getKey(), value);</span>
+      }
+<span class="fc" id="L238">    }</span>
+<span class="fc" id="L239">    return metadata;</span>
+  }
+
+  private static Path resolveAudioPath(
+      Path root, AudioFileIndex audioFileIndex, Map&lt;String, String&gt; row) {
+<span class="fc" id="L244">    List&lt;String&gt; candidates = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L245" title="All 2 branches covered.">    for (String column : AUDIO_PATH_COLUMNS) {</span>
+<span class="fc" id="L246">      String value = row.get(column);</span>
+<span class="pc bpc" id="L247" title="1 of 4 branches missed.">      if (value != null &amp;&amp; !value.isBlank()) {</span>
+<span class="fc" id="L248">        candidates.add(value.trim());</span>
+      }
+<span class="fc" id="L250">    }</span>
+<span class="fc" id="L251">    String id = row.get(&quot;id&quot;);</span>
+<span class="pc bpc" id="L252" title="2 of 4 branches missed.">    if (id != null &amp;&amp; !id.isBlank()) {</span>
+<span class="fc" id="L253">      candidates.add(id.trim() + &quot;.wav&quot;);</span>
+    }
+<span class="fc" id="L255">    Path normalizedRoot = root.normalize();</span>
+<span class="pc bpc" id="L256" title="1 of 2 branches missed.">    for (String candidate : candidates) {</span>
+<span class="fc" id="L257">      Path direct = root.resolve(candidate).normalize();</span>
+<span class="pc bpc" id="L258" title="2 of 4 branches missed.">      if (direct.startsWith(normalizedRoot) &amp;&amp; Files.isRegularFile(direct)) {</span>
+<span class="nc" id="L259">        return direct;</span>
+      }
+<span class="fc" id="L261">      Path indexed = audioFileIndex.resolve(candidate);</span>
+<span class="pc bpc" id="L262" title="1 of 2 branches missed.">      if (indexed != null) {</span>
+<span class="fc" id="L263">        return indexed;</span>
+      }
+<span class="nc" id="L265">    }</span>
+<span class="nc" id="L266">    return null;</span>
+  }
+
+  private static List&lt;Path&gt; metadataCsvFiles(Path root) throws IOException {
+<span class="fc" id="L270">    Path metadataDir = root.resolve(&quot;data&quot;).resolve(&quot;metadata&quot;);</span>
+<span class="pc bpc" id="L271" title="1 of 2 branches missed.">    if (Files.isDirectory(metadataDir)) {</span>
+<span class="fc" id="L272">      try (Stream&lt;Path&gt; paths = Files.walk(metadataDir, 2)) {</span>
+<span class="fc" id="L273">        return paths</span>
+<span class="fc" id="L274">            .filter(Files::isRegularFile)</span>
+<span class="fc" id="L275">            .filter(path -&gt; lowerCaseFileName(path).endsWith(&quot;.csv&quot;))</span>
+<span class="fc" id="L276">            .sorted()</span>
+<span class="fc" id="L277">            .toList();</span>
+      }
+    }
+<span class="nc" id="L280">    try (Stream&lt;Path&gt; paths = Files.walk(root, 3)) {</span>
+<span class="nc" id="L281">      return paths</span>
+<span class="nc" id="L282">          .filter(Files::isRegularFile)</span>
+<span class="nc" id="L283">          .filter(path -&gt; lowerCaseFileName(path).endsWith(&quot;.csv&quot;))</span>
+<span class="nc" id="L284">          .sorted()</span>
+<span class="nc" id="L285">          .toList();</span>
+    }
+  }
+
+  private static Map&lt;String, String&gt; metadataSchema() {
+<span class="fc" id="L290">    Map&lt;String, String&gt; schema = new LinkedHashMap&lt;&gt;();</span>
+<span class="fc" id="L291">    schema.put(SOUND_TYPE, &quot;Clip-level sound/event label from HumBugDB metadata.&quot;);</span>
+<span class="fc" id="L292">    schema.put(SPECIES, &quot;Mosquito species label when available.&quot;);</span>
+<span class="fc" id="L293">    schema.put(GENDER, &quot;Mosquito sex label when available.&quot;);</span>
+<span class="fc" id="L294">    schema.put(&quot;fed&quot;, &quot;Feeding/blood-meal status when available.&quot;);</span>
+<span class="fc" id="L295">    schema.put(&quot;plurality&quot;, &quot;Single/plural mosquito capture label.&quot;);</span>
+<span class="fc" id="L296">    schema.put(&quot;age&quot;, &quot;Mosquito age label when available.&quot;);</span>
+<span class="fc" id="L297">    schema.put(&quot;record_datetime&quot;, &quot;Original recording date/time from HumBugDB metadata.&quot;);</span>
+<span class="fc" id="L298">    schema.put(&quot;method&quot;, &quot;Collection or experiment method.&quot;);</span>
+<span class="fc" id="L299">    schema.put(&quot;mic_type&quot;, &quot;Microphone type or sensor class.&quot;);</span>
+<span class="fc" id="L300">    schema.put(&quot;device_type&quot;, &quot;Capture device information.&quot;);</span>
+<span class="fc" id="L301">    schema.put(&quot;country&quot;, &quot;Recording country.&quot;);</span>
+<span class="fc" id="L302">    schema.put(&quot;district&quot;, &quot;Recording district.&quot;);</span>
+<span class="fc" id="L303">    schema.put(&quot;province&quot;, &quot;Recording province/region.&quot;);</span>
+<span class="fc" id="L304">    schema.put(&quot;place&quot;, &quot;Free-text recording place.&quot;);</span>
+<span class="fc" id="L305">    schema.put(&quot;location_type&quot;, &quot;Location category such as culture/cup/house.&quot;);</span>
+<span class="fc" id="L306">    schema.put(&quot;metadata_csv&quot;, &quot;Relative metadata CSV path inside the local export.&quot;);</span>
+<span class="fc" id="L307">    return schema;</span>
+  }
+
+  private static Map&lt;String, String&gt; row(List&lt;String&gt; headers, List&lt;String&gt; values) {
+<span class="fc" id="L311">    Map&lt;String, String&gt; row = new LinkedHashMap&lt;&gt;();</span>
+<span class="fc bfc" id="L312" title="All 2 branches covered.">    for (int i = 0; i &lt; headers.size(); i++) {</span>
+<span class="pc bpc" id="L313" title="1 of 2 branches missed.">      String value = i &lt; values.size() ? values.get(i).trim() : &quot;&quot;;</span>
+<span class="fc" id="L314">      row.put(headers.get(i), value);</span>
+    }
+<span class="fc" id="L316">    return row;</span>
+  }
+
+  private static List&lt;String&gt; parseCsvLine(String line) {
+<span class="fc" id="L320">    List&lt;String&gt; values = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L321">    StringBuilder current = new StringBuilder();</span>
+<span class="fc" id="L322">    boolean quoted = false;</span>
+<span class="fc" id="L323">    int i = 0;</span>
+<span class="fc bfc" id="L324" title="All 2 branches covered.">    while (i &lt; line.length()) {</span>
+<span class="fc" id="L325">      char ch = line.charAt(i);</span>
+<span class="fc bfc" id="L326" title="All 2 branches covered.">      if (ch == '&quot;') {</span>
+<span class="pc bpc" id="L327" title="1 of 6 branches missed.">        if (quoted &amp;&amp; i + 1 &lt; line.length() &amp;&amp; line.charAt(i + 1) == '&quot;') {</span>
+<span class="fc" id="L328">          current.append('&quot;');</span>
+<span class="fc" id="L329">          i++;</span>
+        } else {
+<span class="fc bfc" id="L331" title="All 2 branches covered.">          quoted = !quoted;</span>
+        }
+<span class="fc bfc" id="L333" title="All 4 branches covered.">      } else if (ch == ',' &amp;&amp; !quoted) {</span>
+<span class="fc" id="L334">        values.add(current.toString());</span>
+<span class="fc" id="L335">        current.setLength(0);</span>
+      } else {
+<span class="fc" id="L337">        current.append(ch);</span>
+      }
+<span class="fc" id="L339">      i++;</span>
+<span class="fc" id="L340">    }</span>
+<span class="fc" id="L341">    values.add(current.toString());</span>
+<span class="fc" id="L342">    return values;</span>
+  }
+
+  private static String firstPresent(Map&lt;String, String&gt; row, Set&lt;String&gt; columns) {
+<span class="fc bfc" id="L346" title="All 2 branches covered.">    for (String column : columns) {</span>
+<span class="fc" id="L347">      String value = row.get(column);</span>
+<span class="pc bpc" id="L348" title="1 of 4 branches missed.">      if (value != null &amp;&amp; !value.isBlank()) {</span>
+<span class="fc" id="L349">        return value;</span>
+      }
+<span class="fc" id="L351">    }</span>
+<span class="fc" id="L352">    return null;</span>
+  }
+
+  private static String fileName(Map&lt;String, String&gt; row) {
+<span class="fc" id="L356">    return firstNonBlank(firstPresent(row, AUDIO_PATH_COLUMNS), row.get(&quot;id&quot;), &quot;recording&quot;);</span>
+  }
+
+  private static String stripExtension(String value) {
+<span class="fc" id="L360">    int dot = value.lastIndexOf('.');</span>
+<span class="pc bpc" id="L361" title="1 of 2 branches missed.">    return dot &gt; 0 ? value.substring(0, dot) : value;</span>
+  }
+
+  private static String lowerCaseFileName(Path path) {
+<span class="fc" id="L365">    return lastPathSegment(path.toString()).toLowerCase(Locale.ROOT);</span>
+  }
+
+  private static String lastPathSegment(String value) {
+<span class="fc" id="L369">    int slash = Math.max(value.lastIndexOf('/'), value.lastIndexOf('\\'));</span>
+<span class="fc bfc" id="L370" title="All 2 branches covered.">    return slash &gt;= 0 ? value.substring(slash + 1) : value;</span>
+  }
+
+  private static Double parseDouble(String value) {
+<span class="pc bpc" id="L374" title="1 of 4 branches missed.">    if (value == null || value.isBlank()) {</span>
+<span class="fc" id="L375">      return null;</span>
+    }
+    try {
+<span class="fc" id="L378">      return Double.parseDouble(value.trim());</span>
+<span class="nc" id="L379">    } catch (NumberFormatException ex) {</span>
+<span class="nc" id="L380">      return null;</span>
+    }
+  }
+
+  private static String firstNonBlank(String... values) {
+<span class="pc bpc" id="L385" title="1 of 2 branches missed.">    for (String value : values) {</span>
+<span class="pc bpc" id="L386" title="1 of 4 branches missed.">      if (value != null &amp;&amp; !value.isBlank()) {</span>
+<span class="fc" id="L387">        return value;</span>
+      }
+    }
+<span class="nc" id="L390">    return &quot;&quot;;</span>
+  }
+
+  private static void putIfPresent(Map&lt;String, String&gt; map, String key, String value) {
+<span class="fc bfc" id="L394" title="All 4 branches covered.">    if (value != null &amp;&amp; !value.isBlank()) {</span>
+<span class="fc" id="L395">      map.put(key, value);</span>
+    }
+<span class="fc" id="L397">  }</span>
+
+  private static Set&lt;String&gt; buildReservedColumns() {
+<span class="fc" id="L400">    Set&lt;String&gt; reserved = new LinkedHashSet&lt;&gt;();</span>
+<span class="fc" id="L401">    reserved.add(&quot;id&quot;);</span>
+<span class="fc" id="L402">    reserved.addAll(LABEL_COLUMNS);</span>
+<span class="fc" id="L403">    reserved.addAll(AUDIO_PATH_COLUMNS);</span>
+<span class="fc" id="L404">    reserved.addAll(DURATION_COLUMNS);</span>
+<span class="fc" id="L405">    reserved.addAll(SAMPLE_RATE_COLUMNS);</span>
+<span class="fc" id="L406">    reserved.addAll(ANNOTATION_START_COLUMNS);</span>
+<span class="fc" id="L407">    reserved.addAll(ANNOTATION_END_COLUMNS);</span>
+<span class="fc" id="L408">    reserved.addAll(ANNOTATION_LENGTH_COLUMNS);</span>
+<span class="fc" id="L409">    reserved.addAll(ANNOTATION_LABEL_COLUMNS);</span>
+<span class="fc" id="L410">    return Set.copyOf(reserved);</span>
+  }
+
+  @SuppressWarnings(&quot;PMD.UseConcurrentHashMap&quot;)
+<span class="fc" id="L414">  private record AudioFileIndex(Map&lt;String, Path&gt; byName, Map&lt;String, Path&gt; byStem) {</span>
+
+    static AudioFileIndex build(Path root) throws IOException {
+<span class="fc" id="L417">      try (Stream&lt;Path&gt; paths = Files.walk(root, 5)) {</span>
+<span class="fc" id="L418">        List&lt;Path&gt; audioFiles =</span>
+            paths
+<span class="fc" id="L420">                .filter(Files::isRegularFile)</span>
+<span class="fc" id="L421">                .filter(path -&gt; lowerCaseFileName(path).endsWith(&quot;.wav&quot;))</span>
+<span class="fc" id="L422">                .sorted(Comparator.comparing(Path::toString))</span>
+<span class="fc" id="L423">                .toList();</span>
+<span class="fc" id="L424">        Map&lt;String, Path&gt; byName = new LinkedHashMap&lt;&gt;();</span>
+<span class="fc" id="L425">        Map&lt;String, Path&gt; byStem = new LinkedHashMap&lt;&gt;();</span>
+<span class="fc bfc" id="L426" title="All 2 branches covered.">        for (Path audioFile : audioFiles) {</span>
+<span class="fc" id="L427">          String fileName = lowerCaseFileName(audioFile);</span>
+<span class="fc" id="L428">          byName.putIfAbsent(fileName, audioFile);</span>
+<span class="fc" id="L429">          byStem.putIfAbsent(stripExtension(fileName), audioFile);</span>
+<span class="fc" id="L430">        }</span>
+<span class="fc" id="L431">        return new AudioFileIndex(Map.copyOf(byName), Map.copyOf(byStem));</span>
+      }
+    }
+
+    Path resolve(String candidate) {
+<span class="fc" id="L436">      String normalized = candidate.trim().toLowerCase(Locale.ROOT);</span>
+<span class="fc" id="L437">      String fileName = lastPathSegment(normalized);</span>
+<span class="fc" id="L438">      Path byExactName = byName.get(fileName);</span>
+<span class="pc bpc" id="L439" title="1 of 2 branches missed.">      if (byExactName != null) {</span>
+<span class="fc" id="L440">        return byExactName;</span>
+      }
+<span class="nc" id="L442">      return byStem.get(stripExtension(fileName));</span>
+    }
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

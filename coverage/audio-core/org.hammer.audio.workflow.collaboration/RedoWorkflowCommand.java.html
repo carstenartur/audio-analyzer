@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>RedoWorkflowCommand.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Core</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.collaboration</a> &gt; <span class="el_source">RedoWorkflowCommand.java</span></div><h1>RedoWorkflowCommand.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.collaboration;
+
+import java.util.Objects;
+
+/**
+ * Server-side semantic redo command.
+ *
+ * @param commandId stable idempotency identifier
+ * @param actor requesting actor
+ * @param expectedRevision client-observed semantic revision
+ * @param targetUndoOperationId accepted undo operation to invert
+ */
+public record RedoWorkflowCommand(
+    String commandId, OperationActor actor, long expectedRevision, String targetUndoOperationId) {
+
+<span class="fc" id="L16">  public RedoWorkflowCommand {</span>
+<span class="fc" id="L17">    commandId = requireNotBlank(commandId, &quot;commandId&quot;);</span>
+<span class="fc" id="L18">    Objects.requireNonNull(actor, &quot;actor&quot;);</span>
+<span class="pc bpc" id="L19" title="1 of 2 branches missed.">    if (expectedRevision &lt; 0) {</span>
+<span class="nc" id="L20">      throw new IllegalArgumentException(&quot;expectedRevision must be &gt;= 0&quot;);</span>
+    }
+<span class="fc" id="L22">    targetUndoOperationId = requireNotBlank(targetUndoOperationId, &quot;targetUndoOperationId&quot;);</span>
+<span class="fc" id="L23">  }</span>
+
+  private static String requireNotBlank(String value, String name) {
+<span class="fc" id="L26">    Objects.requireNonNull(value, name);</span>
+<span class="pc bpc" id="L27" title="1 of 2 branches missed.">    if (value.isBlank()) {</span>
+<span class="nc" id="L28">      throw new IllegalArgumentException(name + &quot; must not be blank&quot;);</span>
+    }
+<span class="fc" id="L30">    return value;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

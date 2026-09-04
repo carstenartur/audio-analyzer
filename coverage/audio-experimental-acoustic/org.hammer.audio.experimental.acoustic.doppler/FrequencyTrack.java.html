@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>FrequencyTrack.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.doppler</a> &gt; <span class="el_source">FrequencyTrack.java</span></div><h1>FrequencyTrack.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.doppler;
+
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Deque;
+import java.util.List;
+
+/** Stabilizes a source-frequency estimate over a bounded history of frames. */
+public final class FrequencyTrack {
+
+  private final int maxHistory;
+  private final double smoothingAlpha;
+<span class="fc" id="L13">  private final Deque&lt;Double&gt; history = new ArrayDeque&lt;&gt;();</span>
+  private double stableFrequency;
+
+  /** Create a frequency stabilizer. */
+<span class="fc" id="L17">  public FrequencyTrack(int maxHistory, double smoothingAlpha) {</span>
+<span class="pc bpc" id="L18" title="1 of 2 branches missed.">    if (maxHistory &lt; 1) {</span>
+<span class="nc" id="L19">      throw new IllegalArgumentException(&quot;maxHistory must be &gt;= 1&quot;);</span>
+    }
+<span class="pc bpc" id="L21" title="3 of 6 branches missed.">    if (!Double.isFinite(smoothingAlpha) || smoothingAlpha &lt;= 0.0 || smoothingAlpha &gt; 1.0) {</span>
+<span class="nc" id="L22">      throw new IllegalArgumentException(&quot;smoothingAlpha must be in (0,1]&quot;);</span>
+    }
+<span class="fc" id="L24">    this.maxHistory = maxHistory;</span>
+<span class="fc" id="L25">    this.smoothingAlpha = smoothingAlpha;</span>
+<span class="fc" id="L26">  }</span>
+
+  /** Add one observed frequency and return the updated stable frequency. */
+  public double update(double observedFrequencyHz) {
+<span class="pc bpc" id="L30" title="2 of 4 branches missed.">    if (!Double.isFinite(observedFrequencyHz) || observedFrequencyHz &lt; 0.0) {</span>
+<span class="nc" id="L31">      throw new IllegalArgumentException(&quot;observedFrequencyHz must be finite and &gt;= 0&quot;);</span>
+    }
+<span class="fc bfc" id="L33" title="All 2 branches covered.">    if (history.isEmpty()) {</span>
+<span class="fc" id="L34">      stableFrequency = observedFrequencyHz;</span>
+    } else {
+<span class="fc" id="L36">      stableFrequency =</span>
+          smoothingAlpha * observedFrequencyHz + (1.0 - smoothingAlpha) * stableFrequency;
+    }
+<span class="fc" id="L39">    history.addLast(observedFrequencyHz);</span>
+<span class="pc bpc" id="L40" title="1 of 2 branches missed.">    while (history.size() &gt; maxHistory) {</span>
+<span class="nc" id="L41">      history.removeFirst();</span>
+    }
+<span class="fc" id="L43">    return stableFrequency;</span>
+  }
+
+  /** Current reference frequency in Hz. */
+  public double stableFrequency() {
+<span class="nc" id="L48">    return stableFrequency;</span>
+  }
+
+  /** Immutable history of observed frequencies in Hz. */
+  public List&lt;Double&gt; history() {
+<span class="fc" id="L53">    return List.copyOf(history);</span>
+  }
+
+  /** Sample variance of the bounded frequency history. */
+  public double variance() {
+<span class="fc bfc" id="L58" title="All 2 branches covered.">    if (history.size() &lt; 2) {</span>
+<span class="fc" id="L59">      return 0.0;</span>
+    }
+<span class="fc" id="L61">    double mean = 0.0;</span>
+<span class="fc bfc" id="L62" title="All 2 branches covered.">    for (double value : history) {</span>
+<span class="fc" id="L63">      mean += value;</span>
+<span class="fc" id="L64">    }</span>
+<span class="fc" id="L65">    mean /= history.size();</span>
+<span class="fc" id="L66">    double sumSquares = 0.0;</span>
+<span class="fc bfc" id="L67" title="All 2 branches covered.">    for (double value : history) {</span>
+<span class="fc" id="L68">      double diff = value - mean;</span>
+<span class="fc" id="L69">      sumSquares += diff * diff;</span>
+<span class="fc" id="L70">    }</span>
+<span class="fc" id="L71">    return sumSquares / (history.size() - 1);</span>
+  }
+
+  /** Snapshot copy preserving the stable frequency. */
+  public FrequencyTrackSnapshot snapshot() {
+<span class="nc" id="L76">    return new FrequencyTrackSnapshot(stableFrequency, new ArrayList&lt;&gt;(history), variance());</span>
+  }
+
+  /** Immutable frequency-track state for metrics and visualization. */
+  public record FrequencyTrackSnapshot(
+      double stableFrequency, List&lt;Double&gt; history, double variance) {
+
+    /** Validate and copy fields. */
+<span class="nc" id="L84">    public FrequencyTrackSnapshot {</span>
+<span class="nc bnc" id="L85" title="All 4 branches missed.">      if (!Double.isFinite(stableFrequency) || stableFrequency &lt; 0.0) {</span>
+<span class="nc" id="L86">        throw new IllegalArgumentException(&quot;stableFrequency must be finite and &gt;= 0&quot;);</span>
+      }
+<span class="nc" id="L88">      history = List.copyOf(history);</span>
+<span class="nc bnc" id="L89" title="All 4 branches missed.">      if (!Double.isFinite(variance) || variance &lt; 0.0) {</span>
+<span class="nc" id="L90">        throw new IllegalArgumentException(&quot;variance must be finite and &gt;= 0&quot;);</span>
+      }
+<span class="nc" id="L92">    }</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

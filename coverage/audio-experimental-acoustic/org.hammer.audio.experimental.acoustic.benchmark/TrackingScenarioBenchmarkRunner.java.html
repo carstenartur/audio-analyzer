@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>TrackingScenarioBenchmarkRunner.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.benchmark</a> &gt; <span class="el_source">TrackingScenarioBenchmarkRunner.java</span></div><h1>TrackingScenarioBenchmarkRunner.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.benchmark;
+
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import org.hammer.audio.acquisition.MicrophoneArray;
+import org.hammer.audio.core.AudioBlock;
+import org.hammer.audio.experimental.acoustic.DelayAndSumBeamformer;
+import org.hammer.audio.experimental.acoustic.FrequencyBand;
+import org.hammer.audio.experimental.acoustic.GccPhatTdoaEstimator;
+import org.hammer.audio.experimental.acoustic.scenario.Scenario;
+import org.hammer.audio.experimental.acoustic.simulation.SimulatedMicrophoneArraySource;
+import org.hammer.audio.experimental.acoustic.simulation.SimulationScenarios;
+import org.hammer.audio.experimental.acoustic.simulation.SimulationScenarios.SimulationScenario;
+import org.hammer.audio.experimental.acoustic.tracking.FrameSchedule;
+import org.hammer.audio.experimental.acoustic.tracking.FrequencyClusterer;
+import org.hammer.audio.experimental.acoustic.tracking.MultiPeakDetector;
+import org.hammer.audio.experimental.acoustic.tracking.SourceTracker;
+import org.hammer.audio.experimental.acoustic.tracking.TrackingPipeline;
+import org.hammer.audio.experimental.acoustic.tracking.TrackingSnapshot;
+import org.hammer.audio.geometry.Vector2;
+
+/** Run the current tracking pipeline against simulation scenarios and emit benchmark reports. */
+public final class TrackingScenarioBenchmarkRunner {
+
+  private final int blockFrames;
+  private final TrackingBenchmarkComparator comparator;
+
+  public TrackingScenarioBenchmarkRunner(int blockFrames) {
+<span class="fc" id="L31">    this(blockFrames, new TrackingBenchmarkComparator());</span>
+<span class="fc" id="L32">  }</span>
+
+<span class="fc" id="L34">  public TrackingScenarioBenchmarkRunner(int blockFrames, TrackingBenchmarkComparator comparator) {</span>
+<span class="pc bpc" id="L35" title="1 of 2 branches missed.">    if (blockFrames &lt; 128) {</span>
+<span class="nc" id="L36">      throw new IllegalArgumentException(&quot;blockFrames must be &gt;= 128&quot;);</span>
+    }
+<span class="fc" id="L38">    this.blockFrames = blockFrames;</span>
+<span class="fc" id="L39">    this.comparator = comparator;</span>
+<span class="fc" id="L40">  }</span>
+
+  /** Benchmark every bundled simulation scenario. */
+  public List&lt;BenchmarkReport&gt; runAll() {
+<span class="fc" id="L44">    List&lt;BenchmarkReport&gt; reports = new ArrayList&lt;&gt;(SimulationScenarios.all().size());</span>
+<span class="fc bfc" id="L45" title="All 2 branches covered.">    for (SimulationScenario scenario : SimulationScenarios.all()) {</span>
+<span class="fc" id="L46">      reports.add(run(scenario));</span>
+<span class="fc" id="L47">    }</span>
+<span class="fc" id="L48">    return reports;</span>
+  }
+
+  /** Benchmark one scenario with the current tracking pipeline and no classification outputs. */
+  public BenchmarkReport run(SimulationScenario scenario) {
+<span class="fc" id="L53">    return run(scenario, Map.of());</span>
+  }
+
+  /** Benchmark one scenario with optional per-source classification outputs. */
+  public BenchmarkReport run(
+      SimulationScenario scenario,
+      Map&lt;String, ClassificationPrediction&gt; classificationPredictions) {
+<span class="fc" id="L60">    Scenario truth = scenario.groundTruth();</span>
+<span class="fc" id="L61">    List&lt;TrackingSnapshot&gt; snapshots = runSnapshots(scenario);</span>
+<span class="fc" id="L62">    return comparator.compare(</span>
+<span class="fc" id="L63">        truth, new BenchmarkMeasurements(scenario.array(), snapshots, classificationPredictions));</span>
+  }
+
+  private List&lt;TrackingSnapshot&gt; runSnapshots(SimulationScenario scenario) {
+<span class="fc" id="L67">    try (SimulatedMicrophoneArraySource source = scenario.newSource()) {</span>
+<span class="fc" id="L68">      MicrophoneArray array = source.microphoneArray();</span>
+<span class="fc" id="L69">      TrackingPipeline pipeline = newPipeline(scenario);</span>
+<span class="fc" id="L70">      List&lt;TrackingSnapshot&gt; snapshots = new ArrayList&lt;&gt;();</span>
+      while (true) {
+<span class="fc" id="L72">        AudioBlock block = source.readBlock(blockFrames).orElse(null);</span>
+<span class="pc bpc" id="L73" title="1 of 4 branches missed.">        if (block == null || block.frames() &lt; blockFrames) {</span>
+<span class="fc" id="L74">          break;</span>
+        }
+<span class="fc" id="L76">        snapshots.add(pipeline.process(block, array));</span>
+<span class="fc" id="L77">      }</span>
+<span class="fc" id="L78">      return snapshots;</span>
+<span class="nc" id="L79">    } catch (IOException exception) {</span>
+<span class="nc" id="L80">      throw new IllegalStateException(&quot;Failed to read simulated benchmark scenario&quot;, exception);</span>
+    }
+  }
+
+  private TrackingPipeline newPipeline(SimulationScenario scenario) {
+<span class="fc" id="L85">    MultiPeakDetector detector =</span>
+        new MultiPeakDetector(blockFrames, new FrequencyBand(150.0, 2_500.0), 3, 2.0);
+<span class="fc" id="L87">    FrequencyClusterer clusterer = new FrequencyClusterer(25.0, 0.0, 2, 4);</span>
+<span class="fc" id="L88">    GccPhatTdoaEstimator tdoaEstimator = new GccPhatTdoaEstimator(343.0);</span>
+<span class="fc" id="L89">    DelayAndSumBeamformer beamformer = new DelayAndSumBeamformer(343.0);</span>
+<span class="fc" id="L90">    SourceTracker tracker = new SourceTracker(35.0, 4, 0.5, 0.04, 1.0, 1.0, 0.85, 0.4);</span>
+<span class="fc" id="L91">    FrameSchedule schedule = new FrameSchedule(scenario.sampleRate(), blockFrames, 0.8);</span>
+<span class="fc" id="L92">    return new TrackingPipeline(</span>
+<span class="fc" id="L93">        detector, clusterer, tdoaEstimator, beamformer, tracker, candidateGrid(scenario), schedule);</span>
+  }
+
+  private static List&lt;Vector2&gt; candidateGrid(SimulationScenario scenario) {
+<span class="fc" id="L97">    List&lt;Vector2&gt; grid = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L98">    double width = scenario.room().widthMeters();</span>
+<span class="fc" id="L99">    double height = scenario.room().heightMeters();</span>
+<span class="fc" id="L100">    int steps = 8;</span>
+<span class="fc bfc" id="L101" title="All 2 branches covered.">    for (int xi = 0; xi &lt;= steps; xi++) {</span>
+<span class="fc bfc" id="L102" title="All 2 branches covered.">      for (int yi = 0; yi &lt;= steps; yi++) {</span>
+<span class="fc" id="L103">        grid.add(new Vector2(width * xi / steps, height * yi / steps));</span>
+      }
+    }
+<span class="fc" id="L106">    return grid;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ChannelTimingCalibration.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Acquisition</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.acquisition</a> &gt; <span class="el_source">ChannelTimingCalibration.java</span></div><h1>ChannelTimingCalibration.java</h1><pre class="source lang-java linenums">package org.hammer.audio.acquisition;
+
+/**
+ * Affine timing and level calibration for one microphone channel.
+ *
+ * @param channel zero-based channel index
+ * @param referenceFrame frame at which {@code offsetSamples} was measured
+ * @param offsetSamples observed channel delay relative to the profile reference channel
+ * @param driftPpm relative sample-rate drift in parts per million
+ * @param residualRmsSamples RMS calibration-fit residual in samples
+ * @param jitterRmsSamples RMS short-term timing jitter in samples
+ * @param gainLinear multiplicative level correction
+ * @param invertedPolarity whether samples must be polarity-inverted
+ */
+public record ChannelTimingCalibration(
+    int channel,
+    long referenceFrame,
+    double offsetSamples,
+    double driftPpm,
+    double residualRmsSamples,
+    double jitterRmsSamples,
+    double gainLinear,
+    boolean invertedPolarity) {
+
+  // Validate one channel calibration.
+<span class="fc" id="L26">  public ChannelTimingCalibration {</span>
+<span class="pc bpc" id="L27" title="1 of 2 branches missed.">    if (channel &lt; 0) {</span>
+<span class="nc" id="L28">      throw new IllegalArgumentException(&quot;channel must be &gt;= 0&quot;);</span>
+    }
+<span class="pc bpc" id="L30" title="1 of 2 branches missed.">    if (referenceFrame &lt; 0) {</span>
+<span class="nc" id="L31">      throw new IllegalArgumentException(&quot;referenceFrame must be &gt;= 0&quot;);</span>
+    }
+<span class="fc" id="L33">    requireFinite(offsetSamples, &quot;offsetSamples&quot;);</span>
+<span class="fc" id="L34">    requireFinite(driftPpm, &quot;driftPpm&quot;);</span>
+<span class="fc" id="L35">    requireNonNegativeFinite(residualRmsSamples, &quot;residualRmsSamples&quot;);</span>
+<span class="fc" id="L36">    requireNonNegativeFinite(jitterRmsSamples, &quot;jitterRmsSamples&quot;);</span>
+<span class="fc" id="L37">    requirePositiveFinite(gainLinear, &quot;gainLinear&quot;);</span>
+<span class="fc" id="L38">  }</span>
+
+  /** Returns the predicted channel delay at an absolute nominal frame index. */
+  public double offsetAtFrame(long frameIndex) {
+<span class="pc bpc" id="L42" title="1 of 2 branches missed.">    if (frameIndex &lt; 0) {</span>
+<span class="nc" id="L43">      throw new IllegalArgumentException(&quot;frameIndex must be &gt;= 0&quot;);</span>
+    }
+<span class="fc" id="L45">    return offsetSamples + (frameIndex - referenceFrame) * driftPpm * 1.0e-6;</span>
+  }
+
+  /** Conservative one-sigma timing uncertainty in samples. */
+  public double timingUncertaintySamples() {
+<span class="fc" id="L50">    return Math.hypot(residualRmsSamples, jitterRmsSamples);</span>
+  }
+
+  private static void requireFinite(double value, String name) {
+<span class="pc bpc" id="L54" title="1 of 2 branches missed.">    if (Double.isFinite(value)) {</span>
+<span class="fc" id="L55">      return;</span>
+    }
+<span class="nc" id="L57">    throw new IllegalArgumentException(name + &quot; must be finite&quot;);</span>
+  }
+
+  private static void requireNonNegativeFinite(double value, String name) {
+<span class="pc bpc" id="L61" title="2 of 4 branches missed.">    if (Double.isFinite(value) &amp;&amp; value &gt;= 0.0) {</span>
+<span class="fc" id="L62">      return;</span>
+    }
+<span class="nc" id="L64">    throw new IllegalArgumentException(name + &quot; must be finite and &gt;= 0&quot;);</span>
+  }
+
+  private static void requirePositiveFinite(double value, String name) {
+<span class="pc bpc" id="L68" title="2 of 4 branches missed.">    if (Double.isFinite(value) &amp;&amp; value &gt; 0.0) {</span>
+<span class="fc" id="L69">      return;</span>
+    }
+<span class="nc" id="L71">    throw new IllegalArgumentException(name + &quot; must be finite and &gt; 0&quot;);</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

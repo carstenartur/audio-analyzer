@@ -1,0 +1,7 @@
+GROUP,PACKAGE,CLASS,INSTRUCTION_MISSED,INSTRUCTION_COVERED,BRANCH_MISSED,BRANCH_COVERED,LINE_MISSED,LINE_COVERED,COMPLEXITY_MISSED,COMPLEXITY_COVERED,METHOD_MISSED,METHOD_COVERED
+Audio Analyzer Geometry,org.hammer.audio.geometry,LocalizationConstraint2D,68,0,18,0,12,0,10,0,1,0
+Audio Analyzer Geometry,org.hammer.audio.geometry,MicrophoneArrayGeometry,3,206,1,19,1,42,2,17,1,8
+Audio Analyzer Geometry,org.hammer.audio.geometry,Vector2,32,81,3,5,3,12,5,8,2,7
+Audio Analyzer Geometry,org.hammer.audio.geometry,Vector3,113,0,8,0,12,0,11,0,7,0
+Audio Analyzer Geometry,org.hammer.audio.geometry,Ray2D,41,0,8,0,8,0,6,0,2,0
+Audio Analyzer Geometry,org.hammer.audio.geometry,MicrophoneArrayGeometry.NamedPosition,5,18,2,2,1,4,2,1,0,1

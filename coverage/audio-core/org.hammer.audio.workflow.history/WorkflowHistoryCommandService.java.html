@@ -1,0 +1,157 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WorkflowHistoryCommandService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Core</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.history</a> &gt; <span class="el_source">WorkflowHistoryCommandService.java</span></div><h1>WorkflowHistoryCommandService.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.history;
+
+import java.util.List;
+import java.util.Objects;
+import org.hammer.audio.workflow.Workflow;
+import org.hammer.audio.workflow.dsl.WorkflowDslParser;
+import org.hammer.audio.workflow.store.CommitId;
+import org.hammer.audio.workflow.store.CommitInfo;
+import org.hammer.audio.workflow.store.RefUpdateResult;
+import org.hammer.audio.workflow.store.StaleWorkflowHeadException;
+import org.hammer.audio.workflow.store.VersionedWorkflowStore;
+import org.hammer.audio.workflow.store.WorkflowSnapshot;
+
+/** Application service for explicit branch-scoped workflow comparison, branching and restore. */
+public final class WorkflowHistoryCommandService {
+
+  private final VersionedWorkflowStore store;
+  private final WorkflowHistoryAccessPolicy accessPolicy;
+  private final WorkflowDslParser parser;
+
+  /**
+   * Creates a command service over one repository-scoped workflow store.
+   *
+   * @param store authoritative workflow history store
+   * @param accessPolicy application access policy for history commands
+   */
+  public WorkflowHistoryCommandService(
+<span class="fc" id="L28">      VersionedWorkflowStore store, WorkflowHistoryAccessPolicy accessPolicy) {</span>
+<span class="fc" id="L29">    this.store = Objects.requireNonNull(store, &quot;store&quot;);</span>
+<span class="fc" id="L30">    this.accessPolicy = Objects.requireNonNull(accessPolicy, &quot;accessPolicy&quot;);</span>
+<span class="fc" id="L31">    this.parser = new WorkflowDslParser();</span>
+<span class="fc" id="L32">  }</span>
+
+  /**
+   * Compares two exact commits that are reachable from the requested branch.
+   *
+   * @param branch branch used as reachability boundary
+   * @param beforeCommit exact before commit
+   * @param afterCommit exact after commit
+   * @return both authoritative workflows and their semantic diff
+   */
+  public WorkflowHistoryComparison compare(
+      String branch, CommitId beforeCommit, CommitId afterCommit) {
+<span class="fc" id="L44">    String requiredBranch = requireNotBlank(branch, &quot;branch&quot;);</span>
+<span class="fc" id="L45">    Objects.requireNonNull(beforeCommit, &quot;beforeCommit&quot;);</span>
+<span class="fc" id="L46">    Objects.requireNonNull(afterCommit, &quot;afterCommit&quot;);</span>
+<span class="fc" id="L47">    List&lt;CommitInfo&gt; reachable = store.history(requiredBranch, Integer.MAX_VALUE);</span>
+<span class="fc" id="L48">    requireReachable(reachable, beforeCommit, requiredBranch);</span>
+<span class="fc" id="L49">    requireReachable(reachable, afterCommit, requiredBranch);</span>
+
+<span class="fc" id="L51">    Workflow beforeWorkflow = loadWorkflow(beforeCommit);</span>
+<span class="fc" id="L52">    Workflow afterWorkflow = loadWorkflow(afterCommit);</span>
+<span class="pc bpc" id="L53" title="1 of 2 branches missed.">    if (!beforeWorkflow.id().equals(afterWorkflow.id())) {</span>
+<span class="nc" id="L54">      throw new IllegalArgumentException(</span>
+          &quot;Cannot compare commits with different workflow ids: &quot;
+<span class="nc" id="L56">              + beforeWorkflow.id()</span>
+              + &quot; and &quot;
+<span class="nc" id="L58">              + afterWorkflow.id());</span>
+    }
+<span class="fc" id="L60">    accessPolicy.assertCompareAllowed(requiredBranch, beforeWorkflow.id());</span>
+<span class="fc" id="L61">    return new WorkflowHistoryComparison(</span>
+        beforeCommit,
+        afterCommit,
+        beforeWorkflow,
+        afterWorkflow,
+<span class="fc" id="L66">        WorkflowDiff.compute(beforeWorkflow, afterWorkflow));</span>
+  }
+
+  /**
+   * Creates a new branch from one exact commit reachable from a source branch.
+   *
+   * @param command source reachability boundary, new branch and exact initial HEAD
+   * @return newly created branch evidence
+   */
+  public WorkflowBranchCreationResult createBranch(CreateWorkflowBranchCommand command) {
+<span class="nc" id="L76">    Objects.requireNonNull(command, &quot;command&quot;);</span>
+<span class="nc" id="L77">    List&lt;CommitInfo&gt; reachable = store.history(command.sourceBranch(), Integer.MAX_VALUE);</span>
+<span class="nc bnc" id="L78" title="All 2 branches missed.">    if (reachable.isEmpty()) {</span>
+<span class="nc" id="L79">      throw new IllegalArgumentException(</span>
+<span class="nc" id="L80">          &quot;Unknown or empty workflow branch: &quot; + command.sourceBranch());</span>
+    }
+<span class="nc" id="L82">    requireReachable(reachable, command.fromCommit(), command.sourceBranch());</span>
+<span class="nc" id="L83">    Workflow workflow = loadWorkflow(command.fromCommit());</span>
+<span class="nc" id="L84">    accessPolicy.assertRestoreAllowed(command.newBranch(), workflow.id());</span>
+<span class="nc" id="L85">    RefUpdateResult update = store.updateRef(command.newBranch(), null, command.fromCommit());</span>
+<span class="nc bnc" id="L86" title="All 2 branches missed.">    if (update != RefUpdateResult.SUCCESS) {</span>
+<span class="nc" id="L87">      throw new IllegalArgumentException(</span>
+<span class="nc" id="L88">          &quot;Workflow branch already exists or cannot be created: &quot; + command.newBranch());</span>
+    }
+<span class="nc" id="L90">    return new WorkflowBranchCreationResult(</span>
+<span class="nc" id="L91">        command.sourceBranch(), command.newBranch(), command.fromCommit(), workflow.id());</span>
+  }
+
+  /**
+   * Restores a reachable historical snapshot as a new commit on the current branch HEAD.
+   *
+   * @param command explicit target, expected HEAD and audit metadata
+   * @return historical source, previous HEAD and new restore commit evidence
+   */
+  public WorkflowRestoreResult restore(RestoreWorkflowVersionCommand command) {
+<span class="fc" id="L101">    Objects.requireNonNull(command, &quot;command&quot;);</span>
+<span class="fc" id="L102">    List&lt;CommitInfo&gt; reachable = store.history(command.branch(), Integer.MAX_VALUE);</span>
+<span class="pc bpc" id="L103" title="1 of 2 branches missed.">    if (reachable.isEmpty()) {</span>
+<span class="nc" id="L104">      throw new IllegalArgumentException(&quot;Unknown or empty workflow branch: &quot; + command.branch());</span>
+    }
+<span class="fc" id="L106">    requireReachable(reachable, command.targetCommit(), command.branch());</span>
+<span class="fc" id="L107">    CommitId actualHead = reachable.getFirst().commitId();</span>
+<span class="fc bfc" id="L108" title="All 2 branches covered.">    if (!command.expectedHead().equals(actualHead)) {</span>
+<span class="fc" id="L109">      throw new StaleWorkflowHeadException(command.branch(), command.expectedHead(), actualHead);</span>
+    }
+
+<span class="fc" id="L112">    WorkflowSnapshot targetSnapshot = store.loadAtCommit(command.targetCommit());</span>
+<span class="fc" id="L113">    Workflow targetWorkflow = parseAndValidate(targetSnapshot);</span>
+<span class="fc" id="L114">    accessPolicy.assertRestoreAllowed(command.branch(), targetWorkflow.id());</span>
+<span class="fc" id="L115">    CommitId restoredCommit =</span>
+<span class="fc" id="L116">        store.commitIfHead(</span>
+<span class="fc" id="L117">            command.branch(), command.expectedHead(), targetSnapshot, command.metadata());</span>
+<span class="fc" id="L118">    return new WorkflowRestoreResult(</span>
+<span class="fc" id="L119">        command.branch(), command.targetCommit(), actualHead, restoredCommit);</span>
+  }
+
+  private Workflow loadWorkflow(CommitId commitId) {
+<span class="fc" id="L123">    return parseAndValidate(store.loadAtCommit(commitId));</span>
+  }
+
+  private Workflow parseAndValidate(WorkflowSnapshot snapshot) {
+<span class="fc" id="L127">    Workflow workflow = parser.parse(snapshot.dslText());</span>
+<span class="pc bpc" id="L128" title="1 of 2 branches missed.">    if (!snapshot.workflowId().equals(workflow.id())) {</span>
+<span class="nc" id="L129">      throw new IllegalArgumentException(</span>
+          &quot;snapshot workflowId '&quot;
+<span class="nc" id="L131">              + snapshot.workflowId()</span>
+              + &quot;' does not match DSL workflow id '&quot;
+<span class="nc" id="L133">              + workflow.id()</span>
+              + &quot;'&quot;);
+    }
+<span class="fc" id="L136">    return workflow;</span>
+  }
+
+  private static void requireReachable(
+      List&lt;CommitInfo&gt; reachable, CommitId commitId, String branch) {
+<span class="fc" id="L141">    boolean found = reachable.stream().anyMatch(info -&gt; info.commitId().equals(commitId));</span>
+<span class="fc bfc" id="L142" title="All 2 branches covered.">    if (!found) {</span>
+<span class="fc" id="L143">      throw new IllegalArgumentException(</span>
+<span class="fc" id="L144">          &quot;Commit &quot; + commitId.value() + &quot; is not reachable from branch &quot; + branch);</span>
+    }
+<span class="fc" id="L146">  }</span>
+
+  private static String requireNotBlank(String value, String name) {
+<span class="fc" id="L149">    Objects.requireNonNull(value, name);</span>
+<span class="fc" id="L150">    String normalized = value.trim();</span>
+<span class="pc bpc" id="L151" title="1 of 2 branches missed.">    if (normalized.isEmpty()) {</span>
+<span class="nc" id="L152">      throw new IllegalArgumentException(name + &quot; must not be blank&quot;);</span>
+    }
+<span class="fc" id="L154">    return normalized;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

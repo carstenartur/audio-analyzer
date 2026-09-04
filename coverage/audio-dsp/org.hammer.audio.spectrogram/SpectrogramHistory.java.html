@@ -1,0 +1,159 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>SpectrogramHistory.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer DSP and Analysis</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.spectrogram</a> &gt; <span class="el_source">SpectrogramHistory.java</span></div><h1>SpectrogramHistory.java</h1><pre class="source lang-java linenums">package org.hammer.audio.spectrogram;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Objects;
+
+/**
+ * Bounded rolling history of {@link SpectrogramFrame}s used to back the waterfall display and drift
+ * / burst analyses.
+ *
+ * &lt;p&gt;Internally backed by a fixed-size ring buffer. Once {@link #capacity()} frames are stored,
+ * appending a new frame evicts the oldest. The history rejects frames whose {@link
+ * SpectrogramFrame#binCount()} differs from the established bin count and starts fresh after a
+ * {@link #clear()} (a clear is also performed automatically when the FFT size or sample rate of an
+ * appended frame changes).
+ *
+ * &lt;p&gt;Instances are &lt;strong&gt;not thread-safe&lt;/strong&gt;; callers must externally synchronize if shared.
+ */
+public final class SpectrogramHistory {
+
+  private final int capacity;
+  private final SpectrogramFrame[] frames;
+  private int head;
+  private int size;
+<span class="fc" id="L26">  private int activeBinCount = -1;</span>
+<span class="fc" id="L27">  private int activeFftSize = -1;</span>
+<span class="fc" id="L28">  private float activeSampleRate = -1f;</span>
+
+  /**
+   * Create a history with the given maximum number of retained frames.
+   *
+   * @param capacity maximum number of retained frames; must be {@code &gt;= 1}
+   */
+<span class="fc" id="L35">  public SpectrogramHistory(int capacity) {</span>
+<span class="pc bpc" id="L36" title="1 of 2 branches missed.">    if (capacity &lt; 1) {</span>
+<span class="nc" id="L37">      throw new IllegalArgumentException(&quot;capacity must be &gt;= 1, was &quot; + capacity);</span>
+    }
+<span class="fc" id="L39">    this.capacity = capacity;</span>
+<span class="fc" id="L40">    this.frames = new SpectrogramFrame[capacity];</span>
+<span class="fc" id="L41">  }</span>
+
+  /**
+   * @return maximum number of retained frames
+   */
+  public int capacity() {
+<span class="nc" id="L47">    return capacity;</span>
+  }
+
+  /**
+   * @return current number of stored frames (between 0 and {@link #capacity()})
+   */
+  public int size() {
+<span class="fc" id="L54">    return size;</span>
+  }
+
+  /**
+   * @return true if no frames are currently stored
+   */
+  public boolean isEmpty() {
+<span class="pc bpc" id="L61" title="1 of 2 branches missed.">    return size == 0;</span>
+  }
+
+  /**
+   * @return number of one-sided frequency bins of the stored frames, or {@code -1} if empty
+   */
+  public int binCount() {
+<span class="fc" id="L68">    return activeBinCount;</span>
+  }
+
+  /**
+   * @return FFT size of the stored frames, or {@code -1} if empty
+   */
+  public int fftSize() {
+<span class="nc" id="L75">    return activeFftSize;</span>
+  }
+
+  /**
+   * @return sample rate of the stored frames in Hz, or {@code -1f} if empty
+   */
+  public float sampleRate() {
+<span class="nc" id="L82">    return activeSampleRate;</span>
+  }
+
+  /**
+   * Append a frame to the history. If the frame's bin count, FFT size or sample rate differs from
+   * the established values, the history is cleared first so the new geometry can take over.
+   *
+   * @param frame frame to append; must not be {@code null}
+   */
+  public void append(SpectrogramFrame frame) {
+<span class="fc" id="L92">    Objects.requireNonNull(frame, &quot;frame&quot;);</span>
+<span class="fc bfc" id="L93" title="All 2 branches covered.">    if (activeBinCount != -1</span>
+<span class="pc bpc" id="L94" title="1 of 2 branches missed.">        &amp;&amp; (frame.binCount() != activeBinCount</span>
+<span class="pc bpc" id="L95" title="1 of 2 branches missed.">            || frame.fftSize() != activeFftSize</span>
+<span class="fc bfc" id="L96" title="All 2 branches covered.">            || Math.abs(frame.sampleRate() - activeSampleRate) &gt; 0.0001f)) {</span>
+<span class="fc" id="L97">      clear();</span>
+    }
+<span class="fc bfc" id="L99" title="All 2 branches covered.">    if (activeBinCount == -1) {</span>
+<span class="fc" id="L100">      activeBinCount = frame.binCount();</span>
+<span class="fc" id="L101">      activeFftSize = frame.fftSize();</span>
+<span class="fc" id="L102">      activeSampleRate = frame.sampleRate();</span>
+    }
+    int writeIndex;
+<span class="fc bfc" id="L105" title="All 2 branches covered.">    if (size &lt; capacity) {</span>
+<span class="fc" id="L106">      writeIndex = (head + size) % capacity;</span>
+<span class="fc" id="L107">      size++;</span>
+    } else {
+<span class="fc" id="L109">      writeIndex = head;</span>
+<span class="fc" id="L110">      head = (head + 1) % capacity;</span>
+    }
+<span class="fc" id="L112">    frames[writeIndex] = frame;</span>
+<span class="fc" id="L113">  }</span>
+
+  /** Reset the history to empty, releasing references to retained frames. */
+  public void clear() {
+<span class="fc" id="L117">    Arrays.fill(frames, null);</span>
+<span class="fc" id="L118">    head = 0;</span>
+<span class="fc" id="L119">    size = 0;</span>
+<span class="fc" id="L120">    activeBinCount = -1;</span>
+<span class="fc" id="L121">    activeFftSize = -1;</span>
+<span class="fc" id="L122">    activeSampleRate = -1f;</span>
+<span class="fc" id="L123">  }</span>
+
+  /**
+   * @return the most recently appended frame, or {@code null} if empty
+   */
+  public SpectrogramFrame latest() {
+<span class="fc bfc" id="L129" title="All 2 branches covered.">    if (size == 0) {</span>
+<span class="fc" id="L130">      return null;</span>
+    }
+<span class="fc" id="L132">    int idx = (head + size - 1) % capacity;</span>
+<span class="fc" id="L133">    return frames[idx];</span>
+  }
+
+  /**
+   * @param indexFromOldest zero-based index from the oldest stored frame
+   * @return the frame at that position
+   * @throws IndexOutOfBoundsException if the index is out of range
+   */
+  public SpectrogramFrame frameAt(int indexFromOldest) {
+<span class="pc bpc" id="L142" title="2 of 4 branches missed.">    if (indexFromOldest &lt; 0 || indexFromOldest &gt;= size) {</span>
+<span class="nc" id="L143">      throw new IndexOutOfBoundsException(&quot;indexFromOldest=&quot; + indexFromOldest + &quot;, size=&quot; + size);</span>
+    }
+<span class="fc" id="L145">    return frames[(head + indexFromOldest) % capacity];</span>
+  }
+
+  /**
+   * @return an immutable copy of the stored frames in order from oldest to newest
+   */
+  public List&lt;SpectrogramFrame&gt; snapshot() {
+<span class="fc" id="L152">    List&lt;SpectrogramFrame&gt; out = new ArrayList&lt;&gt;(size);</span>
+<span class="fc bfc" id="L153" title="All 2 branches covered.">    for (int i = 0; i &lt; size; i++) {</span>
+<span class="fc" id="L154">      out.add(frames[(head + i) % capacity]);</span>
+    }
+<span class="fc" id="L156">    return List.copyOf(out);</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

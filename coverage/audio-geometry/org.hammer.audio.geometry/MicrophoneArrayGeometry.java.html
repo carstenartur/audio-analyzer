@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>MicrophoneArrayGeometry.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Geometry</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.geometry</a> &gt; <span class="el_source">MicrophoneArrayGeometry.java</span></div><h1>MicrophoneArrayGeometry.java</h1><pre class="source lang-java linenums">package org.hammer.audio.geometry;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+
+/**
+ * Calibrated 2D positions of a set of acoustic sensors, decoupled from the audio acquisition layer.
+ *
+ * &lt;p&gt;{@code MicrophoneArrayGeometry} provides reusable geometry primitives for localization
+ * pipelines: pairwise distances, centroid, maximum spacing and lookup by sensor id. It is
+ * intentionally independent of the {@code audio-acquisition} {@code MicrophoneArray} type so that
+ * geometry utilities can be shared with non-audio sensor arrays (e.g. radar, sonar) and with
+ * offline tools that do not depend on the audio stack.
+ *
+ * &lt;p&gt;Instances are immutable, all stored positions are validated to be finite, and sensor ids must
+ * be unique.
+ */
+public final class MicrophoneArrayGeometry {
+
+  private final List&lt;NamedPosition&gt; positions;
+  private final Map&lt;String, NamedPosition&gt; byId;
+  private final double maxSpacingMeters;
+
+  /** Create a geometry from sensor ids and 2D positions in meters. */
+<span class="fc" id="L29">  public MicrophoneArrayGeometry(List&lt;NamedPosition&gt; positions) {</span>
+<span class="fc" id="L30">    Objects.requireNonNull(positions, &quot;positions&quot;);</span>
+<span class="fc bfc" id="L31" title="All 2 branches covered.">    if (positions.isEmpty()) {</span>
+<span class="fc" id="L32">      throw new IllegalArgumentException(&quot;positions must not be empty&quot;);</span>
+    }
+<span class="fc" id="L34">    List&lt;NamedPosition&gt; copy = new ArrayList&lt;&gt;(positions.size());</span>
+<span class="fc" id="L35">    Map&lt;String, NamedPosition&gt; idMap = new LinkedHashMap&lt;&gt;();</span>
+<span class="fc bfc" id="L36" title="All 2 branches covered.">    for (NamedPosition position : positions) {</span>
+<span class="fc" id="L37">      Objects.requireNonNull(position, &quot;positions must not contain null entries&quot;);</span>
+<span class="fc bfc" id="L38" title="All 2 branches covered.">      if (idMap.put(position.id(), position) != null) {</span>
+<span class="fc" id="L39">        throw new IllegalArgumentException(&quot;duplicate sensor id: &quot; + position.id());</span>
+      }
+<span class="fc" id="L41">      copy.add(position);</span>
+<span class="fc" id="L42">    }</span>
+<span class="fc" id="L43">    this.positions = List.copyOf(copy);</span>
+<span class="fc" id="L44">    this.byId = Collections.unmodifiableMap(idMap);</span>
+<span class="fc" id="L45">    this.maxSpacingMeters = computeMaxSpacing(copy);</span>
+<span class="fc" id="L46">  }</span>
+
+  /** Number of sensors in this geometry. */
+  public int size() {
+<span class="fc" id="L50">    return positions.size();</span>
+  }
+
+  /** Named positions in declaration order. */
+  public List&lt;NamedPosition&gt; positions() {
+<span class="nc" id="L55">    return positions;</span>
+  }
+
+  /** Look up a position by sensor id; throws when the id is unknown. */
+  public Vector2 position(String id) {
+<span class="fc" id="L60">    NamedPosition position = byId.get(Objects.requireNonNull(id, &quot;id&quot;));</span>
+<span class="fc bfc" id="L61" title="All 2 branches covered.">    if (position == null) {</span>
+<span class="fc" id="L62">      throw new IllegalArgumentException(&quot;unknown sensor id: &quot; + id);</span>
+    }
+<span class="fc" id="L64">    return position.positionMeters();</span>
+  }
+
+  /** Distance between two sensors identified by their ids. */
+  public double distanceBetween(String firstId, String secondId) {
+<span class="fc" id="L69">    return position(firstId).distanceTo(position(secondId));</span>
+  }
+
+  /** Geometric centroid of all sensor positions. */
+  public Vector2 centroid() {
+<span class="fc" id="L74">    double sumX = 0.0;</span>
+<span class="fc" id="L75">    double sumY = 0.0;</span>
+<span class="fc bfc" id="L76" title="All 2 branches covered.">    for (NamedPosition position : positions) {</span>
+<span class="fc" id="L77">      sumX += position.positionMeters().x();</span>
+<span class="fc" id="L78">      sumY += position.positionMeters().y();</span>
+<span class="fc" id="L79">    }</span>
+<span class="fc" id="L80">    int count = positions.size();</span>
+<span class="fc" id="L81">    return new Vector2(sumX / count, sumY / count);</span>
+  }
+
+  /** Largest pairwise distance between sensors, useful for bounding TDOA search ranges. */
+  public double maxSpacingMeters() {
+<span class="fc" id="L86">    return maxSpacingMeters;</span>
+  }
+
+  /**
+   * Maximum physical inter-sensor delay for a given propagation speed.
+   *
+   * @param speedOfSoundMetersPerSecond positive, finite speed of sound in m/s
+   */
+  public double maxInterSensorDelaySeconds(double speedOfSoundMetersPerSecond) {
+<span class="pc bpc" id="L95" title="1 of 4 branches missed.">    if (!(speedOfSoundMetersPerSecond &gt; 0.0) || !Double.isFinite(speedOfSoundMetersPerSecond)) {</span>
+<span class="fc" id="L96">      throw new IllegalArgumentException(&quot;speedOfSoundMetersPerSecond must be finite and &gt; 0&quot;);</span>
+    }
+<span class="fc" id="L98">    return maxSpacingMeters / speedOfSoundMetersPerSecond;</span>
+  }
+
+  private static double computeMaxSpacing(List&lt;NamedPosition&gt; positions) {
+<span class="fc" id="L102">    double max = 0.0;</span>
+<span class="fc bfc" id="L103" title="All 2 branches covered.">    for (int i = 0; i &lt; positions.size(); i++) {</span>
+<span class="fc" id="L104">      Vector2 a = positions.get(i).positionMeters();</span>
+<span class="fc bfc" id="L105" title="All 2 branches covered.">      for (int j = i + 1; j &lt; positions.size(); j++) {</span>
+<span class="fc" id="L106">        double distance = a.distanceTo(positions.get(j).positionMeters());</span>
+<span class="fc bfc" id="L107" title="All 2 branches covered.">        if (distance &gt; max) {</span>
+<span class="fc" id="L108">          max = distance;</span>
+        }
+      }
+    }
+<span class="fc" id="L112">    return max;</span>
+  }
+
+  /** Sensor identifier and 2D position. */
+  public record NamedPosition(String id, Vector2 positionMeters) {
+
+    /** Validate identifier and position. */
+<span class="fc" id="L119">    public NamedPosition {</span>
+<span class="pc bpc" id="L120" title="2 of 4 branches missed.">      if (id == null || id.isBlank()) {</span>
+<span class="nc" id="L121">        throw new IllegalArgumentException(&quot;id must not be blank&quot;);</span>
+      }
+<span class="fc" id="L123">      Objects.requireNonNull(positionMeters, &quot;positionMeters&quot;);</span>
+<span class="fc" id="L124">    }</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

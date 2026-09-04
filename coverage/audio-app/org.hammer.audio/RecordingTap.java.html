@@ -1,0 +1,398 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>RecordingTap.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio</a> &gt; <span class="el_source">RecordingTap.java</span></div><h1>RecordingTap.java</h1><pre class="source lang-java linenums">package org.hammer.audio;
+
+import java.io.IOException;
+import java.nio.file.Path;
+import java.time.Instant;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
+import org.hammer.audio.core.AudioBlock;
+import org.hammer.audio.recording.AudioBlockRecordingWriter;
+import org.hammer.audio.recording.runtime.RecordingState;
+import org.hammer.audio.recording.runtime.RecordingStatus;
+import org.hammer.audio.recording.runtime.RecordingStatusListener;
+import org.hammer.audio.recording.runtime.RecordingStorageProbe;
+import org.hammer.audio.recording.runtime.RecordingStorageStatus;
+
+/**
+ * Loss-aware recorder that subscribes to every produced {@link AudioBlock}, enqueues without
+ * blocking the capture thread and serializes on a dedicated I/O worker.
+ */
+public final class RecordingTap {
+
+  private static final int DEFAULT_QUEUE_CAPACITY = 512;
+<span class="fc" id="L26">  private static final long STATUS_INTERVAL_NANOS = TimeUnit.MILLISECONDS.toNanos(100L);</span>
+<span class="fc" id="L27">  private static final long STORAGE_INTERVAL_NANOS = TimeUnit.SECONDS.toNanos(1L);</span>
+  private static final long STOP_TIMEOUT_SECONDS = 10L;
+
+  private final AudioBlockRecordingWriter writer;
+  private final Path file;
+  private final RecordingBlockQueue queue;
+  private final RecordingStorageProbe storageProbe;
+  private final double expectedBytesPerSecond;
+  private final Instant startedAt;
+  private final RecordingWorker worker;
+<span class="fc" id="L37">  private final RecordingStatusListeners listeners = new RecordingStatusListeners();</span>
+  private final AtomicReference&lt;RecordingStatus&gt; currentStatus;
+  private final AtomicReference&lt;RecordingStorageStatus&gt; storageStatus;
+<span class="fc" id="L40">  private final AtomicReference&lt;Throwable&gt; failure = new AtomicReference&lt;&gt;();</span>
+<span class="fc" id="L41">  private final AtomicBoolean accepting = new AtomicBoolean(true);</span>
+<span class="fc" id="L42">  private final AtomicBoolean stopRequested = new AtomicBoolean(false);</span>
+<span class="fc" id="L43">  private final AtomicBoolean incomplete = new AtomicBoolean(false);</span>
+<span class="fc" id="L44">  private final AtomicLong receivedBlocks = new AtomicLong();</span>
+<span class="fc" id="L45">  private final AtomicLong receivedFrames = new AtomicLong();</span>
+<span class="fc" id="L46">  private final AtomicLong writtenBlocks = new AtomicLong();</span>
+<span class="fc" id="L47">  private final AtomicLong writtenFrames = new AtomicLong();</span>
+<span class="fc" id="L48">  private final AtomicLong droppedBlocks = new AtomicLong();</span>
+<span class="fc" id="L49">  private final AtomicLong droppedFrames = new AtomicLong();</span>
+<span class="fc" id="L50">  private final AtomicInteger maximumQueueDepth = new AtomicInteger();</span>
+<span class="fc" id="L51">  private final AtomicLong lastStatusPublishedNanos = new AtomicLong();</span>
+
+  private volatile AudioBlockSubscription subscription;
+<span class="fc" id="L54">  private volatile String stopReason = &quot;&quot;;</span>
+  private volatile double measuredBytesPerSecond;
+
+  /**
+   * Compatibility overload. The historic poll interval is ignored because recording now consumes
+   * the complete subscribed block stream.
+   */
+  public static RecordingTap start(AudioCaptureService service, Path file, int pollIntervalMs)
+      throws IOException {
+<span class="nc bnc" id="L63" title="All 2 branches missed.">    if (pollIntervalMs &lt; 1) {</span>
+<span class="nc" id="L64">      throw new IllegalArgumentException(&quot;pollIntervalMs must be &gt;= 1, was &quot; + pollIntervalMs);</span>
+    }
+<span class="nc" id="L66">    return start(service, file);</span>
+  }
+
+  /** Start a loss-aware recording with production storage probing and queue defaults. */
+  public static RecordingTap start(AudioCaptureService service, Path file) throws IOException {
+<span class="nc" id="L71">    Instant startedAt = Instant.now();</span>
+<span class="nc" id="L72">    RecordingStorageProbe storageProbe = RecordingPreflight.productionProbe();</span>
+<span class="nc" id="L73">    return start(service, file, DEFAULT_QUEUE_CAPACITY, storageProbe, startedAt);</span>
+  }
+
+  static RecordingTap start(
+      AudioCaptureService service,
+      Path file,
+      int queueCapacity,
+      RecordingStorageProbe storageProbe,
+      Instant startedAt)
+      throws IOException {
+<span class="fc" id="L83">    RecordingStorageStatus preflight =</span>
+<span class="fc" id="L84">        RecordingPreflight.inspect(service, file, storageProbe, startedAt);</span>
+<span class="fc" id="L85">    return start(service, file, queueCapacity, storageProbe, preflight, startedAt);</span>
+  }
+
+  private static RecordingTap start(
+      AudioCaptureService service,
+      Path file,
+      int queueCapacity,
+      RecordingStorageProbe storageProbe,
+      RecordingStorageStatus preflight,
+      Instant startedAt)
+      throws IOException {
+<span class="pc bpc" id="L96" title="1 of 2 branches missed.">    if (queueCapacity &lt; 1) {</span>
+<span class="nc" id="L97">      throw new IllegalArgumentException(&quot;queueCapacity must be &gt;= 1&quot;);</span>
+    }
+<span class="fc" id="L99">    RecordingPreflight.requireReady(preflight);</span>
+<span class="fc" id="L100">    double expectedRate = preflight.expectedBytesPerSecond();</span>
+<span class="fc" id="L101">    AudioBlockRecordingWriter writer = AudioBlockRecordingWriter.open(file);</span>
+<span class="fc" id="L102">    RecordingTap tap =</span>
+        new RecordingTap(
+            writer,
+<span class="fc" id="L105">            file.toAbsolutePath().normalize(),</span>
+            queueCapacity,
+            storageProbe,
+            expectedRate,
+            startedAt,
+            preflight);
+<span class="fc" id="L111">    tap.worker.start(tap::writerLoop);</span>
+    try {
+<span class="fc" id="L113">      tap.subscription = service.subscribe(tap::acceptBlock);</span>
+<span class="nc" id="L114">    } catch (RuntimeException exception) {</span>
+<span class="nc" id="L115">      tap.requestFailure(exception, &quot;Audio source does not provide a complete recording stream.&quot;);</span>
+<span class="nc" id="L116">      tap.awaitCompletion();</span>
+<span class="nc" id="L117">      throw new IOException(&quot;Failed to subscribe recorder to audio source&quot;, exception);</span>
+<span class="fc" id="L118">    }</span>
+<span class="fc" id="L119">    tap.publishStatus(RecordingState.RECORDING, true);</span>
+<span class="fc" id="L120">    return tap;</span>
+  }
+
+  private RecordingTap(
+      AudioBlockRecordingWriter writer,
+      Path file,
+      int queueCapacity,
+      RecordingStorageProbe storageProbe,
+      double expectedBytesPerSecond,
+      Instant startedAt,
+<span class="fc" id="L130">      RecordingStorageStatus preflight) {</span>
+<span class="fc" id="L131">    this.writer = writer;</span>
+<span class="fc" id="L132">    this.file = file;</span>
+<span class="fc" id="L133">    this.queue = new RecordingBlockQueue(queueCapacity);</span>
+<span class="fc" id="L134">    this.storageProbe = storageProbe;</span>
+<span class="fc" id="L135">    this.expectedBytesPerSecond = expectedBytesPerSecond;</span>
+<span class="fc" id="L136">    this.startedAt = startedAt;</span>
+<span class="fc" id="L137">    this.storageStatus = new AtomicReference&lt;&gt;(preflight);</span>
+<span class="fc" id="L138">    this.worker = new RecordingWorker(&quot;ExperimentRecordingWriter&quot;);</span>
+<span class="fc" id="L139">    this.currentStatus =</span>
+<span class="fc" id="L140">        new AtomicReference&lt;&gt;(snapshot(RecordingState.STARTING, startedAt, &quot;&quot;, &quot;&quot;));</span>
+<span class="fc" id="L141">  }</span>
+
+  /** Destination target. The finalized file appears only after a successful close. */
+  public Path file() {
+<span class="nc" id="L145">    return file;</span>
+  }
+
+  /** Number of blocks successfully serialized so far. */
+  public long blocksWritten() {
+<span class="nc" id="L150">    return writtenBlocks.get();</span>
+  }
+
+  /** Current immutable status snapshot. */
+  public RecordingStatus status() {
+<span class="fc" id="L155">    return currentStatus.get();</span>
+  }
+
+  /** Register a status listener and immediately deliver the current snapshot. */
+  public void addStatusListener(RecordingStatusListener listener) {
+<span class="nc" id="L160">    listeners.add(listener);</span>
+<span class="nc" id="L161">    listener.onRecordingStatus(currentStatus.get());</span>
+<span class="nc" id="L162">  }</span>
+
+  /** Remove a previously registered listener. */
+  public void removeStatusListener(RecordingStatusListener listener) {
+<span class="nc" id="L166">    listeners.remove(listener);</span>
+<span class="nc" id="L167">  }</span>
+
+  /** Returns whether recording reached a terminal state. */
+  public boolean isClosed() {
+<span class="fc" id="L171">    return currentStatus.get().terminal();</span>
+  }
+
+  private void acceptBlock(AudioBlock block) {
+<span class="pc bpc" id="L175" title="1 of 2 branches missed.">    if (!accepting.get()) {</span>
+<span class="nc" id="L176">      return;</span>
+    }
+<span class="fc" id="L178">    receivedBlocks.incrementAndGet();</span>
+<span class="fc" id="L179">    receivedFrames.addAndGet(block.frames());</span>
+<span class="pc bpc" id="L180" title="1 of 2 branches missed.">    if (!queue.offer(block)) {</span>
+<span class="nc" id="L181">      droppedBlocks.incrementAndGet();</span>
+<span class="nc" id="L182">      droppedFrames.addAndGet(block.frames());</span>
+<span class="nc" id="L183">      incomplete.set(true);</span>
+<span class="nc" id="L184">      stopReason = &quot;Recorder queue overflowed; recording is incomplete.&quot;;</span>
+<span class="nc" id="L185">      publishStatus(RecordingState.RECORDING, true);</span>
+<span class="nc" id="L186">      return;</span>
+    }
+<span class="fc" id="L188">    maximumQueueDepth.accumulateAndGet(queue.size(), Math::max);</span>
+<span class="fc" id="L189">    publishStatus(RecordingState.RECORDING, false);</span>
+<span class="fc" id="L190">  }</span>
+
+  private void writerLoop() {
+<span class="fc" id="L193">    long previousRateBytes = 0L;</span>
+<span class="fc" id="L194">    long previousRateNanos = System.nanoTime();</span>
+<span class="fc" id="L195">    long nextStorageProbeNanos = previousRateNanos;</span>
+    try {
+<span class="fc bfc" id="L197" title="All 4 branches covered.">      while (accepting.get() || !queue.isEmpty()) {</span>
+<span class="fc" id="L198">        AudioBlock block = queue.poll(100L, TimeUnit.MILLISECONDS);</span>
+<span class="pc bpc" id="L199" title="1 of 2 branches missed.">        if (block != null) {</span>
+<span class="fc" id="L200">          writer.write(block);</span>
+<span class="fc" id="L201">          writtenBlocks.incrementAndGet();</span>
+<span class="fc" id="L202">          writtenFrames.addAndGet(block.frames());</span>
+<span class="pc bpc" id="L203" title="1 of 2 branches missed.">          if (writer.continuityGapCount() &gt; 0L) {</span>
+<span class="nc" id="L204">            incomplete.set(true);</span>
+          }
+        }
+<span class="fc" id="L207">        long nowNanos = System.nanoTime();</span>
+<span class="fc bfc" id="L208" title="All 2 branches covered.">        if (nowNanos &gt;= nextStorageProbeNanos) {</span>
+<span class="fc" id="L209">          long bytes = writer.bytesWritten();</span>
+<span class="fc" id="L210">          long elapsedNanos = nowNanos - previousRateNanos;</span>
+<span class="pc bpc" id="L211" title="1 of 2 branches missed.">          if (elapsedNanos &gt; 0L) {</span>
+<span class="fc" id="L212">            measuredBytesPerSecond = (bytes - previousRateBytes) * 1_000_000_000.0 / elapsedNanos;</span>
+          }
+<span class="fc" id="L214">          previousRateBytes = bytes;</span>
+<span class="fc" id="L215">          previousRateNanos = nowNanos;</span>
+<span class="fc" id="L216">          refreshStorage(bytes);</span>
+<span class="fc" id="L217">          nextStorageProbeNanos = nowNanos + STORAGE_INTERVAL_NANOS;</span>
+        }
+<span class="fc" id="L219">        RecordingStorageStatus storage = storageStatus.get();</span>
+<span class="fc bfc" id="L220" title="All 2 branches covered.">        if (storage.critical()) {</span>
+<span class="fc" id="L221">          incomplete.set(true);</span>
+<span class="fc" id="L222">          stopReason = &quot;Recording stopped before the destination filesystem was exhausted.&quot;;</span>
+<span class="fc" id="L223">          requestStopFromWorker();</span>
+        }
+<span class="fc" id="L225">        publishStatus(</span>
+<span class="pc bpc" id="L226" title="1 of 2 branches missed.">            stopRequested.get() ? RecordingState.STOPPING : RecordingState.RECORDING, false);</span>
+<span class="fc" id="L227">      }</span>
+<span class="fc" id="L228">      finalizeWriter();</span>
+<span class="nc" id="L229">    } catch (InterruptedException exception) {</span>
+<span class="nc" id="L230">      Thread.currentThread().interrupt();</span>
+<span class="nc" id="L231">      incomplete.set(true);</span>
+<span class="nc" id="L232">      requestFailure(exception, &quot;Recorder worker was interrupted.&quot;);</span>
+<span class="nc" id="L233">      abortWriter();</span>
+<span class="nc" id="L234">    } catch (IOException | RuntimeException exception) {</span>
+<span class="nc" id="L235">      requestFailure(exception, &quot;Recording write failed.&quot;);</span>
+<span class="nc" id="L236">      abortWriter();</span>
+    } finally {
+<span class="fc" id="L238">      finishStatus();</span>
+<span class="fc" id="L239">      worker.complete();</span>
+    }
+<span class="fc" id="L241">  }</span>
+
+  private void finalizeWriter() throws IOException {
+<span class="pc bpc" id="L244" title="1 of 2 branches missed.">    if (writtenBlocks.get() == 0L) {</span>
+<span class="nc" id="L245">      incomplete.set(true);</span>
+<span class="nc bnc" id="L246" title="All 2 branches missed.">      stopReason = stopReason.isBlank() ? &quot;No audio blocks were written.&quot; : stopReason;</span>
+<span class="nc" id="L247">      writer.abort();</span>
+<span class="nc" id="L248">      return;</span>
+    }
+<span class="fc" id="L250">    writer.close();</span>
+<span class="fc" id="L251">  }</span>
+
+  private void abortWriter() {
+    try {
+<span class="nc" id="L255">      writer.abort();</span>
+<span class="nc" id="L256">    } catch (IOException exception) {</span>
+<span class="nc" id="L257">      Throwable primary = failure.get();</span>
+<span class="nc bnc" id="L258" title="All 2 branches missed.">      if (primary != null) {</span>
+<span class="nc" id="L259">        primary.addSuppressed(exception);</span>
+      } else {
+<span class="nc" id="L261">        failure.set(exception);</span>
+      }
+<span class="nc" id="L263">    }</span>
+<span class="nc" id="L264">  }</span>
+
+  private void refreshStorage(long bytesWritten) {
+    try {
+<span class="fc" id="L268">      storageStatus.set(</span>
+<span class="fc" id="L269">          storageProbe.probe(</span>
+<span class="fc" id="L270">              file, bytesWritten, measuredBytesPerSecond, expectedBytesPerSecond, Instant.now()));</span>
+<span class="nc" id="L271">    } catch (IOException exception) {</span>
+<span class="nc" id="L272">      storageStatus.set(</span>
+<span class="nc" id="L273">          RecordingStorageStatus.unavailable(</span>
+              file,
+              bytesWritten,
+              measuredBytesPerSecond,
+              expectedBytesPerSecond,
+<span class="nc" id="L278">              Instant.now(),</span>
+<span class="nc" id="L279">              exception.getMessage()));</span>
+<span class="fc" id="L280">    }</span>
+<span class="fc" id="L281">  }</span>
+
+  /** Stop accepting new blocks, drain the queue and finalize exactly once. */
+  public void stop() throws IOException {
+<span class="pc bpc" id="L285" title="1 of 2 branches missed.">    if (isClosed()) {</span>
+<span class="nc" id="L286">      return;</span>
+    }
+<span class="pc bpc" id="L288" title="1 of 2 branches missed.">    stopReason = stopReason.isBlank() ? &quot;Stopped by user.&quot; : stopReason;</span>
+<span class="fc" id="L289">    stopRequested.set(true);</span>
+<span class="fc" id="L290">    accepting.set(false);</span>
+<span class="fc" id="L291">    closeSubscription();</span>
+<span class="fc" id="L292">    publishStatus(RecordingState.STOPPING, true);</span>
+<span class="fc" id="L293">    awaitCompletion();</span>
+<span class="fc" id="L294">    Throwable terminalFailure = failure.get();</span>
+<span class="pc bpc" id="L295" title="1 of 2 branches missed.">    if (terminalFailure != null) {</span>
+<span class="nc bnc" id="L296" title="All 2 branches missed.">      if (terminalFailure instanceof IOException ioException) {</span>
+<span class="nc" id="L297">        throw ioException;</span>
+      }
+<span class="nc" id="L299">      throw new IOException(&quot;Recording failed&quot;, terminalFailure);</span>
+    }
+<span class="fc" id="L301">  }</span>
+
+  private void requestStopFromWorker() {
+<span class="pc bpc" id="L304" title="1 of 2 branches missed.">    if (stopRequested.compareAndSet(false, true)) {</span>
+<span class="fc" id="L305">      accepting.set(false);</span>
+<span class="fc" id="L306">      closeSubscription();</span>
+    }
+<span class="fc" id="L308">  }</span>
+
+  private void requestFailure(Throwable exception, String reason) {
+<span class="nc" id="L311">    failure.compareAndSet(null, exception);</span>
+<span class="nc" id="L312">    stopReason = reason;</span>
+<span class="nc" id="L313">    accepting.set(false);</span>
+<span class="nc" id="L314">    stopRequested.set(true);</span>
+<span class="nc" id="L315">    closeSubscription();</span>
+<span class="nc" id="L316">  }</span>
+
+  private void closeSubscription() {
+<span class="fc" id="L319">    AudioBlockSubscription current = subscription;</span>
+<span class="pc bpc" id="L320" title="1 of 2 branches missed.">    if (current != null) {</span>
+<span class="fc" id="L321">      current.close();</span>
+    }
+<span class="fc" id="L323">  }</span>
+
+  private void awaitCompletion() throws IOException {
+    try {
+<span class="pc bpc" id="L327" title="1 of 2 branches missed.">      if (!worker.await(STOP_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {</span>
+<span class="nc" id="L328">        incomplete.set(true);</span>
+<span class="nc" id="L329">        worker.cancel();</span>
+<span class="nc" id="L330">        throw new IOException(&quot;Timed out while draining the recording queue&quot;);</span>
+      }
+<span class="nc" id="L332">    } catch (InterruptedException exception) {</span>
+<span class="nc" id="L333">      Thread.currentThread().interrupt();</span>
+<span class="nc" id="L334">      throw new IOException(&quot;Interrupted while stopping recording&quot;, exception);</span>
+<span class="fc" id="L335">    }</span>
+<span class="fc" id="L336">  }</span>
+
+  private void finishStatus() {
+<span class="fc" id="L339">    Throwable terminalFailure = failure.get();</span>
+    RecordingState terminalState;
+<span class="fc" id="L341">    String errorMessage = &quot;&quot;;</span>
+<span class="pc bpc" id="L342" title="1 of 2 branches missed.">    if (terminalFailure != null) {</span>
+<span class="nc" id="L343">      terminalState = RecordingState.FAILED;</span>
+      errorMessage =
+<span class="nc bnc" id="L345" title="All 2 branches missed.">          terminalFailure.getMessage() == null</span>
+<span class="nc" id="L346">              ? terminalFailure.toString()</span>
+<span class="nc" id="L347">              : terminalFailure.getMessage();</span>
+<span class="pc bpc" id="L348" title="2 of 6 branches missed.">    } else if (incomplete.get() || writer.continuityGapCount() &gt; 0L || droppedBlocks.get() &gt; 0L) {</span>
+<span class="fc" id="L349">      terminalState = RecordingState.INCOMPLETE;</span>
+    } else {
+<span class="fc" id="L351">      terminalState = RecordingState.COMPLETED;</span>
+    }
+<span class="fc" id="L353">    publishStatus(terminalState, true, errorMessage);</span>
+<span class="fc" id="L354">  }</span>
+
+  private void publishStatus(RecordingState state, boolean force) {
+<span class="fc" id="L357">    publishStatus(state, force, &quot;&quot;);</span>
+<span class="fc" id="L358">  }</span>
+
+  private void publishStatus(RecordingState state, boolean force, String errorMessage) {
+<span class="fc" id="L361">    long nowNanos = System.nanoTime();</span>
+<span class="fc" id="L362">    long previous = lastStatusPublishedNanos.get();</span>
+<span class="pc bpc" id="L363" title="2 of 6 branches missed.">    if (!force &amp;&amp; previous != 0L &amp;&amp; nowNanos - previous &lt; STATUS_INTERVAL_NANOS) {</span>
+<span class="fc" id="L364">      return;</span>
+    }
+<span class="pc bpc" id="L366" title="3 of 4 branches missed.">    if (!lastStatusPublishedNanos.compareAndSet(previous, nowNanos) &amp;&amp; !force) {</span>
+<span class="nc" id="L367">      return;</span>
+    }
+<span class="fc" id="L369">    RecordingStatus status = snapshot(state, Instant.now(), stopReason, errorMessage);</span>
+<span class="fc" id="L370">    currentStatus.set(status);</span>
+<span class="fc" id="L371">    listeners.publish(status);</span>
+<span class="fc" id="L372">  }</span>
+
+  private RecordingStatus snapshot(
+      RecordingState state, Instant updatedAt, String reason, String errorMessage) {
+<span class="fc" id="L376">    return new RecordingStatus(</span>
+        state,
+        file,
+        startedAt,
+        updatedAt,
+<span class="fc" id="L381">        receivedBlocks.get(),</span>
+<span class="fc" id="L382">        writtenBlocks.get(),</span>
+<span class="fc" id="L383">        receivedFrames.get(),</span>
+<span class="fc" id="L384">        writtenFrames.get(),</span>
+<span class="fc" id="L385">        droppedBlocks.get(),</span>
+<span class="fc" id="L386">        droppedFrames.get(),</span>
+<span class="fc" id="L387">        writer.continuityGapCount(),</span>
+<span class="fc" id="L388">        queue.size(),</span>
+<span class="fc" id="L389">        queue.capacity(),</span>
+<span class="fc" id="L390">        maximumQueueDepth.get(),</span>
+<span class="fc" id="L391">        writer.bytesWritten(),</span>
+        measuredBytesPerSecond,
+<span class="fc" id="L393">        storageStatus.get(),</span>
+        reason,
+        errorMessage);
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

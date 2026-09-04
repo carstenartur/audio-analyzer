@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>GainProcessor.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer DSP and Analysis</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.dsp</a> &gt; <span class="el_source">GainProcessor.java</span></div><h1>GainProcessor.java</h1><pre class="source lang-java linenums">package org.hammer.audio.dsp;
+
+import java.util.Objects;
+import org.hammer.audio.core.AudioBlock;
+
+/**
+ * Applies a finite non-negative linear gain and saturates samples to the normalized audio range.
+ */
+public final class GainProcessor implements DSPProcessor {
+
+  /** Conservative upper bound that prevents accidental extreme amplification. */
+  public static final float MAX_GAIN = 16.0f;
+
+  private final float linearFactor;
+
+  /**
+   * Creates a processor with one stable linear multiplier.
+   *
+   * @param gain finite multiplier in {@code [0, 16]}
+   */
+<span class="fc" id="L21">  public GainProcessor(float gain) {</span>
+<span class="fc bfc" id="L22" title="All 6 branches covered.">    if (!Float.isFinite(gain) || gain &lt; 0.0f || gain &gt; MAX_GAIN) {</span>
+<span class="fc" id="L23">      throw new IllegalArgumentException(&quot;gain must be finite and in [0, 16], was &quot; + gain);</span>
+    }
+<span class="fc" id="L25">    this.linearFactor = gain;</span>
+<span class="fc" id="L26">  }</span>
+
+  /** Returns the configured linear multiplier. */
+  public float gain() {
+<span class="nc" id="L30">    return linearFactor;</span>
+  }
+
+  @Override
+  public AudioBlock process(AudioBlock input) {
+<span class="fc" id="L35">    Objects.requireNonNull(input, &quot;input&quot;);</span>
+<span class="fc" id="L36">    float[][] output = new float[input.channels()][input.frames()];</span>
+<span class="fc bfc" id="L37" title="All 2 branches covered.">    for (int channel = 0; channel &lt; input.channels(); channel++) {</span>
+<span class="fc" id="L38">      float[] source = input.channelView(channel);</span>
+<span class="fc" id="L39">      float[] target = output[channel];</span>
+<span class="fc bfc" id="L40" title="All 2 branches covered.">      for (int frame = 0; frame &lt; input.frames(); frame++) {</span>
+<span class="fc" id="L41">        target[frame] = clamp(source[frame] * linearFactor);</span>
+      }
+    }
+<span class="fc" id="L44">    return AudioBlock.wrap(input.format(), output, input.frameIndex(), input.timestampNanos());</span>
+  }
+
+  private static float clamp(float sample) {
+<span class="fc" id="L48">    return Math.max(-1.0f, Math.min(1.0f, sample));</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

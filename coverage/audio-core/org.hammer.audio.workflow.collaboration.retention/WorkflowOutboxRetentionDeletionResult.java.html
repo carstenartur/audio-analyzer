@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WorkflowOutboxRetentionDeletionResult.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Core</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.collaboration.retention</a> &gt; <span class="el_source">WorkflowOutboxRetentionDeletionResult.java</span></div><h1>WorkflowOutboxRetentionDeletionResult.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.collaboration.retention;
+
+import java.util.HashSet;
+import java.util.List;
+import java.util.Objects;
+import java.util.Set;
+
+/**
+ * Result of revalidating and deleting one immutable retention plan.
+ *
+ * @param deletedEventIds event identifiers deleted in the plan's deterministic order
+ * @param skippedEventIds missing or no-longer-eligible event identifiers
+ */
+public record WorkflowOutboxRetentionDeletionResult(
+    List&lt;String&gt; deletedEventIds, List&lt;String&gt; skippedEventIds) {
+
+<span class="fc" id="L17">  public WorkflowOutboxRetentionDeletionResult {</span>
+<span class="fc" id="L18">    deletedEventIds = validatedIds(deletedEventIds, &quot;deletedEventIds&quot;);</span>
+<span class="fc" id="L19">    skippedEventIds = validatedIds(skippedEventIds, &quot;skippedEventIds&quot;);</span>
+<span class="fc" id="L20">    Set&lt;String&gt; overlap = new HashSet&lt;&gt;(deletedEventIds);</span>
+<span class="fc" id="L21">    overlap.retainAll(skippedEventIds);</span>
+<span class="pc bpc" id="L22" title="1 of 2 branches missed.">    if (!overlap.isEmpty()) {</span>
+<span class="nc" id="L23">      throw new IllegalArgumentException(&quot;deleted and skipped event ids overlap: &quot; + overlap);</span>
+    }
+<span class="fc" id="L25">  }</span>
+
+  /** Returns an immutable defensive copy of the deleted event identifiers. */
+  @Override
+  public List&lt;String&gt; deletedEventIds() {
+<span class="fc" id="L30">    return List.copyOf(deletedEventIds);</span>
+  }
+
+  /** Returns an immutable defensive copy of the skipped event identifiers. */
+  @Override
+  public List&lt;String&gt; skippedEventIds() {
+<span class="nc" id="L36">    return List.copyOf(skippedEventIds);</span>
+  }
+
+  /** Number of rows deleted by the transaction. */
+  public int deletedCount() {
+<span class="nc" id="L41">    return deletedEventIds.size();</span>
+  }
+
+  /** Number of planned rows skipped after transaction-time revalidation. */
+  public int skippedCount() {
+<span class="nc" id="L46">    return skippedEventIds.size();</span>
+  }
+
+  private static List&lt;String&gt; validatedIds(List&lt;String&gt; values, String name) {
+<span class="fc" id="L50">    List&lt;String&gt; ids = List.copyOf(Objects.requireNonNull(values, name));</span>
+<span class="fc" id="L51">    Set&lt;String&gt; unique = new HashSet&lt;&gt;();</span>
+<span class="pc bpc" id="L52" title="1 of 2 branches missed.">    for (String id : ids) {</span>
+<span class="nc" id="L53">      Objects.requireNonNull(id, name + &quot; entry&quot;);</span>
+<span class="nc bnc" id="L54" title="All 2 branches missed.">      if (id.isBlank()) {</span>
+<span class="nc" id="L55">        throw new IllegalArgumentException(name + &quot; entries must not be blank&quot;);</span>
+      }
+<span class="nc bnc" id="L57" title="All 2 branches missed.">      if (!unique.add(id)) {</span>
+<span class="nc" id="L58">        throw new IllegalArgumentException(name + &quot; contains duplicate id: &quot; + id);</span>
+      }
+<span class="nc" id="L60">    }</span>
+<span class="fc" id="L61">    return ids;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

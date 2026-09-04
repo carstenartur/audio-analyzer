@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>DopplerErrorMetric.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.benchmark</a> &gt; <span class="el_source">DopplerErrorMetric.java</span></div><h1>DopplerErrorMetric.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.benchmark;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
+/**
+ * Summary metric for benchmark comparisons of Doppler/radial-velocity estimates.
+ *
+ * @param meanAbsoluteErrorMetersPerSecond mean absolute Doppler error in meters per second
+ * @param medianAbsoluteErrorMetersPerSecond median absolute Doppler error in meters per second
+ * @param sampleCount total Doppler sample count
+ * @param evaluatedCount number of evaluated Doppler samples
+ * @param skippedCount number of skipped Doppler samples
+ * @param unavailableTruthCount number of samples without usable Doppler truth
+ */
+public record DopplerErrorMetric(
+    Double meanAbsoluteErrorMetersPerSecond,
+    Double medianAbsoluteErrorMetersPerSecond,
+    int sampleCount,
+    int evaluatedCount,
+    int skippedCount,
+    int unavailableTruthCount) {
+
+<span class="fc" id="L25">  public DopplerErrorMetric {</span>
+<span class="fc" id="L26">    validateCounts(sampleCount, evaluatedCount, skippedCount, unavailableTruthCount);</span>
+<span class="fc" id="L27">    validateMetric(</span>
+        meanAbsoluteErrorMetersPerSecond, evaluatedCount, &quot;meanAbsoluteErrorMetersPerSecond&quot;);
+<span class="fc" id="L29">    validateMetric(</span>
+        medianAbsoluteErrorMetersPerSecond, evaluatedCount, &quot;medianAbsoluteErrorMetersPerSecond&quot;);
+<span class="fc" id="L31">  }</span>
+
+  /** Build a summary metric from per-sample absolute errors. */
+  public static DopplerErrorMetric ofSamples(
+      List&lt;Double&gt; absoluteErrorsMetersPerSecond, int skippedCount, int unavailableTruthCount) {
+<span class="pc bpc" id="L36" title="1 of 2 branches missed.">    if (absoluteErrorsMetersPerSecond == null) {</span>
+<span class="nc" id="L37">      throw new IllegalArgumentException(&quot;absoluteErrorsMetersPerSecond must not be null&quot;);</span>
+    }
+<span class="fc" id="L39">    int evaluatedCount = absoluteErrorsMetersPerSecond.size();</span>
+<span class="fc" id="L40">    return new DopplerErrorMetric(</span>
+<span class="fc bfc" id="L41" title="All 2 branches covered.">        evaluatedCount == 0 ? null : mean(absoluteErrorsMetersPerSecond),</span>
+<span class="fc bfc" id="L42" title="All 2 branches covered.">        evaluatedCount == 0 ? null : median(absoluteErrorsMetersPerSecond),</span>
+        evaluatedCount + skippedCount + unavailableTruthCount,
+        evaluatedCount,
+        skippedCount,
+        unavailableTruthCount);
+  }
+
+  private static void validateCounts(
+      int sampleCount, int evaluatedCount, int skippedCount, int unavailableTruthCount) {
+<span class="pc bpc" id="L51" title="4 of 8 branches missed.">    if (sampleCount &lt; 0 || evaluatedCount &lt; 0 || skippedCount &lt; 0 || unavailableTruthCount &lt; 0) {</span>
+<span class="nc" id="L52">      throw new IllegalArgumentException(&quot;metric counts must be &gt;= 0&quot;);</span>
+    }
+<span class="pc bpc" id="L54" title="1 of 2 branches missed.">    if (sampleCount != evaluatedCount + skippedCount + unavailableTruthCount) {</span>
+<span class="nc" id="L55">      throw new IllegalArgumentException(</span>
+          &quot;sampleCount must equal evaluatedCount + skippedCount + unavailableTruthCount&quot;);
+    }
+<span class="fc" id="L58">  }</span>
+
+  private static void validateMetric(Double value, int evaluatedCount, String fieldName) {
+<span class="fc bfc" id="L61" title="All 2 branches covered.">    if (evaluatedCount == 0) {</span>
+<span class="pc bpc" id="L62" title="1 of 2 branches missed.">      if (value != null) {</span>
+<span class="nc" id="L63">        throw new IllegalArgumentException(fieldName + &quot; must be null when evaluatedCount is 0&quot;);</span>
+      }
+<span class="fc" id="L65">      return;</span>
+    }
+<span class="pc bpc" id="L67" title="3 of 6 branches missed.">    if (value == null || !Double.isFinite(value) || value &lt; 0.0) {</span>
+<span class="nc" id="L68">      throw new IllegalArgumentException(fieldName + &quot; must be finite and &gt;= 0&quot;);</span>
+    }
+<span class="fc" id="L70">  }</span>
+
+  private static double mean(List&lt;Double&gt; values) {
+<span class="fc" id="L73">    double sum = 0.0;</span>
+<span class="fc bfc" id="L74" title="All 2 branches covered.">    for (Double value : values) {</span>
+<span class="pc bpc" id="L75" title="3 of 6 branches missed.">      if (value == null || !Double.isFinite(value) || value &lt; 0.0) {</span>
+<span class="nc" id="L76">        throw new IllegalArgumentException(&quot;metric samples must be finite and &gt;= 0&quot;);</span>
+      }
+<span class="fc" id="L78">      sum += value;</span>
+<span class="fc" id="L79">    }</span>
+<span class="fc" id="L80">    return sum / values.size();</span>
+  }
+
+  private static double median(List&lt;Double&gt; values) {
+<span class="fc" id="L84">    List&lt;Double&gt; sorted = new ArrayList&lt;&gt;(values.size());</span>
+<span class="fc bfc" id="L85" title="All 2 branches covered.">    for (Double value : values) {</span>
+<span class="pc bpc" id="L86" title="3 of 6 branches missed.">      if (value == null || !Double.isFinite(value) || value &lt; 0.0) {</span>
+<span class="nc" id="L87">        throw new IllegalArgumentException(&quot;metric samples must be finite and &gt;= 0&quot;);</span>
+      }
+<span class="fc" id="L89">      sorted.add(value);</span>
+<span class="fc" id="L90">    }</span>
+<span class="fc" id="L91">    Collections.sort(sorted);</span>
+<span class="fc" id="L92">    int middle = sorted.size() / 2;</span>
+<span class="fc bfc" id="L93" title="All 2 branches covered.">    if ((sorted.size() &amp; 1) == 1) {</span>
+<span class="fc" id="L94">      return sorted.get(middle);</span>
+    }
+<span class="fc" id="L96">    return (sorted.get(middle - 1) + sorted.get(middle)) / 2.0;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

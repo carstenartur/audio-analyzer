@@ -1,0 +1,362 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>SpectrumPanel.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer</a> &gt; <span class="el_source">SpectrumPanel.java</span></div><h1>SpectrumPanel.java</h1><pre class="source lang-java linenums">package org.hammer;
+
+import java.awt.Color;
+import java.awt.Dimension;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.Polygon;
+import java.awt.Rectangle;
+import java.awt.geom.Path2D;
+import org.hammer.audio.AudioCaptureService;
+import org.hammer.audio.analysis.SpectrumAnalyzer;
+import org.hammer.audio.analysis.SpectrumDisplayState;
+import org.hammer.audio.analysis.SpectrumSnapshot;
+import org.hammer.audio.core.AudioBlock;
+import org.hammer.audio.ui.theme.PlotRenderTheme;
+
+/** Panel for displaying the current FFT magnitude spectrum. */
+public final class SpectrumPanel extends javax.swing.JPanel {
+
+  private static final long serialVersionUID = 1L;
+  private static final int FFT_SIZE = 1024;
+  private static final int LEFT_MARGIN = 44;
+  private static final int RIGHT_MARGIN = 12;
+  private static final int TOP_MARGIN = 18;
+  private static final int BOTTOM_MARGIN = 28;
+  private static final float MIN_PEAK_MAGNITUDE = 1.0e-6f;
+  // Avoid rebuilding the analyzer for insignificant float-format differences.
+  private static final float SAMPLE_RATE_TOLERANCE = 0.0001f;
+
+  private AudioCaptureService audioCaptureService;
+  private transient SpectrumAnalyzer analyzer;
+  private transient SpectrumSnapshot latestSpectrum;
+  private transient SpectrumSnapshot frozenSpectrum;
+<span class="fc" id="L34">  private final transient SpectrumDisplayState displayState = new SpectrumDisplayState();</span>
+<span class="fc" id="L35">  private long latestSpectrumFrameIndex = Long.MIN_VALUE;</span>
+<span class="fc" id="L36">  private long latestSpectrumTimestampNanos = Long.MIN_VALUE;</span>
+<span class="fc" id="L37">  private long displayStateFrameIndex = Long.MIN_VALUE;</span>
+  private boolean frozen;
+
+  public SpectrumPanel() {
+<span class="fc" id="L41">    super(true);</span>
+<span class="fc" id="L42">    setPreferredSize(new Dimension(320, 180));</span>
+<span class="fc" id="L43">    javax.swing.Timer timer =</span>
+<span class="fc" id="L44">        new javax.swing.Timer(UiConstants.REFRESH_INTERVAL_MS, e -&gt; repaint());</span>
+<span class="fc" id="L45">    timer.start();</span>
+<span class="fc" id="L46">  }</span>
+
+  /**
+   * Set the audio capture service that supplies audio blocks to analyze.
+   *
+   * @param service the audio service
+   */
+  public void setAudioCaptureService(AudioCaptureService service) {
+<span class="fc" id="L54">    this.audioCaptureService = service;</span>
+<span class="fc" id="L55">    this.analyzer = null;</span>
+<span class="fc" id="L56">    this.latestSpectrum = null;</span>
+<span class="fc" id="L57">    this.frozenSpectrum = null;</span>
+<span class="fc" id="L58">    this.latestSpectrumFrameIndex = Long.MIN_VALUE;</span>
+<span class="fc" id="L59">    this.latestSpectrumTimestampNanos = Long.MIN_VALUE;</span>
+<span class="fc" id="L60">    this.displayStateFrameIndex = Long.MIN_VALUE;</span>
+<span class="fc" id="L61">    this.frozen = false;</span>
+<span class="fc" id="L62">    this.displayState.clear();</span>
+<span class="fc" id="L63">  }</span>
+
+  /**
+   * Freeze or unfreeze the currently displayed spectrum.
+   *
+   * @param frozen true to freeze the current spectrum
+   */
+  public void setFrozen(boolean frozen) {
+<span class="nc bnc" id="L71" title="All 4 branches missed.">    if (frozen &amp;&amp; !this.frozen) {</span>
+<span class="nc" id="L72">      frozenSpectrum = getCurrentSpectrum();</span>
+<span class="nc bnc" id="L73" title="All 2 branches missed.">    } else if (!frozen) {</span>
+<span class="nc" id="L74">      frozenSpectrum = null;</span>
+    }
+<span class="nc" id="L76">    this.frozen = frozen;</span>
+<span class="nc" id="L77">    repaint();</span>
+<span class="nc" id="L78">  }</span>
+
+  /**
+   * @return the display state, exposing peak-hold and averaging configuration
+   */
+  public SpectrumDisplayState getDisplayState() {
+<span class="nc" id="L84">    return displayState;</span>
+  }
+
+  /** Enable or disable the peak-hold trace overlay. */
+  public void setPeakHoldEnabled(boolean enabled) {
+<span class="nc" id="L89">    displayState.setPeakHoldEnabled(enabled);</span>
+<span class="nc" id="L90">    repaint();</span>
+<span class="nc" id="L91">  }</span>
+
+  /** Enable or disable the exponential-average trace overlay. */
+  public void setAveragingEnabled(boolean enabled) {
+<span class="nc" id="L95">    displayState.setAveragingEnabled(enabled);</span>
+<span class="nc" id="L96">    repaint();</span>
+<span class="nc" id="L97">  }</span>
+
+  /** Reset the peak-hold trace without changing other settings. */
+  public void resetPeakHold() {
+<span class="nc" id="L101">    displayState.resetPeakHold();</span>
+<span class="nc" id="L102">    repaint();</span>
+<span class="nc" id="L103">  }</span>
+
+  /**
+   * @return current spectrum snapshot, or {@code null} if no audio block is available
+   */
+  public SpectrumSnapshot getCurrentSpectrum() {
+<span class="pc bpc" id="L109" title="3 of 4 branches missed.">    if (frozen &amp;&amp; frozenSpectrum != null) {</span>
+<span class="nc" id="L110">      maybeUpdateDisplayState(frozenSpectrum);</span>
+<span class="nc" id="L111">      return frozenSpectrum;</span>
+    }
+<span class="fc" id="L113">    AudioCaptureService service = audioCaptureService;</span>
+<span class="pc bpc" id="L114" title="1 of 2 branches missed.">    if (service == null) {</span>
+<span class="nc" id="L115">      maybeUpdateDisplayState(latestSpectrum);</span>
+<span class="nc" id="L116">      return latestSpectrum;</span>
+    }
+<span class="fc" id="L118">    AudioBlock block = service.getLatestBlock();</span>
+<span class="pc bpc" id="L119" title="1 of 2 branches missed.">    if (block == null) {</span>
+<span class="nc" id="L120">      maybeUpdateDisplayState(latestSpectrum);</span>
+<span class="nc" id="L121">      return latestSpectrum;</span>
+    }
+<span class="fc bfc" id="L123" title="All 2 branches covered.">    if (latestSpectrum != null</span>
+<span class="fc bfc" id="L124" title="All 2 branches covered.">        &amp;&amp; latestSpectrumFrameIndex == block.frameIndex()</span>
+<span class="pc bpc" id="L125" title="1 of 2 branches missed.">        &amp;&amp; latestSpectrumTimestampNanos == block.timestampNanos()) {</span>
+<span class="fc" id="L126">      maybeUpdateDisplayState(latestSpectrum);</span>
+<span class="fc" id="L127">      return latestSpectrum;</span>
+    }
+<span class="fc" id="L129">    SpectrumAnalyzer currentAnalyzer = analyzer;</span>
+<span class="fc bfc" id="L130" title="All 2 branches covered.">    if (currentAnalyzer == null</span>
+<span class="pc bpc" id="L131" title="2 of 4 branches missed.">        || currentAnalyzer.fftSize() != FFT_SIZE</span>
+        || latestSpectrum == null
+<span class="pc bpc" id="L133" title="1 of 2 branches missed.">        || Math.abs(latestSpectrum.sampleRate() - block.format().sampleRate())</span>
+            &gt; SAMPLE_RATE_TOLERANCE) {
+<span class="fc" id="L135">      currentAnalyzer = new SpectrumAnalyzer(FFT_SIZE, 0, block.format().sampleRate());</span>
+<span class="fc" id="L136">      analyzer = currentAnalyzer;</span>
+    }
+<span class="fc" id="L138">    latestSpectrum = currentAnalyzer.analyze(block);</span>
+<span class="fc" id="L139">    latestSpectrumFrameIndex = block.frameIndex();</span>
+<span class="fc" id="L140">    latestSpectrumTimestampNanos = block.timestampNanos();</span>
+<span class="fc" id="L141">    maybeUpdateDisplayState(latestSpectrum);</span>
+<span class="fc" id="L142">    return latestSpectrum;</span>
+  }
+
+  private void maybeUpdateDisplayState(SpectrumSnapshot snapshot) {
+<span class="pc bpc" id="L146" title="1 of 2 branches missed.">    if (snapshot == null) {</span>
+<span class="nc" id="L147">      return;</span>
+    }
+<span class="fc bfc" id="L149" title="All 2 branches covered.">    if (snapshot.sourceFrameIndex() == displayStateFrameIndex) {</span>
+<span class="fc" id="L150">      return;</span>
+    }
+<span class="fc" id="L152">    displayState.update(snapshot);</span>
+<span class="fc" id="L153">    displayStateFrameIndex = snapshot.sourceFrameIndex();</span>
+<span class="fc" id="L154">  }</span>
+
+  /**
+   * @return peak frequency in Hz, or {@code NaN} if no spectrum is available
+   */
+  public double getPeakFrequencyHz() {
+<span class="nc" id="L160">    SpectrumSnapshot spectrum = getCurrentSpectrum();</span>
+<span class="nc bnc" id="L161" title="All 4 branches missed.">    if (spectrum == null || spectrum.binCount() &lt;= 1) {</span>
+<span class="nc" id="L162">      return Double.NaN;</span>
+    }
+<span class="nc" id="L164">    int peakBin = -1;</span>
+<span class="nc" id="L165">    float peakMagnitude = 0f;</span>
+<span class="nc bnc" id="L166" title="All 2 branches missed.">    for (int bin = 1; bin &lt; spectrum.binCount(); bin++) {</span>
+<span class="nc" id="L167">      float magnitude = spectrum.magnitude(bin);</span>
+<span class="nc bnc" id="L168" title="All 2 branches missed.">      if (magnitude &gt; peakMagnitude) {</span>
+<span class="nc" id="L169">        peakMagnitude = magnitude;</span>
+<span class="nc" id="L170">        peakBin = bin;</span>
+      }
+    }
+<span class="nc bnc" id="L173" title="All 2 branches missed.">    if (peakBin &lt; 0) {</span>
+<span class="nc" id="L174">      return Double.NaN;</span>
+    }
+<span class="nc" id="L176">    return spectrum.frequencyOfBin(peakBin);</span>
+  }
+
+  @Override
+  protected void paintComponent(Graphics g) {
+<span class="nc" id="L181">    super.paintComponent(g);</span>
+<span class="nc" id="L182">    Graphics2D g2 = (Graphics2D) g.create();</span>
+    try {
+<span class="nc" id="L184">      PlotRenderTheme.applyQualityRendering(g2);</span>
+<span class="nc" id="L185">      paintSpectrum(g2);</span>
+    } finally {
+<span class="nc" id="L187">      g2.dispose();</span>
+    }
+<span class="nc" id="L189">  }</span>
+
+  private void paintSpectrum(Graphics2D g) {
+<span class="nc" id="L192">    int width = getWidth();</span>
+<span class="nc" id="L193">    int height = getHeight();</span>
+<span class="nc" id="L194">    int plotX = LEFT_MARGIN;</span>
+<span class="nc" id="L195">    int plotY = TOP_MARGIN;</span>
+<span class="nc" id="L196">    int plotWidth = Math.max(1, width - LEFT_MARGIN - RIGHT_MARGIN);</span>
+<span class="nc" id="L197">    int plotHeight = Math.max(1, height - TOP_MARGIN - BOTTOM_MARGIN);</span>
+<span class="nc" id="L198">    Rectangle plotBounds = new Rectangle(plotX, plotY, plotWidth, plotHeight);</span>
+<span class="nc" id="L199">    PlotRenderTheme.drawPlotBackground(g, width, height, plotBounds);</span>
+<span class="nc" id="L200">    PlotRenderTheme.drawGrid(g, plotBounds, 8, 6);</span>
+<span class="nc" id="L201">    PlotRenderTheme.drawTitle(g, plotBounds.x, 14, &quot;Spectrum&quot;);</span>
+<span class="nc" id="L202">    PlotRenderTheme.drawXAxisLabel(g, plotBounds, &quot;Frequency [Hz]&quot;);</span>
+<span class="nc" id="L203">    PlotRenderTheme.drawYAxisLabel(g, plotBounds, &quot;Magnitude [dB rel. peak]&quot;);</span>
+<span class="nc" id="L204">    PlotRenderTheme.drawYTicks(</span>
+        g, plotBounds, new double[] {0.0d, 0.5d, 1.0d}, new String[] {&quot;0 dB&quot;, &quot;-40 dB&quot;, &quot;-80 dB&quot;});
+
+<span class="nc" id="L207">    SpectrumSnapshot spectrum = getCurrentSpectrum();</span>
+<span class="nc bnc" id="L208" title="All 2 branches missed.">    if (spectrum == null) {</span>
+<span class="nc" id="L209">      PlotRenderTheme.drawEmptyState(g, plotBounds, &quot;No spectrum data&quot;);</span>
+<span class="nc" id="L210">      return;</span>
+    }
+
+<span class="nc" id="L213">    float[] magnitudes = spectrum.magnitudesView();</span>
+<span class="nc bnc" id="L214" title="All 2 branches missed.">    if (magnitudes.length &lt;= 1) {</span>
+<span class="nc" id="L215">      PlotRenderTheme.drawEmptyState(g, plotBounds, &quot;Insufficient FFT bins&quot;);</span>
+<span class="nc" id="L216">      return;</span>
+    }
+<span class="nc bnc" id="L218" title="All 2 branches missed.">    float[] peaks = displayState.isPeakHoldEnabled() ? displayState.peakHold().peaksView() : null;</span>
+    float[] averaged =
+<span class="nc bnc" id="L220" title="All 2 branches missed.">        displayState.isAveragingEnabled() ? displayState.averager().averageView() : null;</span>
+<span class="nc" id="L221">    float referenceMagnitude = findReferenceMagnitude(magnitudes);</span>
+<span class="nc bnc" id="L222" title="All 4 branches missed.">    if (peaks != null &amp;&amp; peaks.length == magnitudes.length) {</span>
+<span class="nc bnc" id="L223" title="All 2 branches missed.">      for (float p : peaks) {</span>
+<span class="nc bnc" id="L224" title="All 2 branches missed.">        if (p &gt; referenceMagnitude) {</span>
+<span class="nc" id="L225">          referenceMagnitude = p;</span>
+        }
+      }
+    }
+<span class="nc" id="L229">    drawSpectrumShape(g, plotBounds, magnitudes, referenceMagnitude);</span>
+
+<span class="nc bnc" id="L231" title="All 4 branches missed.">    if (averaged != null &amp;&amp; averaged.length == magnitudes.length) {</span>
+<span class="nc" id="L232">      drawTrace(g, plotBounds, averaged, referenceMagnitude, PlotRenderTheme.WAVEFORM_RIGHT);</span>
+    }
+<span class="nc bnc" id="L234" title="All 4 branches missed.">    if (peaks != null &amp;&amp; peaks.length == magnitudes.length) {</span>
+<span class="nc" id="L235">      drawTrace(g, plotBounds, peaks, referenceMagnitude, PlotRenderTheme.HIGHLIGHT);</span>
+    }
+
+<span class="nc" id="L238">    int peakBin = findPeakBin(magnitudes);</span>
+<span class="nc bnc" id="L239" title="All 2 branches missed.">    if (peakBin &gt; 0) {</span>
+<span class="nc" id="L240">      double peakHz = spectrum.frequencyOfBin(peakBin);</span>
+<span class="nc" id="L241">      int peakX = xForBin(plotBounds, peakBin, magnitudes.length);</span>
+<span class="nc" id="L242">      double peakNorm =</span>
+<span class="nc" id="L243">          PlotRenderTheme.normalizedMagnitude(</span>
+<span class="nc" id="L244">              normalizedMagnitude(magnitudes[peakBin], referenceMagnitude));</span>
+<span class="nc" id="L245">      int peakY = yForNormalized(plotBounds, peakNorm);</span>
+<span class="nc" id="L246">      g.setColor(PlotRenderTheme.HIGHLIGHT);</span>
+<span class="nc" id="L247">      g.setStroke(PlotRenderTheme.PEAK_STROKE);</span>
+<span class="nc" id="L248">      g.drawLine(peakX, plotBounds.y, peakX, plotBounds.y + plotBounds.height - 1);</span>
+<span class="nc" id="L249">      g.fillOval(peakX - 3, peakY - 3, 6, 6);</span>
+<span class="nc" id="L250">      PlotRenderTheme.drawLabel(</span>
+          g,
+<span class="nc" id="L252">          Math.min(plotBounds.x + plotBounds.width - 120, peakX + 6),</span>
+          plotBounds.y + 14,
+<span class="nc" id="L254">          String.format(&quot;Peak %.1f Hz&quot;, peakHz));</span>
+    }
+
+<span class="nc" id="L257">    double nyquist = spectrum.sampleRate() / 2.0;</span>
+<span class="nc" id="L258">    PlotRenderTheme.drawXTicks(</span>
+        g,
+        plotBounds,
+        new double[] {0.0d, 0.5d, 1.0d},
+        new String[] {
+<span class="nc" id="L263">          &quot;0 Hz&quot;, String.format(&quot;%.0f Hz&quot;, nyquist / 2.0), String.format(&quot;%.0f Hz&quot;, nyquist)</span>
+        });
+<span class="nc" id="L265">  }</span>
+
+  private void drawSpectrumShape(
+      Graphics2D g, Rectangle plotBounds, float[] magnitudes, float referenceMagnitude) {
+<span class="nc" id="L269">    int bins = magnitudes.length;</span>
+<span class="nc" id="L270">    Path2D.Double linePath = new Path2D.Double();</span>
+<span class="nc" id="L271">    Polygon areaPolygon = new Polygon();</span>
+<span class="nc" id="L272">    areaPolygon.addPoint(plotBounds.x, plotBounds.y + plotBounds.height - 1);</span>
+<span class="nc bnc" id="L273" title="All 2 branches missed.">    for (int bin = 1; bin &lt; bins; bin++) {</span>
+<span class="nc" id="L274">      int x = xForBin(plotBounds, bin, bins);</span>
+<span class="nc" id="L275">      int y =</span>
+<span class="nc" id="L276">          yForNormalized(</span>
+              plotBounds,
+<span class="nc" id="L278">              PlotRenderTheme.normalizedMagnitude(</span>
+<span class="nc" id="L279">                  normalizedMagnitude(magnitudes[bin], referenceMagnitude)));</span>
+<span class="nc bnc" id="L280" title="All 2 branches missed.">      if (bin == 1) {</span>
+<span class="nc" id="L281">        linePath.moveTo(x, y);</span>
+      } else {
+<span class="nc" id="L283">        linePath.lineTo(x, y);</span>
+      }
+<span class="nc" id="L285">      areaPolygon.addPoint(x, y);</span>
+    }
+<span class="nc" id="L287">    areaPolygon.addPoint(plotBounds.x + plotBounds.width - 1, plotBounds.y + plotBounds.height - 1);</span>
+<span class="nc" id="L288">    g.setColor(PlotRenderTheme.SPECTRUM_FILL);</span>
+<span class="nc" id="L289">    g.fillPolygon(areaPolygon);</span>
+<span class="nc" id="L290">    g.setColor(PlotRenderTheme.SPECTRUM_LINE);</span>
+<span class="nc" id="L291">    g.setStroke(PlotRenderTheme.TRACE_STROKE);</span>
+<span class="nc" id="L292">    g.draw(linePath);</span>
+<span class="nc" id="L293">  }</span>
+
+  private void drawTrace(
+      Graphics2D g,
+      Rectangle plotBounds,
+      float[] magnitudes,
+      float referenceMagnitude,
+      Color color) {
+<span class="nc" id="L301">    int bins = magnitudes.length;</span>
+<span class="nc" id="L302">    Path2D.Double linePath = new Path2D.Double();</span>
+<span class="nc bnc" id="L303" title="All 2 branches missed.">    for (int bin = 1; bin &lt; bins; bin++) {</span>
+<span class="nc" id="L304">      int x = xForBin(plotBounds, bin, bins);</span>
+<span class="nc" id="L305">      int y =</span>
+<span class="nc" id="L306">          yForNormalized(</span>
+              plotBounds,
+<span class="nc" id="L308">              PlotRenderTheme.normalizedMagnitude(</span>
+<span class="nc" id="L309">                  normalizedMagnitude(magnitudes[bin], referenceMagnitude)));</span>
+<span class="nc bnc" id="L310" title="All 2 branches missed.">      if (bin == 1) {</span>
+<span class="nc" id="L311">        linePath.moveTo(x, y);</span>
+      } else {
+<span class="nc" id="L313">        linePath.lineTo(x, y);</span>
+      }
+    }
+<span class="nc" id="L316">    g.setColor(color);</span>
+<span class="nc" id="L317">    g.setStroke(PlotRenderTheme.THIN_TRACE_STROKE);</span>
+<span class="nc" id="L318">    g.draw(linePath);</span>
+<span class="nc" id="L319">  }</span>
+
+  private static int findPeakBin(float[] magnitudes) {
+<span class="nc" id="L322">    int peakBin = -1;</span>
+<span class="nc" id="L323">    float peakMagnitude = MIN_PEAK_MAGNITUDE;</span>
+<span class="nc bnc" id="L324" title="All 2 branches missed.">    for (int bin = 1; bin &lt; magnitudes.length; bin++) {</span>
+<span class="nc" id="L325">      float magnitude = magnitudes[bin];</span>
+<span class="nc bnc" id="L326" title="All 2 branches missed.">      if (magnitude &gt; peakMagnitude) {</span>
+<span class="nc" id="L327">        peakMagnitude = magnitude;</span>
+<span class="nc" id="L328">        peakBin = bin;</span>
+      }
+    }
+<span class="nc" id="L331">    return peakBin;</span>
+  }
+
+  private static float findReferenceMagnitude(float[] magnitudes) {
+<span class="nc" id="L335">    float reference = 0f;</span>
+<span class="nc bnc" id="L336" title="All 2 branches missed.">    for (int bin = 1; bin &lt; magnitudes.length; bin++) {</span>
+<span class="nc" id="L337">      reference = Math.max(reference, magnitudes[bin]);</span>
+    }
+<span class="nc" id="L339">    return Math.max(reference, MIN_PEAK_MAGNITUDE);</span>
+  }
+
+  private static float normalizedMagnitude(float magnitude, float referenceMagnitude) {
+<span class="nc bnc" id="L343" title="All 2 branches missed.">    if (referenceMagnitude &lt;= 0f) {</span>
+<span class="nc" id="L344">      return 0f;</span>
+    }
+<span class="nc" id="L346">    return magnitude / referenceMagnitude;</span>
+  }
+
+  private static int xForBin(Rectangle plotBounds, int bin, int bins) {
+<span class="nc" id="L350">    int denominator = Math.max(1, bins - 2);</span>
+<span class="nc" id="L351">    double ratio = (bin - 1.0) / denominator;</span>
+<span class="nc" id="L352">    return plotBounds.x + (int) Math.round(ratio * (plotBounds.width - 1));</span>
+  }
+
+  private static int yForNormalized(Rectangle plotBounds, double normalized) {
+<span class="nc" id="L356">    return plotBounds.y</span>
+        + plotBounds.height
+        - 1
+<span class="nc" id="L359">        - (int) Math.round(normalized * (plotBounds.height - 1));</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

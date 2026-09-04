@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>DiagnosisFinding.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer DSP and Analysis</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.diagnosis</a> &gt; <span class="el_source">DiagnosisFinding.java</span></div><h1>DiagnosisFinding.java</h1><pre class="source lang-java linenums">package org.hammer.audio.diagnosis;
+
+import java.util.Objects;
+
+/**
+ * Immutable individual diagnostic finding produced by {@link DiagnosisAnalyzer}.
+ *
+ * &lt;p&gt;A finding bundles the categorical {@link DiagnosisType}, a {@link DiagnosisSeverity}, a {@code
+ * [0,1]} confidence score, a short human-readable message and (where applicable) a measured
+ * frequency and value. {@link Double#NaN} indicates that the field is not meaningful for the
+ * finding.
+ */
+public final class DiagnosisFinding {
+
+  private final DiagnosisType type;
+  private final DiagnosisSeverity severity;
+  private final double confidence;
+  private final String message;
+  private final double frequencyHz;
+  private final double value;
+
+  /**
+   * Create a finding.
+   *
+   * @param type categorical type; must not be {@code null}
+   * @param severity severity; must not be {@code null}
+   * @param confidence confidence in {@code [0, 1]}
+   * @param message short human-readable explanation; must not be {@code null}
+   * @param frequencyHz measured frequency in Hz, or {@link Double#NaN} if not applicable
+   * @param value measured numeric value, or {@link Double#NaN} if not applicable
+   */
+  public DiagnosisFinding(
+      DiagnosisType type,
+      DiagnosisSeverity severity,
+      double confidence,
+      String message,
+      double frequencyHz,
+<span class="fc" id="L38">      double value) {</span>
+<span class="fc" id="L39">    this.type = Objects.requireNonNull(type, &quot;type&quot;);</span>
+<span class="fc" id="L40">    this.severity = Objects.requireNonNull(severity, &quot;severity&quot;);</span>
+<span class="pc bpc" id="L41" title="3 of 6 branches missed.">    if (Double.isNaN(confidence) || confidence &lt; 0.0 || confidence &gt; 1.0) {</span>
+<span class="nc" id="L42">      throw new IllegalArgumentException(&quot;confidence must be in [0,1], was &quot; + confidence);</span>
+    }
+<span class="fc" id="L44">    this.confidence = confidence;</span>
+<span class="fc" id="L45">    this.message = Objects.requireNonNull(message, &quot;message&quot;);</span>
+<span class="fc" id="L46">    this.frequencyHz = frequencyHz;</span>
+<span class="fc" id="L47">    this.value = value;</span>
+<span class="fc" id="L48">  }</span>
+
+  public DiagnosisType type() {
+<span class="fc" id="L51">    return type;</span>
+  }
+
+  public DiagnosisSeverity severity() {
+<span class="fc" id="L55">    return severity;</span>
+  }
+
+  public double confidence() {
+<span class="fc" id="L59">    return confidence;</span>
+  }
+
+  public String message() {
+<span class="nc" id="L63">    return message;</span>
+  }
+
+  /**
+   * @return measured frequency in Hz, or {@link Double#NaN} if not applicable
+   */
+  public double frequencyHz() {
+<span class="nc" id="L70">    return frequencyHz;</span>
+  }
+
+  /**
+   * @return measured numeric value, or {@link Double#NaN} if not applicable
+   */
+  public double value() {
+<span class="nc" id="L77">    return value;</span>
+  }
+
+  @Override
+  public String toString() {
+<span class="fc" id="L82">    return &quot;DiagnosisFinding[&quot;</span>
+        + severity
+        + &quot; &quot;
+        + type
+        + &quot; conf=&quot;
+        + confidence
+        + &quot; msg=&quot;
+        + message
+        + &quot;]&quot;;
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

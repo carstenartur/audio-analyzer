@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>SyntheticCalibrationFixture.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.calibration</a> &gt; <span class="el_source">SyntheticCalibrationFixture.java</span></div><h1>SyntheticCalibrationFixture.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.calibration;
+
+import java.util.Objects;
+import org.hammer.audio.core.AudioBlock;
+import org.hammer.audio.core.AudioFormatDescriptor;
+
+/** Deterministic single-pulse audio fixtures for calibration tests and offline experiments. */
+public final class SyntheticCalibrationFixture {
+
+<span class="nc" id="L10">  private SyntheticCalibrationFixture() {</span>
+<span class="nc" id="L11">    throw new UnsupportedOperationException(&quot;Utility class&quot;);</span>
+  }
+
+  /**
+   * Generates one common pulse observed with an explicit non-negative delay per channel.
+   *
+   * @param format multichannel audio format
+   * @param frameIndex absolute nominal start frame
+   * @param timestampNanos nominal block timestamp
+   * @param frames block length
+   * @param pulseFrame undelayed pulse frame inside the block
+   * @param channelDelaysSamples per-channel delay from the common pulse
+   * @return immutable deterministic calibration block
+   */
+  public static AudioBlock pulseBlock(
+      AudioFormatDescriptor format,
+      long frameIndex,
+      long timestampNanos,
+      int frames,
+      int pulseFrame,
+      int[] channelDelaysSamples) {
+<span class="fc" id="L32">    Objects.requireNonNull(format, &quot;format&quot;);</span>
+<span class="fc" id="L33">    Objects.requireNonNull(channelDelaysSamples, &quot;channelDelaysSamples&quot;);</span>
+<span class="pc bpc" id="L34" title="1 of 2 branches missed.">    if (frames &lt; 1) {</span>
+<span class="nc" id="L35">      throw new IllegalArgumentException(&quot;frames must be &gt;= 1&quot;);</span>
+    }
+<span class="pc bpc" id="L37" title="2 of 4 branches missed.">    if (pulseFrame &lt; 0 || pulseFrame &gt;= frames) {</span>
+<span class="nc" id="L38">      throw new IllegalArgumentException(&quot;pulseFrame must be inside the block&quot;);</span>
+    }
+<span class="pc bpc" id="L40" title="1 of 2 branches missed.">    if (channelDelaysSamples.length != format.channels()) {</span>
+<span class="nc" id="L41">      throw new IllegalArgumentException(&quot;channel delays must match the format channel count&quot;);</span>
+    }
+<span class="fc" id="L43">    float[][] samples = new float[format.channels()][frames];</span>
+<span class="fc bfc" id="L44" title="All 2 branches covered.">    for (int channel = 0; channel &lt; channelDelaysSamples.length; channel++) {</span>
+<span class="fc" id="L45">      int delay = channelDelaysSamples[channel];</span>
+<span class="fc" id="L46">      int observedFrame = pulseFrame + delay;</span>
+<span class="pc bpc" id="L47" title="2 of 4 branches missed.">      if (delay &lt; 0 || observedFrame &gt;= frames) {</span>
+<span class="nc" id="L48">        throw new IllegalArgumentException(&quot;channel delay places the pulse outside the block&quot;);</span>
+      }
+<span class="fc" id="L50">      samples[channel][observedFrame] = 1.0f;</span>
+    }
+<span class="fc" id="L52">    return AudioBlock.wrap(format, samples, frameIndex, timestampNanos);</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

@@ -1,0 +1,306 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>JGitRepositoryVersionedWorkflowStore.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.infrastructure.workflow.store</a> &gt; <span class="el_source">JGitRepositoryVersionedWorkflowStore.java</span></div><h1>JGitRepositoryVersionedWorkflowStore.java</h1><pre class="source lang-java linenums">package org.hammer.audio.infrastructure.workflow.store;
+
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.NoSuchElementException;
+import java.util.Objects;
+import org.eclipse.jgit.lib.CommitBuilder;
+import org.eclipse.jgit.lib.Constants;
+import org.eclipse.jgit.lib.FileMode;
+import org.eclipse.jgit.lib.ObjectId;
+import org.eclipse.jgit.lib.ObjectInserter;
+import org.eclipse.jgit.lib.PersonIdent;
+import org.eclipse.jgit.lib.RefUpdate;
+import org.eclipse.jgit.lib.Repository;
+import org.eclipse.jgit.revwalk.RevCommit;
+import org.eclipse.jgit.revwalk.RevWalk;
+import org.eclipse.jgit.treewalk.TreeWalk;
+import org.eclipse.jgit.util.RawParseUtils;
+import org.hammer.audio.workflow.store.CommitId;
+import org.hammer.audio.workflow.store.CommitInfo;
+import org.hammer.audio.workflow.store.CommitMetadata;
+import org.hammer.audio.workflow.store.RefUpdateResult;
+import org.hammer.audio.workflow.store.StaleWorkflowHeadException;
+import org.hammer.audio.workflow.store.VersionedWorkflowStore;
+import org.hammer.audio.workflow.store.WorkflowSnapshot;
+
+/**
+ * Repository-based {@link VersionedWorkflowStore} implementation shared by storage adapters.
+ *
+ * &lt;p&gt;The repository lifecycle belongs to the surrounding adapter. This class deliberately uses only
+ * public JGit APIs and never opens a filesystem repository itself.
+ */
+final class JGitRepositoryVersionedWorkflowStore implements VersionedWorkflowStore {
+
+  private static final String WORKFLOW_DSL_PATH = &quot;workflow.dsl&quot;;
+  private static final String WORKFLOW_ID_PATH = &quot;workflow.id&quot;;
+<span class="fc" id="L41">  private static final ObjectId ZERO_ID = ObjectId.zeroId();</span>
+
+  private final Repository repository;
+
+<span class="fc" id="L45">  JGitRepositoryVersionedWorkflowStore(Repository repository) {</span>
+<span class="fc" id="L46">    this.repository = Objects.requireNonNull(repository, &quot;repository&quot;);</span>
+<span class="fc" id="L47">  }</span>
+
+  @Override
+  public CommitId commit(String branch, WorkflowSnapshot snapshot, CommitMetadata metadata) {
+<span class="fc" id="L51">    return commit(branch, null, snapshot, metadata, false);</span>
+  }
+
+  @Override
+  public CommitId commitIfHead(
+      String branch, CommitId expectedHead, WorkflowSnapshot snapshot, CommitMetadata metadata) {
+<span class="fc" id="L57">    return commit(branch, expectedHead, snapshot, metadata, true);</span>
+  }
+
+  private CommitId commit(
+      String branch,
+      CommitId expectedHead,
+      WorkflowSnapshot snapshot,
+      CommitMetadata metadata,
+      boolean conditional) {
+<span class="pc bpc" id="L66" title="2 of 4 branches missed.">    if (branch == null || branch.isBlank()) {</span>
+<span class="nc" id="L67">      throw new IllegalArgumentException(&quot;branch must not be blank&quot;);</span>
+    }
+<span class="fc" id="L69">    Objects.requireNonNull(snapshot, &quot;snapshot&quot;);</span>
+<span class="fc" id="L70">    Objects.requireNonNull(metadata, &quot;metadata&quot;);</span>
+<span class="fc" id="L71">    String refName = toRefName(branch);</span>
+
+<span class="fc" id="L73">    try (ObjectInserter inserter = repository.newObjectInserter()) {</span>
+<span class="fc" id="L74">      ObjectId parent = repository.resolve(refName);</span>
+<span class="fc bfc" id="L75" title="All 2 branches covered.">      if (conditional) {</span>
+<span class="fc" id="L76">        assertExpectedHead(branch, expectedHead, parent);</span>
+      }
+
+<span class="fc" id="L79">      ObjectId blobDsl =</span>
+<span class="fc" id="L80">          inserter.insert(Constants.OBJ_BLOB, snapshot.dslText().getBytes(StandardCharsets.UTF_8));</span>
+<span class="fc" id="L81">      ObjectId blobWorkflowId =</span>
+<span class="fc" id="L82">          inserter.insert(</span>
+<span class="fc" id="L83">              Constants.OBJ_BLOB, snapshot.workflowId().getBytes(StandardCharsets.UTF_8));</span>
+
+<span class="fc" id="L85">      org.eclipse.jgit.lib.TreeFormatter formatter = new org.eclipse.jgit.lib.TreeFormatter();</span>
+<span class="fc" id="L86">      formatter.append(WORKFLOW_DSL_PATH, FileMode.REGULAR_FILE, blobDsl);</span>
+<span class="fc" id="L87">      formatter.append(WORKFLOW_ID_PATH, FileMode.REGULAR_FILE, blobWorkflowId);</span>
+<span class="fc" id="L88">      ObjectId treeId = inserter.insert(formatter);</span>
+
+<span class="fc" id="L90">      CommitBuilder commit = new CommitBuilder();</span>
+<span class="fc" id="L91">      commit.setTreeId(treeId);</span>
+<span class="fc bfc" id="L92" title="All 2 branches covered.">      if (parent != null) {</span>
+<span class="fc" id="L93">        commit.setParentIds(parent);</span>
+      }
+<span class="fc" id="L95">      PersonIdent ident = toPersonIdent(metadata);</span>
+<span class="fc" id="L96">      commit.setAuthor(ident);</span>
+<span class="fc" id="L97">      commit.setCommitter(ident);</span>
+<span class="fc" id="L98">      commit.setMessage(metadata.message());</span>
+
+<span class="fc" id="L100">      ObjectId commitId = inserter.insert(commit);</span>
+<span class="fc" id="L101">      inserter.flush();</span>
+
+<span class="fc" id="L103">      RefUpdate update = repository.updateRef(refName);</span>
+<span class="fc bfc" id="L104" title="All 2 branches covered.">      update.setExpectedOldObjectId(parent == null ? ZERO_ID : parent);</span>
+<span class="fc" id="L105">      update.setNewObjectId(commitId);</span>
+<span class="fc" id="L106">      update.setRefLogMessage(&quot;workflow checkpoint&quot;, false);</span>
+<span class="fc" id="L107">      RefUpdate.Result result = update.update();</span>
+<span class="pc bpc" id="L108" title="1 of 2 branches missed.">      if (!isSuccessfulRefUpdate(result)) {</span>
+<span class="nc bnc" id="L109" title="All 2 branches missed.">        if (conditional) {</span>
+<span class="nc" id="L110">          throw new StaleWorkflowHeadException(</span>
+<span class="nc" id="L111">              branch, expectedHead, toCommitId(repository.resolve(refName)));</span>
+        }
+<span class="nc" id="L113">        throw new IllegalStateException(&quot;Failed to update ref '&quot; + refName + &quot;': &quot; + result);</span>
+      }
+<span class="fc" id="L115">      return new CommitId(commitId.name());</span>
+<span class="nc" id="L116">    } catch (IOException ex) {</span>
+<span class="nc" id="L117">      throw new IllegalStateException(&quot;Failed to commit workflow snapshot&quot;, ex);</span>
+    }
+  }
+
+  @Override
+  public WorkflowSnapshot loadAtCommit(CommitId commitId) {
+<span class="fc" id="L123">    Objects.requireNonNull(commitId, &quot;commitId&quot;);</span>
+<span class="fc" id="L124">    ObjectId objectId = parseObjectId(commitId);</span>
+<span class="fc" id="L125">    try (RevWalk walk = new RevWalk(repository)) {</span>
+<span class="fc" id="L126">      RevCommit commit = walk.parseCommit(objectId);</span>
+<span class="fc" id="L127">      return readSnapshot(commit);</span>
+<span class="nc" id="L128">    } catch (IOException ex) {</span>
+<span class="nc" id="L129">      NoSuchElementException exception =</span>
+          new NoSuchElementException(&quot;Commit not found: &quot; + commitId);
+<span class="nc" id="L131">      exception.initCause(ex);</span>
+<span class="nc" id="L132">      throw exception;</span>
+    }
+  }
+
+  @Override
+  public WorkflowSnapshot loadHead(String branch) {
+<span class="pc bpc" id="L138" title="2 of 4 branches missed.">    if (branch == null || branch.isBlank()) {</span>
+<span class="nc" id="L139">      throw new IllegalArgumentException(&quot;branch must not be blank&quot;);</span>
+    }
+<span class="fc" id="L141">    String refName = toRefName(branch);</span>
+    try {
+<span class="fc" id="L143">      ObjectId head = repository.resolve(refName);</span>
+<span class="pc bpc" id="L144" title="1 of 2 branches missed.">      if (head == null) {</span>
+<span class="nc" id="L145">        throw new NoSuchElementException(&quot;Branch not found: &quot; + branch);</span>
+      }
+<span class="fc" id="L147">      return loadAtCommit(new CommitId(head.name()));</span>
+<span class="nc" id="L148">    } catch (IOException ex) {</span>
+<span class="nc" id="L149">      throw new IllegalStateException(&quot;Failed to resolve branch: &quot; + branch, ex);</span>
+    }
+  }
+
+  @Override
+  public RefUpdateResult updateRef(String refName, CommitId expectedOldCommit, CommitId newCommit) {
+<span class="pc bpc" id="L155" title="2 of 4 branches missed.">    if (refName == null || refName.isBlank()) {</span>
+<span class="nc" id="L156">      throw new IllegalArgumentException(&quot;refName must not be blank&quot;);</span>
+    }
+<span class="fc" id="L158">    Objects.requireNonNull(newCommit, &quot;newCommit&quot;);</span>
+<span class="fc" id="L159">    String normalizedRef = toRefName(refName);</span>
+<span class="fc" id="L160">    ObjectId newObjectId = parseObjectId(newCommit);</span>
+<span class="fc" id="L161">    verifyCommitExists(newObjectId, newCommit);</span>
+    try {
+<span class="fc" id="L163">      RefUpdate update = repository.updateRef(normalizedRef);</span>
+<span class="fc" id="L164">      update.setExpectedOldObjectId(</span>
+<span class="fc bfc" id="L165" title="All 2 branches covered.">          expectedOldCommit == null ? ZERO_ID : parseObjectId(expectedOldCommit));</span>
+<span class="fc" id="L166">      update.setNewObjectId(newObjectId);</span>
+<span class="fc" id="L167">      update.setForceUpdate(true);</span>
+<span class="fc" id="L168">      update.setRefLogMessage(&quot;workflow ref update&quot;, false);</span>
+<span class="fc" id="L169">      RefUpdate.Result result = update.update();</span>
+<span class="fc" id="L170">      return mapRefUpdateResult(result);</span>
+<span class="nc" id="L171">    } catch (IOException ex) {</span>
+<span class="nc" id="L172">      throw new IllegalStateException(&quot;Failed to update ref: &quot; + refName, ex);</span>
+    }
+  }
+
+  private void verifyCommitExists(ObjectId objectId, CommitId commitId) {
+<span class="fc" id="L177">    try (RevWalk walk = new RevWalk(repository)) {</span>
+<span class="fc" id="L178">      walk.parseCommit(objectId);</span>
+<span class="nc" id="L179">    } catch (IOException ex) {</span>
+<span class="nc" id="L180">      NoSuchElementException exception =</span>
+<span class="nc" id="L181">          new NoSuchElementException(&quot;Commit not found: &quot; + commitId.value());</span>
+<span class="nc" id="L182">      exception.initCause(ex);</span>
+<span class="nc" id="L183">      throw exception;</span>
+<span class="fc" id="L184">    }</span>
+<span class="fc" id="L185">  }</span>
+
+  @Override
+  public List&lt;CommitInfo&gt; history(String refName, int limit) {
+<span class="pc bpc" id="L189" title="2 of 4 branches missed.">    if (refName == null || refName.isBlank()) {</span>
+<span class="nc" id="L190">      throw new IllegalArgumentException(&quot;refName must not be blank&quot;);</span>
+    }
+<span class="pc bpc" id="L192" title="1 of 2 branches missed.">    if (limit &lt; 0) {</span>
+<span class="nc" id="L193">      throw new IllegalArgumentException(&quot;limit must be &gt;= 0&quot;);</span>
+    }
+<span class="pc bpc" id="L195" title="1 of 2 branches missed.">    if (limit == 0) {</span>
+<span class="nc" id="L196">      return List.of();</span>
+    }
+<span class="fc" id="L198">    String normalizedRef = toRefName(refName);</span>
+    try {
+<span class="fc" id="L200">      ObjectId head = repository.resolve(normalizedRef);</span>
+<span class="pc bpc" id="L201" title="1 of 2 branches missed.">      if (head == null) {</span>
+<span class="nc" id="L202">        return List.of();</span>
+      }
+<span class="fc" id="L204">      List&lt;CommitInfo&gt; history = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L205">      try (RevWalk walk = new RevWalk(repository)) {</span>
+<span class="fc" id="L206">        walk.markStart(walk.parseCommit(head));</span>
+<span class="fc bfc" id="L207" title="All 2 branches covered.">        for (RevCommit commit : walk) {</span>
+<span class="fc" id="L208">          history.add(</span>
+              new CommitInfo(
+<span class="fc" id="L210">                  new CommitId(commit.getId().name()),</span>
+<span class="fc" id="L211">                  commitMetadataFrom(commit),</span>
+<span class="fc" id="L212">                  readWorkflowId(commit)));</span>
+<span class="fc bfc" id="L213" title="All 2 branches covered.">          if (history.size() &gt;= limit) {</span>
+<span class="fc" id="L214">            break;</span>
+          }
+<span class="fc" id="L216">        }</span>
+      }
+<span class="fc" id="L218">      return List.copyOf(history);</span>
+<span class="nc" id="L219">    } catch (IOException ex) {</span>
+<span class="nc" id="L220">      throw new IllegalStateException(&quot;Failed to load history for ref: &quot; + refName, ex);</span>
+    }
+  }
+
+  private static void assertExpectedHead(
+      String branch, CommitId expectedHead, ObjectId actualHead) {
+<span class="pc bpc" id="L226" title="1 of 2 branches missed.">    ObjectId expectedObjectId = expectedHead == null ? null : parseObjectId(expectedHead);</span>
+<span class="fc bfc" id="L227" title="All 2 branches covered.">    if (!Objects.equals(expectedObjectId, actualHead)) {</span>
+<span class="fc" id="L228">      throw new StaleWorkflowHeadException(branch, expectedHead, toCommitId(actualHead));</span>
+    }
+<span class="fc" id="L230">  }</span>
+
+  private static CommitId toCommitId(ObjectId objectId) {
+<span class="pc bpc" id="L233" title="1 of 2 branches missed.">    return objectId == null ? null : new CommitId(objectId.name());</span>
+  }
+
+  private static String toRefName(String branchOrRef) {
+<span class="fc bfc" id="L237" title="All 2 branches covered.">    if (branchOrRef.startsWith(&quot;refs/&quot;)) {</span>
+<span class="fc" id="L238">      return branchOrRef;</span>
+    }
+<span class="fc" id="L240">    return &quot;refs/heads/&quot; + branchOrRef;</span>
+  }
+
+  private static PersonIdent toPersonIdent(CommitMetadata metadata) {
+<span class="fc" id="L244">    String sanitizedAuthor = metadata.author().trim().replaceAll(&quot;[\\r\\n]&quot;, &quot; &quot;);</span>
+<span class="fc" id="L245">    String emailLocalPart = sanitizedAuthor.replaceAll(&quot;[^A-Za-z0-9._-]&quot;, &quot;-&quot;);</span>
+<span class="pc bpc" id="L246" title="1 of 2 branches missed.">    if (emailLocalPart.isBlank()) {</span>
+<span class="nc" id="L247">      emailLocalPart = &quot;workflow-author&quot;;</span>
+    }
+<span class="fc" id="L249">    Instant instant = metadata.timestamp();</span>
+<span class="fc" id="L250">    return new PersonIdent(</span>
+        sanitizedAuthor, emailLocalPart + &quot;@audio-analyzer.invalid&quot;, instant, ZoneOffset.UTC);
+  }
+
+  private static boolean isSuccessfulRefUpdate(RefUpdate.Result result) {
+<span class="fc bfc" id="L255" title="All 8 branches covered.">    return result == RefUpdate.Result.NEW</span>
+        || result == RefUpdate.Result.FAST_FORWARD
+        || result == RefUpdate.Result.FORCED
+        || result == RefUpdate.Result.NO_CHANGE;
+  }
+
+  private static RefUpdateResult mapRefUpdateResult(RefUpdate.Result result) {
+<span class="fc bfc" id="L262" title="All 2 branches covered.">    if (isSuccessfulRefUpdate(result)) {</span>
+<span class="fc" id="L263">      return RefUpdateResult.SUCCESS;</span>
+    }
+<span class="fc" id="L265">    return RefUpdateResult.STALE;</span>
+  }
+
+  private static ObjectId parseObjectId(CommitId commitId) {
+    try {
+<span class="fc" id="L270">      return ObjectId.fromString(commitId.value());</span>
+<span class="nc" id="L271">    } catch (IllegalArgumentException ex) {</span>
+<span class="nc" id="L272">      NoSuchElementException exception =</span>
+<span class="nc" id="L273">          new NoSuchElementException(&quot;Invalid commit id: &quot; + commitId.value());</span>
+<span class="nc" id="L274">      exception.initCause(ex);</span>
+<span class="nc" id="L275">      throw exception;</span>
+    }
+  }
+
+  private WorkflowSnapshot readSnapshot(RevCommit commit) throws IOException {
+<span class="fc" id="L280">    String workflowId = readFile(commit, WORKFLOW_ID_PATH);</span>
+<span class="fc" id="L281">    String dslText = readFile(commit, WORKFLOW_DSL_PATH);</span>
+<span class="fc" id="L282">    return new WorkflowSnapshot(workflowId, dslText);</span>
+  }
+
+  private String readWorkflowId(RevCommit commit) throws IOException {
+<span class="fc" id="L286">    return readFile(commit, WORKFLOW_ID_PATH);</span>
+  }
+
+  private String readFile(RevCommit commit, String filePath) throws IOException {
+<span class="fc" id="L290">    try (TreeWalk walk = TreeWalk.forPath(repository, filePath, commit.getTree())) {</span>
+<span class="pc bpc" id="L291" title="1 of 2 branches missed.">      if (walk == null) {</span>
+<span class="nc" id="L292">        throw new NoSuchElementException(</span>
+<span class="nc" id="L293">            &quot;File '&quot; + filePath + &quot;' not found in commit &quot; + commit.getId().name());</span>
+      }
+<span class="fc" id="L295">      return RawParseUtils.decode(repository.open(walk.getObjectId(0)).getBytes());</span>
+    }
+  }
+
+  private static CommitMetadata commitMetadataFrom(RevCommit commit) {
+<span class="fc" id="L300">    PersonIdent author = commit.getAuthorIdent();</span>
+<span class="pc bpc" id="L301" title="1 of 2 branches missed.">    String authorName = author == null ? &quot;unknown&quot; : author.getName();</span>
+<span class="pc bpc" id="L302" title="1 of 2 branches missed.">    Instant timestamp = author == null ? Instant.EPOCH : author.getWhenAsInstant();</span>
+<span class="fc" id="L303">    return new CommitMetadata(authorName, commit.getFullMessage().trim(), timestamp);</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>GainNodeExecutor.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer DSP and Analysis</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.dsp.workflow</a> &gt; <span class="el_source">GainNodeExecutor.java</span></div><h1>GainNodeExecutor.java</h1><pre class="source lang-java linenums">package org.hammer.audio.dsp.workflow;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+import org.hammer.audio.core.AudioBlock;
+import org.hammer.audio.dsp.GainProcessor;
+import org.hammer.audio.dsp.workflow.DeterministicAudioParameters.Gain;
+import org.hammer.audio.workflow.Edge;
+import org.hammer.audio.workflow.Node;
+import org.hammer.audio.workflow.catalog.ExperimentNodeProtocol;
+import org.hammer.audio.workflow.execution.WorkflowRunModels.Control;
+import org.hammer.audio.workflow.execution.WorkflowRunModels.Violation;
+
+/** Applies the shared gain processor to an immutable audio value in bounded chunks. */
+<span class="fc" id="L16">final class GainNodeExecutor implements DeterministicAudioNodeExecutor {</span>
+
+  private static final int CHUNK_FRAMES = 4_096;
+
+  @Override
+  public String nodeType() {
+<span class="fc" id="L22">    return ExperimentNodeProtocol.TYPE_GAIN;</span>
+  }
+
+  @Override
+  public List&lt;Violation&gt; validate(Node node, List&lt;Edge&gt; incomingEdges) {
+<span class="fc" id="L27">    Objects.requireNonNull(node, &quot;node&quot;);</span>
+<span class="fc" id="L28">    Objects.requireNonNull(incomingEdges, &quot;incomingEdges&quot;);</span>
+<span class="fc" id="L29">    List&lt;Violation&gt; violations = new ArrayList&lt;&gt;();</span>
+<span class="pc bpc" id="L30" title="1 of 2 branches missed.">    if (incomingEdges.size() != 1) {</span>
+<span class="nc" id="L31">      violations.add(</span>
+          new Violation(
+              DeterministicAudioDiagnostics.INVALID_TOPOLOGY,
+<span class="nc" id="L34">              &quot;Gain nodes require exactly one incoming audio edge, found &quot; + incomingEdges.size(),</span>
+<span class="nc" id="L35">              node.id()));</span>
+    }
+    try {
+<span class="fc" id="L38">      DeterministicAudioParameters.parseGain(node);</span>
+<span class="nc" id="L39">    } catch (IllegalArgumentException exception) {</span>
+<span class="nc" id="L40">      violations.add(</span>
+          new Violation(
+<span class="nc" id="L42">              DeterministicAudioDiagnostics.INVALID_PARAMETER, exception.getMessage(), node.id()));</span>
+<span class="fc" id="L43">    }</span>
+<span class="fc" id="L44">    return List.copyOf(violations);</span>
+  }
+
+  @Override
+  public AudioBlock execute(Node node, AudioBlock input, Control control) {
+<span class="fc" id="L49">    Objects.requireNonNull(node, &quot;node&quot;);</span>
+<span class="fc" id="L50">    Objects.requireNonNull(control, &quot;control&quot;);</span>
+<span class="pc bpc" id="L51" title="1 of 2 branches missed.">    if (input == null) {</span>
+<span class="nc" id="L52">      throw new IllegalArgumentException(&quot;Gain nodes require one computed audio input&quot;);</span>
+    }
+<span class="fc" id="L54">    Gain parameters = DeterministicAudioParameters.parseGain(node);</span>
+<span class="fc" id="L55">    GainProcessor processor = new GainProcessor(parameters.factor());</span>
+<span class="fc" id="L56">    float[][] output = new float[input.channels()][input.frames()];</span>
+<span class="fc" id="L57">    int offset = 0;</span>
+<span class="fc bfc" id="L58" title="All 2 branches covered.">    while (offset &lt; input.frames()) {</span>
+<span class="fc" id="L59">      requireNotCancelled(control);</span>
+<span class="fc" id="L60">      int frames = Math.min(CHUNK_FRAMES, input.frames() - offset);</span>
+<span class="fc" id="L61">      AudioBlock chunk = inputChunk(input, offset, frames);</span>
+<span class="fc" id="L62">      AudioBlock processed = processor.process(chunk);</span>
+<span class="fc" id="L63">      copyInto(processed, output, offset);</span>
+<span class="fc" id="L64">      offset += frames;</span>
+<span class="fc" id="L65">    }</span>
+<span class="fc" id="L66">    requireNotCancelled(control);</span>
+<span class="fc" id="L67">    return AudioBlock.wrap(input.format(), output, input.frameIndex(), 0L);</span>
+  }
+
+  private static AudioBlock inputChunk(AudioBlock input, int offset, int frames) {
+<span class="fc" id="L71">    float[][] samples = new float[input.channels()][frames];</span>
+<span class="fc bfc" id="L72" title="All 2 branches covered.">    for (int channel = 0; channel &lt; input.channels(); channel++) {</span>
+<span class="fc" id="L73">      System.arraycopy(input.channelView(channel), offset, samples[channel], 0, frames);</span>
+    }
+<span class="fc" id="L75">    return AudioBlock.wrap(input.format(), samples, input.frameIndex() + offset, 0L);</span>
+  }
+
+  private static void copyInto(AudioBlock source, float[][] target, int offset) {
+<span class="fc bfc" id="L79" title="All 2 branches covered.">    for (int channel = 0; channel &lt; source.channels(); channel++) {</span>
+<span class="fc" id="L80">      System.arraycopy(source.channelView(channel), 0, target[channel], offset, source.frames());</span>
+    }
+<span class="fc" id="L82">  }</span>
+
+  private static void requireNotCancelled(Control control) {
+<span class="pc bpc" id="L85" title="1 of 2 branches missed.">    if (control.cancellationRequested()) {</span>
+<span class="nc" id="L86">      throw new DeterministicAudioCancellationException();</span>
+    }
+<span class="fc" id="L88">  }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

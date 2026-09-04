@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>DocumentValueJson.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experiment Document</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experiment.document</a> &gt; <span class="el_source">DocumentValueJson.java</span></div><h1>DocumentValueJson.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experiment.document;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.BooleanNode;
+import com.fasterxml.jackson.databind.node.DecimalNode;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.fasterxml.jackson.databind.node.NullNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.databind.node.TextNode;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.TreeMap;
+import org.hammer.audio.plugin.document.DocumentValue;
+
+/** Converts host-owned JSON trees to the framework-neutral plugin value model and back. */
+@SuppressWarnings(&quot;PMD.LooseCoupling&quot;)
+final class DocumentValueJson {
+
+  private DocumentValueJson() {
+    // utility class
+  }
+
+  static DocumentValue fromJson(JsonNode node) throws ExperimentDocumentException {
+<span class="fc" id="L26">    return fromJson(node, &quot;/&quot;, 0);</span>
+  }
+
+  private static DocumentValue fromJson(JsonNode node, String pointer, int depth)
+      throws ExperimentDocumentException {
+<span class="fc" id="L31">    requireDepth(depth, pointer);</span>
+<span class="pc bpc" id="L32" title="2 of 4 branches missed.">    if (node == null || node.isNull()) {</span>
+<span class="nc" id="L33">      return DocumentValue.nullValue();</span>
+    }
+<span class="fc bfc" id="L35" title="All 2 branches covered.">    if (node.isObject()) {</span>
+<span class="fc" id="L36">      requireSize(node.size(), pointer);</span>
+<span class="fc" id="L37">      TreeMap&lt;String, DocumentValue&gt; fields = new TreeMap&lt;&gt;();</span>
+<span class="fc" id="L38">      Iterator&lt;Map.Entry&lt;String, JsonNode&gt;&gt; entries = node.fields();</span>
+<span class="fc bfc" id="L39" title="All 2 branches covered.">      while (entries.hasNext()) {</span>
+<span class="fc" id="L40">        Map.Entry&lt;String, JsonNode&gt; entry = entries.next();</span>
+<span class="fc" id="L41">        String childPointer = pointer(pointer, entry.getKey());</span>
+<span class="fc" id="L42">        requireString(entry.getKey(), childPointer);</span>
+<span class="fc" id="L43">        fields.put(entry.getKey(), fromJson(entry.getValue(), childPointer, depth + 1));</span>
+<span class="fc" id="L44">      }</span>
+<span class="fc" id="L45">      return DocumentValue.object(fields);</span>
+    }
+<span class="pc bpc" id="L47" title="1 of 2 branches missed.">    if (node.isArray()) {</span>
+<span class="nc" id="L48">      requireSize(node.size(), pointer);</span>
+<span class="nc" id="L49">      ArrayList&lt;DocumentValue&gt; values = new ArrayList&lt;&gt;(node.size());</span>
+<span class="nc bnc" id="L50" title="All 2 branches missed.">      for (int index = 0; index &lt; node.size(); index++) {</span>
+<span class="nc" id="L51">        values.add(fromJson(node.get(index), pointer + &quot;/&quot; + index, depth + 1));</span>
+      }
+<span class="nc" id="L53">      return DocumentValue.array(values);</span>
+    }
+<span class="fc bfc" id="L55" title="All 2 branches covered.">    if (node.isTextual()) {</span>
+<span class="fc" id="L56">      return DocumentValue.string(requireString(node.textValue(), pointer));</span>
+    }
+<span class="fc bfc" id="L58" title="All 2 branches covered.">    if (node.isNumber()) {</span>
+<span class="fc" id="L59">      return DocumentValue.number(node.decimalValue());</span>
+    }
+<span class="pc bpc" id="L61" title="1 of 2 branches missed.">    if (node.isBoolean()) {</span>
+<span class="fc" id="L62">      return DocumentValue.bool(node.booleanValue());</span>
+    }
+<span class="nc" id="L64">    throw new ExperimentDocumentException(</span>
+        pointer, &quot;unsupported-value&quot;, &quot;Unsupported JSON value type at &quot; + pointer);
+  }
+
+  static JsonNode toJson(DocumentValue value) {
+<span class="pc bpc" id="L69" title="2 of 6 branches missed.">    return switch (value) {</span>
+<span class="fc" id="L70">      case DocumentValue.ObjectValue objectValue -&gt; objectNode(objectValue.fields());</span>
+<span class="nc" id="L71">      case DocumentValue.ArrayValue arrayValue -&gt; arrayNode(arrayValue);</span>
+<span class="fc" id="L72">      case DocumentValue.StringValue stringValue -&gt; new TextNode(stringValue.value());</span>
+<span class="fc" id="L73">      case DocumentValue.NumberValue numberValue -&gt; new DecimalNode(numberValue.value());</span>
+<span class="fc" id="L74">      case DocumentValue.BooleanValue booleanValue -&gt; BooleanNode.valueOf(booleanValue.value());</span>
+<span class="nc" id="L75">      case DocumentValue.NullValue ignored -&gt; NullNode.getInstance();</span>
+    };
+  }
+
+  private static ObjectNode objectNode(Map&lt;String, DocumentValue&gt; values) {
+<span class="fc" id="L80">    ObjectNode result = JsonNodeFactory.instance.objectNode();</span>
+<span class="fc" id="L81">    new TreeMap&lt;&gt;(values).forEach((key, value) -&gt; result.set(key, toJson(value)));</span>
+<span class="fc" id="L82">    return result;</span>
+  }
+
+  private static ArrayNode arrayNode(DocumentValue.ArrayValue value) {
+<span class="nc" id="L86">    ArrayNode result = JsonNodeFactory.instance.arrayNode();</span>
+<span class="nc" id="L87">    value.values().forEach(item -&gt; result.add(toJson(item)));</span>
+<span class="nc" id="L88">    return result;</span>
+  }
+
+  static String pointer(String parent, String key) {
+<span class="fc" id="L92">    String escaped = key.replace(&quot;~&quot;, &quot;~0&quot;).replace(&quot;/&quot;, &quot;~1&quot;);</span>
+<span class="fc bfc" id="L93" title="All 2 branches covered.">    return &quot;/&quot;.equals(parent) ? &quot;/&quot; + escaped : parent + &quot;/&quot; + escaped;</span>
+  }
+
+  private static void requireDepth(int depth, String pointer) throws ExperimentDocumentException {
+<span class="pc bpc" id="L97" title="1 of 2 branches missed.">    if (depth &gt; ExperimentDocumentFormat.MAX_NESTING_DEPTH) {</span>
+<span class="nc" id="L98">      throw new ExperimentDocumentException(</span>
+          pointer, &quot;max-depth&quot;, &quot;Document nesting exceeds the configured limit&quot;);
+    }
+<span class="fc" id="L101">  }</span>
+
+  private static void requireSize(int size, String pointer) throws ExperimentDocumentException {
+<span class="pc bpc" id="L104" title="1 of 2 branches missed.">    if (size &gt; ExperimentDocumentFormat.MAX_COLLECTION_SIZE) {</span>
+<span class="nc" id="L105">      throw new ExperimentDocumentException(</span>
+          pointer, &quot;max-collection&quot;, &quot;Document collection exceeds the configured limit&quot;);
+    }
+<span class="fc" id="L108">  }</span>
+
+  private static String requireString(String value, String pointer)
+      throws ExperimentDocumentException {
+<span class="pc bpc" id="L112" title="1 of 2 branches missed.">    if (value.length() &gt; ExperimentDocumentFormat.MAX_STRING_LENGTH) {</span>
+<span class="nc" id="L113">      throw new ExperimentDocumentException(</span>
+          pointer, &quot;max-string&quot;, &quot;Document string exceeds the configured limit&quot;);
+    }
+<span class="fc" id="L116">    return value;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

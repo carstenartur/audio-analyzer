@@ -1,0 +1,174 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WorkflowOperationEntity.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.infrastructure.workflow.collaboration.store</a> &gt; <span class="el_source">WorkflowOperationEntity.java</span></div><h1>WorkflowOperationEntity.java</h1><pre class="source lang-java linenums">package org.hammer.audio.infrastructure.workflow.collaboration.store;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Index;
+import jakarta.persistence.Lob;
+import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
+import java.time.Instant;
+import org.hammer.audio.workflow.WorkflowOperation;
+import org.hammer.audio.workflow.collaboration.store.StoredWorkflowOperation;
+import org.hammer.audio.workflow.collaboration.store.WorkflowOperationBodyCodec;
+import org.hammer.audio.workflow.collaboration.store.WorkflowOperationCommandMetadata;
+import org.hammer.audio.workflow.collaboration.store.WorkflowOperationPersistenceData;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
+/** Hibernate-owned durable accepted semantic operation. */
+@Entity
+@Table(
+    name = &quot;workflow_collaboration_operation&quot;,
+    indexes = {
+      @Index(name = &quot;idx_workflow_operation_session&quot;, columnList = &quot;session_id&quot;),
+      @Index(name = &quot;idx_workflow_operation_revision&quot;, columnList = &quot;session_id, semantic_revision&quot;)
+    },
+    uniqueConstraints = {
+      @UniqueConstraint(name = &quot;uk_workflow_operation_id&quot;, columnNames = &quot;operation_id&quot;),
+      @UniqueConstraint(
+          name = &quot;uk_workflow_operation_sequence&quot;,
+          columnNames = {&quot;session_id&quot;, &quot;operation_sequence&quot;})
+    })
+public class WorkflowOperationEntity {
+
+  @Id
+  @GeneratedValue(strategy = GenerationType.IDENTITY)
+  private Long id;
+
+  @Column(name = &quot;session_id&quot;, nullable = false, length = 255)
+  private String storedSessionId;
+
+  @Column(name = &quot;operation_id&quot;, nullable = false, length = 255)
+  private String storedOperationId;
+
+  @Column(name = &quot;actor_id&quot;, nullable = false, length = 255)
+  private String actorId;
+
+  @Column(name = &quot;operation_type&quot;, nullable = false, length = 255)
+  private String operationType;
+
+  @Column(name = &quot;occurred_at&quot;, nullable = false)
+  private Instant occurredAt;
+
+  @Column(name = &quot;operation_sequence&quot;, nullable = false)
+  private long storedOperationSequence;
+
+  @Column(name = &quot;semantic_revision&quot;, nullable = false)
+  private long storedSemanticRevision;
+
+  @Lob
+  @Column(name = &quot;operation_payload&quot;, nullable = false)
+  private String payload;
+
+  @Column(name = &quot;operation_body_version&quot;)
+  private Integer bodyVersion;
+
+  @JdbcTypeCode(SqlTypes.LONG32VARCHAR)
+  @Column(name = &quot;operation_body&quot;)
+  private String operationBody;
+
+  @Column(name = &quot;command_kind&quot;, length = 32)
+  private String commandKind;
+
+  @Column(name = &quot;command_id&quot;, length = 255)
+  private String commandId;
+
+  @Column(name = &quot;target_operation_id&quot;, length = 255)
+  private String targetOperationId;
+
+<span class="fc" id="L82">  protected WorkflowOperationEntity() {</span>
+    // Required by Jakarta Persistence.
+<span class="fc" id="L84">  }</span>
+
+  static WorkflowOperationEntity accepted(
+      String sessionId, WorkflowOperationPersistenceData operation, long sequence, long revision) {
+<span class="fc" id="L88">    WorkflowOperationEntity entity = new WorkflowOperationEntity();</span>
+<span class="fc" id="L89">    entity.storedSessionId = sessionId;</span>
+<span class="fc" id="L90">    entity.storedOperationId = operation.operationId();</span>
+<span class="fc" id="L91">    entity.actorId = operation.actorId();</span>
+<span class="fc" id="L92">    entity.operationType = operation.operationType();</span>
+<span class="fc" id="L93">    entity.occurredAt = operation.occurredAt();</span>
+<span class="fc" id="L94">    entity.storedOperationSequence = sequence;</span>
+<span class="fc" id="L95">    entity.storedSemanticRevision = revision;</span>
+<span class="fc" id="L96">    entity.payload = operation.payload();</span>
+<span class="fc bfc" id="L97" title="All 2 branches covered.">    entity.bodyVersion = operation.hasOperationBody() ? operation.bodyVersion() : null;</span>
+<span class="fc" id="L98">    entity.operationBody = operation.operationBody();</span>
+<span class="fc" id="L99">    entity.commandKind = operation.command().kind().name();</span>
+<span class="fc" id="L100">    entity.commandId = operation.command().commandId();</span>
+<span class="fc" id="L101">    entity.targetOperationId = operation.command().targetOperationId();</span>
+<span class="fc" id="L102">    return entity;</span>
+  }
+
+  StoredWorkflowOperation toStoredOperation() {
+    WorkflowOperationCommandMetadata command =
+<span class="pc bpc" id="L107" title="1 of 4 branches missed.">        commandKind == null || commandId == null</span>
+<span class="fc" id="L108">            ? WorkflowOperationCommandMetadata.normal(storedOperationId)</span>
+<span class="fc" id="L109">            : new WorkflowOperationCommandMetadata(</span>
+<span class="fc" id="L110">                WorkflowOperationCommandMetadata.Kind.valueOf(commandKind),</span>
+                commandId,
+                targetOperationId);
+<span class="fc" id="L113">    return new StoredWorkflowOperation(</span>
+        storedSessionId,
+        storedOperationId,
+        actorId,
+        operationType,
+        occurredAt,
+        storedOperationSequence,
+        storedSemanticRevision,
+        payload,
+<span class="fc bfc" id="L122" title="All 2 branches covered.">        bodyVersion == null ? 0 : bodyVersion,</span>
+        operationBody,
+        command);
+  }
+
+  boolean hasSameSemanticContent(
+      String expectedSessionId, WorkflowOperationPersistenceData candidate) {
+<span class="fc" id="L129">    boolean identityMatches =</span>
+<span class="pc bpc" id="L130" title="1 of 2 branches missed.">        storedSessionId.equals(expectedSessionId)</span>
+<span class="pc bpc" id="L131" title="1 of 2 branches missed.">            &amp;&amp; actorId.equals(candidate.actorId())</span>
+<span class="pc bpc" id="L132" title="1 of 2 branches missed.">            &amp;&amp; operationType.equals(candidate.operationType())</span>
+<span class="fc bfc" id="L133" title="All 2 branches covered.">            &amp;&amp; payload.equals(candidate.payload())</span>
+<span class="pc bpc" id="L134" title="1 of 2 branches missed.">            &amp;&amp; command().equals(candidate.command());</span>
+<span class="pc bpc" id="L135" title="1 of 4 branches missed.">    if (!identityMatches || bodyVersion == null) {</span>
+<span class="fc" id="L136">      return identityMatches;</span>
+    }
+<span class="nc bnc" id="L138" title="All 4 branches missed.">    if (!candidate.hasOperationBody() || bodyVersion != candidate.bodyVersion()) {</span>
+<span class="nc" id="L139">      return false;</span>
+    }
+<span class="nc" id="L141">    WorkflowOperation candidateOperation =</span>
+<span class="nc" id="L142">        WorkflowOperationBodyCodec.decode(candidate.bodyVersion(), candidate.operationBody());</span>
+<span class="nc" id="L143">    WorkflowOperation normalizedCandidate =</span>
+<span class="nc" id="L144">        WorkflowOperationBodyCodec.reidentify(</span>
+<span class="nc" id="L145">            candidateOperation, candidate.operationId(), occurredAt, candidate.actorId());</span>
+<span class="nc" id="L146">    return operationBody.equals(WorkflowOperationBodyCodec.encode(normalizedCandidate).body());</span>
+  }
+
+  private WorkflowOperationCommandMetadata command() {
+<span class="pc bpc" id="L150" title="2 of 4 branches missed.">    return commandKind == null || commandId == null</span>
+<span class="nc" id="L151">        ? WorkflowOperationCommandMetadata.normal(storedOperationId)</span>
+<span class="fc" id="L152">        : new WorkflowOperationCommandMetadata(</span>
+<span class="fc" id="L153">            WorkflowOperationCommandMetadata.Kind.valueOf(commandKind),</span>
+            commandId,
+            targetOperationId);
+  }
+
+  String sessionId() {
+<span class="fc" id="L159">    return storedSessionId;</span>
+  }
+
+  String operationId() {
+<span class="nc" id="L163">    return storedOperationId;</span>
+  }
+
+  long operationSequence() {
+<span class="fc" id="L167">    return storedOperationSequence;</span>
+  }
+
+  long semanticRevision() {
+<span class="fc" id="L171">    return storedSemanticRevision;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

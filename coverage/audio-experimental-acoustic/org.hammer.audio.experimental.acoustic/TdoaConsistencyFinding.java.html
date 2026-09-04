@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>TdoaConsistencyFinding.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic</a> &gt; <span class="el_source">TdoaConsistencyFinding.java</span></div><h1>TdoaConsistencyFinding.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic;
+
+import java.util.List;
+import java.util.Objects;
+
+/**
+ * One deterministic physical or cycle-consistency problem in a set of pairwise TDOA estimates.
+ *
+ * @param kind finding classification
+ * @param microphoneIds ordered microphones participating in the check
+ * @param residualSeconds signed excess or cycle residual in seconds
+ * @param toleranceSeconds configured absolute tolerance in seconds
+ */
+public record TdoaConsistencyFinding(
+    Kind kind, List&lt;String&gt; microphoneIds, double residualSeconds, double toleranceSeconds) {
+
+  /** Finding classification. */
+<span class="fc" id="L18">  public enum Kind {</span>
+    /** Pair delay exceeds the maximum acoustic path difference for the microphone spacing. */
+<span class="fc" id="L20">    PHYSICAL_LIMIT,</span>
+    /** Three pair estimates violate the additive delay cycle around one microphone triple. */
+<span class="fc" id="L22">    CYCLE_RESIDUAL</span>
+  }
+
+  // Validate and defensively copy one finding.
+<span class="fc" id="L26">  public TdoaConsistencyFinding {</span>
+<span class="fc" id="L27">    Objects.requireNonNull(kind, &quot;kind&quot;);</span>
+<span class="fc" id="L28">    List&lt;String&gt; requiredIds = Objects.requireNonNull(microphoneIds, &quot;microphoneIds&quot;);</span>
+<span class="pc bpc" id="L29" title="2 of 8 branches missed.">    if (requiredIds.size() &lt; 2 || requiredIds.stream().anyMatch(id -&gt; id == null || id.isBlank())) {</span>
+<span class="fc" id="L30">      throw new IllegalArgumentException(&quot;microphoneIds must contain at least two non-blank ids&quot;);</span>
+    }
+<span class="fc" id="L32">    microphoneIds = List.copyOf(requiredIds);</span>
+<span class="fc" id="L33">    requireFinite(residualSeconds, &quot;residualSeconds&quot;);</span>
+<span class="fc" id="L34">    requirePositiveFinite(toleranceSeconds, &quot;toleranceSeconds&quot;);</span>
+<span class="fc" id="L35">  }</span>
+
+  /** Absolute residual normalized to the configured tolerance. */
+  public double normalizedSeverity() {
+<span class="nc" id="L39">    return Math.abs(residualSeconds) / toleranceSeconds;</span>
+  }
+
+  private static void requireFinite(double value, String name) {
+<span class="pc bpc" id="L43" title="1 of 2 branches missed.">    if (Double.isFinite(value)) {</span>
+<span class="fc" id="L44">      return;</span>
+    }
+<span class="nc" id="L46">    throw new IllegalArgumentException(name + &quot; must be finite&quot;);</span>
+  }
+
+  private static void requirePositiveFinite(double value, String name) {
+<span class="pc bpc" id="L50" title="2 of 4 branches missed.">    if (Double.isFinite(value) &amp;&amp; value &gt; 0.0) {</span>
+<span class="fc" id="L51">      return;</span>
+    }
+<span class="nc" id="L53">    throw new IllegalArgumentException(name + &quot; must be finite and &gt; 0&quot;);</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

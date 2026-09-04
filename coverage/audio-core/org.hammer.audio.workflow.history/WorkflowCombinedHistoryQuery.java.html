@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WorkflowCombinedHistoryQuery.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Core</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.history</a> &gt; <span class="el_source">WorkflowCombinedHistoryQuery.java</span></div><h1>WorkflowCombinedHistoryQuery.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.history;
+
+import java.util.Objects;
+
+/**
+ * Correctly composed generic and workflow-semantic history query.
+ *
+ * &lt;p&gt;The semantic filter produces exact commit candidates without a result limit. The generic query
+ * then applies commit metadata/full-text predicates, ranking or ordering and its final limit.
+ *
+ * @param genericQuery generic commit/message/author/path/time query carrying the final limit
+ * @param semanticFilter branch reachability and workflow-domain predicates
+ */
+public record WorkflowCombinedHistoryQuery(
+    WorkflowHistoryTextQuery genericQuery, WorkflowSemanticHistoryFilter semanticFilter) {
+
+<span class="fc" id="L17">  public WorkflowCombinedHistoryQuery {</span>
+<span class="fc" id="L18">    Objects.requireNonNull(genericQuery, &quot;genericQuery&quot;);</span>
+<span class="fc" id="L19">    Objects.requireNonNull(semanticFilter, &quot;semanticFilter&quot;);</span>
+<span class="fc" id="L20">  }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

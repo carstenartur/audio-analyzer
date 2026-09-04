@@ -1,0 +1,278 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>BenchmarkReport.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.benchmark</a> &gt; <span class="el_source">BenchmarkReport.java</span></div><h1>BenchmarkReport.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.benchmark;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.json.JsonMapper;
+import java.util.Locale;
+import java.util.Objects;
+
+/**
+ * Machine-readable benchmark summary for one scenario execution.
+ *
+ * @param scenarioId scenario identifier
+ * @param expectedSourceCount expected number of scenario sources
+ * @param snapshotCount number of processed snapshots
+ * @param localization localization-accuracy summary
+ * @param frequency frequency-accuracy summary
+ * @param doppler Doppler/radial-velocity summary
+ * @param classification classification-accuracy summary
+ * @param trackContinuity matched-track continuity ratio, or {@code null} if unavailable
+ * @param trackContinuitySampleCount number of continuity samples considered
+ * @param trackContinuityEvaluatedCount number of continuity samples that were evaluated
+ * @param trackContinuitySkippedCount number of continuity samples skipped because no match existed
+ * @param trackContinuityUnavailableTruthCount number of continuity samples without usable truth
+ * @param idStability dominant-track stability ratio, or {@code null} if unavailable
+ * @param sourceCountAccuracy fraction of frames with the exact expected source count
+ * @param meanSourceCountError mean absolute source-count error per frame
+ * @param falsePositiveRate fraction of produced tracks that were spurious
+ * @param falseNegativeRate fraction of available truth samples that were missed
+ * @param meanProcessingNanos mean per-snapshot processing time in nanoseconds
+ * @param medianProcessingNanos median per-snapshot processing time in nanoseconds
+ * @param maxProcessingNanos maximum per-snapshot processing time in nanoseconds
+ */
+public record BenchmarkReport(
+    String scenarioId,
+    int expectedSourceCount,
+    int snapshotCount,
+    LocalizationErrorMetric localization,
+    FrequencyErrorMetric frequency,
+    DopplerErrorMetric doppler,
+    ClassificationAccuracyMetric classification,
+    Double trackContinuity,
+    int trackContinuitySampleCount,
+    int trackContinuityEvaluatedCount,
+    int trackContinuitySkippedCount,
+    int trackContinuityUnavailableTruthCount,
+    Double idStability,
+    Double sourceCountAccuracy,
+    Double meanSourceCountError,
+    Double falsePositiveRate,
+    Double falseNegativeRate,
+    long meanProcessingNanos,
+    long medianProcessingNanos,
+    long maxProcessingNanos) {
+
+<span class="fc" id="L55">  private static final ObjectMapper OBJECT_MAPPER = JsonMapper.builder().build();</span>
+  private static final String MARKDOWN_COLUMN_SEPARATOR = &quot; | &quot;;
+
+<span class="fc" id="L58">  public BenchmarkReport {</span>
+<span class="fc" id="L59">    Objects.requireNonNull(scenarioId, &quot;scenarioId&quot;);</span>
+<span class="fc" id="L60">    Objects.requireNonNull(localization, &quot;localization&quot;);</span>
+<span class="fc" id="L61">    Objects.requireNonNull(frequency, &quot;frequency&quot;);</span>
+<span class="fc" id="L62">    Objects.requireNonNull(doppler, &quot;doppler&quot;);</span>
+<span class="fc" id="L63">    Objects.requireNonNull(classification, &quot;classification&quot;);</span>
+<span class="pc bpc" id="L64" title="1 of 2 branches missed.">    if (scenarioId.isBlank()) {</span>
+<span class="nc" id="L65">      throw new IllegalArgumentException(&quot;scenarioId must not be blank&quot;);</span>
+    }
+<span class="pc bpc" id="L67" title="2 of 4 branches missed.">    if (expectedSourceCount &lt; 0 || snapshotCount &lt; 0) {</span>
+<span class="nc" id="L68">      throw new IllegalArgumentException(&quot;counts must be &gt;= 0&quot;);</span>
+    }
+<span class="fc" id="L70">    validateCounts(</span>
+        trackContinuitySampleCount,
+        trackContinuityEvaluatedCount,
+        trackContinuitySkippedCount,
+        trackContinuityUnavailableTruthCount,
+        &quot;trackContinuity&quot;);
+<span class="fc" id="L76">    validateNullableRate(trackContinuity, &quot;trackContinuity&quot;);</span>
+<span class="fc" id="L77">    validateNullableRate(idStability, &quot;idStability&quot;);</span>
+<span class="fc" id="L78">    validateNullableRate(sourceCountAccuracy, &quot;sourceCountAccuracy&quot;);</span>
+<span class="fc" id="L79">    validateNullableNonNegative(meanSourceCountError, &quot;meanSourceCountError&quot;);</span>
+<span class="fc" id="L80">    validateNullableRate(falsePositiveRate, &quot;falsePositiveRate&quot;);</span>
+<span class="fc" id="L81">    validateNullableRate(falseNegativeRate, &quot;falseNegativeRate&quot;);</span>
+<span class="pc bpc" id="L82" title="3 of 6 branches missed.">    if (meanProcessingNanos &lt; 0L || medianProcessingNanos &lt; 0L || maxProcessingNanos &lt; 0L) {</span>
+<span class="nc" id="L83">      throw new IllegalArgumentException(&quot;processing times must be &gt;= 0&quot;);</span>
+    }
+<span class="fc" id="L85">  }</span>
+
+  /** CSV header matching {@link #toCsvRow()}. */
+  public static String csvHeader() {
+<span class="nc" id="L89">    return String.join(</span>
+        &quot;,&quot;,
+        &quot;scenarioId&quot;,
+        &quot;expectedSourceCount&quot;,
+        &quot;snapshotCount&quot;,
+        &quot;meanDistanceErrorMeters&quot;,
+        &quot;medianDistanceErrorMeters&quot;,
+        &quot;meanAngularErrorDegrees&quot;,
+        &quot;medianAngularErrorDegrees&quot;,
+        &quot;localizationSampleCount&quot;,
+        &quot;localizationEvaluatedCount&quot;,
+        &quot;localizationSkippedCount&quot;,
+        &quot;localizationUnavailableTruthCount&quot;,
+        &quot;meanAbsoluteFrequencyErrorHz&quot;,
+        &quot;medianAbsoluteFrequencyErrorHz&quot;,
+        &quot;meanRelativeFrequencyError&quot;,
+        &quot;frequencySampleCount&quot;,
+        &quot;frequencyEvaluatedCount&quot;,
+        &quot;frequencySkippedCount&quot;,
+        &quot;frequencyUnavailableTruthCount&quot;,
+        &quot;meanAbsoluteDopplerErrorMps&quot;,
+        &quot;medianAbsoluteDopplerErrorMps&quot;,
+        &quot;dopplerSampleCount&quot;,
+        &quot;dopplerEvaluatedCount&quot;,
+        &quot;dopplerSkippedCount&quot;,
+        &quot;dopplerUnavailableTruthCount&quot;,
+        &quot;classificationAccuracy&quot;,
+        &quot;classificationCorrectCount&quot;,
+        &quot;classificationSampleCount&quot;,
+        &quot;classificationEvaluatedCount&quot;,
+        &quot;classificationSkippedCount&quot;,
+        &quot;classificationUnavailableTruthCount&quot;,
+        &quot;trackContinuity&quot;,
+        &quot;trackContinuitySampleCount&quot;,
+        &quot;trackContinuityEvaluatedCount&quot;,
+        &quot;trackContinuitySkippedCount&quot;,
+        &quot;trackContinuityUnavailableTruthCount&quot;,
+        &quot;idStability&quot;,
+        &quot;sourceCountAccuracy&quot;,
+        &quot;meanSourceCountError&quot;,
+        &quot;falsePositiveRate&quot;,
+        &quot;falseNegativeRate&quot;,
+        &quot;meanProcessingNanos&quot;,
+        &quot;medianProcessingNanos&quot;,
+        &quot;maxProcessingNanos&quot;);
+  }
+
+  /** Serialize the report to one CSV row. */
+  public String toCsvRow() {
+<span class="fc" id="L138">    return String.join(</span>
+        &quot;,&quot;,
+<span class="fc" id="L140">        csvEscape(scenarioId),</span>
+<span class="fc" id="L141">        Integer.toString(expectedSourceCount),</span>
+<span class="fc" id="L142">        Integer.toString(snapshotCount),</span>
+<span class="fc" id="L143">        format(localization.meanDistanceErrorMeters()),</span>
+<span class="fc" id="L144">        format(localization.medianDistanceErrorMeters()),</span>
+<span class="fc" id="L145">        format(localization.meanAngularErrorDegrees()),</span>
+<span class="fc" id="L146">        format(localization.medianAngularErrorDegrees()),</span>
+<span class="fc" id="L147">        Integer.toString(localization.sampleCount()),</span>
+<span class="fc" id="L148">        Integer.toString(localization.evaluatedCount()),</span>
+<span class="fc" id="L149">        Integer.toString(localization.skippedCount()),</span>
+<span class="fc" id="L150">        Integer.toString(localization.unavailableTruthCount()),</span>
+<span class="fc" id="L151">        format(frequency.meanAbsoluteErrorHz()),</span>
+<span class="fc" id="L152">        format(frequency.medianAbsoluteErrorHz()),</span>
+<span class="fc" id="L153">        format(frequency.meanRelativeError()),</span>
+<span class="fc" id="L154">        Integer.toString(frequency.sampleCount()),</span>
+<span class="fc" id="L155">        Integer.toString(frequency.evaluatedCount()),</span>
+<span class="fc" id="L156">        Integer.toString(frequency.skippedCount()),</span>
+<span class="fc" id="L157">        Integer.toString(frequency.unavailableTruthCount()),</span>
+<span class="fc" id="L158">        format(doppler.meanAbsoluteErrorMetersPerSecond()),</span>
+<span class="fc" id="L159">        format(doppler.medianAbsoluteErrorMetersPerSecond()),</span>
+<span class="fc" id="L160">        Integer.toString(doppler.sampleCount()),</span>
+<span class="fc" id="L161">        Integer.toString(doppler.evaluatedCount()),</span>
+<span class="fc" id="L162">        Integer.toString(doppler.skippedCount()),</span>
+<span class="fc" id="L163">        Integer.toString(doppler.unavailableTruthCount()),</span>
+<span class="fc" id="L164">        format(classification.accuracy()),</span>
+<span class="fc" id="L165">        Integer.toString(classification.correctCount()),</span>
+<span class="fc" id="L166">        Integer.toString(classification.sampleCount()),</span>
+<span class="fc" id="L167">        Integer.toString(classification.evaluatedCount()),</span>
+<span class="fc" id="L168">        Integer.toString(classification.skippedCount()),</span>
+<span class="fc" id="L169">        Integer.toString(classification.unavailableTruthCount()),</span>
+<span class="fc" id="L170">        format(trackContinuity),</span>
+<span class="fc" id="L171">        Integer.toString(trackContinuitySampleCount),</span>
+<span class="fc" id="L172">        Integer.toString(trackContinuityEvaluatedCount),</span>
+<span class="fc" id="L173">        Integer.toString(trackContinuitySkippedCount),</span>
+<span class="fc" id="L174">        Integer.toString(trackContinuityUnavailableTruthCount),</span>
+<span class="fc" id="L175">        format(idStability),</span>
+<span class="fc" id="L176">        format(sourceCountAccuracy),</span>
+<span class="fc" id="L177">        format(meanSourceCountError),</span>
+<span class="fc" id="L178">        format(falsePositiveRate),</span>
+<span class="fc" id="L179">        format(falseNegativeRate),</span>
+<span class="fc" id="L180">        Long.toString(meanProcessingNanos),</span>
+<span class="fc" id="L181">        Long.toString(medianProcessingNanos),</span>
+<span class="fc" id="L182">        Long.toString(maxProcessingNanos));</span>
+  }
+
+  /** Serialize the report to a compact JSON object. */
+  public String toJson() {
+    try {
+<span class="fc" id="L188">      return OBJECT_MAPPER.writeValueAsString(this);</span>
+<span class="nc" id="L189">    } catch (JsonProcessingException exception) {</span>
+<span class="nc" id="L190">      throw new IllegalStateException(&quot;Failed to serialize benchmark report&quot;, exception);</span>
+    }
+  }
+
+  /** Render a human-friendly markdown summary suitable for benchmark reports. */
+  public String toMarkdownSummary() {
+<span class="fc" id="L196">    return &quot;| Scenario | Median position error (m) | Mean frequency error (Hz) | Track continuity |&quot;</span>
+        + &quot; ID stability | False+ | False- | Mean processing (ns) |\n&quot;
+        + &quot;| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n| &quot;
+<span class="fc" id="L199">        + markdownEscape(scenarioId)</span>
+        + MARKDOWN_COLUMN_SEPARATOR
+<span class="fc" id="L201">        + markdownFormat(localization.medianDistanceErrorMeters())</span>
+        + MARKDOWN_COLUMN_SEPARATOR
+<span class="fc" id="L203">        + markdownFormat(frequency.meanAbsoluteErrorHz())</span>
+        + MARKDOWN_COLUMN_SEPARATOR
+<span class="fc" id="L205">        + formatTrackContinuity()</span>
+        + MARKDOWN_COLUMN_SEPARATOR
+<span class="fc" id="L207">        + markdownFormat(idStability)</span>
+        + MARKDOWN_COLUMN_SEPARATOR
+<span class="fc" id="L209">        + markdownFormat(falsePositiveRate)</span>
+        + MARKDOWN_COLUMN_SEPARATOR
+<span class="fc" id="L211">        + markdownFormat(falseNegativeRate)</span>
+        + MARKDOWN_COLUMN_SEPARATOR
+        + meanProcessingNanos
+        + &quot; |&quot;;
+  }
+
+  private String formatTrackContinuity() {
+<span class="fc bfc" id="L218" title="All 2 branches covered.">    if (trackContinuity == null) {</span>
+<span class="pc bpc" id="L219" title="1 of 2 branches missed.">      return trackContinuityUnavailableTruthCount &gt; 0</span>
+<span class="nc" id="L220">          ? &quot;n/a (%d unavailable)&quot;.formatted(trackContinuityUnavailableTruthCount)</span>
+<span class="fc" id="L221">          : &quot;n/a&quot;;</span>
+    }
+<span class="fc" id="L223">    int continuityDenominator = trackContinuityEvaluatedCount + trackContinuitySkippedCount;</span>
+<span class="fc" id="L224">    return &quot;%s (%d/%d)&quot;</span>
+<span class="fc" id="L225">        .formatted(</span>
+<span class="fc" id="L226">            format(trackContinuity),</span>
+<span class="fc" id="L227">            trackContinuityEvaluatedCount,</span>
+<span class="fc" id="L228">            Math.max(continuityDenominator, 1));</span>
+  }
+
+  private static String csvEscape(String value) {
+<span class="fc" id="L232">    return '&quot;' + value.replace(&quot;\&quot;&quot;, &quot;\&quot;\&quot;&quot;) + '&quot;';</span>
+  }
+
+  private static String markdownEscape(String value) {
+<span class="fc" id="L236">    return value.replace(&quot;\\&quot;, &quot;\\\\&quot;).replace(&quot;|&quot;, &quot;\\|&quot;).replace(&quot;\r&quot;, &quot; &quot;).replace(&quot;\n&quot;, &quot; &quot;);</span>
+  }
+
+  private static String markdownFormat(Double value) {
+<span class="fc bfc" id="L240" title="All 2 branches covered.">    return value == null ? &quot;n/a&quot; : format(value);</span>
+  }
+
+  private static String format(Double value) {
+<span class="pc bpc" id="L244" title="1 of 2 branches missed.">    if (value == null) {</span>
+<span class="nc" id="L245">      return &quot;&quot;;</span>
+    }
+<span class="fc" id="L247">    return String.format(Locale.ROOT, &quot;%.6f&quot;, value);</span>
+  }
+
+  private static void validateCounts(
+      int sampleCount,
+      int evaluatedCount,
+      int skippedCount,
+      int unavailableTruthCount,
+      String fieldName) {
+<span class="pc bpc" id="L256" title="4 of 8 branches missed.">    if (sampleCount &lt; 0 || evaluatedCount &lt; 0 || skippedCount &lt; 0 || unavailableTruthCount &lt; 0) {</span>
+<span class="nc" id="L257">      throw new IllegalArgumentException(fieldName + &quot; counts must be &gt;= 0&quot;);</span>
+    }
+<span class="pc bpc" id="L259" title="1 of 2 branches missed.">    if (sampleCount != evaluatedCount + skippedCount + unavailableTruthCount) {</span>
+<span class="nc" id="L260">      throw new IllegalArgumentException(</span>
+          fieldName
+              + &quot; sampleCount must equal evaluatedCount + skippedCount + unavailableTruthCount&quot;);
+    }
+<span class="fc" id="L264">  }</span>
+
+  private static void validateNullableRate(Double value, String fieldName) {
+<span class="pc bpc" id="L267" title="3 of 8 branches missed.">    if (value != null &amp;&amp; (!Double.isFinite(value) || value &lt; 0.0 || value &gt; 1.0)) {</span>
+<span class="nc" id="L268">      throw new IllegalArgumentException(fieldName + &quot; must be finite and in [0,1]&quot;);</span>
+    }
+<span class="fc" id="L270">  }</span>
+
+  private static void validateNullableNonNegative(Double value, String fieldName) {
+<span class="pc bpc" id="L273" title="2 of 6 branches missed.">    if (value != null &amp;&amp; (!Double.isFinite(value) || value &lt; 0.0)) {</span>
+<span class="nc" id="L274">      throw new IllegalArgumentException(fieldName + &quot; must be finite and &gt;= 0&quot;);</span>
+    }
+<span class="fc" id="L276">  }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>
