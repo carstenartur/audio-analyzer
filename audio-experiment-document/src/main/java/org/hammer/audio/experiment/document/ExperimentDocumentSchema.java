@@ -2,11 +2,13 @@ package org.hammer.audio.experiment.document;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.networknt.schema.Error;
 import com.networknt.schema.Schema;
 import com.networknt.schema.SchemaRegistry;
 import com.networknt.schema.SpecificationVersion;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.List;
 
 /** Validates against the complete bundled public schema; remote retrieval is disabled. */
 final class ExperimentDocumentSchema {
@@ -18,14 +20,14 @@ final class ExperimentDocumentSchema {
   }
 
   static void validate(JsonNode document) throws ExperimentDocumentException {
-    var errors =
+    List<Error> errors =
         SCHEMA.validate(
             document,
             context ->
                 context.executionConfig(
                     config -> config.formatAssertionsEnabled(true).failFast(true)));
     if (!errors.isEmpty()) {
-      var error = errors.getFirst();
+      Error error = errors.getFirst();
       throw new ExperimentDocumentException(
           error.getInstanceLocation().toString(), "schema-invalid", error.getMessage());
     }
@@ -33,9 +35,8 @@ final class ExperimentDocumentSchema {
 
   private static Schema load() {
     try (InputStream input =
-        ExperimentDocumentSchema.class
-            .getClassLoader()
-            .getResourceAsStream(ExperimentDocumentFormat.SCHEMA_RESOURCE)) {
+        ExperimentDocumentSchema.class.getResourceAsStream(
+            "/" + ExperimentDocumentFormat.SCHEMA_RESOURCE)) {
       if (input == null) {
         throw new IllegalStateException("Bundled experiment schema is missing");
       }

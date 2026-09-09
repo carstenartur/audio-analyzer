@@ -5,13 +5,17 @@ import java.time.Instant;
 import java.util.HashSet;
 import java.util.Locale;
 import java.util.Set;
+import org.hammer.audio.workflow.Edge;
 import org.hammer.audio.workflow.Metadata;
+import org.hammer.audio.workflow.Node;
+import org.hammer.audio.workflow.Port;
 import org.hammer.audio.workflow.Workflow;
 
 /** Cross-field invariants that JSON Schema alone cannot express. */
 final class ExperimentSetupValidator {
 
   private static final String PROFILES = "/profiles/";
+  private static final String INVALID_SETUP = "invalid-setup";
   private static final String OUTPUTS = "outputs";
   private static final String OUTPUT_POINTER = "/outputs";
   private static final String CALIBRATION = "calibration";
@@ -58,7 +62,8 @@ final class ExperimentSetupValidator {
       try {
         PortableNames.requireRelativePath(asset.path("relativePath").textValue());
       } catch (IllegalArgumentException exception) {
-        throw failure("/assets", "Asset path is not portable");
+        throw new ExperimentDocumentException(
+            "/assets", INVALID_SETUP, "Asset path is not portable", exception);
       }
     }
     JsonNode profiles = root.path("profiles");
@@ -144,22 +149,23 @@ final class ExperimentSetupValidator {
     try {
       return PortableNames.requireBaseName(name);
     } catch (IllegalArgumentException exception) {
-      throw failure(pointer, "Output basename is not portable");
+      throw new ExperimentDocumentException(
+          pointer, INVALID_SETUP, "Output basename is not portable", exception);
     }
   }
 
   static void validateWorkflow(Workflow workflow) throws ExperimentDocumentException {
     validateMetadata(workflow.metadata());
-    for (var node : workflow.nodes()) {
+    for (Node node : workflow.nodes()) {
       validateMetadata(node.metadata());
-      for (var port : node.inputPorts()) {
+      for (Port port : node.inputPorts()) {
         validateMetadata(port.metadata());
       }
-      for (var port : node.outputPorts()) {
+      for (Port port : node.outputPorts()) {
         validateMetadata(port.metadata());
       }
     }
-    for (var edge : workflow.edges()) {
+    for (Edge edge : workflow.edges()) {
       validateMetadata(edge.metadata());
     }
   }
@@ -176,6 +182,6 @@ final class ExperimentSetupValidator {
   }
 
   private static ExperimentDocumentException failure(String pointer, String message) {
-    return new ExperimentDocumentException(pointer, "invalid-setup", message);
+    return new ExperimentDocumentException(pointer, INVALID_SETUP, message);
   }
 }

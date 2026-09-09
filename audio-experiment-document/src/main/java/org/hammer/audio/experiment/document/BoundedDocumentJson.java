@@ -49,22 +49,20 @@ final class BoundedDocumentJson {
       boolean[] arrays = new boolean[sizes.length];
       int depth = 0;
       boolean started = false;
-      JsonToken token;
-      while ((token = parser.nextToken()) != null) {
+      for (JsonToken token = parser.nextToken(); token != null; token = parser.nextToken()) {
         if (started && depth == 0) {
           throw new ExperimentDocumentException("/", "invalid-json", "Trailing JSON content");
         }
         started = true;
         if (token == JsonToken.FIELD_NAME || (depth > 0 && arrays[depth] && !token.isStructEnd())) {
-          if (++sizes[depth] > ExperimentDocumentFormat.MAX_COLLECTION_SIZE) {
-            throw new ExperimentDocumentException(
-                "/", "max-collection", "Collection limit exceeded");
-          }
+          sizes[depth]++;
         }
-        if (token == JsonToken.FIELD_NAME || token == JsonToken.VALUE_STRING) {
-          if (parser.getTextLength() > ExperimentDocumentFormat.MAX_STRING_LENGTH) {
-            throw new ExperimentDocumentException("/", "max-string", "String limit exceeded");
-          }
+        if (sizes[depth] > ExperimentDocumentFormat.MAX_COLLECTION_SIZE) {
+          throw new ExperimentDocumentException("/", "max-collection", "Collection limit exceeded");
+        }
+        if ((token == JsonToken.FIELD_NAME || token == JsonToken.VALUE_STRING)
+            && parser.getTextLength() > ExperimentDocumentFormat.MAX_STRING_LENGTH) {
+          throw new ExperimentDocumentException("/", "max-string", "String limit exceeded");
         }
         if (token.isStructStart()) {
           depth++;
