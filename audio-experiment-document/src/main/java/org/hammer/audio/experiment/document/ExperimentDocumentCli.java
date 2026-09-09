@@ -23,21 +23,22 @@ public final class ExperimentDocumentCli {
   }
 
   static int run(String[] args, java.io.PrintStream out, java.io.PrintStream error) {
-    if (args.length < 2 || args.length > 3) {
+    if (!((args.length == 2 && "validate".equals(args[0]))
+        || (args.length == 3 && "normalize".equals(args[0])))) {
       error.println(
           "Usage: validate <input.audioexp> | normalize <input.audioexp> <output.audioexp>");
       return 2;
     }
-    ExperimentDocumentCodec codec = new ExperimentDocumentCodec();
-    Path source = Path.of(args[1]);
+    ExperimentDocumentService service = new ExperimentDocumentService(java.util.List.of());
     try {
-      ExperimentDocument document = codec.load(source);
-      ExperimentDocumentPreview preview = PluginDocumentCatalog.empty().preview(document, codec);
+      Path source = Path.of(args[1]);
+      ExperimentDocumentPreview preview = service.preview(source);
       if ("validate".equals(args[0]) && args.length == 2) {
         out.println("VALID " + preview.canonicalSha256());
         out.println("experiment=" + preview.document().experiment().name());
         out.println("executionAllowed=" + preview.executionAllowed());
         out.println("readOnly=" + preview.readOnly());
+        out.println(service.inspectionJson(preview));
         preview
             .diagnostics()
             .forEach(
@@ -45,7 +46,7 @@ public final class ExperimentDocumentCli {
         return preview.executionAllowed() ? 0 : 1;
       }
       if ("normalize".equals(args[0]) && args.length == 3) {
-        codec.save(Path.of(args[2]), preview.document());
+        service.normalize(source, Path.of(args[2]));
         out.println("SAVED " + preview.canonicalSha256());
         return 0;
       }

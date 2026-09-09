@@ -148,7 +148,7 @@ class ExperimentDocumentCodecTest {
         2, preview.document().pluginData().get("gain-plugin").get("gain-settings").schemaVersion());
   }
 
-  private static ExperimentDocumentContribution contribution(String schema) {
+  static ExperimentDocumentContribution contribution(String schema) {
     return new ExperimentDocumentContribution() {
       @Override
       public String sectionId() {

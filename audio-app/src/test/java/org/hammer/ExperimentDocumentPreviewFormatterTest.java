@@ -42,6 +42,9 @@ class ExperimentDocumentPreviewFormatterTest {
     assertTrue(text.contains("example:1->2"));
     assertTrue(text.contains("/pluginData/example missing-plugin"));
     assertTrue(text.contains("cannot be applied or executed"));
+    assertTrue(text.contains("\"profiles\""));
+    assertTrue(text.contains("\"outputs\""));
+    assertTrue(text.contains("\"provenance\""));
   }
 
   private static ExperimentDocument document() {

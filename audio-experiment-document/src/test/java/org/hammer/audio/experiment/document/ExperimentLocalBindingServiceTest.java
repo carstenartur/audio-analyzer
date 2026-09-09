@@ -103,7 +103,10 @@ class ExperimentLocalBindingServiceTest {
                 ExperimentDocumentFormat.WORKFLOW_VERSION,
                 WORKFLOW,
                 DocumentHashes.sha256(WORKFLOW)),
-            DocumentValue.object(Map.of()),
+            DocumentValue.object(
+                Map.of(
+                    "source",
+                    DocumentValue.object(Map.of("assetId", DocumentValue.string("recording"))))),
             List.of(),
             Map.of(),
             List.of(

@@ -2,6 +2,8 @@ package org.hammer.audio.experiment.document;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collection;
 import java.util.Objects;
@@ -66,7 +68,9 @@ public final class ExperimentDocumentService {
   public ExperimentDocumentPreview normalize(Path source, Path target) throws IOException {
     Path normalizedSource = Objects.requireNonNull(source, "source").toAbsolutePath().normalize();
     Path normalizedTarget = Objects.requireNonNull(target, "target").toAbsolutePath().normalize();
-    if (normalizedSource.equals(normalizedTarget)) {
+    if (normalizedSource.equals(normalizedTarget)
+        || (Files.exists(normalizedTarget)
+            && Files.isSameFile(normalizedSource, normalizedTarget))) {
       throw new IOException("Normalize requires a distinct Save As target");
     }
     ExperimentDocumentPreview preview = preview(normalizedSource);
@@ -78,6 +82,14 @@ public final class ExperimentDocumentService {
   public Workflow workflow(ExperimentDocumentPreview preview) {
     Objects.requireNonNull(preview, "preview");
     return workflowParser.parse(preview.document().workflow().content());
+  }
+
+  /**
+   * Complete canonical data for a plain-text import preview, including preserved plugin sections.
+   */
+  public String inspectionJson(ExperimentDocumentPreview preview)
+      throws ExperimentDocumentException {
+    return new String(codec.encode(preview.document()), StandardCharsets.UTF_8);
   }
 
   /** Return the checked-in public v1 schema without resolving any external URI. */

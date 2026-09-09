@@ -16,6 +16,12 @@ large datasets, credentials, local output directories or executable implementati
 | Embedded workflow format | `io.github.carstenartur.audio-analyzer.workflow-dsl`          |
 | Public schema resource   | `schemas/audio-analyzer-experiment-v1.schema.json`            |
 
+New documents use the [public v1 schema URL](https://raw.githubusercontent.com/carstenartur/audio-analyzer/master/audio-experiment-document/src/main/resources/schemas/audio-analyzer-experiment-v1.schema.json)
+as `$schema`. The earlier relative resource identity remains an accepted v1 alias and is preserved
+when normalizing existing files. Neither identifier is fetched during import.
+The [vendor media-type registration dossier](../specifications/audio-experiment-media-type.md)
+records the proposed registration information; this implementation does not claim IANA registration.
+
 The extension and media type are hints only. Every importer verifies `format`, `formatVersion`, the
 checked-in schema identity, the canonical workflow hash and the canonical document hash.
 
@@ -51,6 +57,41 @@ Two hashes have distinct purposes:
 
 A mismatch is a validation error; the document is never silently accepted or repaired in place.
 
+The canonical encoding has no BOM, insignificant whitespace or trailing newline. Core fields use the
+order emitted by `ExperimentDocumentCodec`; extensible object keys use Java lexicographic order.
+JSON numeric data is parsed as exact decimals and normalized with `BigDecimal.stripTrailingZeros()`;
+large powers of ten may use exponent notation. Strings preserve their Unicode content. This is the
+Audio Analyzer normal form, not an assertion of RFC 8785/JCS compatibility. The checked-in fixtures
+provide byte-level examples for independent implementations.
+
+## Core profiles and reproducibility
+
+`profiles` is a closed core object. Each of its five sections is optional, but a present section must
+contain the fields defined in the public schema:
+
+|      Section      |                                                    Contents                                                     |
+|-------------------|-----------------------------------------------------------------------------------------------------------------|
+| `source`          | `assetId` referring to an entry in `assets`; required for `recording`, `replay` and `dataset` modes             |
+| `capture`         | Sample rate in Hz, channel count, PCM sample size, signedness, byte order and logical device requirements       |
+| `microphoneArray` | Stable identity, name and microphone positions in metres with zero-based channel mapping                        |
+| `calibration`     | Identity, reference channel, channel timing/level parameters, validity interval and an evidence asset reference |
+| `environment`     | Temperature in Celsius, relative humidity in percent, speed of sound in m/s and explanatory notes               |
+
+Channel indices are unique and contiguous. Capture, geometry and calibration channel counts agree;
+calibration validity ends after its creation instant. A calibration that has expired can still be
+opened for historical inspection; storing a validity interval does not certify current hardware.
+All source and calibration evidence references resolve to declared, bounded assets. Opening a
+document does not read those assets: explicit local binding performs the size/digest checks later.
+
+`provenance` additionally supports optional `algorithmVersions`, `sourceCommit` (Git object ID) and
+`sourceRun` (stable run ID). Creator information, including `verifiedAccount`, is an imported claim;
+the document hash is an integrity check, not a signature or identity verification.
+
+Local device IDs, credentials and output directories have no core representation. Workflow metadata
+cannot smuggle these bindings or implementation/script/command references into the portable setup.
+Use logical output IDs and `outputs` instead of `output.path`. Unknown plugin payloads remain inert
+data and are never used for reflection, shell execution, network retrieval or plugin installation.
+
 ## Import safety
 
 All input is untrusted. The shared `ExperimentDocumentService` enforces the same rules for CLI,
@@ -60,6 +101,8 @@ REST, Swing and web adapters:
 - maximum nesting depth: 64;
 - maximum collection size per level: 10,000;
 - bounded string values;
+- number tokens limited to 128 characters and parsed without floating-point rounding;
+- exactly one UTF-8 JSON document, with no trailing JSON value;
 - strict duplicate-key rejection;
 - fixed allowlists for all current core fields;
 - rejection of unsupported future envelope versions;
@@ -69,6 +112,13 @@ REST, Swing and web adapters:
 - no absolute paths, path traversal or output directories in portable values;
 - no local device opening or experiment execution during preview;
 - no file write before an explicit normalize/save-as destination is selected.
+
+Limits cover the entire envelope and plugin data during streaming, before tree allocation.
+The complete bundled Draft 2020-12 schema is validated locally with network retrieval disabled.
+Portable basenames also reject control characters, Windows device names and trailing dots/spaces.
+Output names are unique ignoring case, so two declared outputs cannot collide on another platform.
+Assets are relative paths of at most 1024 characters with portable components of at most 255 characters.
+Byte sizes are bounded by `2^53 - 1` for exact interchange with JavaScript tooling.
 
 Parsing or preview failure leaves the current workflow and session unchanged.
 
@@ -97,6 +147,11 @@ participants does not block import.
 The Swing desktop currently offers modeless preview and normalized Save As only; it never applies or
 executes a document on open. The web workbench offers preview, normalize and explicitly confirmed
 apply.
+
+CLI, desktop and web previews include the complete canonical document, so profiles, assets, output
+requests, provenance and preserved plugin sections can be inspected before any replacement.
+Save As rejects symbolic-link and hard-link aliases of the imported file. Saving uses a unique
+sibling temporary file and removes it on failure; predictable `.partial` paths are never followed.
 
 ## Local asset and output bindings
 
@@ -159,12 +214,30 @@ limits, canonical serialization and local schema evaluation.
 
 No unsupported section is discarded silently.
 
+Package requirements currently support `*` or an exact installed package version. Other range
+expressions fail closed as incompatible. Algorithm incompatibility preserves the original section
+and blocks required use even after saving and reopening the normalized document.
+
+Envelope version 1 is the first supported envelope; there is no invented version-0 migration.
+Older internal properties manifests are separate formats. Future envelope migrations must be
+explicitly specified and tested before their input versions are accepted. Plugin schema migration
+is independent of the envelope and advances through explicit adjacent versions. Save As writes a
+new document and records successful migrations; it never rewrites the imported source.
+
 ## CLI
+
+Build the module and its dependencies with Java 21, then obtain its runtime classpath (Unix shell):
+
+```bash
+mvn -B -pl audio-experiment-document -am install
+mvn -B -pl audio-experiment-document dependency:build-classpath \
+  -Dmdep.outputFile=target/cli-classpath.txt
+```
 
 Validate and inspect a document:
 
 ```bash
-java -cp audio-experiment-document.jar \
+java -cp "audio-experiment-document/target/classes:$(cat audio-experiment-document/target/cli-classpath.txt)" \
   org.hammer.audio.experiment.document.ExperimentDocumentCli \
   validate docs/examples/minimal.audioexp
 ```
@@ -172,7 +245,7 @@ java -cp audio-experiment-document.jar \
 Write a canonical copy to a distinct destination:
 
 ```bash
-java -cp audio-experiment-document.jar \
+java -cp "audio-experiment-document/target/classes:$(cat audio-experiment-document/target/cli-classpath.txt)" \
   org.hammer.audio.experiment.document.ExperimentDocumentCli \
   normalize docs/examples/minimal.audioexp /tmp/minimal-normalized.audioexp
 ```
@@ -207,6 +280,14 @@ projection with `dirty: true`, because the imported workflow has not yet been ch
 - [`minimal.audioexp`](../examples/minimal.audioexp) is a byte-stable core-only setup.
 - [`unknown-optional-plugin.audioexp`](../examples/unknown-optional-plugin.audioexp) demonstrates
   preservation of plugin data when the optional plugin is unavailable.
+- [`full.audioexp`](../examples/full.audioexp) includes a connected workflow, every core profile,
+  calibration validity, provenance versions and two tiny, digest-verified assets in `examples/assets`.
+- [`legacy-plugin.audioexp`](../examples/legacy-plugin.audioexp) and
+  [`migrated-plugin.audioexp`](../examples/migrated-plugin.audioexp) are the deterministic before/after
+  fixtures for the test gain contribution's explicit schema 1 to 2 migration.
+- [`invalid`](../examples/invalid) contains future-version, duplicate-key, traversal and active-content
+  documents that the importer must reject. Their stale hashes are intentional: structural rejection
+  must happen before hash verification.
 
 These examples are intentionally small. They can be validated and normalized by the public codec,
 CLI and REST API.
