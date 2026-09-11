@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>SpectrumSnapshot.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer DSP and Analysis</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.analysis</a> &gt; <span class="el_source">SpectrumSnapshot.java</span></div><h1>SpectrumSnapshot.java</h1><pre class="source lang-java linenums">package org.hammer.audio.analysis;
+
+/**
+ * Immutable spectrum-analysis snapshot produced by {@link SpectrumAnalyzer}.
+ *
+ * &lt;p&gt;Contains the one-sided magnitude spectrum (DC ... Nyquist) computed from one channel of an
+ * audio block, the FFT size that produced it, and the sample rate (for bin → frequency conversion).
+ *
+ * @author refactoring
+ */
+public final class SpectrumSnapshot implements AnalysisSnapshot {
+
+  private final long sourceFrameIndex;
+  private final long sourceTimestampNanos;
+  private final int fftSize;
+  private final float sampleRate;
+  private final int channel;
+  private final float[] magnitudes;
+
+  /**
+   * Create a new spectrum snapshot. The magnitudes array is defensively copied.
+   *
+   * @param sourceFrameIndex frame index from the analyzed block
+   * @param sourceTimestampNanos timestamp from the analyzed block
+   * @param channel channel index that was analyzed
+   * @param sampleRate sample rate of the source audio
+   * @param fftSize FFT size that produced the magnitudes
+   * @param magnitudes one-sided magnitude spectrum of length {@code fftSize/2 + 1}
+   * @throws IllegalArgumentException if {@code magnitudes.length != fftSize/2 + 1}
+   */
+  public SpectrumSnapshot(
+      long sourceFrameIndex,
+      long sourceTimestampNanos,
+      int channel,
+      float sampleRate,
+      int fftSize,
+<span class="fc" id="L37">      float[] magnitudes) {</span>
+<span class="pc bpc" id="L38" title="1 of 2 branches missed.">    if (magnitudes.length != fftSize / 2 + 1) {</span>
+<span class="nc" id="L39">      throw new IllegalArgumentException(</span>
+          &quot;magnitudes.length must be fftSize/2+1, was &quot; + magnitudes.length);
+    }
+<span class="fc" id="L42">    this.sourceFrameIndex = sourceFrameIndex;</span>
+<span class="fc" id="L43">    this.sourceTimestampNanos = sourceTimestampNanos;</span>
+<span class="fc" id="L44">    this.channel = channel;</span>
+<span class="fc" id="L45">    this.sampleRate = sampleRate;</span>
+<span class="fc" id="L46">    this.fftSize = fftSize;</span>
+<span class="fc" id="L47">    this.magnitudes = magnitudes.clone();</span>
+<span class="fc" id="L48">  }</span>
+
+  @Override
+  public long sourceFrameIndex() {
+<span class="fc" id="L52">    return sourceFrameIndex;</span>
+  }
+
+  @Override
+  public long sourceTimestampNanos() {
+<span class="fc" id="L57">    return sourceTimestampNanos;</span>
+  }
+
+  /**
+   * @return analyzed channel index
+   */
+  public int channel() {
+<span class="fc" id="L64">    return channel;</span>
+  }
+
+  /**
+   * @return sample rate of the source audio (Hz)
+   */
+  public float sampleRate() {
+<span class="fc" id="L71">    return sampleRate;</span>
+  }
+
+  /**
+   * @return the FFT size that produced the magnitudes
+   */
+  public int fftSize() {
+<span class="fc" id="L78">    return fftSize;</span>
+  }
+
+  /**
+   * @return frequency resolution per bin in Hz, i.e. {@code sampleRate / fftSize}
+   */
+  public float binWidthHz() {
+<span class="fc" id="L85">    return sampleRate / fftSize;</span>
+  }
+
+  /**
+   * @param bin bin index in {@code [0, magnitudes().length)}
+   * @return centre frequency of the given bin in Hz
+   */
+  public float frequencyOfBin(int bin) {
+<span class="fc" id="L93">    return bin * binWidthHz();</span>
+  }
+
+  /**
+   * @return defensive copy of the one-sided magnitude spectrum
+   */
+  public float[] magnitudes() {
+<span class="fc" id="L100">    return magnitudes.clone();</span>
+  }
+
+  /**
+   * Read-only access to the internal magnitudes array. Callers must not mutate the returned array.
+   * Intended for hot rendering paths and downstream analyzers that need to avoid per-frame
+   * allocations.
+   *
+   * @return the internal magnitudes array (do not mutate)
+   */
+  public float[] magnitudesView() {
+<span class="fc" id="L111">    return magnitudes;</span>
+  }
+
+  /**
+   * @return number of frequency bins in the one-sided spectrum
+   */
+  public int binCount() {
+<span class="fc" id="L118">    return magnitudes.length;</span>
+  }
+
+  /**
+   * @param bin bin index
+   * @return magnitude at that bin
+   */
+  public float magnitude(int bin) {
+<span class="fc" id="L126">    return magnitudes[bin];</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

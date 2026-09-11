@@ -1,0 +1,181 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WorkflowHistorySearch.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Core</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.history</a> &gt; <span class="el_source">WorkflowHistorySearch.java</span></div><h1>WorkflowHistorySearch.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.history;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+import org.hammer.audio.workflow.Node;
+import org.hammer.audio.workflow.Workflow;
+import org.hammer.audio.workflow.dsl.WorkflowDslParser;
+import org.hammer.audio.workflow.store.CommitInfo;
+import org.hammer.audio.workflow.store.VersionedWorkflowStore;
+import org.hammer.audio.workflow.store.WorkflowSnapshot;
+
+/**
+ * Read-only query API for searching workflow history stored in a {@link VersionedWorkflowStore}.
+ *
+ * &lt;p&gt;This service walks a reverse-chronological commit list, parses each stored snapshot back into
+ * a domain {@link Workflow} and applies a predicate to decide whether the version should be
+ * included in the result. It is a &lt;em&gt;derived view&lt;/em&gt; only; it never mutates the store or any
+ * editor state.
+ *
+ * &lt;p&gt;Callers must supply a {@link VersionedWorkflowStore} and a ref name (branch). The number of
+ * commits examined is bounded by the {@code historyLimit} parameter passed to each search method.
+ *
+ * &lt;p&gt;&lt;b&gt;Performance note&lt;/b&gt;: this implementation parses every snapshot in the examined history
+ * window. For production usage at scale, a dedicated search index should be used instead; this
+ * class exists to satisfy the read-only query API requirement without introducing an index
+ * dependency in the domain layer.
+ *
+ * &lt;p&gt;Owned by the semantic-analysis/history-projection layer. Must not depend on UI, JGit or
+ * execution internals.
+ */
+public final class WorkflowHistorySearch {
+
+  private final WorkflowDslParser parser;
+
+  /** Creates a search service using a default {@link WorkflowDslParser}. */
+<span class="fc" id="L37">  public WorkflowHistorySearch() {</span>
+<span class="fc" id="L38">    this.parser = new WorkflowDslParser();</span>
+<span class="fc" id="L39">  }</span>
+
+  /**
+   * A commit that matched a search query, together with the identifiers of the matching objects
+   * inside the workflow at that commit.
+   *
+   * @param commitInfo commit summary from the store
+   * @param matchedObjectIds stable identifiers of nodes or edges that matched the query; may be
+   *     empty when the match is on commit-level metadata only
+   */
+  public record CommitMatch(CommitInfo commitInfo, List&lt;String&gt; matchedObjectIds) {
+<span class="fc" id="L50">    public CommitMatch {</span>
+<span class="fc" id="L51">      Objects.requireNonNull(commitInfo, &quot;commitInfo&quot;);</span>
+<span class="fc" id="L52">      matchedObjectIds = List.copyOf(Objects.requireNonNull(matchedObjectIds, &quot;matchedObjectIds&quot;));</span>
+<span class="fc" id="L53">    }</span>
+  }
+
+  /**
+   * Returns the commits (up to {@code historyLimit}) on {@code refName} whose workflow snapshot
+   * contains at least one node with the given {@code nodeType}.
+   *
+   * @param store versioned workflow store; must not be {@code null}
+   * @param refName branch or ref name; must not be blank
+   * @param historyLimit maximum number of commits to examine; must be &amp;ge; 0
+   * @param nodeType node type string to search for; must not be blank
+   * @return matching commits, most recent first
+   */
+  public List&lt;CommitMatch&gt; findByNodeType(
+      VersionedWorkflowStore store, String refName, int historyLimit, String nodeType) {
+<span class="fc" id="L68">    Objects.requireNonNull(store, &quot;store&quot;);</span>
+<span class="fc" id="L69">    requireNonBlank(refName, &quot;refName&quot;);</span>
+<span class="fc" id="L70">    requireNonNegative(historyLimit, &quot;historyLimit&quot;);</span>
+<span class="fc" id="L71">    requireNonBlank(nodeType, &quot;nodeType&quot;);</span>
+
+<span class="fc" id="L73">    List&lt;CommitMatch&gt; results = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L74" title="All 2 branches covered.">    for (CommitInfo info : store.history(refName, historyLimit)) {</span>
+<span class="fc" id="L75">      Workflow workflow = parseWorkflow(store, info);</span>
+<span class="fc" id="L76">      List&lt;String&gt; matched = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L77" title="All 2 branches covered.">      for (Node node : workflow.nodes()) {</span>
+<span class="fc bfc" id="L78" title="All 2 branches covered.">        if (nodeType.equals(node.type())) {</span>
+<span class="fc" id="L79">          matched.add(node.id());</span>
+        }
+<span class="fc" id="L81">      }</span>
+<span class="fc bfc" id="L82" title="All 2 branches covered.">      if (!matched.isEmpty()) {</span>
+<span class="fc" id="L83">        results.add(new CommitMatch(info, matched));</span>
+      }
+<span class="fc" id="L85">    }</span>
+<span class="fc" id="L86">    return List.copyOf(results);</span>
+  }
+
+  /**
+   * Returns the commits (up to {@code historyLimit}) on {@code refName} whose workflow snapshot
+   * contains at least one node or edge with a metadata property matching the given key and value.
+   *
+   * @param store versioned workflow store; must not be {@code null}
+   * @param refName branch or ref name; must not be blank
+   * @param historyLimit maximum number of commits to examine; must be &amp;ge; 0
+   * @param paramKey metadata property key to search for; must not be blank
+   * @param paramValue expected metadata property value; must not be {@code null}
+   * @return matching commits, most recent first
+   */
+  public List&lt;CommitMatch&gt; findByParameter(
+      VersionedWorkflowStore store,
+      String refName,
+      int historyLimit,
+      String paramKey,
+      String paramValue) {
+<span class="fc" id="L106">    Objects.requireNonNull(store, &quot;store&quot;);</span>
+<span class="fc" id="L107">    requireNonBlank(refName, &quot;refName&quot;);</span>
+<span class="fc" id="L108">    requireNonNegative(historyLimit, &quot;historyLimit&quot;);</span>
+<span class="fc" id="L109">    requireNonBlank(paramKey, &quot;paramKey&quot;);</span>
+<span class="fc" id="L110">    Objects.requireNonNull(paramValue, &quot;paramValue&quot;);</span>
+
+<span class="fc" id="L112">    List&lt;CommitMatch&gt; results = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L113" title="All 2 branches covered.">    for (CommitInfo info : store.history(refName, historyLimit)) {</span>
+<span class="fc" id="L114">      Workflow workflow = parseWorkflow(store, info);</span>
+<span class="fc" id="L115">      List&lt;String&gt; matched = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L116" title="All 2 branches covered.">      for (Node node : workflow.nodes()) {</span>
+<span class="fc" id="L117">        String v = node.metadata().entries().get(paramKey);</span>
+<span class="fc bfc" id="L118" title="All 2 branches covered.">        if (paramValue.equals(v)) {</span>
+<span class="fc" id="L119">          matched.add(node.id());</span>
+        }
+<span class="fc" id="L121">      }</span>
+<span class="fc" id="L122">      workflow</span>
+<span class="fc" id="L123">          .edges()</span>
+<span class="fc" id="L124">          .forEach(</span>
+              edge -&gt; {
+<span class="nc" id="L126">                String v = edge.metadata().entries().get(paramKey);</span>
+<span class="nc bnc" id="L127" title="All 2 branches missed.">                if (paramValue.equals(v)) {</span>
+<span class="nc" id="L128">                  matched.add(edge.id());</span>
+                }
+<span class="nc" id="L130">              });</span>
+<span class="fc bfc" id="L131" title="All 2 branches covered.">      if (!matched.isEmpty()) {</span>
+<span class="fc" id="L132">        results.add(new CommitMatch(info, matched));</span>
+      }
+<span class="fc" id="L134">    }</span>
+<span class="fc" id="L135">    return List.copyOf(results);</span>
+  }
+
+  /**
+   * Returns the commits (up to {@code historyLimit}) on {@code refName} whose commit author equals
+   * the given {@code author}.
+   *
+   * @param store versioned workflow store; must not be {@code null}
+   * @param refName branch or ref name; must not be blank
+   * @param historyLimit maximum number of commits to examine; must be &amp;ge; 0
+   * @param author author string to match exactly; must not be blank
+   * @return matching commits, most recent first
+   */
+  public List&lt;CommitMatch&gt; findByAuthor(
+      VersionedWorkflowStore store, String refName, int historyLimit, String author) {
+<span class="fc" id="L150">    Objects.requireNonNull(store, &quot;store&quot;);</span>
+<span class="fc" id="L151">    requireNonBlank(refName, &quot;refName&quot;);</span>
+<span class="fc" id="L152">    requireNonNegative(historyLimit, &quot;historyLimit&quot;);</span>
+<span class="fc" id="L153">    requireNonBlank(author, &quot;author&quot;);</span>
+
+<span class="fc" id="L155">    List&lt;CommitMatch&gt; results = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L156" title="All 2 branches covered.">    for (CommitInfo info : store.history(refName, historyLimit)) {</span>
+<span class="fc bfc" id="L157" title="All 2 branches covered.">      if (author.equals(info.metadata().author())) {</span>
+<span class="fc" id="L158">        results.add(new CommitMatch(info, List.of()));</span>
+      }
+<span class="fc" id="L160">    }</span>
+<span class="fc" id="L161">    return List.copyOf(results);</span>
+  }
+
+  private Workflow parseWorkflow(VersionedWorkflowStore store, CommitInfo info) {
+<span class="fc" id="L165">    WorkflowSnapshot snapshot = store.loadAtCommit(info.commitId());</span>
+<span class="fc" id="L166">    return parser.parse(snapshot.dslText());</span>
+  }
+
+  private static void requireNonBlank(String value, String name) {
+<span class="pc bpc" id="L170" title="1 of 4 branches missed.">    if (value == null || value.isBlank()) {</span>
+<span class="fc" id="L171">      throw new IllegalArgumentException(name + &quot; must not be blank&quot;);</span>
+    }
+<span class="fc" id="L173">  }</span>
+
+  private static void requireNonNegative(int value, String name) {
+<span class="fc bfc" id="L176" title="All 2 branches covered.">    if (value &lt; 0) {</span>
+<span class="fc" id="L177">      throw new IllegalArgumentException(name + &quot; must be &gt;= 0&quot;);</span>
+    }
+<span class="fc" id="L179">  }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

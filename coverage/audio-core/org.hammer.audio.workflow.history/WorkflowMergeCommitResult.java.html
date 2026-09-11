@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WorkflowMergeCommitResult.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Core</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.history</a> &gt; <span class="el_source">WorkflowMergeCommitResult.java</span></div><h1>WorkflowMergeCommitResult.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.history;
+
+import java.util.Objects;
+import org.hammer.audio.workflow.Workflow;
+import org.hammer.audio.workflow.store.CommitId;
+
+/**
+ * Evidence for one validated semantic merge checkpoint.
+ *
+ * @param targetBranch branch advanced by the merge
+ * @param baseCommit exact common-base commit
+ * @param localCommit exact previous local HEAD
+ * @param remoteCommit exact remote source commit
+ * @param mergedCommit newly created checkpoint commit
+ * @param workflow validated deterministic merged workflow
+ * @param auditMessage complete deterministic commit message including merge-resolution metadata
+ */
+public record WorkflowMergeCommitResult(
+    String targetBranch,
+    CommitId baseCommit,
+    CommitId localCommit,
+    CommitId remoteCommit,
+    CommitId mergedCommit,
+    Workflow workflow,
+    String auditMessage) {
+
+<span class="fc" id="L27">  public WorkflowMergeCommitResult {</span>
+<span class="pc bpc" id="L28" title="2 of 4 branches missed.">    if (targetBranch == null || targetBranch.isBlank()) {</span>
+<span class="nc" id="L29">      throw new IllegalArgumentException(&quot;targetBranch must not be blank&quot;);</span>
+    }
+<span class="fc" id="L31">    Objects.requireNonNull(baseCommit, &quot;baseCommit&quot;);</span>
+<span class="fc" id="L32">    Objects.requireNonNull(localCommit, &quot;localCommit&quot;);</span>
+<span class="fc" id="L33">    Objects.requireNonNull(remoteCommit, &quot;remoteCommit&quot;);</span>
+<span class="fc" id="L34">    Objects.requireNonNull(mergedCommit, &quot;mergedCommit&quot;);</span>
+<span class="fc" id="L35">    Objects.requireNonNull(workflow, &quot;workflow&quot;);</span>
+<span class="pc bpc" id="L36" title="2 of 4 branches missed.">    if (auditMessage == null || auditMessage.isBlank()) {</span>
+<span class="nc" id="L37">      throw new IllegalArgumentException(&quot;auditMessage must not be blank&quot;);</span>
+    }
+<span class="fc" id="L39">  }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

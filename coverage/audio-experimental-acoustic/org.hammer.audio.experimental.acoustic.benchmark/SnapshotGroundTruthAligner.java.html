@@ -1,0 +1,499 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>SnapshotGroundTruthAligner.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.benchmark</a> &gt; <span class="el_source">SnapshotGroundTruthAligner.java</span></div><h1>SnapshotGroundTruthAligner.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.benchmark;
+
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Objects;
+import org.hammer.audio.experimental.acoustic.scenario.AcousticGroundTruth;
+import org.hammer.audio.experimental.acoustic.scenario.Scenario;
+import org.hammer.audio.experimental.acoustic.scenario.ScenarioSource;
+import org.hammer.audio.experimental.acoustic.scenario.ScenarioTrajectory;
+import org.hammer.audio.experimental.acoustic.tracking.TrackedSource;
+import org.hammer.audio.experimental.acoustic.tracking.TrackingSnapshot;
+import org.hammer.audio.geometry.Vector2;
+
+/**
+ * Align tracking snapshots to scenario ground truth with deterministic nearest-neighbour matching.
+ */
+<span class="fc" id="L18">public final class SnapshotGroundTruthAligner {</span>
+
+  private static final double MAX_POSITION_ALIGNMENT_METERS = 1.5;
+  private static final double MAX_FREQUENCY_ALIGNMENT_HZ = 120.0;
+  private static final double FREQUENCY_TIE_BREAK_COST_METERS_PER_HZ = 1.0e-6;
+<span class="fc" id="L23">  private static final Comparator&lt;GroundTruthObservation&gt; TRUTH_ORDER =</span>
+<span class="fc" id="L24">      Comparator.comparing((GroundTruthObservation observation) -&gt; observation.source().sourceId())</span>
+<span class="fc" id="L25">          .thenComparing(</span>
+<span class="fc" id="L26">              GroundTruthObservation::expectedFrequencyHz, Comparator.nullsLast(Double::compareTo))</span>
+<span class="fc" id="L27">          .thenComparing(</span>
+              observation -&gt;
+<span class="nc bnc" id="L29" title="All 2 branches missed.">                  observation.expectedPositionMeters() != null</span>
+<span class="nc" id="L30">                      ? observation.expectedPositionMeters().x()</span>
+<span class="nc" id="L31">                      : null,</span>
+<span class="fc" id="L32">              Comparator.nullsLast(Double::compareTo))</span>
+<span class="fc" id="L33">          .thenComparing(</span>
+              observation -&gt;
+<span class="nc bnc" id="L35" title="All 2 branches missed.">                  observation.expectedPositionMeters() != null</span>
+<span class="nc" id="L36">                      ? observation.expectedPositionMeters().y()</span>
+<span class="nc" id="L37">                      : null,</span>
+<span class="fc" id="L38">              Comparator.nullsLast(Double::compareTo));</span>
+<span class="fc" id="L39">  private static final Comparator&lt;IndexedTrack&gt; TRACK_ORDER =</span>
+<span class="fc" id="L40">      Comparator.comparingInt((IndexedTrack track) -&gt; track.trackedSource().id())</span>
+<span class="pc" id="L41">          .thenComparingDouble(track -&gt; track.trackedSource().frequencyHz())</span>
+<span class="pc" id="L42">          .thenComparingDouble(track -&gt; track.trackedSource().positionMeters().x())</span>
+<span class="pc" id="L43">          .thenComparingDouble(track -&gt; track.trackedSource().positionMeters().y())</span>
+<span class="fc" id="L44">          .thenComparingInt(IndexedTrack::originalIndex);</span>
+  private static final long COST_SCALE = 1_000_000L;
+
+  /**
+   * Align one snapshot to the supplied scenario truth.
+   *
+   * &lt;p&gt;This overload expects {@link TrackingSnapshot#sourceTimestampNanos()} to already be
+   * normalized to scenario-relative time, such as by subtracting the first snapshot timestamp in a
+   * benchmark run.
+   */
+  public SnapshotAlignment align(Scenario scenario, TrackingSnapshot snapshot) {
+<span class="fc" id="L55">    return align(scenario, snapshot, 0L);</span>
+  }
+
+  /**
+   * Align one snapshot to the supplied scenario truth using a scenario start timestamp.
+   *
+   * &lt;p&gt;The scenario time is computed as {@code (snapshot.sourceTimestampNanos() -
+   * scenarioStartTimestampNanos) / 1e9}. Use this overload when snapshots carry capture timestamps
+   * from live or recorded pipelines instead of scenario-relative nanoseconds.
+   */
+  public SnapshotAlignment align(
+      Scenario scenario, TrackingSnapshot snapshot, long scenarioStartTimestampNanos) {
+<span class="fc" id="L67">    Objects.requireNonNull(scenario, &quot;scenario&quot;);</span>
+<span class="fc" id="L68">    Objects.requireNonNull(snapshot, &quot;snapshot&quot;);</span>
+<span class="fc" id="L69">    double timestampSeconds =</span>
+<span class="fc" id="L70">        (snapshot.sourceTimestampNanos() - scenarioStartTimestampNanos) / 1.0e9;</span>
+<span class="fc" id="L71">    List&lt;GroundTruthObservation&gt; truthSamples = truthSamplesAt(scenario, timestampSeconds);</span>
+<span class="fc" id="L72">    List&lt;IndexedTrack&gt; indexedTracks = sortedTracks(snapshot.tracks());</span>
+<span class="fc" id="L73">    Assignment assignment = bestAssignment(truthSamples, indexedTracks);</span>
+
+<span class="fc" id="L75">    List&lt;AlignedSourceObservation&gt; matchedSources = new ArrayList&lt;&gt;(assignment.pairs().size());</span>
+<span class="fc" id="L76">    boolean[] matchedTruthIndexes = new boolean[truthSamples.size()];</span>
+<span class="fc" id="L77">    boolean[] matchedTrackIndexes = new boolean[snapshot.tracks().size()];</span>
+<span class="fc bfc" id="L78" title="All 2 branches covered.">    for (MatchPair pair : assignment.pairs()) {</span>
+<span class="fc" id="L79">      GroundTruthObservation sample = truthSamples.get(pair.truthIndex());</span>
+<span class="fc" id="L80">      IndexedTrack track = indexedTracks.get(pair.trackIndex());</span>
+<span class="fc" id="L81">      matchedTruthIndexes[pair.truthIndex()] = true;</span>
+<span class="fc" id="L82">      matchedTrackIndexes[track.originalIndex()] = true;</span>
+<span class="fc" id="L83">      matchedSources.add(new AlignedSourceObservation(sample, track.trackedSource()));</span>
+<span class="fc" id="L84">    }</span>
+
+<span class="fc" id="L86">    List&lt;GroundTruthObservation&gt; missingSources = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L87" title="All 2 branches covered.">    for (int i = 0; i &lt; truthSamples.size(); i++) {</span>
+<span class="fc bfc" id="L88" title="All 2 branches covered.">      if (!matchedTruthIndexes[i]) {</span>
+<span class="fc" id="L89">        missingSources.add(truthSamples.get(i));</span>
+      }
+    }
+
+<span class="fc" id="L93">    List&lt;TrackedSource&gt; spuriousTracks = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L94" title="All 2 branches covered.">    for (int i = 0; i &lt; snapshot.tracks().size(); i++) {</span>
+<span class="fc bfc" id="L95" title="All 2 branches covered.">      if (!matchedTrackIndexes[i]) {</span>
+<span class="fc" id="L96">        spuriousTracks.add(snapshot.tracks().get(i));</span>
+      }
+    }
+
+<span class="fc" id="L100">    return new SnapshotAlignment(timestampSeconds, matchedSources, missingSources, spuriousTracks);</span>
+  }
+
+  private static List&lt;GroundTruthObservation&gt; truthSamplesAt(
+      Scenario scenario, double timestampSeconds) {
+<span class="fc" id="L105">    List&lt;GroundTruthObservation&gt; samples = new ArrayList&lt;&gt;(scenario.sources().size());</span>
+<span class="fc bfc" id="L106" title="All 2 branches covered.">    for (ScenarioSource source : scenario.sources()) {</span>
+<span class="fc" id="L107">      ScenarioTrajectory trajectory = source.trajectory();</span>
+      Vector2 expectedPosition =
+<span class="fc bfc" id="L109" title="All 2 branches covered.">          trajectory != null</span>
+<span class="fc" id="L110">              ? interpolate(trajectory.positions(), trajectory.timestamps(), timestampSeconds)</span>
+<span class="fc" id="L111">              : null;</span>
+      Vector2 expectedVelocity =
+<span class="fc bfc" id="L113" title="All 4 branches covered.">          trajectory != null &amp;&amp; trajectory.velocities() != null</span>
+<span class="fc" id="L114">              ? interpolate(trajectory.velocities(), trajectory.timestamps(), timestampSeconds)</span>
+<span class="fc" id="L115">              : null;</span>
+<span class="fc" id="L116">      AcousticGroundTruth acoustic = source.acousticProperties();</span>
+<span class="fc bfc" id="L117" title="All 2 branches covered.">      Double expectedFrequency = acoustic != null ? acoustic.fundamentalFrequencyHz() : null;</span>
+<span class="fc" id="L118">      samples.add(</span>
+          new GroundTruthObservation(
+              source, expectedPosition, expectedVelocity, expectedFrequency));
+<span class="fc" id="L121">    }</span>
+<span class="fc" id="L122">    samples.sort(TRUTH_ORDER);</span>
+<span class="fc" id="L123">    return samples;</span>
+  }
+
+  private static Vector2 interpolate(
+      List&lt;Vector2&gt; values, List&lt;Double&gt; timestamps, double timestampSeconds) {
+<span class="fc bfc" id="L128" title="All 2 branches covered.">    if (timestampSeconds &lt;= timestamps.get(0)) {</span>
+<span class="fc" id="L129">      return values.get(0);</span>
+    }
+<span class="fc" id="L131">    int lastIndex = timestamps.size() - 1;</span>
+<span class="fc bfc" id="L132" title="All 2 branches covered.">    if (timestampSeconds &gt;= timestamps.get(lastIndex)) {</span>
+<span class="fc" id="L133">      return values.get(lastIndex);</span>
+    }
+<span class="pc bpc" id="L135" title="1 of 2 branches missed.">    for (int i = 1; i &lt; timestamps.size(); i++) {</span>
+<span class="fc" id="L136">      double upperTime = timestamps.get(i);</span>
+<span class="pc bpc" id="L137" title="1 of 2 branches missed.">      if (timestampSeconds &lt;= upperTime) {</span>
+<span class="fc" id="L138">        double lowerTime = timestamps.get(i - 1);</span>
+<span class="fc" id="L139">        double alpha = (timestampSeconds - lowerTime) / (upperTime - lowerTime);</span>
+<span class="fc" id="L140">        Vector2 lower = values.get(i - 1);</span>
+<span class="fc" id="L141">        Vector2 upper = values.get(i);</span>
+<span class="fc" id="L142">        return lower.plus(upper.minus(lower).scale(alpha));</span>
+      }
+    }
+<span class="nc" id="L145">    return values.get(lastIndex);</span>
+  }
+
+  private static List&lt;IndexedTrack&gt; sortedTracks(List&lt;TrackedSource&gt; tracks) {
+<span class="fc" id="L149">    List&lt;IndexedTrack&gt; indexedTracks = new ArrayList&lt;&gt;(tracks.size());</span>
+<span class="fc bfc" id="L150" title="All 2 branches covered.">    for (int i = 0; i &lt; tracks.size(); i++) {</span>
+<span class="fc" id="L151">      indexedTracks.add(new IndexedTrack(i, tracks.get(i)));</span>
+    }
+<span class="fc" id="L153">    indexedTracks.sort(TRACK_ORDER);</span>
+<span class="fc" id="L154">    return List.copyOf(indexedTracks);</span>
+  }
+
+  private static Assignment bestAssignment(
+      List&lt;GroundTruthObservation&gt; truthSamples, List&lt;IndexedTrack&gt; tracks) {
+<span class="fc" id="L159">    int truthCount = truthSamples.size();</span>
+<span class="fc" id="L160">    int trackCount = tracks.size();</span>
+<span class="pc bpc" id="L161" title="2 of 4 branches missed.">    if (truthCount == 0 || trackCount == 0) {</span>
+<span class="nc" id="L162">      return new Assignment(List.of());</span>
+    }
+
+<span class="fc" id="L165">    int nodeCount = 2 + truthCount + trackCount;</span>
+<span class="fc" id="L166">    int sourceNode = 0;</span>
+<span class="fc" id="L167">    int sinkNode = nodeCount - 1;</span>
+<span class="fc" id="L168">    List&lt;List&lt;Edge&gt;&gt; graph = emptyGraph(nodeCount);</span>
+<span class="fc" id="L169">    addSourceEdges(graph, sourceNode, truthCount);</span>
+<span class="fc" id="L170">    addCandidateEdges(graph, truthSamples, tracks, truthCount, trackCount);</span>
+<span class="fc" id="L171">    addSinkEdges(graph, sinkNode, truthCount, trackCount);</span>
+
+<span class="fc" id="L173">    long totalScaledCost = 0L;</span>
+<span class="fc" id="L174">    int matchedCount = 0;</span>
+    while (true) {
+<span class="fc" id="L176">      PathResult path = shortestAugmentingPath(graph, sourceNode, sinkNode);</span>
+<span class="fc bfc" id="L177" title="All 2 branches covered.">      if (!path.reachable()) {</span>
+<span class="fc" id="L178">        break;</span>
+      }
+<span class="fc" id="L180">      augment(graph, path, sinkNode);</span>
+<span class="fc" id="L181">      totalScaledCost += path.distanceToSink();</span>
+<span class="fc" id="L182">      matchedCount++;</span>
+<span class="fc" id="L183">    }</span>
+<span class="fc" id="L184">    return new Assignment(collectMatchedPairs(graph, matchedCount));</span>
+  }
+
+  private static List&lt;List&lt;Edge&gt;&gt; emptyGraph(int nodeCount) {
+<span class="fc" id="L188">    List&lt;List&lt;Edge&gt;&gt; graph = new ArrayList&lt;&gt;(nodeCount);</span>
+<span class="fc bfc" id="L189" title="All 2 branches covered.">    for (int i = 0; i &lt; nodeCount; i++) {</span>
+<span class="fc" id="L190">      graph.add(new ArrayList&lt;&gt;());</span>
+    }
+<span class="fc" id="L192">    return graph;</span>
+  }
+
+  private static void addSourceEdges(List&lt;List&lt;Edge&gt;&gt; graph, int sourceNode, int truthCount) {
+<span class="fc bfc" id="L196" title="All 2 branches covered.">    for (int truthIndex = 0; truthIndex &lt; truthCount; truthIndex++) {</span>
+<span class="fc" id="L197">      addEdge(graph, sourceNode, truthNode(truthIndex), 1, 0L, -1, -1);</span>
+    }
+<span class="fc" id="L199">  }</span>
+
+  private static void addCandidateEdges(
+      List&lt;List&lt;Edge&gt;&gt; graph,
+      List&lt;GroundTruthObservation&gt; truthSamples,
+      List&lt;IndexedTrack&gt; tracks,
+      int truthCount,
+      int trackCount) {
+<span class="fc bfc" id="L207" title="All 2 branches covered.">    for (int truthIndex = 0; truthIndex &lt; truthSamples.size(); truthIndex++) {</span>
+<span class="fc" id="L208">      addCandidateEdgesForTruth(</span>
+<span class="fc" id="L209">          graph, truthSamples.get(truthIndex), tracks, truthCount, trackCount, truthIndex);</span>
+    }
+<span class="fc" id="L211">  }</span>
+
+  private static void addCandidateEdgesForTruth(
+      List&lt;List&lt;Edge&gt;&gt; graph,
+      GroundTruthObservation truth,
+      List&lt;IndexedTrack&gt; tracks,
+      int truthCount,
+      int trackCount,
+      int truthIndex) {
+<span class="fc bfc" id="L220" title="All 2 branches covered.">    for (int trackIndex = 0; trackIndex &lt; trackCount; trackIndex++) {</span>
+<span class="fc" id="L221">      double cost = alignmentCost(truth, tracks.get(trackIndex).trackedSource());</span>
+<span class="fc bfc" id="L222" title="All 2 branches covered.">      if (!Double.isFinite(cost)) {</span>
+<span class="fc" id="L223">        continue;</span>
+      }
+<span class="fc" id="L225">      addEdge(</span>
+          graph,
+<span class="fc" id="L227">          truthNode(truthIndex),</span>
+<span class="fc" id="L228">          trackNode(truthCount, trackIndex),</span>
+          1,
+<span class="fc" id="L230">          scaledCost(cost, trackIndex, trackCount),</span>
+          truthIndex,
+          trackIndex);
+    }
+<span class="fc" id="L234">  }</span>
+
+  private static void addSinkEdges(
+      List&lt;List&lt;Edge&gt;&gt; graph, int sinkNode, int truthCount, int trackCount) {
+<span class="fc bfc" id="L238" title="All 2 branches covered.">    for (int trackIndex = 0; trackIndex &lt; trackCount; trackIndex++) {</span>
+<span class="fc" id="L239">      addEdge(graph, trackNode(truthCount, trackIndex), sinkNode, 1, 0L, -1, -1);</span>
+    }
+<span class="fc" id="L241">  }</span>
+
+  private static List&lt;MatchPair&gt; collectMatchedPairs(List&lt;List&lt;Edge&gt;&gt; graph, int matchedCount) {
+<span class="fc" id="L244">    List&lt;MatchPair&gt; pairs = new ArrayList&lt;&gt;(matchedCount);</span>
+<span class="fc bfc" id="L245" title="All 2 branches covered.">    for (List&lt;Edge&gt; edges : graph) {</span>
+<span class="fc bfc" id="L246" title="All 2 branches covered.">      for (Edge edge : edges) {</span>
+<span class="fc bfc" id="L247" title="All 2 branches covered.">        if (edge.truthIndexValue() &gt;= 0</span>
+<span class="pc bpc" id="L248" title="1 of 2 branches missed.">            &amp;&amp; edge.trackIndexValue() &gt;= 0</span>
+<span class="fc bfc" id="L249" title="All 2 branches covered.">            &amp;&amp; edge.remainingCapacityValue() == 0) {</span>
+<span class="fc" id="L250">          pairs.add(new MatchPair(edge.truthIndexValue(), edge.trackIndexValue()));</span>
+        }
+<span class="fc" id="L252">      }</span>
+<span class="fc" id="L253">    }</span>
+<span class="fc" id="L254">    pairs.sort(</span>
+<span class="fc" id="L255">        Comparator.comparingInt(MatchPair::truthIndex).thenComparingInt(MatchPair::trackIndex));</span>
+<span class="fc" id="L256">    return pairs;</span>
+  }
+
+  private static int truthNode(int truthIndex) {
+<span class="fc" id="L260">    return 1 + truthIndex;</span>
+  }
+
+  private static int trackNode(int truthCount, int trackIndex) {
+<span class="fc" id="L264">    return 1 + truthCount + trackIndex;</span>
+  }
+
+  private static long scaledCost(double cost, int trackIndex, int trackCount) {
+    // Preserve the alignment cost as the primary ordering and use the track index only as a
+    // deterministic tie-breaker when two candidate matches quantize to the same cost.
+<span class="fc" id="L270">    return Math.round(cost * COST_SCALE) * (trackCount + 1L) + trackIndex;</span>
+  }
+
+  private static void addEdge(
+      List&lt;List&lt;Edge&gt;&gt; graph,
+      int from,
+      int to,
+      int capacity,
+      long cost,
+      int truthIndex,
+      int trackIndex) {
+<span class="fc" id="L281">    Edge forward = new Edge(to, graph.get(to).size(), capacity, cost, truthIndex, trackIndex);</span>
+<span class="fc" id="L282">    Edge reverse = new Edge(from, graph.get(from).size(), 0, -cost, -1, -1);</span>
+<span class="fc" id="L283">    graph.get(from).add(forward);</span>
+<span class="fc" id="L284">    graph.get(to).add(reverse);</span>
+<span class="fc" id="L285">  }</span>
+
+  private static PathResult shortestAugmentingPath(List&lt;List&lt;Edge&gt;&gt; graph, int source, int sink) {
+<span class="fc" id="L288">    int nodeCount = graph.size();</span>
+<span class="fc" id="L289">    long[] distance = new long[nodeCount];</span>
+<span class="fc" id="L290">    int[] previousNode = new int[nodeCount];</span>
+<span class="fc" id="L291">    int[] previousEdge = new int[nodeCount];</span>
+<span class="fc" id="L292">    boolean[] inQueue = new boolean[nodeCount];</span>
+<span class="fc bfc" id="L293" title="All 2 branches covered.">    for (int i = 0; i &lt; nodeCount; i++) {</span>
+<span class="fc" id="L294">      distance[i] = Long.MAX_VALUE;</span>
+<span class="fc" id="L295">      previousNode[i] = -1;</span>
+<span class="fc" id="L296">      previousEdge[i] = -1;</span>
+    }
+<span class="fc" id="L298">    distance[source] = 0L;</span>
+
+<span class="fc" id="L300">    List&lt;Integer&gt; queue = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L301">    queue.add(source);</span>
+<span class="fc" id="L302">    inQueue[source] = true;</span>
+<span class="fc" id="L303">    int queueIndex = 0;</span>
+<span class="fc bfc" id="L304" title="All 2 branches covered.">    while (queueIndex &lt; queue.size()) {</span>
+<span class="fc" id="L305">      int node = queue.get(queueIndex);</span>
+<span class="fc" id="L306">      queueIndex++;</span>
+<span class="fc" id="L307">      inQueue[node] = false;</span>
+<span class="fc" id="L308">      List&lt;Edge&gt; edges = graph.get(node);</span>
+<span class="fc bfc" id="L309" title="All 2 branches covered.">      for (int edgeIndex = 0; edgeIndex &lt; edges.size(); edgeIndex++) {</span>
+<span class="fc" id="L310">        Edge edge = edges.get(edgeIndex);</span>
+<span class="fc bfc" id="L311" title="All 2 branches covered.">        if (edge.remainingCapacityValue() &lt;= 0) {</span>
+<span class="fc" id="L312">          continue;</span>
+        }
+<span class="fc" id="L314">        long nextDistance = distance[node] + edge.edgeCostValue();</span>
+<span class="fc bfc" id="L315" title="All 2 branches covered.">        if (nextDistance &lt; distance[edge.targetNodeValue()]) {</span>
+<span class="fc" id="L316">          distance[edge.targetNodeValue()] = nextDistance;</span>
+<span class="fc" id="L317">          previousNode[edge.targetNodeValue()] = node;</span>
+<span class="fc" id="L318">          previousEdge[edge.targetNodeValue()] = edgeIndex;</span>
+<span class="fc bfc" id="L319" title="All 2 branches covered.">          if (!inQueue[edge.targetNodeValue()]) {</span>
+<span class="fc" id="L320">            queue.add(edge.targetNodeValue());</span>
+<span class="fc" id="L321">            inQueue[edge.targetNodeValue()] = true;</span>
+          }
+        }
+      }
+<span class="fc" id="L325">    }</span>
+<span class="fc bfc" id="L326" title="All 2 branches covered.">    return new PathResult(</span>
+        distance[sink] != Long.MAX_VALUE, distance[sink], previousNode, previousEdge);
+  }
+
+  private static void augment(List&lt;List&lt;Edge&gt;&gt; graph, PathResult path, int sink) {
+<span class="fc bfc" id="L331" title="All 2 branches covered.">    for (int node = sink; path.previousNode()[node] &gt;= 0; node = path.previousNode()[node]) {</span>
+<span class="fc" id="L332">      int previousNode = path.previousNode()[node];</span>
+<span class="fc" id="L333">      Edge forward = graph.get(previousNode).get(path.previousEdge()[node]);</span>
+<span class="fc" id="L334">      Edge reverse = graph.get(node).get(forward.reverseEdgeIndexValue());</span>
+<span class="fc" id="L335">      forward.remainingCapacityValue(forward.remainingCapacityValue() - 1);</span>
+<span class="fc" id="L336">      reverse.remainingCapacityValue(reverse.remainingCapacityValue() + 1);</span>
+    }
+<span class="fc" id="L338">  }</span>
+
+  private static double alignmentCost(GroundTruthObservation truth, TrackedSource track) {
+<span class="fc bfc" id="L341" title="All 2 branches covered.">    if (!truth.hasAlignmentTruth()) {</span>
+<span class="fc" id="L342">      return Double.POSITIVE_INFINITY;</span>
+    }
+<span class="pc bpc" id="L344" title="1 of 2 branches missed.">    if (truth.expectedPositionMeters() != null) {</span>
+<span class="fc" id="L345">      double positionError = truth.expectedPositionMeters().distanceTo(track.positionMeters());</span>
+<span class="fc bfc" id="L346" title="All 2 branches covered.">      if (positionError &gt; MAX_POSITION_ALIGNMENT_METERS) {</span>
+<span class="fc" id="L347">        return Double.POSITIVE_INFINITY;</span>
+      }
+<span class="pc bpc" id="L349" title="1 of 2 branches missed.">      if (truth.expectedFrequencyHz() == null) {</span>
+<span class="nc" id="L350">        return positionError;</span>
+      }
+<span class="fc" id="L352">      double frequencyError = Math.abs(track.frequencyHz() - truth.expectedFrequencyHz());</span>
+<span class="fc" id="L353">      return positionError + frequencyError * FREQUENCY_TIE_BREAK_COST_METERS_PER_HZ;</span>
+    }
+<span class="nc bnc" id="L355" title="All 2 branches missed.">    if (truth.expectedFrequencyHz() == null) {</span>
+<span class="nc" id="L356">      return Double.POSITIVE_INFINITY;</span>
+    }
+<span class="nc" id="L358">    double frequencyError = Math.abs(track.frequencyHz() - truth.expectedFrequencyHz());</span>
+<span class="nc bnc" id="L359" title="All 2 branches missed.">    if (frequencyError &gt; MAX_FREQUENCY_ALIGNMENT_HZ) {</span>
+<span class="nc" id="L360">      return Double.POSITIVE_INFINITY;</span>
+    }
+<span class="nc" id="L362">    return frequencyError;</span>
+  }
+
+  private static final class IndexedTrack {
+    private final int originalIndexValue;
+    private final TrackedSource trackedSourceValue;
+
+<span class="fc" id="L369">    private IndexedTrack(int originalIndex, TrackedSource trackedSource) {</span>
+<span class="fc" id="L370">      this.originalIndexValue = originalIndex;</span>
+<span class="fc" id="L371">      this.trackedSourceValue = trackedSource;</span>
+<span class="fc" id="L372">    }</span>
+
+    private int originalIndex() {
+<span class="fc" id="L375">      return originalIndexValue;</span>
+    }
+
+    private TrackedSource trackedSource() {
+<span class="fc" id="L379">      return trackedSourceValue;</span>
+    }
+  }
+
+  private static final class MatchPair {
+    private final int truthIndexValue;
+    private final int trackIndexValue;
+
+<span class="fc" id="L387">    private MatchPair(int truthIndex, int trackIndex) {</span>
+<span class="fc" id="L388">      this.truthIndexValue = truthIndex;</span>
+<span class="fc" id="L389">      this.trackIndexValue = trackIndex;</span>
+<span class="fc" id="L390">    }</span>
+
+    private int truthIndex() {
+<span class="fc" id="L393">      return truthIndexValue;</span>
+    }
+
+    private int trackIndex() {
+<span class="fc" id="L397">      return trackIndexValue;</span>
+    }
+  }
+
+  private static final class Assignment {
+    private final List&lt;MatchPair&gt; pairsValue;
+
+<span class="fc" id="L404">    private Assignment(List&lt;MatchPair&gt; pairs) {</span>
+<span class="fc" id="L405">      this.pairsValue = pairs;</span>
+<span class="fc" id="L406">    }</span>
+
+    private List&lt;MatchPair&gt; pairs() {
+<span class="fc" id="L409">      return pairsValue;</span>
+    }
+  }
+
+  private static final class PathResult {
+    private final boolean reachableValue;
+    private final long distanceToSinkValue;
+    private final int[] previousNodeValue;
+    private final int[] previousEdgeValue;
+
+    private PathResult(
+<span class="fc" id="L420">        boolean reachable, long distanceToSink, int[] previousNode, int[] previousEdge) {</span>
+<span class="fc" id="L421">      this.reachableValue = reachable;</span>
+<span class="fc" id="L422">      this.distanceToSinkValue = distanceToSink;</span>
+<span class="fc" id="L423">      this.previousNodeValue = previousNode;</span>
+<span class="fc" id="L424">      this.previousEdgeValue = previousEdge;</span>
+<span class="fc" id="L425">    }</span>
+
+    private boolean reachable() {
+<span class="fc" id="L428">      return reachableValue;</span>
+    }
+
+    private long distanceToSink() {
+<span class="fc" id="L432">      return distanceToSinkValue;</span>
+    }
+
+    private int[] previousNode() {
+<span class="fc" id="L436">      return previousNodeValue;</span>
+    }
+
+    private int[] previousEdge() {
+<span class="fc" id="L440">      return previousEdgeValue;</span>
+    }
+  }
+
+  /**
+   * Residual-network edge for the min-cost max-flow truth-to-track assignment search.
+   *
+   * &lt;p&gt;{@code reverseIndex} points at the paired reverse edge, {@code truthIndex}/{@code
+   * trackIndex} identify only real truth-to-track match edges, and {@code capacity} stays mutable
+   * so the residual graph can be updated after each augmenting path while the other edge metadata
+   * remains fixed.
+   */
+  private static final class Edge {
+    private final int targetNode;
+    private final int reverseEdgeIndex;
+    private int remainingCapacity;
+    private final long edgeCost;
+    private final int truthIndex;
+    private final int trackIndex;
+
+    private Edge(
+<span class="fc" id="L461">        int to, int reverseIndex, int capacity, long cost, int truthIndex, int trackIndex) {</span>
+<span class="fc" id="L462">      this.targetNode = to;</span>
+<span class="fc" id="L463">      this.reverseEdgeIndex = reverseIndex;</span>
+<span class="fc" id="L464">      this.remainingCapacity = capacity;</span>
+<span class="fc" id="L465">      this.edgeCost = cost;</span>
+<span class="fc" id="L466">      this.truthIndex = truthIndex;</span>
+<span class="fc" id="L467">      this.trackIndex = trackIndex;</span>
+<span class="fc" id="L468">    }</span>
+
+    private int targetNodeValue() {
+<span class="fc" id="L471">      return targetNode;</span>
+    }
+
+    private int reverseEdgeIndexValue() {
+<span class="fc" id="L475">      return reverseEdgeIndex;</span>
+    }
+
+    private int remainingCapacityValue() {
+<span class="fc" id="L479">      return remainingCapacity;</span>
+    }
+
+    private void remainingCapacityValue(int capacity) {
+<span class="fc" id="L483">      this.remainingCapacity = capacity;</span>
+<span class="fc" id="L484">    }</span>
+
+    private long edgeCostValue() {
+<span class="fc" id="L487">      return edgeCost;</span>
+    }
+
+    private int truthIndexValue() {
+<span class="fc" id="L491">      return truthIndex;</span>
+    }
+
+    private int trackIndexValue() {
+<span class="fc" id="L495">      return trackIndex;</span>
+    }
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

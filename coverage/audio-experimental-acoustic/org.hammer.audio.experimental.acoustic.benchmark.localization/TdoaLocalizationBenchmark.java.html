@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>TdoaLocalizationBenchmark.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.benchmark.localization</a> &gt; <span class="el_source">TdoaLocalizationBenchmark.java</span></div><h1>TdoaLocalizationBenchmark.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.benchmark.localization;
+
+import java.util.Objects;
+import org.hammer.audio.experimental.acoustic.benchmark.BenchmarkReport;
+import org.hammer.audio.experimental.acoustic.benchmark.TrackingScenarioBenchmarkRunner;
+import org.hammer.audio.experimental.acoustic.simulation.SimulationScenarios.SimulationScenario;
+
+/**
+ * {@link LocalizationBenchmark} implementation using TDOA-based localization via the existing
+ * {@link TrackingScenarioBenchmarkRunner} pipeline (GCC-PHAT TDOA + delay-and-sum beamforming +
+ * Kalman tracking).
+ *
+ * &lt;p&gt;This benchmark delegates all signal processing to the default tracking pipeline and extracts
+ * the relevant localization metrics from the resulting {@link BenchmarkReport}.
+ */
+public final class TdoaLocalizationBenchmark implements LocalizationBenchmark {
+
+  private static final int DEFAULT_BLOCK_FRAMES = 1024;
+
+  private final TrackingScenarioBenchmarkRunner runner;
+
+  /** Create a benchmark with the default block size ({@value DEFAULT_BLOCK_FRAMES} frames). */
+  public TdoaLocalizationBenchmark() {
+<span class="fc" id="L24">    this(DEFAULT_BLOCK_FRAMES);</span>
+<span class="fc" id="L25">  }</span>
+
+  /**
+   * Create a benchmark with the given block size.
+   *
+   * @param blockFrames FFT block size in samples; must be {@code &gt;= 128}
+   */
+<span class="fc" id="L32">  public TdoaLocalizationBenchmark(int blockFrames) {</span>
+<span class="fc bfc" id="L33" title="All 2 branches covered.">    if (blockFrames &lt; 128) {</span>
+<span class="fc" id="L34">      throw new IllegalArgumentException(&quot;blockFrames must be &gt;= 128&quot;);</span>
+    }
+<span class="fc" id="L36">    this.runner = new TrackingScenarioBenchmarkRunner(blockFrames);</span>
+<span class="fc" id="L37">  }</span>
+
+  @Override
+  public LocalizationBenchmarkResult run(SimulationScenario scenario) {
+<span class="fc" id="L41">    Objects.requireNonNull(scenario, &quot;scenario&quot;);</span>
+<span class="fc" id="L42">    BenchmarkReport report = runner.run(scenario);</span>
+<span class="fc" id="L43">    return extractResult(scenario.name(), report);</span>
+  }
+
+  @Override
+  public String name() {
+<span class="fc" id="L48">    return &quot;TdoaLocalizationBenchmark&quot;;</span>
+  }
+
+  /** Extract a {@link LocalizationBenchmarkResult} from a {@link BenchmarkReport}. */
+  private static LocalizationBenchmarkResult extractResult(
+      String scenarioId, BenchmarkReport report) {
+
+    double meanLocError =
+<span class="pc bpc" id="L56" title="1 of 2 branches missed.">        report.localization().meanDistanceErrorMeters() != null</span>
+<span class="fc" id="L57">            ? report.localization().meanDistanceErrorMeters()</span>
+<span class="pc" id="L58">            : 0.0;</span>
+
+    // trackingError: 1 - continuity, or 0 if unavailable
+<span class="fc" id="L61">    double trackingError = 0.0;</span>
+<span class="pc bpc" id="L62" title="1 of 2 branches missed.">    if (report.trackContinuity() != null) {</span>
+<span class="fc" id="L63">      trackingError = 1.0 - report.trackContinuity();</span>
+    }
+
+    // False positives and negatives: derived from rates × total evaluated frames
+<span class="fc" id="L67">    int evaluatedFrames = report.snapshotCount();</span>
+<span class="fc" id="L68">    int falsePositives = 0;</span>
+<span class="fc" id="L69">    int falseNegatives = 0;</span>
+<span class="pc bpc" id="L70" title="2 of 4 branches missed.">    if (report.falsePositiveRate() != null &amp;&amp; evaluatedFrames &gt; 0) {</span>
+<span class="fc" id="L71">      falsePositives = (int) Math.round(report.falsePositiveRate() * evaluatedFrames);</span>
+    }
+<span class="pc bpc" id="L73" title="2 of 4 branches missed.">    if (report.falseNegativeRate() != null &amp;&amp; evaluatedFrames &gt; 0) {</span>
+<span class="fc" id="L74">      falseNegatives = (int) Math.round(report.falseNegativeRate() * evaluatedFrames);</span>
+    }
+
+<span class="fc" id="L77">    return new LocalizationBenchmarkResult(</span>
+        scenarioId,
+        meanLocError,
+<span class="fc" id="L80">        Math.min(1.0, Math.max(0.0, trackingError)),</span>
+        falsePositives,
+        falseNegatives,
+        evaluatedFrames);
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

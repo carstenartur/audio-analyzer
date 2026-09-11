@@ -1,0 +1,188 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>DatasetAnalytics.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.dataset</a> &gt; <span class="el_source">DatasetAnalytics.java</span></div><h1>DatasetAnalytics.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.dataset;
+
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+
+/**
+ * Summary analytics computed from a {@link DatasetManifest}.
+ *
+ * &lt;p&gt;This class computes descriptive statistics over the recordings in a dataset, including label
+ * distribution, sample-rate distribution, and duration distribution. Use {@link
+ * #compute(DatasetManifest)} to build an analytics snapshot, and {@link #toMarkdownReport()} to
+ * render a human-readable summary.
+ *
+ * @param datasetName the name of the dataset
+ * @param recordingCount total number of recordings in the manifest
+ * @param labelDistribution count of recordings per unique value of each metadata label key
+ * @param sampleRateCounts count of recordings per distinct sample rate (Hz, rounded to integer)
+ * @param durationStats descriptive statistics over clip durations (seconds)
+ */
+@SuppressWarnings({&quot;PMD.UseConcurrentHashMap&quot;, &quot;PMD.DanglingJavadoc&quot;})
+public record DatasetAnalytics(
+    String datasetName,
+    int recordingCount,
+    Map&lt;String, Map&lt;String, Integer&gt;&gt; labelDistribution,
+    Map&lt;Integer, Integer&gt; sampleRateCounts,
+    DistributionStats durationStats) {
+
+  /** Validate and defensively copy all fields. */
+<span class="fc" id="L33">  public DatasetAnalytics {</span>
+<span class="fc" id="L34">    Objects.requireNonNull(datasetName, &quot;datasetName&quot;);</span>
+<span class="fc" id="L35">    Objects.requireNonNull(labelDistribution, &quot;labelDistribution&quot;);</span>
+<span class="fc" id="L36">    Objects.requireNonNull(sampleRateCounts, &quot;sampleRateCounts&quot;);</span>
+<span class="fc" id="L37">    Objects.requireNonNull(durationStats, &quot;durationStats&quot;);</span>
+<span class="fc bfc" id="L38" title="All 2 branches covered.">    if (datasetName.isBlank()) {</span>
+<span class="fc" id="L39">      throw new IllegalArgumentException(&quot;datasetName must not be blank&quot;);</span>
+    }
+<span class="fc bfc" id="L41" title="All 2 branches covered.">    if (recordingCount &lt; 0) {</span>
+<span class="fc" id="L42">      throw new IllegalArgumentException(&quot;recordingCount must be &gt;= 0&quot;);</span>
+    }
+<span class="fc" id="L44">    Map&lt;String, Map&lt;String, Integer&gt;&gt; labelCopy = new LinkedHashMap&lt;&gt;();</span>
+<span class="fc bfc" id="L45" title="All 2 branches covered.">    for (Map.Entry&lt;String, Map&lt;String, Integer&gt;&gt; entry : labelDistribution.entrySet()) {</span>
+<span class="fc" id="L46">      labelCopy.put(entry.getKey(), Map.copyOf(entry.getValue()));</span>
+<span class="fc" id="L47">    }</span>
+<span class="fc" id="L48">    labelDistribution = Map.copyOf(labelCopy);</span>
+<span class="fc" id="L49">    sampleRateCounts = Map.copyOf(sampleRateCounts);</span>
+<span class="fc" id="L50">  }</span>
+
+  /**
+   * Compute analytics from the given manifest.
+   *
+   * @param manifest imported dataset manifest; must not be {@code null}
+   * @return analytics snapshot; never {@code null}
+   */
+  public static DatasetAnalytics compute(DatasetManifest manifest) {
+<span class="fc" id="L59">    Objects.requireNonNull(manifest, &quot;manifest&quot;);</span>
+<span class="fc" id="L60">    List&lt;DatasetRecording&gt; recordings = manifest.recordings();</span>
+<span class="fc" id="L61">    Map&lt;String, Map&lt;String, Integer&gt;&gt; labelDist = new LinkedHashMap&lt;&gt;();</span>
+<span class="fc" id="L62">    Map&lt;Integer, Integer&gt; sampleRateCounts = new LinkedHashMap&lt;&gt;();</span>
+<span class="fc" id="L63">    List&lt;Double&gt; durations = new ArrayList&lt;&gt;(recordings.size());</span>
+<span class="fc bfc" id="L64" title="All 2 branches covered.">    for (DatasetRecording rec : recordings) {</span>
+<span class="fc bfc" id="L65" title="All 2 branches covered.">      for (Map.Entry&lt;String, String&gt; label : rec.labels().entrySet()) {</span>
+<span class="fc" id="L66">        labelDist</span>
+<span class="fc" id="L67">            .computeIfAbsent(label.getKey(), k -&gt; new LinkedHashMap&lt;&gt;())</span>
+<span class="fc" id="L68">            .merge(label.getValue(), 1, Integer::sum);</span>
+<span class="fc" id="L69">      }</span>
+<span class="fc" id="L70">      int srBucket = (int) Math.round(rec.sampleRateHz());</span>
+<span class="fc" id="L71">      sampleRateCounts.merge(srBucket, 1, Integer::sum);</span>
+<span class="fc" id="L72">      durations.add(rec.durationSeconds());</span>
+<span class="fc" id="L73">    }</span>
+<span class="fc" id="L74">    DistributionStats durationStats = DistributionStats.of(durations);</span>
+<span class="fc" id="L75">    return new DatasetAnalytics(</span>
+<span class="fc" id="L76">        manifest.descriptor().name(),</span>
+<span class="fc" id="L77">        recordings.size(),</span>
+        labelDist,
+        sampleRateCounts,
+        durationStats);
+  }
+
+  /**
+   * Render a compact Markdown summary of this analytics snapshot.
+   *
+   * @return Markdown text; never {@code null}
+   */
+  @SuppressWarnings({&quot;PMD.ConsecutiveAppendsShouldReuse&quot;, &quot;PMD.ConsecutiveLiteralAppends&quot;})
+  public String toMarkdownReport() {
+<span class="fc" id="L90">    StringBuilder sb = new StringBuilder(512);</span>
+<span class="fc" id="L91">    sb.append(&quot;# Dataset Analytics\n\n&quot;);</span>
+<span class="fc" id="L92">    sb.append(&quot;- Dataset: &quot;).append(datasetName).append('\n');</span>
+<span class="fc" id="L93">    sb.append(&quot;- Recordings: &quot;).append(recordingCount).append('\n');</span>
+<span class="fc" id="L94">    sb.append('\n');</span>
+
+<span class="fc" id="L96">    sb.append(&quot;## Duration Distribution (seconds)\n\n&quot;);</span>
+<span class="fc" id="L97">    sb.append(durationStats.toMarkdown()).append('\n');</span>
+
+<span class="fc bfc" id="L99" title="All 2 branches covered.">    if (!sampleRateCounts.isEmpty()) {</span>
+<span class="fc" id="L100">      sb.append(&quot;## Sample Rate Distribution\n\n&quot;);</span>
+<span class="fc" id="L101">      sb.append(&quot;| Sample rate (Hz) | Count |\n|---:|---:|\n&quot;);</span>
+<span class="fc bfc" id="L102" title="All 2 branches covered.">      for (Map.Entry&lt;Integer, Integer&gt; entry : sampleRateCounts.entrySet()) {</span>
+<span class="fc" id="L103">        sb.append(&quot;| &quot;)</span>
+<span class="fc" id="L104">            .append(entry.getKey())</span>
+<span class="fc" id="L105">            .append(&quot; | &quot;)</span>
+<span class="fc" id="L106">            .append(entry.getValue())</span>
+<span class="fc" id="L107">            .append(&quot; |\n&quot;);</span>
+<span class="fc" id="L108">      }</span>
+<span class="fc" id="L109">      sb.append('\n');</span>
+    }
+
+<span class="fc bfc" id="L112" title="All 2 branches covered.">    if (!labelDistribution.isEmpty()) {</span>
+<span class="fc" id="L113">      sb.append(&quot;## Label Distribution\n\n&quot;);</span>
+<span class="fc bfc" id="L114" title="All 2 branches covered.">      for (Map.Entry&lt;String, Map&lt;String, Integer&gt;&gt; labelEntry : labelDistribution.entrySet()) {</span>
+<span class="fc" id="L115">        sb.append(&quot;### &quot;).append(labelEntry.getKey()).append(&quot;\n\n&quot;);</span>
+<span class="fc" id="L116">        sb.append(&quot;| Value | Count |\n|---|---:|\n&quot;);</span>
+<span class="fc bfc" id="L117" title="All 2 branches covered.">        for (Map.Entry&lt;String, Integer&gt; valueEntry : labelEntry.getValue().entrySet()) {</span>
+<span class="fc" id="L118">          sb.append(&quot;| &quot;)</span>
+<span class="fc" id="L119">              .append(valueEntry.getKey())</span>
+<span class="fc" id="L120">              .append(&quot; | &quot;)</span>
+<span class="fc" id="L121">              .append(valueEntry.getValue())</span>
+<span class="fc" id="L122">              .append(&quot; |\n&quot;);</span>
+<span class="fc" id="L123">        }</span>
+<span class="fc" id="L124">        sb.append('\n');</span>
+<span class="fc" id="L125">      }</span>
+    }
+
+<span class="fc" id="L128">    return sb.toString();</span>
+  }
+
+  /**
+   * Descriptive statistics over a series of {@code double} values.
+   *
+   * @param count number of values
+   * @param min minimum value
+   * @param max maximum value
+   * @param mean arithmetic mean
+   * @param stddev population standard deviation
+   */
+<span class="fc" id="L140">  public record DistributionStats(int count, double min, double max, double mean, double stddev) {</span>
+
+    /**
+     * Compute stats over a list of doubles. Returns a zero-valued instance when the list is empty.
+     */
+    public static DistributionStats of(List&lt;Double&gt; values) {
+<span class="fc" id="L146">      Objects.requireNonNull(values, &quot;values&quot;);</span>
+<span class="fc bfc" id="L147" title="All 2 branches covered.">      if (values.isEmpty()) {</span>
+<span class="fc" id="L148">        return new DistributionStats(0, 0.0, 0.0, 0.0, 0.0);</span>
+      }
+<span class="fc" id="L150">      double min = values.get(0);</span>
+<span class="fc" id="L151">      double max = values.get(0);</span>
+<span class="fc" id="L152">      double sum = 0.0;</span>
+<span class="fc bfc" id="L153" title="All 2 branches covered.">      for (double v : values) {</span>
+<span class="pc bpc" id="L154" title="1 of 2 branches missed.">        if (v &lt; min) {</span>
+<span class="nc" id="L155">          min = v;</span>
+        }
+<span class="fc bfc" id="L157" title="All 2 branches covered.">        if (v &gt; max) {</span>
+<span class="fc" id="L158">          max = v;</span>
+        }
+<span class="fc" id="L160">        sum += v;</span>
+<span class="fc" id="L161">      }</span>
+<span class="fc" id="L162">      double mean = sum / values.size();</span>
+<span class="fc" id="L163">      double variance = 0.0;</span>
+<span class="fc bfc" id="L164" title="All 2 branches covered.">      for (double v : values) {</span>
+<span class="fc" id="L165">        double diff = v - mean;</span>
+<span class="fc" id="L166">        variance += diff * diff;</span>
+<span class="fc" id="L167">      }</span>
+<span class="fc" id="L168">      double stddev = Math.sqrt(variance / values.size());</span>
+<span class="fc" id="L169">      return new DistributionStats(values.size(), min, max, mean, stddev);</span>
+    }
+
+    /** Render this distribution as a compact Markdown snippet (bullet list). */
+    public String toMarkdown() {
+<span class="fc bfc" id="L174" title="All 2 branches covered.">      if (count == 0) {</span>
+<span class="fc" id="L175">        return &quot;- No data\n&quot;;</span>
+      }
+<span class="fc" id="L177">      return String.format(</span>
+          Locale.ROOT,
+          &quot;- Count: %d%n- Min: %.3f%n- Max: %.3f%n- Mean: %.3f%n- Std dev: %.3f%n&quot;,
+<span class="fc" id="L180">          count,</span>
+<span class="fc" id="L181">          min,</span>
+<span class="fc" id="L182">          max,</span>
+<span class="fc" id="L183">          mean,</span>
+<span class="fc" id="L184">          stddev);</span>
+    }
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

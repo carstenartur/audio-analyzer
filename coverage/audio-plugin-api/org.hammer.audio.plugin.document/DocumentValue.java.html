@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>DocumentValue.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Plugin API</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.plugin.document</a> &gt; <span class="el_source">DocumentValue.java</span></div><h1>DocumentValue.java</h1><pre class="source lang-java linenums">package org.hammer.audio.plugin.document;
+
+import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.SortedMap;
+import java.util.TreeMap;
+
+/**
+ * Immutable, framework-neutral value model for bounded experiment-document sections.
+ *
+ * &lt;p&gt;The host owns JSON parsing and serialization. Plugins receive only this data model and cannot
+ * request polymorphic object deserialization.
+ */
+public sealed interface DocumentValue
+    permits DocumentValue.ArrayValue,
+        DocumentValue.BooleanValue,
+        DocumentValue.NullValue,
+        DocumentValue.NumberValue,
+        DocumentValue.ObjectValue,
+        DocumentValue.StringValue {
+
+  /** Create an immutable object value with lexicographically ordered keys. */
+  static ObjectValue object(Map&lt;String, ? extends DocumentValue&gt; fields) {
+<span class="nc" id="L28">    SortedMap&lt;String, DocumentValue&gt; copy = new TreeMap&lt;&gt;();</span>
+<span class="nc" id="L29">    fields.forEach(copy::put);</span>
+<span class="nc" id="L30">    return new ObjectValue(copy);</span>
+  }
+
+  /** Create an immutable array value. */
+  static ArrayValue array(List&lt;? extends DocumentValue&gt; values) {
+<span class="nc" id="L35">    return new ArrayValue(new ArrayList&lt;&gt;(values));</span>
+  }
+
+  /** Create a string value. */
+  static StringValue string(String value) {
+<span class="nc" id="L40">    return new StringValue(value);</span>
+  }
+
+  /** Create a canonical finite decimal value. */
+  static NumberValue number(BigDecimal value) {
+<span class="nc" id="L45">    return new NumberValue(value);</span>
+  }
+
+  /** Create a boolean value. */
+  static BooleanValue bool(boolean value) {
+<span class="nc" id="L50">    return new BooleanValue(value);</span>
+  }
+
+  /** Return the singleton null value. */
+  static NullValue nullValue() {
+<span class="nc" id="L55">    return NullValue.INSTANCE;</span>
+  }
+
+  /**
+   * Immutable object value.
+   *
+   * @param fields lexicographically ordered immutable field map
+   */
+  record ObjectValue(Map&lt;String, DocumentValue&gt; fields) implements DocumentValue {
+
+    // Validate and defensively copy all fields.
+<span class="nc" id="L66">    public ObjectValue {</span>
+<span class="nc" id="L67">      Objects.requireNonNull(fields, &quot;fields&quot;);</span>
+<span class="nc" id="L68">      SortedMap&lt;String, DocumentValue&gt; copy = new TreeMap&lt;&gt;();</span>
+<span class="nc" id="L69">      fields.forEach(</span>
+          (key, value) -&gt; {
+<span class="nc" id="L71">            Objects.requireNonNull(key, &quot;object field name&quot;);</span>
+<span class="nc bnc" id="L72" title="All 2 branches missed.">            if (key.isBlank()) {</span>
+<span class="nc" id="L73">              throw new IllegalArgumentException(&quot;object field name must not be blank&quot;);</span>
+            }
+<span class="nc" id="L75">            copy.put(key, Objects.requireNonNull(value, &quot;object field value&quot;));</span>
+<span class="nc" id="L76">          });</span>
+<span class="nc" id="L77">      fields = Collections.unmodifiableMap(copy);</span>
+<span class="nc" id="L78">    }</span>
+  }
+
+  /**
+   * Immutable array value.
+   *
+   * @param values ordered immutable values
+   */
+  record ArrayValue(List&lt;DocumentValue&gt; values) implements DocumentValue {
+
+    // Validate and defensively copy all values.
+<span class="nc" id="L89">    public ArrayValue {</span>
+<span class="nc" id="L90">      Objects.requireNonNull(values, &quot;values&quot;);</span>
+<span class="nc" id="L91">      List&lt;DocumentValue&gt; copy = new ArrayList&lt;&gt;(values.size());</span>
+<span class="nc bnc" id="L92" title="All 2 branches missed.">      for (DocumentValue value : values) {</span>
+<span class="nc" id="L93">        copy.add(Objects.requireNonNull(value, &quot;array value&quot;));</span>
+<span class="nc" id="L94">      }</span>
+<span class="nc" id="L95">      values = Collections.unmodifiableList(copy);</span>
+<span class="nc" id="L96">    }</span>
+  }
+
+  /**
+   * Immutable string value.
+   *
+   * @param value text value
+   */
+  record StringValue(String value) implements DocumentValue {
+
+    // Validate the string value.
+<span class="nc" id="L107">    public StringValue {</span>
+<span class="nc" id="L108">      Objects.requireNonNull(value, &quot;value&quot;);</span>
+<span class="nc" id="L109">    }</span>
+  }
+
+  /**
+   * Canonical finite decimal value.
+   *
+   * @param value canonical decimal value
+   */
+  record NumberValue(BigDecimal value) implements DocumentValue {
+
+    // Normalize equivalent decimal representations.
+<span class="nc" id="L120">    public NumberValue {</span>
+<span class="nc" id="L121">      Objects.requireNonNull(value, &quot;value&quot;);</span>
+<span class="nc bnc" id="L122" title="All 2 branches missed.">      value = value.signum() == 0 ? BigDecimal.ZERO : value.stripTrailingZeros();</span>
+<span class="nc" id="L123">    }</span>
+  }
+
+  /**
+   * Immutable boolean value.
+   *
+   * @param value boolean value
+   */
+<span class="nc" id="L131">  record BooleanValue(boolean value) implements DocumentValue {</span>
+    // Boolean values require no normalization.
+  }
+
+  /** Singleton null value. */
+<span class="nc" id="L136">  enum NullValue implements DocumentValue {</span>
+    /** The only null value instance. */
+<span class="nc" id="L138">    INSTANCE</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

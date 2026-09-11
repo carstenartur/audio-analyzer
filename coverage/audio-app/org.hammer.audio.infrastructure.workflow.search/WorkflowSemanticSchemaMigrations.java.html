@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WorkflowSemanticSchemaMigrations.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.infrastructure.workflow.search</a> &gt; <span class="el_source">WorkflowSemanticSchemaMigrations.java</span></div><h1>WorkflowSemanticSchemaMigrations.java</h1><pre class="source lang-java linenums">package org.hammer.audio.infrastructure.workflow.search;
+
+/** Stable classpath contract for Audio Analyzer-owned semantic search migrations. */
+public final class WorkflowSemanticSchemaMigrations {
+
+  /** Flyway location for H2 migrations. */
+  public static final String H2_LOCATION =
+      &quot;classpath:db/migration/audio-analyzer/workflow-semantic/h2&quot;;
+
+  /** Flyway location for PostgreSQL migrations. */
+  public static final String POSTGRESQL_LOCATION =
+      &quot;classpath:db/migration/audio-analyzer/workflow-semantic/postgresql&quot;;
+
+  /** Dedicated Flyway history table for the disposable semantic projection schema. */
+  public static final String SCHEMA_HISTORY_TABLE =
+      &quot;audio_analyzer_workflow_semantic_schema_history&quot;;
+
+  /** Baseline used before installing semantic projection storage. */
+  public static final String PRE_MIGRATION_BASELINE_VERSION = &quot;0&quot;;
+
+  /** Description for the pre-migration baseline. */
+  public static final String PRE_MIGRATION_BASELINE_DESCRIPTION =
+      &quot;before Audio Analyzer workflow semantic migrations&quot;;
+
+  /** Current application semantic projection schema version. */
+  public static final String CURRENT_SCHEMA_VERSION = &quot;1&quot;;
+
+<span class="nc" id="L28">  private WorkflowSemanticSchemaMigrations() {</span>
+<span class="nc" id="L29">    throw new AssertionError(&quot;No instances&quot;);</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

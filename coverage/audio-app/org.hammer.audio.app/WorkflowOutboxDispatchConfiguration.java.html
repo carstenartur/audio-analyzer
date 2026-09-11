@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WorkflowOutboxDispatchConfiguration.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.app</a> &gt; <span class="el_source">WorkflowOutboxDispatchConfiguration.java</span></div><h1>WorkflowOutboxDispatchConfiguration.java</h1><pre class="source lang-java linenums">package org.hammer.audio.app;
+
+import java.time.Clock;
+import java.time.Duration;
+import java.util.UUID;
+import org.hammer.audio.app.outbox.ScheduledWorkflowOutboxDispatcher;
+import org.hammer.audio.workflow.collaboration.outbox.WorkflowOutboxBackoffPolicy;
+import org.hammer.audio.workflow.collaboration.outbox.WorkflowOutboxDispatcher;
+import org.hammer.audio.workflow.collaboration.outbox.WorkflowOutboxDispatcherSettings;
+import org.hammer.audio.workflow.collaboration.outbox.WorkflowOutboxPublisher;
+import org.hammer.audio.workflow.collaboration.store.WorkflowOutboxStore;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
+import org.springframework.scheduling.annotation.EnableScheduling;
+
+/** Enables leased outbox polling only when durable state and a publisher adapter exist. */
+@Configuration
+@EnableScheduling
+@ConditionalOnProperty(name = &quot;workbench.persistence.mode&quot;, havingValue = &quot;hibernate&quot;)
+<span class="fc" id="L24">public class WorkflowOutboxDispatchConfiguration {</span>
+
+  private static final String PROPERTY_PREFIX = &quot;workbench.collaboration.outbox.&quot;;
+
+  /** Creates the bounded transport-neutral dispatcher when both required ports exist. */
+  @Bean
+  @ConditionalOnBean({WorkflowOutboxStore.class, WorkflowOutboxPublisher.class})
+  public WorkflowOutboxDispatcher workflowOutboxDispatcher(
+      WorkflowOutboxStore outboxStore,
+      WorkflowOutboxPublisher publisher,
+      ObjectProvider&lt;Clock&gt; clockProvider,
+      Environment environment) {
+<span class="fc" id="L36">    WorkflowOutboxBackoffPolicy backoffPolicy =</span>
+        new WorkflowOutboxBackoffPolicy(
+<span class="fc" id="L38">            duration(environment, &quot;initial-backoff&quot;, Duration.ofSeconds(1)),</span>
+<span class="fc" id="L39">            duration(environment, &quot;maximum-backoff&quot;, Duration.ofMinutes(5)));</span>
+<span class="fc" id="L40">    WorkflowOutboxDispatcherSettings settings =</span>
+        new WorkflowOutboxDispatcherSettings(
+<span class="fc" id="L42">            dispatcherId(environment),</span>
+<span class="fc" id="L43">            environment.getProperty(PROPERTY_PREFIX + &quot;batch-size&quot;, Integer.class, 50),</span>
+<span class="fc" id="L44">            duration(environment, &quot;lease-duration&quot;, Duration.ofSeconds(30)),</span>
+            backoffPolicy);
+<span class="fc" id="L46">    return new WorkflowOutboxDispatcher(</span>
+<span class="fc" id="L47">        outboxStore, publisher, clockProvider.getIfAvailable(Clock::systemUTC), settings);</span>
+  }
+
+  /** Activates periodic dispatch around the configured application service. */
+  @Bean
+  @ConditionalOnBean(WorkflowOutboxDispatcher.class)
+  public ScheduledWorkflowOutboxDispatcher scheduledWorkflowOutboxDispatcher(
+      WorkflowOutboxDispatcher dispatcher) {
+<span class="fc" id="L55">    return new ScheduledWorkflowOutboxDispatcher(dispatcher);</span>
+  }
+
+  private static String dispatcherId(Environment environment) {
+<span class="fc" id="L59">    String configured = environment.getProperty(PROPERTY_PREFIX + &quot;dispatcher-id&quot;);</span>
+<span class="pc bpc" id="L60" title="3 of 4 branches missed.">    return configured == null || configured.isBlank()</span>
+<span class="fc" id="L61">        ? &quot;audio-analyzer-&quot; + UUID.randomUUID()</span>
+<span class="nc" id="L62">        : configured;</span>
+  }
+
+  private static Duration duration(
+      Environment environment, String propertyName, Duration defaultValue) {
+<span class="fc" id="L67">    String value = environment.getProperty(PROPERTY_PREFIX + propertyName);</span>
+<span class="pc bpc" id="L68" title="3 of 4 branches missed.">    return value == null || value.isBlank() ? defaultValue : Duration.parse(value);</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

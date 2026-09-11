@@ -1,0 +1,295 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>EvidenceBundleExporter.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.export</a> &gt; <span class="el_source">EvidenceBundleExporter.java</span></div><h1>EvidenceBundleExporter.java</h1><pre class="source lang-java linenums">package org.hammer.audio.export;
+
+import java.awt.image.BufferedImage;
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.util.List;
+import java.util.Locale;
+import javax.imageio.ImageIO;
+import org.hammer.audio.analysis.SpectrumSnapshot;
+import org.hammer.audio.core.AudioBlock;
+import org.hammer.audio.diagnosis.DiagnosisFinding;
+import org.hammer.audio.diagnosis.DiagnosisSnapshot;
+import org.hammer.audio.localization.StereoDelaySnapshot;
+import org.hammer.audio.spectrogram.SpectrogramFrame;
+import org.hammer.audio.spectrogram.SpectrogramHistory;
+
+/**
+ * Self-contained evidence bundle writer.
+ *
+ * &lt;p&gt;Given a parent directory and an immutable {@link EvidenceData} payload, writes a {@code
+ * measurement-YYYYMMDD-HHMMSS} sub-directory containing:
+ *
+ * &lt;ul&gt;
+ *   &lt;li&gt;{@code screenshot.png} (if screenshot supplied)
+ *   &lt;li&gt;{@code samples.csv} per-frame, per-channel sample table
+ *   &lt;li&gt;{@code spectrum.csv} one-sided FFT magnitudes
+ *   &lt;li&gt;{@code spectrogram.csv} time-major spectrogram frames
+ *   &lt;li&gt;{@code stereo-delay.csv} stereo delay measurement
+ *   &lt;li&gt;{@code diagnosis.txt} human-readable diagnosis findings
+ *   &lt;li&gt;{@code metadata.json} bundle metadata (timestamp, formats, sizes, etc.)
+ * &lt;/ul&gt;
+ *
+ * &lt;p&gt;Any optional artifact whose source data is {@code null} is omitted; an empty bundle (no
+ * artifacts at all) is rejected.
+ */
+public final class EvidenceBundleExporter {
+
+<span class="fc" id="L45">  private static final DateTimeFormatter DIR_TIMESTAMP =</span>
+<span class="fc" id="L46">      DateTimeFormatter.ofPattern(&quot;yyyyMMdd-HHmmss&quot;, Locale.ROOT);</span>
+
+  private final ZoneId zoneId;
+
+  /** Create an exporter using the system default time zone. */
+  public EvidenceBundleExporter() {
+<span class="fc" id="L52">    this(ZoneId.systemDefault());</span>
+<span class="fc" id="L53">  }</span>
+
+  /**
+   * Create an exporter with a fixed time zone.
+   *
+   * @param zoneId zone used to format the bundle directory name
+   */
+<span class="fc" id="L60">  public EvidenceBundleExporter(ZoneId zoneId) {</span>
+<span class="fc" id="L61">    this.zoneId = zoneId;</span>
+<span class="fc" id="L62">  }</span>
+
+  /**
+   * Write an evidence bundle.
+   *
+   * @param parentDirectory directory under which the bundle directory is created
+   * @param data evidence payload; must not be entirely empty
+   * @return the path to the created bundle directory
+   * @throws IOException if writing any artifact fails
+   * @throws IllegalArgumentException if the payload contains no usable data
+   */
+  public Path export(Path parentDirectory, EvidenceData data) throws IOException {
+<span class="pc bpc" id="L74" title="1 of 2 branches missed.">    if (data == null) {</span>
+<span class="nc" id="L75">      throw new IllegalArgumentException(&quot;data must not be null&quot;);</span>
+    }
+<span class="fc bfc" id="L77" title="All 2 branches covered.">    if (!data.hasAnything()) {</span>
+<span class="fc" id="L78">      throw new IllegalArgumentException(&quot;Evidence payload contains no data to export&quot;);</span>
+    }
+<span class="fc" id="L80">    Files.createDirectories(parentDirectory);</span>
+<span class="pc bpc" id="L81" title="1 of 2 branches missed.">    Instant now = data.timestamp() != null ? data.timestamp() : Instant.now();</span>
+<span class="fc" id="L82">    String baseName = &quot;measurement-&quot; + LocalDateTime.ofInstant(now, zoneId).format(DIR_TIMESTAMP);</span>
+<span class="fc" id="L83">    Path bundleDir = parentDirectory.resolve(baseName);</span>
+<span class="fc" id="L84">    int suffix = 1;</span>
+<span class="pc bpc" id="L85" title="1 of 2 branches missed.">    while (Files.exists(bundleDir)) {</span>
+<span class="nc" id="L86">      bundleDir = parentDirectory.resolve(baseName + &quot;-&quot; + suffix);</span>
+<span class="nc" id="L87">      suffix++;</span>
+    }
+<span class="fc" id="L89">    Files.createDirectory(bundleDir);</span>
+<span class="fc" id="L90">    String name = bundleDir.getFileName().toString();</span>
+
+<span class="pc bpc" id="L92" title="1 of 2 branches missed.">    if (data.screenshot() != null) {</span>
+<span class="fc" id="L93">      writeScreenshot(bundleDir.resolve(&quot;screenshot.png&quot;), data.screenshot());</span>
+    }
+<span class="pc bpc" id="L95" title="1 of 2 branches missed.">    if (data.block() != null) {</span>
+<span class="fc" id="L96">      writeSamples(bundleDir.resolve(&quot;samples.csv&quot;), data.block());</span>
+    }
+<span class="pc bpc" id="L98" title="1 of 2 branches missed.">    if (data.spectrum() != null) {</span>
+<span class="fc" id="L99">      writeSpectrum(bundleDir.resolve(&quot;spectrum.csv&quot;), data.spectrum());</span>
+    }
+<span class="pc bpc" id="L101" title="2 of 4 branches missed.">    if (data.spectrogram() != null &amp;&amp; !data.spectrogram().isEmpty()) {</span>
+<span class="fc" id="L102">      writeSpectrogram(bundleDir.resolve(&quot;spectrogram.csv&quot;), data.spectrogram());</span>
+    }
+<span class="pc bpc" id="L104" title="1 of 2 branches missed.">    if (data.stereoDelay() != null) {</span>
+<span class="nc" id="L105">      writeStereoDelay(bundleDir.resolve(&quot;stereo-delay.csv&quot;), data.stereoDelay());</span>
+    }
+<span class="pc bpc" id="L107" title="1 of 2 branches missed.">    if (data.diagnosis() != null) {</span>
+<span class="fc" id="L108">      writeDiagnosis(bundleDir.resolve(&quot;diagnosis.txt&quot;), data.diagnosis());</span>
+    }
+<span class="fc" id="L110">    writeMetadata(bundleDir.resolve(&quot;metadata.json&quot;), name, now, data);</span>
+<span class="fc" id="L111">    return bundleDir;</span>
+  }
+
+  private static void writeScreenshot(Path file, BufferedImage image) throws IOException {
+<span class="pc bpc" id="L115" title="1 of 2 branches missed.">    if (!ImageIO.write(image, &quot;png&quot;, file.toFile())) {</span>
+<span class="nc" id="L116">      throw new IOException(&quot;No PNG writer available for screenshot&quot;);</span>
+    }
+<span class="fc" id="L118">  }</span>
+
+  private static void writeSamples(Path file, AudioBlock block) throws IOException {
+<span class="fc" id="L121">    try (PrintWriter w = new PrintWriter(Files.newBufferedWriter(file, StandardCharsets.UTF_8))) {</span>
+<span class="fc" id="L122">      w.print(&quot;frame&quot;);</span>
+<span class="fc bfc" id="L123" title="All 2 branches covered.">      for (int c = 0; c &lt; block.channels(); c++) {</span>
+<span class="fc" id="L124">        w.print(&quot;,channel&quot;);</span>
+<span class="fc" id="L125">        w.print(c);</span>
+      }
+<span class="fc" id="L127">      w.println();</span>
+<span class="fc" id="L128">      float[][] samples = block.samples();</span>
+<span class="fc bfc" id="L129" title="All 2 branches covered.">      for (int frame = 0; frame &lt; block.frames(); frame++) {</span>
+<span class="fc" id="L130">        w.print(frame);</span>
+<span class="fc bfc" id="L131" title="All 2 branches covered.">        for (int c = 0; c &lt; block.channels(); c++) {</span>
+<span class="fc" id="L132">          w.printf(Locale.ROOT, &quot;,%.9f&quot;, samples[c][frame]);</span>
+        }
+<span class="fc" id="L134">        w.println();</span>
+      }
+    }
+<span class="fc" id="L137">  }</span>
+
+  private static void writeSpectrum(Path file, SpectrumSnapshot spectrum) throws IOException {
+<span class="fc" id="L140">    try (PrintWriter w = new PrintWriter(Files.newBufferedWriter(file, StandardCharsets.UTF_8))) {</span>
+<span class="fc" id="L141">      w.println(&quot;bin,frequencyHz,magnitude&quot;);</span>
+<span class="fc bfc" id="L142" title="All 2 branches covered.">      for (int bin = 0; bin &lt; spectrum.binCount(); bin++) {</span>
+<span class="fc" id="L143">        w.printf(</span>
+            Locale.ROOT,
+            &quot;%d,%.6f,%.9f%n&quot;,
+<span class="fc" id="L146">            bin,</span>
+<span class="fc" id="L147">            spectrum.frequencyOfBin(bin),</span>
+<span class="fc" id="L148">            spectrum.magnitude(bin));</span>
+      }
+    }
+<span class="fc" id="L151">  }</span>
+
+  private static void writeSpectrogram(Path file, SpectrogramHistory history) throws IOException {
+<span class="fc" id="L154">    List&lt;SpectrogramFrame&gt; frames = history.snapshot();</span>
+<span class="fc" id="L155">    try (PrintWriter w = new PrintWriter(Files.newBufferedWriter(file, StandardCharsets.UTF_8))) {</span>
+<span class="fc" id="L156">      w.print(&quot;frameIndex,timestampNanos&quot;);</span>
+<span class="fc" id="L157">      int bins = history.binCount();</span>
+<span class="fc bfc" id="L158" title="All 2 branches covered.">      for (int bin = 0; bin &lt; bins; bin++) {</span>
+<span class="fc" id="L159">        w.printf(Locale.ROOT, &quot;,bin%d&quot;, bin);</span>
+      }
+<span class="fc" id="L161">      w.println();</span>
+<span class="fc bfc" id="L162" title="All 2 branches covered.">      for (SpectrogramFrame f : frames) {</span>
+<span class="fc" id="L163">        w.print(f.sourceFrameIndex());</span>
+<span class="fc" id="L164">        w.print(&quot;,&quot;);</span>
+<span class="fc" id="L165">        w.print(f.sourceTimestampNanos());</span>
+<span class="fc" id="L166">        float[] view = f.magnitudesView();</span>
+<span class="fc bfc" id="L167" title="All 2 branches covered.">        for (int bin = 0; bin &lt; bins; bin++) {</span>
+<span class="pc bpc" id="L168" title="1 of 2 branches missed.">          float m = bin &lt; view.length ? view[bin] : 0f;</span>
+<span class="fc" id="L169">          w.printf(Locale.ROOT, &quot;,%.9f&quot;, m);</span>
+        }
+<span class="fc" id="L171">        w.println();</span>
+<span class="fc" id="L172">      }</span>
+    }
+<span class="fc" id="L174">  }</span>
+
+  private static void writeStereoDelay(Path file, StereoDelaySnapshot delay) throws IOException {
+<span class="nc" id="L177">    try (PrintWriter w = new PrintWriter(Files.newBufferedWriter(file, StandardCharsets.UTF_8))) {</span>
+<span class="nc" id="L178">      w.println(&quot;key,value&quot;);</span>
+<span class="nc" id="L179">      w.printf(Locale.ROOT, &quot;status,%s%n&quot;, delay.status());</span>
+<span class="nc" id="L180">      w.printf(Locale.ROOT, &quot;valid,%s%n&quot;, delay.valid());</span>
+<span class="nc" id="L181">      w.printf(Locale.ROOT, &quot;delaySamples,%d%n&quot;, delay.delaySamples());</span>
+<span class="nc" id="L182">      w.printf(Locale.ROOT, &quot;delayMillis,%.6f%n&quot;, delay.delayMillis());</span>
+<span class="nc" id="L183">      w.printf(</span>
+<span class="nc" id="L184">          Locale.ROOT, &quot;pathLengthDifferenceMeters,%.6f%n&quot;, delay.pathLengthDifferenceMeters());</span>
+<span class="nc" id="L185">      w.printf(Locale.ROOT, &quot;angleDegrees,%.3f%n&quot;, delay.angleDegrees());</span>
+<span class="nc" id="L186">      w.printf(Locale.ROOT, &quot;confidence,%.4f%n&quot;, delay.confidence());</span>
+<span class="nc" id="L187">      w.printf(Locale.ROOT, &quot;microphoneSpacingMeters,%.4f%n&quot;, delay.microphoneSpacingMeters());</span>
+<span class="nc" id="L188">      w.printf(</span>
+<span class="nc" id="L189">          Locale.ROOT, &quot;speedOfSoundMetersPerSecond,%.3f%n&quot;, delay.speedOfSoundMetersPerSecond());</span>
+<span class="nc" id="L190">      w.println();</span>
+<span class="nc" id="L191">      w.println(&quot;lagSamples,correlation&quot;);</span>
+<span class="nc" id="L192">      float[] correlations = delay.correlationByLag();</span>
+<span class="nc bnc" id="L193" title="All 2 branches missed.">      for (int i = 0; i &lt; correlations.length; i++) {</span>
+<span class="nc" id="L194">        w.printf(Locale.ROOT, &quot;%d,%.6f%n&quot;, delay.correlationLagForIndex(i), correlations[i]);</span>
+      }
+    }
+<span class="nc" id="L197">  }</span>
+
+  private static void writeDiagnosis(Path file, DiagnosisSnapshot diagnosis) throws IOException {
+<span class="fc" id="L200">    try (PrintWriter w = new PrintWriter(Files.newBufferedWriter(file, StandardCharsets.UTF_8))) {</span>
+<span class="fc" id="L201">      w.printf(Locale.ROOT, &quot;sourceFrameIndex: %d%n&quot;, diagnosis.sourceFrameIndex());</span>
+<span class="fc" id="L202">      w.printf(Locale.ROOT, &quot;sourceTimestampNanos: %d%n&quot;, diagnosis.sourceTimestampNanos());</span>
+<span class="fc" id="L203">      w.printf(Locale.ROOT, &quot;findings: %d%n&quot;, diagnosis.findings().size());</span>
+<span class="fc" id="L204">      w.println();</span>
+<span class="pc bpc" id="L205" title="1 of 2 branches missed.">      if (diagnosis.findings().isEmpty()) {</span>
+<span class="nc" id="L206">        w.println(&quot;No findings.&quot;);</span>
+<span class="nc" id="L207">        return;</span>
+      }
+<span class="fc bfc" id="L209" title="All 2 branches covered.">      for (DiagnosisFinding finding : diagnosis.findings()) {</span>
+<span class="fc" id="L210">        w.printf(</span>
+            Locale.ROOT,
+            &quot;[%s] %s (type=%s, confidence=%.2f&quot;,
+<span class="fc" id="L213">            finding.severity(),</span>
+<span class="fc" id="L214">            finding.message(),</span>
+<span class="fc" id="L215">            finding.type(),</span>
+<span class="fc" id="L216">            finding.confidence());</span>
+<span class="pc bpc" id="L217" title="1 of 2 branches missed.">        if (!Double.isNaN(finding.frequencyHz())) {</span>
+<span class="fc" id="L218">          w.printf(Locale.ROOT, &quot;, frequencyHz=%.3f&quot;, finding.frequencyHz());</span>
+        }
+<span class="pc bpc" id="L220" title="1 of 2 branches missed.">        if (!Double.isNaN(finding.value())) {</span>
+<span class="fc" id="L221">          w.printf(Locale.ROOT, &quot;, value=%.6f&quot;, finding.value());</span>
+        }
+<span class="fc" id="L223">        w.println(&quot;)&quot;);</span>
+<span class="fc" id="L224">      }</span>
+<span class="nc" id="L225">    }</span>
+<span class="fc" id="L226">  }</span>
+
+  private static void writeMetadata(
+      Path file, String bundleName, Instant timestamp, EvidenceData data) throws IOException {
+<span class="fc" id="L230">    try (PrintWriter w = new PrintWriter(Files.newBufferedWriter(file, StandardCharsets.UTF_8))) {</span>
+<span class="fc" id="L231">      w.println(&quot;{&quot;);</span>
+<span class="fc" id="L232">      w.printf(Locale.ROOT, &quot;  \&quot;bundleName\&quot;: \&quot;%s\&quot;,%n&quot;, escape(bundleName));</span>
+<span class="fc" id="L233">      w.printf(Locale.ROOT, &quot;  \&quot;createdAt\&quot;: \&quot;%s\&quot;,%n&quot;, timestamp.toString());</span>
+<span class="pc bpc" id="L234" title="1 of 2 branches missed.">      w.printf(Locale.ROOT, &quot;  \&quot;hasScreenshot\&quot;: %s,%n&quot;, data.screenshot() != null);</span>
+<span class="fc" id="L235">      AudioBlock block = data.block();</span>
+<span class="pc bpc" id="L236" title="1 of 2 branches missed.">      if (block != null) {</span>
+<span class="fc" id="L237">        w.println(&quot;  \&quot;audio\&quot;: {&quot;);</span>
+<span class="fc" id="L238">        w.printf(Locale.ROOT, &quot;    \&quot;sampleRate\&quot;: %.3f,%n&quot;, block.format().sampleRate());</span>
+<span class="fc" id="L239">        w.printf(Locale.ROOT, &quot;    \&quot;channels\&quot;: %d,%n&quot;, block.channels());</span>
+<span class="fc" id="L240">        w.printf(Locale.ROOT, &quot;    \&quot;frames\&quot;: %d,%n&quot;, block.frames());</span>
+<span class="fc" id="L241">        w.printf(Locale.ROOT, &quot;    \&quot;frameIndex\&quot;: %d%n&quot;, block.frameIndex());</span>
+<span class="fc" id="L242">        w.println(&quot;  },&quot;);</span>
+      }
+<span class="fc" id="L244">      SpectrumSnapshot spectrum = data.spectrum();</span>
+<span class="pc bpc" id="L245" title="1 of 2 branches missed.">      if (spectrum != null) {</span>
+<span class="fc" id="L246">        w.println(&quot;  \&quot;spectrum\&quot;: {&quot;);</span>
+<span class="fc" id="L247">        w.printf(Locale.ROOT, &quot;    \&quot;fftSize\&quot;: %d,%n&quot;, spectrum.fftSize());</span>
+<span class="fc" id="L248">        w.printf(Locale.ROOT, &quot;    \&quot;bins\&quot;: %d,%n&quot;, spectrum.binCount());</span>
+<span class="fc" id="L249">        w.printf(Locale.ROOT, &quot;    \&quot;binWidthHz\&quot;: %.6f%n&quot;, spectrum.binWidthHz());</span>
+<span class="fc" id="L250">        w.println(&quot;  },&quot;);</span>
+      }
+<span class="fc" id="L252">      SpectrogramHistory history = data.spectrogram();</span>
+<span class="pc bpc" id="L253" title="2 of 4 branches missed.">      if (history != null &amp;&amp; !history.isEmpty()) {</span>
+<span class="fc" id="L254">        w.println(&quot;  \&quot;spectrogram\&quot;: {&quot;);</span>
+<span class="fc" id="L255">        w.printf(Locale.ROOT, &quot;    \&quot;frames\&quot;: %d,%n&quot;, history.size());</span>
+<span class="fc" id="L256">        w.printf(Locale.ROOT, &quot;    \&quot;capacity\&quot;: %d,%n&quot;, history.capacity());</span>
+<span class="fc" id="L257">        w.printf(Locale.ROOT, &quot;    \&quot;bins\&quot;: %d,%n&quot;, history.binCount());</span>
+<span class="fc" id="L258">        w.printf(Locale.ROOT, &quot;    \&quot;sampleRate\&quot;: %.3f%n&quot;, history.sampleRate());</span>
+<span class="fc" id="L259">        w.println(&quot;  },&quot;);</span>
+      }
+<span class="fc" id="L261">      DiagnosisSnapshot diagnosis = data.diagnosis();</span>
+<span class="pc bpc" id="L262" title="1 of 2 branches missed.">      if (diagnosis != null) {</span>
+<span class="fc" id="L263">        w.printf(Locale.ROOT, &quot;  \&quot;diagnosisFindings\&quot;: %d,%n&quot;, diagnosis.findings().size());</span>
+      }
+<span class="fc" id="L265">      w.printf(</span>
+<span class="pc bpc" id="L266" title="1 of 2 branches missed.">          Locale.ROOT, &quot;  \&quot;notes\&quot;: \&quot;%s\&quot;%n&quot;, escape(data.notes() == null ? &quot;&quot; : data.notes()));</span>
+<span class="fc" id="L267">      w.println(&quot;}&quot;);</span>
+    }
+<span class="fc" id="L269">  }</span>
+
+  private static String escape(String s) {
+<span class="fc" id="L272">    StringBuilder out = new StringBuilder(s.length() + 8);</span>
+<span class="fc bfc" id="L273" title="All 2 branches covered.">    for (int i = 0; i &lt; s.length(); i++) {</span>
+<span class="fc" id="L274">      char c = s.charAt(i);</span>
+<span class="pc bpc" id="L275" title="7 of 8 branches missed.">      switch (c) {</span>
+<span class="nc" id="L276">        case '\\' -&gt; out.append(&quot;\\\\&quot;);</span>
+<span class="nc" id="L277">        case '&quot;' -&gt; out.append(&quot;\\\&quot;&quot;);</span>
+<span class="nc" id="L278">        case '\b' -&gt; out.append(&quot;\\b&quot;);</span>
+<span class="nc" id="L279">        case '\f' -&gt; out.append(&quot;\\f&quot;);</span>
+<span class="nc" id="L280">        case '\n' -&gt; out.append(&quot;\\n&quot;);</span>
+<span class="nc" id="L281">        case '\r' -&gt; out.append(&quot;\\r&quot;);</span>
+<span class="nc" id="L282">        case '\t' -&gt; out.append(&quot;\\t&quot;);</span>
+        default -&gt; {
+<span class="pc bpc" id="L284" title="1 of 2 branches missed.">          if (c &lt; 0x20) {</span>
+<span class="nc" id="L285">            out.append(String.format(Locale.ROOT, &quot;\\u%04x&quot;, (int) c));</span>
+          } else {
+<span class="fc" id="L287">            out.append(c);</span>
+          }
+        }
+      }
+    }
+<span class="fc" id="L292">    return out.toString();</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

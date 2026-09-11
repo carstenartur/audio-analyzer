@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>DSPPipeline.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer DSP and Analysis</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.dsp</a> &gt; <span class="el_source">DSPPipeline.java</span></div><h1>DSPPipeline.java</h1><pre class="source lang-java linenums">package org.hammer.audio.dsp;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.Objects;
+import org.hammer.audio.core.AudioBlock;
+
+/**
+ * Composable chain of {@link DSPProcessor} stages.
+ *
+ * &lt;p&gt;A pipeline applies its processors in declared order, threading the output of each stage into
+ * the next:
+ *
+ * &lt;pre&gt;{@code
+ * DSPPipeline pipeline = DSPPipeline.of(
+ *     new GainProcessor(0.5f),
+ *     new DCBlockProcessor(),
+ *     new HighPassProcessor(80.0f));
+ * AudioBlock processed = pipeline.process(rawBlock);
+ * }&lt;/pre&gt;
+ *
+ * &lt;p&gt;The pipeline itself is immutable: stages are captured at construction time. To change the
+ * topology at runtime, build a new pipeline.
+ *
+ * @author refactoring
+ */
+public final class DSPPipeline implements DSPProcessor {
+
+  private final DSPProcessor[] stages;
+
+<span class="fc" id="L33">  private DSPPipeline(DSPProcessor[] stages) {</span>
+<span class="fc" id="L34">    this.stages = stages;</span>
+<span class="fc" id="L35">  }</span>
+
+  /**
+   * Create a new pipeline from an explicit list of stages.
+   *
+   * @param stages ordered list of processors; must not be {@code null} and must not contain {@code
+   *     null} entries
+   * @return a new pipeline
+   */
+  public static DSPPipeline of(DSPProcessor... stages) {
+<span class="fc" id="L45">    Objects.requireNonNull(stages, &quot;stages&quot;);</span>
+<span class="fc" id="L46">    DSPProcessor[] copy = new DSPProcessor[stages.length];</span>
+<span class="fc bfc" id="L47" title="All 2 branches covered.">    for (int i = 0; i &lt; stages.length; i++) {</span>
+<span class="fc" id="L48">      copy[i] = Objects.requireNonNull(stages[i], &quot;stages[&quot; + i + &quot;]&quot;);</span>
+    }
+<span class="fc" id="L50">    return new DSPPipeline(copy);</span>
+  }
+
+  /**
+   * Create a new pipeline from a list of stages.
+   *
+   * @param stages ordered list of processors; must not be {@code null} and must not contain {@code
+   *     null} entries
+   * @return a new pipeline
+   */
+  public static DSPPipeline of(List&lt;? extends DSPProcessor&gt; stages) {
+<span class="nc" id="L61">    Objects.requireNonNull(stages, &quot;stages&quot;);</span>
+<span class="nc" id="L62">    return of(stages.toArray(new DSPProcessor[0]));</span>
+  }
+
+  /**
+   * @return an empty pipeline that returns its input unchanged
+   */
+  public static DSPPipeline empty() {
+<span class="fc" id="L69">    return new DSPPipeline(new DSPProcessor[0]);</span>
+  }
+
+  @Override
+  public AudioBlock process(AudioBlock block) {
+<span class="fc" id="L74">    AudioBlock current = Objects.requireNonNull(block, &quot;block&quot;);</span>
+<span class="fc bfc" id="L75" title="All 2 branches covered.">    for (DSPProcessor stage : stages) {</span>
+<span class="fc" id="L76">      current = Objects.requireNonNull(stage.process(current), &quot;stage produced null block&quot;);</span>
+    }
+<span class="fc" id="L78">    return current;</span>
+  }
+
+  /**
+   * @return number of stages in this pipeline
+   */
+  public int size() {
+<span class="fc" id="L85">    return stages.length;</span>
+  }
+
+  /**
+   * @return an unmodifiable view of the stages in declaration order
+   */
+  public List&lt;DSPProcessor&gt; stages() {
+<span class="fc" id="L92">    return Collections.unmodifiableList(new ArrayList&lt;&gt;(Arrays.asList(stages)));</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>
