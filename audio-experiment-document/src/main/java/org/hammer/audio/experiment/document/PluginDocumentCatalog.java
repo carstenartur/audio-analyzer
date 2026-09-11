@@ -259,7 +259,12 @@ public final class PluginDocumentCatalog {
                 DocumentDiagnostic.Severity.ERROR,
                 "/requiredPlugins",
                 "package-incompatible",
-                "Required plugin package version is not installed: " + requirement.id()));
+                "Required plugin package version mismatch for "
+                    + requirement.id()
+                    + ": required "
+                    + requirement.versionRange()
+                    + ", installed "
+                    + installed.descriptor().version()));
       }
       for (String section : requirement.sections()) {
         required.add(new SectionKey(requirement.id(), section));
