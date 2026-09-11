@@ -1,7 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/carstenartur/audio-analyzer/master/audio-experiment-document/src/main/resources/schemas/audio-analyzer-experiment-v1.schema.json",
-  "title": "Audio Analyzer portable experiment document",
+  "title": "Audio Analyzer portable experiment document v1",
+  "$comment": "Limits, hashes, portable path components, workflow structure, unique identities and cross-references are additionally checked by the codec. Schema identifiers are never fetched on import.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -18,52 +19,625 @@
     "provenance"
   ],
   "properties": {
-    "$schema": {"const": "schemas/audio-analyzer-experiment-v1.schema.json"},
-    "format": {"const": "io.github.carstenartur.audio-analyzer.experiment"},
-    "formatVersion": {"const": 1},
+    "$schema": {
+      "enum": [
+        "https://raw.githubusercontent.com/carstenartur/audio-analyzer/master/audio-experiment-document/src/main/resources/schemas/audio-analyzer-experiment-v1.schema.json",
+        "schemas/audio-analyzer-experiment-v1.schema.json"
+      ]
+    },
+    "format": {
+      "const": "io.github.carstenartur.audio-analyzer.experiment"
+    },
+    "formatVersion": {
+      "const": 1
+    },
     "experiment": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "name", "description", "tags", "intent", "sourceMode", "intendedDuration", "applicationVersion"],
+      "required": [
+        "id",
+        "name",
+        "description",
+        "tags",
+        "intent",
+        "sourceMode",
+        "intendedDuration",
+        "applicationVersion"
+      ],
       "properties": {
-        "id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
-        "name": {"type": "string", "minLength": 1},
-        "description": {"type": "string"},
-        "tags": {"type": "array", "items": {"type": "string"}},
-        "intent": {"type": "string"},
-        "sourceMode": {"type": "string"},
-        "intendedDuration": {"type": ["string", "null"]},
-        "applicationVersion": {"type": "string", "minLength": 1}
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "name": {
+          "$ref": "#/$defs/text"
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 1000000
+        },
+        "tags": {
+          "type": "array",
+          "minItems": 0,
+          "maxItems": 10000,
+          "items": {
+            "$ref": "#/$defs/text"
+          }
+        },
+        "intent": {
+          "$ref": "#/$defs/identifier"
+        },
+        "sourceMode": {
+          "$ref": "#/$defs/identifier"
+        },
+        "intendedDuration": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 128
+        },
+        "applicationVersion": {
+          "$ref": "#/$defs/text"
+        }
       }
     },
     "workflow": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["format", "formatVersion", "content", "sha256"],
+      "required": [
+        "format",
+        "formatVersion",
+        "content",
+        "sha256"
+      ],
       "properties": {
-        "format": {"const": "io.github.carstenartur.audio-analyzer.workflow-dsl"},
-        "formatVersion": {"const": 1},
-        "content": {"type": "string", "minLength": 1},
-        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+        "format": {
+          "const": "io.github.carstenartur.audio-analyzer.workflow-dsl"
+        },
+        "formatVersion": {
+          "const": 1
+        },
+        "content": {
+          "$ref": "#/$defs/text"
+        },
+        "sha256": {
+          "$ref": "#/$defs/digest"
+        }
       }
     },
-    "profiles": {"type": "object"},
-    "requiredPlugins": {"type": "array"},
-    "pluginData": {"type": "object"},
-    "assets": {"type": "array"},
-    "outputs": {"type": "array"},
+    "profiles": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [],
+      "properties": {
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "assetId"
+          ],
+          "properties": {
+            "assetId": {
+              "$ref": "#/$defs/identifier"
+            }
+          }
+        },
+        "capture": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "sampleRateHz",
+            "channels",
+            "sampleSizeBits",
+            "signed",
+            "bigEndian",
+            "deviceRequirements"
+          ],
+          "properties": {
+            "sampleRateHz": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "maximum": 10000000
+            },
+            "channels": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 256
+            },
+            "sampleSizeBits": {
+              "enum": [
+                8,
+                16,
+                24,
+                32
+              ]
+            },
+            "signed": {
+              "type": "boolean"
+            },
+            "bigEndian": {
+              "type": "boolean"
+            },
+            "deviceRequirements": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "description",
+                "synchronizedChannels"
+              ],
+              "properties": {
+                "description": {
+                  "$ref": "#/$defs/text"
+                },
+                "synchronizedChannels": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
+        },
+        "microphoneArray": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "name",
+            "microphones"
+          ],
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/identifier"
+            },
+            "name": {
+              "$ref": "#/$defs/text"
+            },
+            "microphones": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 256,
+              "items": {
+                "$ref": "#/$defs/microphone"
+              }
+            }
+          }
+        },
+        "calibration": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "referenceChannel",
+            "calibratedAt",
+            "validUntil",
+            "evidenceAssetId",
+            "channels"
+          ],
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/identifier"
+            },
+            "referenceChannel": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 255
+            },
+            "calibratedAt": {
+              "$ref": "#/$defs/instant"
+            },
+            "validUntil": {
+              "$ref": "#/$defs/instant"
+            },
+            "evidenceAssetId": {
+              "$ref": "#/$defs/identifier"
+            },
+            "channels": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 256,
+              "items": {
+                "$ref": "#/$defs/channelCalibration"
+              }
+            }
+          }
+        },
+        "environment": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [],
+          "properties": {
+            "temperatureCelsius": {
+              "type": "number",
+              "minimum": -273.15,
+              "maximum": 1000
+            },
+            "relativeHumidityPercent": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100
+            },
+            "speedOfSoundMetersPerSecond": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "maximum": 100000
+            },
+            "notes": {
+              "type": "string",
+              "maxLength": 1000000
+            }
+          }
+        }
+      }
+    },
+    "requiredPlugins": {
+      "type": "array",
+      "minItems": 0,
+      "maxItems": 10000,
+      "items": {
+        "$ref": "#/$defs/requirement"
+      }
+    },
+    "pluginData": {
+      "type": "object",
+      "maxProperties": 10000,
+      "propertyNames": {
+        "$ref": "#/$defs/identifier"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "maxProperties": 10000,
+        "propertyNames": {
+          "$ref": "#/$defs/identifier"
+        },
+        "additionalProperties": {
+          "$ref": "#/$defs/pluginSection"
+        }
+      }
+    },
+    "assets": {
+      "type": "array",
+      "minItems": 0,
+      "maxItems": 10000,
+      "items": {
+        "$ref": "#/$defs/asset"
+      }
+    },
+    "outputs": {
+      "type": "array",
+      "minItems": 0,
+      "maxItems": 10000,
+      "items": {
+        "$ref": "#/$defs/output"
+      }
+    },
     "provenance": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["creatorDisplayName", "verifiedAccount", "createdAt", "modifiedAt", "softwareVersion", "canonicalSha256", "migrationNotes"],
+      "required": [
+        "creatorDisplayName",
+        "verifiedAccount",
+        "createdAt",
+        "modifiedAt",
+        "softwareVersion",
+        "canonicalSha256",
+        "migrationNotes"
+      ],
       "properties": {
-        "creatorDisplayName": {"type": "string", "minLength": 1},
-        "verifiedAccount": {"type": "string"},
-        "createdAt": {"type": "string"},
-        "modifiedAt": {"type": "string"},
-        "softwareVersion": {"type": "string", "minLength": 1},
-        "canonicalSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-        "migrationNotes": {"type": "array", "items": {"type": "string"}}
+        "creatorDisplayName": {
+          "$ref": "#/$defs/text"
+        },
+        "verifiedAccount": {
+          "type": "string",
+          "maxLength": 1000000
+        },
+        "createdAt": {
+          "$ref": "#/$defs/instant"
+        },
+        "modifiedAt": {
+          "$ref": "#/$defs/instant"
+        },
+        "softwareVersion": {
+          "$ref": "#/$defs/text"
+        },
+        "canonicalSha256": {
+          "$ref": "#/$defs/digest"
+        },
+        "migrationNotes": {
+          "type": "array",
+          "minItems": 0,
+          "maxItems": 10000,
+          "items": {
+            "$ref": "#/$defs/text"
+          }
+        },
+        "algorithmVersions": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/identifier"
+          },
+          "maxProperties": 10000,
+          "additionalProperties": {
+            "$ref": "#/$defs/text"
+          }
+        },
+        "sourceCommit": {
+          "type": "string",
+          "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+        },
+        "sourceRun": {
+          "$ref": "#/$defs/identifier"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1000000,
+      "pattern": "\\S"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "minLength": 64,
+      "maxLength": 64
+    },
+    "instant": {
+      "type": "string",
+      "format": "date-time",
+      "maxLength": 64
+    },
+    "mediaType": {
+      "type": "string",
+      "maxLength": 255,
+      "pattern": "^[A-Za-z0-9!#$&^_.+\\-]+/[A-Za-z0-9!#$&^_.+\\-]+$"
+    },
+    "baseName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255,
+      "pattern": "^[^/\\\\:*?\"<>|\\u0000-\\u001f\\u007f]+$",
+      "not": {
+        "anyOf": [
+          {
+            "enum": [
+              ".",
+              ".."
+            ]
+          },
+          {
+            "pattern": "[. ]$"
+          },
+          {
+            "pattern": "^(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\\.|$)"
+          }
+        ]
+      }
+    },
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024,
+      "pattern": "^[^/\\\\:*?\"<>|\\u0000-\\u001f\\u007f]+(?:/[^/\\\\:*?\"<>|\\u0000-\\u001f\\u007f]+)*$",
+      "not": {
+        "pattern": "(?:^|/)(?:\\.{1,2})(?:/|$)|[. ](?:/|$)"
+      }
+    },
+    "data": {
+      "type": [
+        "object",
+        "array",
+        "string",
+        "number",
+        "boolean",
+        "null"
+      ],
+      "maxProperties": 10000,
+      "maxItems": 10000,
+      "maxLength": 1000000,
+      "propertyNames": {
+        "type": "string",
+        "maxLength": 1000000
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/data"
+      },
+      "items": {
+        "$ref": "#/$defs/data"
+      }
+    },
+    "requirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "versionRange",
+        "sections"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "versionRange": {
+          "$ref": "#/$defs/text"
+        },
+        "sections": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 10000,
+          "items": {
+            "$ref": "#/$defs/identifier"
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "pluginSection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "algorithmVersion",
+        "data"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "algorithmVersion": {
+          "$ref": "#/$defs/text"
+        },
+        "data": {
+          "$ref": "#/$defs/data"
+        }
+      }
+    },
+    "asset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "relativePath",
+        "mediaType",
+        "sizeBytes",
+        "sha256"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "relativePath": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "mediaType": {
+          "$ref": "#/$defs/mediaType"
+        },
+        "sizeBytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "sha256": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "output": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "mediaType",
+        "baseName"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "mediaType": {
+          "$ref": "#/$defs/mediaType"
+        },
+        "baseName": {
+          "$ref": "#/$defs/baseName"
+        }
+      }
+    },
+    "microphone": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "channel",
+        "xMeters",
+        "yMeters",
+        "zMeters"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "channel": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255
+        },
+        "xMeters": {
+          "type": "number",
+          "minimum": -1000000,
+          "maximum": 1000000
+        },
+        "yMeters": {
+          "type": "number",
+          "minimum": -1000000,
+          "maximum": 1000000
+        },
+        "zMeters": {
+          "type": "number",
+          "minimum": -1000000,
+          "maximum": 1000000
+        }
+      }
+    },
+    "channelCalibration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "channel",
+        "referenceFrame",
+        "offsetSamples",
+        "driftPpm",
+        "residualRmsSamples",
+        "jitterRmsSamples",
+        "gainLinear",
+        "invertedPolarity"
+      ],
+      "properties": {
+        "channel": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255
+        },
+        "referenceFrame": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "offsetSamples": {
+          "type": "number",
+          "minimum": -1000000000,
+          "maximum": 1000000000
+        },
+        "driftPpm": {
+          "type": "number",
+          "minimum": -1000000,
+          "maximum": 1000000
+        },
+        "residualRmsSamples": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1000000000
+        },
+        "jitterRmsSamples": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1000000000
+        },
+        "gainLinear": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1000000000
+        },
+        "invertedPolarity": {
+          "type": "boolean"
+        }
       }
     }
   }

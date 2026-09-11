@@ -42,6 +42,8 @@ class ExperimentDocumentHttpAdapterTest {
     assertEquals(0, preview.edgeCount());
     assertTrue(preview.executionAllowed());
     assertTrue(preview.diagnostics().isEmpty());
+    assertArrayEquals(
+        source, preview.canonicalDocument().getBytes(java.nio.charset.StandardCharsets.UTF_8));
   }
 
   @Test

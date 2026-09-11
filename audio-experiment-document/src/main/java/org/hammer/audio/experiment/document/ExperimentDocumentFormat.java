@@ -26,6 +26,12 @@ public final class ExperimentDocumentFormat {
   /** Public schema resource path. */
   public static final String SCHEMA_RESOURCE = "schemas/audio-analyzer-experiment-v1.schema.json";
 
+  /** Public, version-specific schema identity; importers only use the bundled resource. */
+  public static final String SCHEMA_URI =
+      "https://raw.githubusercontent.com/carstenartur/audio-analyzer/master/"
+          + "audio-experiment-document/src/main/resources/"
+          + SCHEMA_RESOURCE;
+
   /** Maximum accepted UTF-8 document bytes. */
   public static final int MAX_DOCUMENT_BYTES = 2 * 1024 * 1024;
 

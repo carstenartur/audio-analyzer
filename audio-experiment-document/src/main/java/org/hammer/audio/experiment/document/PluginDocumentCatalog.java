@@ -148,7 +148,7 @@ public final class PluginDocumentCatalog {
                 item ->
                     item.code().startsWith("missing-")
                         || item.code().startsWith("future-")
-                        || item.code().startsWith("algorithm-"));
+                        || item.code().endsWith("-incompatible"));
     return new ExperimentDocumentPreview(
         canonical,
         canonical.provenance().canonicalSha256(),
@@ -184,6 +184,16 @@ public final class PluginDocumentCatalog {
               "Plugin section version is newer than the installed contribution"));
       return original;
     }
+    if (!original.algorithmVersion().equals(contribution.algorithmVersion())) {
+      diagnostics.add(
+          diagnostic(
+              required ? DocumentDiagnostic.Severity.ERROR : DocumentDiagnostic.Severity.WARNING,
+              pointer + "/algorithmVersion",
+              "algorithm-incompatible",
+              "Document algorithm version differs from the installed contribution"));
+      return original;
+    }
+    List<String> sectionMigrations = new ArrayList<>();
     DocumentValue migratedValue = original.data();
     int version = original.schemaVersion();
     while (version < contribution.schemaVersion()) {
@@ -208,7 +218,7 @@ public final class PluginDocumentCatalog {
                 "Plugin migration failed: " + exception.getClass().getSimpleName()));
         return original;
       }
-      migrations.add(
+      sectionMigrations.add(
           contribution.sectionId() + ":" + migration.fromVersion() + "->" + migration.toVersion());
       version = migration.toVersion();
     }
@@ -231,22 +241,31 @@ public final class PluginDocumentCatalog {
       return original;
     }
     diagnostics.addAll(semantic.diagnostics());
-    if (!original.algorithmVersion().equals(contribution.algorithmVersion())) {
-      diagnostics.add(
-          diagnostic(
-              required ? DocumentDiagnostic.Severity.ERROR : DocumentDiagnostic.Severity.WARNING,
-              pointer + "/algorithmVersion",
-              "algorithm-incompatible",
-              "Document algorithm version differs from the installed contribution"));
-    }
+    migrations.addAll(sectionMigrations);
     return new ExperimentDocument.PluginSection(
         contribution.schemaVersion(), contribution.algorithmVersion(), semantic.normalizedValue());
   }
 
-  private static Set<SectionKey> requiredSections(
+  private Set<SectionKey> requiredSections(
       ExperimentDocument document, List<DocumentDiagnostic> diagnostics) {
     HashSet<SectionKey> required = new HashSet<>();
     for (ExperimentDocument.PluginRequirement requirement : document.requiredPlugins()) {
+      RegisteredPlugin installed = plugins.get(requirement.id());
+      if (installed != null
+          && !"*".equals(requirement.versionRange())
+          && !installed.descriptor().version().equals(requirement.versionRange())) {
+        diagnostics.add(
+            diagnostic(
+                DocumentDiagnostic.Severity.ERROR,
+                "/requiredPlugins",
+                "package-incompatible",
+                "Required plugin package version mismatch for "
+                    + requirement.id()
+                    + ": required "
+                    + requirement.versionRange()
+                    + ", installed "
+                    + installed.descriptor().version()));
+      }
       for (String section : requirement.sections()) {
         required.add(new SectionKey(requirement.id(), section));
       }
@@ -282,7 +301,10 @@ public final class PluginDocumentCatalog {
             input.provenance().modifiedAt(),
             input.provenance().softwareVersion(),
             "",
-            notes);
+            notes,
+            input.provenance().algorithmVersions(),
+            input.provenance().sourceCommit(),
+            input.provenance().sourceRun());
     return new ExperimentDocument(
         input.schema(),
         input.format(),

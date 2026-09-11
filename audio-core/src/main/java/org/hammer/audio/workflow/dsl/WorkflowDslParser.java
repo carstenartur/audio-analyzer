@@ -41,7 +41,11 @@ public final class WorkflowDslParser {
   public Workflow parse(String text) {
     List<String> lines = splitLines(text);
     ParserState state = new ParserState(lines);
-    return parseWorkflow(state);
+    Workflow workflow = parseWorkflow(state);
+    if (state.currentLine() != null) {
+      throw new WorkflowDslParseException("Unexpected trailing workflow content");
+    }
+    return workflow;
   }
 
   private Workflow parseWorkflow(ParserState state) {
@@ -105,7 +109,11 @@ public final class WorkflowDslParser {
     String name = state.readField("name", level + 1);
     PortDirection direction = PortDirection.valueOf(state.readField("direction", level + 1));
     DataType dataType = new DataType(state.readField("dataType", level + 1));
-    boolean required = Boolean.parseBoolean(state.readField("required", level + 1));
+    String requiredValue = state.readField("required", level + 1);
+    if (!"true".equals(requiredValue) && !"false".equals(requiredValue)) {
+      throw new WorkflowDslParseException("Port required must be true or false");
+    }
+    boolean required = Boolean.parseBoolean(requiredValue);
     PortMultiplicity multiplicity =
         PortMultiplicity.valueOf(state.readField("multiplicity", level + 1));
     Metadata metadata = Metadata.empty();
@@ -146,6 +154,9 @@ public final class WorkflowDslParser {
     Map<String, String> entries = new HashMap<>();
     while (state.peekScalarField(parentIndentLevel + 1)) {
       String[] kv = state.readScalarKV(parentIndentLevel + 1);
+      if (entries.containsKey(kv[0])) {
+        throw new WorkflowDslParseException("Duplicate metadata key: " + kv[0]);
+      }
       entries.put(kv[0], kv[1]);
     }
     return new Metadata(entries);

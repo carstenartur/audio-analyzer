@@ -260,6 +260,13 @@ export function ExperimentDocumentPanel({ onError, onStatus }: ExperimentDocumen
               </div>
             </dl>
 
+            <details>
+              <summary>Complete setup, profiles, assets and provenance</summary>
+              <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+                {preview.canonicalDocument}
+              </pre>
+            </details>
+
             {preview.migrations.length === 0 ? null : (
               <>
                 <h3>Migrations</h3>

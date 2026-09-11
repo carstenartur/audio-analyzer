@@ -34,6 +34,7 @@ export interface ExperimentDocumentPreviewResponse {
   migrations: string[];
   executionAllowed: boolean;
   readOnly: boolean;
+  canonicalDocument: string;
 }
 
 interface ExperimentDocumentErrorResponse {

@@ -20,6 +20,7 @@ import java.util.Set;
 import java.util.TreeMap;
 import org.hammer.audio.plugin.document.DocumentValue;
 import org.hammer.audio.workflow.Workflow;
+import org.hammer.audio.workflow.WorkflowValidator;
 import org.hammer.audio.workflow.dsl.WorkflowDslParser;
 import org.hammer.audio.workflow.dsl.WorkflowDslSerializer;
 
@@ -66,9 +67,13 @@ public final class ExperimentDocumentCodec {
           "modifiedAt",
           "softwareVersion",
           "canonicalSha256",
-          "migrationNotes");
+          "migrationNotes",
+          "algorithmVersions",
+          "sourceCommit",
+          "sourceRun");
 
   private final ObjectMapper mapper;
+  private final BoundedDocumentJson boundedJson = new BoundedDocumentJson();
   private final WorkflowDslParser workflowParser = new WorkflowDslParser();
   private final WorkflowDslSerializer workflowSerializer = new WorkflowDslSerializer();
 
@@ -89,13 +94,20 @@ public final class ExperimentDocumentCodec {
     }
     JsonNode parsed;
     try {
-      parsed = mapper.readTree(bytes);
+      parsed = boundedJson.read(bytes);
+    } catch (ExperimentDocumentException exception) {
+      throw exception;
     } catch (IOException exception) {
       throw failure("/", "invalid-json", "Experiment document is not strict JSON", exception);
     }
     ObjectNode root = requireObject(parsed, "/");
     rejectUnknown(root, ROOT_FIELDS, "/");
-    ExperimentDocument document = parseDocument(root);
+    ExperimentDocument document;
+    try {
+      document = parseDocument(root);
+    } catch (IllegalArgumentException exception) {
+      throw failure("/", "invalid-value", "Invalid experiment document value", exception);
+    }
     ExperimentDocument normalized = normalizeWorkflow(document, true);
     String expectedHash = canonicalHash(normalized);
     if (!expectedHash.equals(normalized.provenance().canonicalSha256())) {
@@ -112,12 +124,21 @@ public final class ExperimentDocumentCodec {
     ExperimentDocument normalized = normalizeWorkflow(document, false);
     String hash = canonicalHash(normalized);
     ExperimentDocument withHash = withCanonicalHash(normalized, hash);
-    return writeTree(toTree(withHash, true));
+    byte[] bytes = writeTree(toTree(withHash, true));
+    if (bytes.length > ExperimentDocumentFormat.MAX_DOCUMENT_BYTES) {
+      throw failure("/", "max-bytes", "Canonical document exceeds the byte limit");
+    }
+    return bytes;
   }
 
   /** Return the canonical hash without modifying the supplied document. */
   public String canonicalHash(ExperimentDocument document) throws ExperimentDocumentException {
-    ExperimentDocument withoutHash = withCanonicalHash(document, "");
+    ExperimentDocument normalized = normalizeWorkflow(document, false);
+    ObjectNode validated = toTree(withCanonicalHash(normalized, "0".repeat(64)), true);
+    validateIdentity(validated);
+    ExperimentDocumentSchema.validate(validated);
+    ExperimentSetupValidator.validate(validated);
+    ExperimentDocument withoutHash = withCanonicalHash(normalized, "");
     return DocumentHashes.sha256(writeTree(toTree(withoutHash, false)));
   }
 
@@ -131,35 +152,51 @@ public final class ExperimentDocumentCodec {
       throw new IOException("Experiment document target has no parent or filename: " + normalized);
     }
     java.nio.file.Files.createDirectories(parent);
-    java.nio.file.Path temporary = normalized.resolveSibling(fileName.toString() + ".partial");
-    java.nio.file.Files.write(
-        temporary,
-        bytes,
-        java.nio.file.StandardOpenOption.CREATE,
-        java.nio.file.StandardOpenOption.TRUNCATE_EXISTING,
-        java.nio.file.StandardOpenOption.WRITE);
+    java.nio.file.Path temporary =
+        java.nio.file.Files.createTempFile(parent, ".audioexp-", ".partial");
     try {
-      java.nio.file.Files.move(
-          temporary,
-          normalized,
-          java.nio.file.StandardCopyOption.ATOMIC_MOVE,
-          java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-    } catch (java.nio.file.AtomicMoveNotSupportedException exception) {
-      java.nio.file.Files.move(
-          temporary, normalized, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+      java.nio.file.Files.write(temporary, bytes);
+      try {
+        java.nio.file.Files.move(
+            temporary,
+            normalized,
+            java.nio.file.StandardCopyOption.ATOMIC_MOVE,
+            java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+      } catch (java.nio.file.AtomicMoveNotSupportedException exception) {
+        java.nio.file.Files.move(
+            temporary, normalized, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+      }
+    } finally {
+      java.nio.file.Files.deleteIfExists(temporary);
     }
   }
 
   /** Read and decode one bounded document from disk. */
   public ExperimentDocument load(java.nio.file.Path source) throws IOException {
-    long size = java.nio.file.Files.size(source);
-    if (size > ExperimentDocumentFormat.MAX_DOCUMENT_BYTES) {
-      throw failure("/", "max-bytes", "Experiment document exceeds the byte limit");
+    try (java.io.InputStream input = java.nio.file.Files.newInputStream(source)) {
+      return decode(input.readNBytes(ExperimentDocumentFormat.MAX_DOCUMENT_BYTES + 1));
     }
-    return decode(java.nio.file.Files.readAllBytes(source));
   }
 
   private ExperimentDocument parseDocument(ObjectNode root) throws ExperimentDocumentException {
+    validateIdentity(root);
+    ExperimentDocumentSchema.validate(root);
+    ExperimentSetupValidator.validate(root);
+    return new ExperimentDocument(
+        requiredText(root, "$schema", "/$schema"),
+        requiredText(root, "format", "/format"),
+        requiredPositiveInt(root, "formatVersion", "/formatVersion"),
+        parseExperiment(requiredObject(root, "experiment", "/experiment")),
+        parseWorkflow(requiredObject(root, "workflow", "/workflow")),
+        parseProfiles(requiredObject(root, "profiles", "/profiles")),
+        parseRequirements(requiredArray(root, "requiredPlugins", "/requiredPlugins")),
+        parsePluginData(requiredObject(root, "pluginData", "/pluginData")),
+        parseAssets(requiredArray(root, "assets", "/assets")),
+        parseOutputs(requiredArray(root, "outputs", "/outputs")),
+        parseProvenance(requiredObject(root, "provenance", "/provenance")));
+  }
+
+  private static void validateIdentity(ObjectNode root) throws ExperimentDocumentException {
     String schema = requiredText(root, "$schema", "/$schema");
     String format = requiredText(root, "format", "/format");
     int version = requiredPositiveInt(root, "formatVersion", "/formatVersion");
@@ -172,21 +209,10 @@ public final class ExperimentDocumentCodec {
           "unsupported-version",
           "Unsupported experiment document version: " + version);
     }
-    if (!ExperimentDocumentFormat.SCHEMA_RESOURCE.equals(schema)) {
+    if (!ExperimentDocumentFormat.SCHEMA_RESOURCE.equals(schema)
+        && !ExperimentDocumentFormat.SCHEMA_URI.equals(schema)) {
       throw failure("/$schema", "unsupported-schema", "Unsupported experiment document schema");
     }
-    return new ExperimentDocument(
-        schema,
-        format,
-        version,
-        parseExperiment(requiredObject(root, "experiment", "/experiment")),
-        parseWorkflow(requiredObject(root, "workflow", "/workflow")),
-        parseProfiles(requiredObject(root, "profiles", "/profiles")),
-        parseRequirements(requiredArray(root, "requiredPlugins", "/requiredPlugins")),
-        parsePluginData(requiredObject(root, "pluginData", "/pluginData")),
-        parseAssets(requiredArray(root, "assets", "/assets")),
-        parseOutputs(requiredArray(root, "outputs", "/outputs")),
-        parseProvenance(requiredObject(root, "provenance", "/provenance")));
   }
 
   private ExperimentDocument.ExperimentInfo parseExperiment(ObjectNode node)
@@ -324,7 +350,19 @@ public final class ExperimentDocumentCodec {
         requiredText(node, "canonicalSha256", "/provenance/canonicalSha256"),
         textArray(
             requiredArray(node, "migrationNotes", "/provenance/migrationNotes"),
-            "/provenance/migrationNotes"));
+            "/provenance/migrationNotes"),
+        algorithmVersions(node),
+        optionalText(node, "sourceCommit", "/provenance/sourceCommit"),
+        optionalText(node, "sourceRun", "/provenance/sourceRun"));
+  }
+
+  private static Map<String, String> algorithmVersions(ObjectNode provenance) {
+    TreeMap<String, String> versions = new TreeMap<>();
+    provenance
+        .path("algorithmVersions")
+        .fields()
+        .forEachRemaining(entry -> versions.put(entry.getKey(), entry.getValue().textValue()));
+    return versions;
   }
 
   private ExperimentDocument normalizeWorkflow(ExperimentDocument document, boolean verifyHash)
@@ -341,6 +379,11 @@ public final class ExperimentDocumentCodec {
       throw failure(
           "/workflow/content", "invalid-workflow", "Embedded workflow DSL is invalid", exception);
     }
+    List<String> violations = new WorkflowValidator().validate(workflow);
+    if (!violations.isEmpty()) {
+      throw failure("/workflow/content", "invalid-workflow", String.join("; ", violations));
+    }
+    ExperimentSetupValidator.validateWorkflow(workflow);
     String canonical = workflowSerializer.serialize(workflow);
     String hash = DocumentHashes.sha256(canonical);
     if (verifyHash && !hash.equals(payload.sha256())) {
@@ -379,7 +422,10 @@ public final class ExperimentDocumentCodec {
             current.modifiedAt(),
             current.softwareVersion(),
             hash,
-            current.migrationNotes());
+            current.migrationNotes(),
+            current.algorithmVersions(),
+            current.sourceCommit(),
+            current.sourceRun());
     return new ExperimentDocument(
         document.schema(),
         document.format(),
@@ -515,6 +561,17 @@ public final class ExperimentDocumentCodec {
       node.put("canonicalSha256", value.canonicalSha256());
     }
     node.set("migrationNotes", stringArray(value.migrationNotes()));
+    if (!value.algorithmVersions().isEmpty()) {
+      ObjectNode algorithms = JsonNodeFactory.instance.objectNode();
+      new TreeMap<>(value.algorithmVersions()).forEach(algorithms::put);
+      node.set("algorithmVersions", algorithms);
+    }
+    if (!value.sourceCommit().isEmpty()) {
+      node.put("sourceCommit", value.sourceCommit());
+    }
+    if (!value.sourceRun().isEmpty()) {
+      node.put("sourceRun", value.sourceRun());
+    }
     return node;
   }
 
@@ -599,7 +656,7 @@ public final class ExperimentDocumentCodec {
   private static int requiredPositiveInt(ObjectNode parent, String field, String pointer)
       throws ExperimentDocumentException {
     JsonNode value = requiredNode(parent, field, pointer);
-    if (!value.canConvertToInt() || value.intValue() < 1) {
+    if (!isInteger(value) || !value.canConvertToInt() || value.intValue() < 1) {
       throw failure(pointer, "expected-positive-integer", "Expected a positive integer");
     }
     return value.intValue();
@@ -608,10 +665,14 @@ public final class ExperimentDocumentCodec {
   private static long requiredNonNegativeLong(ObjectNode parent, String field, String pointer)
       throws ExperimentDocumentException {
     JsonNode value = requiredNode(parent, field, pointer);
-    if (!value.canConvertToLong() || value.longValue() < 0L) {
+    if (!isInteger(value) || !value.canConvertToLong() || value.longValue() < 0L) {
       throw failure(pointer, "expected-nonnegative-integer", "Expected a non-negative integer");
     }
     return value.longValue();
+  }
+
+  private static boolean isInteger(JsonNode value) {
+    return value.isNumber() && value.decimalValue().stripTrailingZeros().scale() <= 0;
   }
 
   private static List<String> textArray(ArrayNode array, String pointer)

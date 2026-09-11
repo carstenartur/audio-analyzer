@@ -60,7 +60,8 @@ public final class ExperimentDocumentHttpAdapter {
         preview.diagnostics(),
         preview.migrations(),
         preview.executionAllowed(),
-        preview.readOnly());
+        preview.readOnly(),
+        documentService.inspectionJson(preview));
   }
 
   /** Return canonical normalized bytes without applying or executing the imported document. */
@@ -117,6 +118,7 @@ public final class ExperimentDocumentHttpAdapter {
    * @param migrations applied migration descriptions
    * @param executionAllowed whether execution is allowed with installed plugins
    * @param readOnly whether the preview can only be inspected and preserved
+   * @param canonicalDocument complete canonical JSON for inspection before applying
    */
   public record PreviewResponse(
       String format,
@@ -133,10 +135,12 @@ public final class ExperimentDocumentHttpAdapter {
       List<DocumentDiagnostic> diagnostics,
       List<String> migrations,
       boolean executionAllowed,
-      boolean readOnly) {
+      boolean readOnly,
+      String canonicalDocument) {
 
     /* Defensively copy response collections. */
     public PreviewResponse {
+      Objects.requireNonNull(canonicalDocument, "canonicalDocument");
       requiredPlugins = List.copyOf(Objects.requireNonNull(requiredPlugins, "requiredPlugins"));
       diagnostics = List.copyOf(Objects.requireNonNull(diagnostics, "diagnostics"));
       migrations = List.copyOf(Objects.requireNonNull(migrations, "migrations"));

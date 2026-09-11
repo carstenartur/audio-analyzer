@@ -223,6 +223,9 @@ public record ExperimentDocument(
    * @param softwareVersion software version
    * @param canonicalSha256 canonical document hash
    * @param migrationNotes immutable migration notes
+   * @param algorithmVersions named algorithm compatibility versions
+   * @param sourceCommit optional source Git object id
+   * @param sourceRun optional stable source run id
    */
   public record Provenance(
       String creatorDisplayName,
@@ -231,7 +234,10 @@ public record ExperimentDocument(
       Instant modifiedAt,
       String softwareVersion,
       String canonicalSha256,
-      List<String> migrationNotes) {
+      List<String> migrationNotes,
+      Map<String, String> algorithmVersions,
+      String sourceCommit,
+      String sourceRun) {
 
     /* Validate provenance fields. */
     public Provenance {
@@ -248,12 +254,56 @@ public record ExperimentDocument(
               ? ""
               : requireSha256(canonicalSha256, "canonicalSha256");
       migrationNotes = normalizedStrings(migrationNotes, "migration note");
+      TreeMap<String, String> algorithms = new TreeMap<>();
+      Objects.requireNonNull(algorithmVersions, "algorithmVersions")
+          .forEach(
+              (id, version) ->
+                  algorithms.put(
+                      requireIdentifier(id, "algorithm id"),
+                      requireNonBlank(version, "algorithm version")));
+      algorithmVersions = Collections.unmodifiableMap(algorithms);
+      sourceCommit = sourceCommit == null ? "" : sourceCommit;
+      sourceRun = sourceRun == null ? "" : sourceRun;
+      if (!sourceCommit.isEmpty() && !sourceCommit.matches("[0-9a-f]{40}|[0-9a-f]{64}")) {
+        throw new IllegalArgumentException("sourceCommit must be a Git object id");
+      }
+      if (!sourceRun.isEmpty()) {
+        requireIdentifier(sourceRun, "sourceRun");
+      }
+    }
+
+    /** Create provenance without optional algorithm and source references. */
+    public Provenance(
+        String creatorDisplayName,
+        String verifiedAccount,
+        Instant createdAt,
+        Instant modifiedAt,
+        String softwareVersion,
+        String canonicalSha256,
+        List<String> migrationNotes) {
+      this(
+          creatorDisplayName,
+          verifiedAccount,
+          createdAt,
+          modifiedAt,
+          softwareVersion,
+          canonicalSha256,
+          migrationNotes,
+          Map.of(),
+          "",
+          "");
     }
 
     /** Return a fresh immutable copy of migration notes. */
     @Override
     public List<String> migrationNotes() {
       return List.copyOf(migrationNotes);
+    }
+
+    /** Return immutable named algorithm versions. */
+    @Override
+    public Map<String, String> algorithmVersions() {
+      return Map.copyOf(algorithmVersions);
     }
   }
 
