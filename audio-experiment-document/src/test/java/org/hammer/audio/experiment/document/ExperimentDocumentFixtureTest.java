@@ -180,9 +180,13 @@ class ExperimentDocumentFixtureTest {
     assertTrue(preview.migrations().isEmpty());
     assertArrayEquals(bytes, service.normalize(bytes));
     assertFalse(service.preview(service.normalize(bytes)).executionAllowed());
-    assertTrue(
+    DocumentDiagnostic packageDiagnostic =
         preview.diagnostics().stream()
-            .anyMatch(item -> "package-incompatible".equals(item.code())));
+            .filter(item -> "package-incompatible".equals(item.code()))
+            .findFirst()
+            .orElseThrow();
+    assertTrue(packageDiagnostic.message().contains("required 2.0.0"));
+    assertTrue(packageDiagnostic.message().contains("installed 1.0.0"));
     assertTrue(
         preview.diagnostics().stream()
             .anyMatch(item -> "algorithm-incompatible".equals(item.code())));
