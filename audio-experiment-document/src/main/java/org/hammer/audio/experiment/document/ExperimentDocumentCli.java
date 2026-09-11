@@ -46,8 +46,8 @@ public final class ExperimentDocumentCli {
         return preview.executionAllowed() ? 0 : 1;
       }
       if ("normalize".equals(args[0]) && args.length == 3) {
-        service.normalize(source, Path.of(args[2]));
-        out.println("SAVED " + preview.canonicalSha256());
+        ExperimentDocumentPreview normalized = service.normalize(source, Path.of(args[2]));
+        out.println("SAVED " + normalized.canonicalSha256());
         return 0;
       }
       error.println("Unsupported command or argument count");
