@@ -1,0 +1,422 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>TrackingBenchmarkComparator.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.benchmark</a> &gt; <span class="el_source">TrackingBenchmarkComparator.java</span></div><h1>TrackingBenchmarkComparator.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.benchmark;
+
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import org.hammer.audio.acquisition.Microphone;
+import org.hammer.audio.experimental.acoustic.scenario.ClassificationGroundTruth;
+import org.hammer.audio.experimental.acoustic.scenario.Scenario;
+import org.hammer.audio.experimental.acoustic.scenario.ScenarioSource;
+import org.hammer.audio.experimental.acoustic.tracking.TrackedSource;
+import org.hammer.audio.experimental.acoustic.tracking.TrackingSnapshot;
+import org.hammer.audio.geometry.Vector2;
+
+/** Compare tracking/classification measurements against scenario ground truth. */
+public final class TrackingBenchmarkComparator
+    implements GroundTruthComparator&lt;Scenario, BenchmarkMeasurements, BenchmarkReport&gt; {
+
+  private final SnapshotGroundTruthAligner aligner;
+
+  public TrackingBenchmarkComparator() {
+<span class="fc" id="L25">    this(new SnapshotGroundTruthAligner());</span>
+<span class="fc" id="L26">  }</span>
+
+<span class="fc" id="L28">  public TrackingBenchmarkComparator(SnapshotGroundTruthAligner aligner) {</span>
+<span class="fc" id="L29">    this.aligner = Objects.requireNonNull(aligner, &quot;aligner&quot;);</span>
+<span class="fc" id="L30">  }</span>
+
+  @Override
+  public BenchmarkReport compare(Scenario truth, BenchmarkMeasurements measurements) {
+<span class="fc" id="L34">    Objects.requireNonNull(truth, &quot;truth&quot;);</span>
+<span class="fc" id="L35">    Objects.requireNonNull(measurements, &quot;measurements&quot;);</span>
+
+<span class="fc" id="L37">    ComparisonAccumulator accumulator = new ComparisonAccumulator(measurements.snapshots().size());</span>
+<span class="fc" id="L38">    Vector2 arrayCenter = arrayCenter(measurements);</span>
+<span class="fc" id="L39">    long scenarioStartTimestampNanos = scenarioStartTimestampNanos(measurements);</span>
+<span class="fc bfc" id="L40" title="All 2 branches covered.">    for (TrackingSnapshot snapshot : measurements.snapshots()) {</span>
+<span class="fc" id="L41">      processSnapshot(truth, snapshot, scenarioStartTimestampNanos, arrayCenter, accumulator);</span>
+<span class="fc" id="L42">    }</span>
+<span class="fc" id="L43">    return accumulator.toReport(</span>
+        truth,
+        measurements,
+<span class="fc" id="L46">        summarizeClassification(truth, measurements.classificationPredictions()));</span>
+  }
+
+  private void processSnapshot(
+      Scenario truth,
+      TrackingSnapshot snapshot,
+      long scenarioStartTimestampNanos,
+      Vector2 arrayCenter,
+      ComparisonAccumulator accumulator) {
+<span class="fc" id="L55">    accumulator.recordSnapshot(snapshot, truth.sources().size());</span>
+<span class="fc" id="L56">    SnapshotAlignment alignment = aligner.align(truth, snapshot, scenarioStartTimestampNanos);</span>
+<span class="fc" id="L57">    accumulator.totalSpuriousTracks += alignment.spuriousTracks().size();</span>
+<span class="fc bfc" id="L58" title="All 2 branches covered.">    for (AlignedSourceObservation observation : alignment.matchedSources()) {</span>
+<span class="fc" id="L59">      accumulator.recordMatchedObservation(arrayCenter, observation);</span>
+<span class="fc" id="L60">    }</span>
+<span class="fc bfc" id="L61" title="All 2 branches covered.">    for (GroundTruthObservation missingSource : alignment.missingSources()) {</span>
+<span class="fc" id="L62">      accumulator.recordMissingObservation(missingSource);</span>
+<span class="fc" id="L63">    }</span>
+<span class="fc" id="L64">  }</span>
+
+  private static long scenarioStartTimestampNanos(BenchmarkMeasurements measurements) {
+<span class="fc bfc" id="L67" title="All 2 branches covered.">    return measurements.snapshots().isEmpty()</span>
+<span class="fc" id="L68">        ? 0L</span>
+<span class="fc" id="L69">        : measurements.snapshots().get(0).sourceTimestampNanos();</span>
+  }
+
+  private static ClassificationSummary summarizeClassification(
+      Scenario truth, Map&lt;String, ClassificationPrediction&gt; predictions) {
+<span class="fc" id="L74">    int classificationCorrect = 0;</span>
+<span class="fc" id="L75">    int classificationEvaluatedCount = 0;</span>
+<span class="fc" id="L76">    int classificationSkippedCount = 0;</span>
+<span class="fc" id="L77">    int classificationUnavailableTruthCount = 0;</span>
+<span class="fc bfc" id="L78" title="All 2 branches covered.">    for (ScenarioSource source : truth.sources()) {</span>
+<span class="fc" id="L79">      ClassificationGroundTruth labels = source.labels();</span>
+<span class="fc" id="L80">      ClassificationPrediction prediction = predictions.get(source.sourceId());</span>
+<span class="fc bfc" id="L81" title="All 4 branches covered.">      if (labels == null || !hasComparableClassification(labels)) {</span>
+<span class="fc" id="L82">        classificationUnavailableTruthCount++;</span>
+<span class="fc bfc" id="L83" title="All 2 branches covered.">      } else if (prediction == null) {</span>
+<span class="fc" id="L84">        classificationSkippedCount++;</span>
+      } else {
+<span class="fc" id="L86">        classificationEvaluatedCount++;</span>
+<span class="fc bfc" id="L87" title="All 2 branches covered.">        if (classificationMatches(labels, prediction)) {</span>
+<span class="fc" id="L88">          classificationCorrect++;</span>
+        }
+      }
+<span class="fc" id="L91">    }</span>
+<span class="fc" id="L92">    return new ClassificationSummary(</span>
+        classificationCorrect,
+        classificationEvaluatedCount,
+        classificationSkippedCount,
+        classificationUnavailableTruthCount);
+  }
+
+  private static boolean hasComparableClassification(ClassificationGroundTruth labels) {
+<span class="fc bfc" id="L100" title="All 2 branches covered.">    return labels.species() != null</span>
+<span class="pc bpc" id="L101" title="1 of 2 branches missed.">        || labels.sex() != null</span>
+<span class="pc bpc" id="L102" title="1 of 2 branches missed.">        || labels.age() != null</span>
+<span class="pc bpc" id="L103" title="1 of 2 branches missed.">        || labels.feedingStatus() != null</span>
+<span class="pc bpc" id="L104" title="1 of 2 branches missed.">        || !labels.labels().isEmpty();</span>
+  }
+
+  private static boolean classificationMatches(
+      ClassificationGroundTruth truth, ClassificationPrediction prediction) {
+<span class="pc bpc" id="L109" title="1 of 4 branches missed.">    if (truth.species() != null &amp;&amp; !truth.species().equals(prediction.species())) {</span>
+<span class="fc" id="L110">      return false;</span>
+    }
+<span class="pc bpc" id="L112" title="3 of 4 branches missed.">    if (truth.sex() != null &amp;&amp; !truth.sex().equals(prediction.sex())) {</span>
+<span class="nc" id="L113">      return false;</span>
+    }
+<span class="pc bpc" id="L115" title="3 of 4 branches missed.">    if (truth.age() != null &amp;&amp; !truth.age().equals(prediction.age())) {</span>
+<span class="nc" id="L116">      return false;</span>
+    }
+<span class="pc bpc" id="L118" title="1 of 2 branches missed.">    if (truth.feedingStatus() != null</span>
+<span class="nc bnc" id="L119" title="All 2 branches missed.">        &amp;&amp; !truth.feedingStatus().equals(prediction.feedingStatus())) {</span>
+<span class="nc" id="L120">      return false;</span>
+    }
+<span class="pc bpc" id="L122" title="1 of 2 branches missed.">    for (Map.Entry&lt;String, String&gt; entry : truth.labels().entrySet()) {</span>
+<span class="nc bnc" id="L123" title="All 2 branches missed.">      if (!Objects.equals(entry.getValue(), prediction.labels().get(entry.getKey()))) {</span>
+<span class="nc" id="L124">        return false;</span>
+      }
+<span class="nc" id="L126">    }</span>
+<span class="fc" id="L127">    return true;</span>
+  }
+
+  private static Vector2 arrayCenter(BenchmarkMeasurements measurements) {
+<span class="fc" id="L131">    double sumX = 0.0;</span>
+<span class="fc" id="L132">    double sumY = 0.0;</span>
+<span class="fc bfc" id="L133" title="All 2 branches covered.">    for (Microphone microphone : measurements.array().microphones()) {</span>
+<span class="fc" id="L134">      sumX += microphone.positionMeters().x();</span>
+<span class="fc" id="L135">      sumY += microphone.positionMeters().y();</span>
+<span class="fc" id="L136">    }</span>
+<span class="fc" id="L137">    double divisor = measurements.array().microphones().size();</span>
+<span class="fc" id="L138">    return new Vector2(sumX / divisor, sumY / divisor);</span>
+  }
+
+  private static double angularErrorDegrees(Vector2 reference, Vector2 expected, Vector2 measured) {
+<span class="fc" id="L142">    Vector2 expectedDirection = expected.minus(reference);</span>
+<span class="fc" id="L143">    Vector2 measuredDirection = measured.minus(reference);</span>
+<span class="fc" id="L144">    double expectedLength = expectedDirection.length();</span>
+<span class="fc" id="L145">    double measuredLength = measuredDirection.length();</span>
+<span class="pc bpc" id="L146" title="2 of 4 branches missed.">    if (expectedLength == 0.0 || measuredLength == 0.0) {</span>
+<span class="nc" id="L147">      return 0.0;</span>
+    }
+<span class="fc" id="L149">    double cosTheta = expectedDirection.dot(measuredDirection) / (expectedLength * measuredLength);</span>
+<span class="fc" id="L150">    cosTheta = Math.max(-1.0, Math.min(1.0, cosTheta));</span>
+<span class="fc" id="L151">    return Math.toDegrees(Math.acos(cosTheta));</span>
+  }
+
+  private static double radialVelocityToward(Vector2 receiver, Vector2 source, Vector2 velocity) {
+<span class="fc" id="L155">    return velocity.dot(receiver.minus(source).normalized());</span>
+  }
+
+  private static Double idStability(
+      Set&lt;String&gt; evaluableSourceIds, Map&lt;String, Map&lt;Integer, Integer&gt;&gt; trackCountsBySource) {
+<span class="fc bfc" id="L160" title="All 2 branches covered.">    if (evaluableSourceIds.isEmpty()) {</span>
+<span class="fc" id="L161">      return null;</span>
+    }
+<span class="fc" id="L163">    double total = 0.0;</span>
+<span class="fc bfc" id="L164" title="All 2 branches covered.">    for (String sourceId : evaluableSourceIds) {</span>
+<span class="fc" id="L165">      Map&lt;Integer, Integer&gt; trackCounts = trackCountsBySource.get(sourceId);</span>
+<span class="pc bpc" id="L166" title="1 of 4 branches missed.">      if (trackCounts == null || trackCounts.isEmpty()) {</span>
+<span class="nc" id="L167">        continue;</span>
+      }
+<span class="fc" id="L169">      int dominant = 0;</span>
+<span class="fc" id="L170">      int matched = 0;</span>
+<span class="fc bfc" id="L171" title="All 2 branches covered.">      for (int count : trackCounts.values()) {</span>
+<span class="fc" id="L172">        dominant = Math.max(dominant, count);</span>
+<span class="fc" id="L173">        matched += count;</span>
+<span class="fc" id="L174">      }</span>
+<span class="fc" id="L175">      total += dominant / (double) matched;</span>
+<span class="fc" id="L176">    }</span>
+<span class="fc" id="L177">    return total / evaluableSourceIds.size();</span>
+  }
+
+  private static long mean(List&lt;Long&gt; values) {
+<span class="fc bfc" id="L181" title="All 2 branches covered.">    if (values.isEmpty()) {</span>
+<span class="fc" id="L182">      return 0L;</span>
+    }
+<span class="fc" id="L184">    long sum = 0L;</span>
+<span class="fc bfc" id="L185" title="All 2 branches covered.">    for (Long value : values) {</span>
+<span class="fc" id="L186">      sum += value;</span>
+<span class="fc" id="L187">    }</span>
+<span class="fc" id="L188">    return Math.round(sum / (double) values.size());</span>
+  }
+
+  private static long median(List&lt;Long&gt; values) {
+<span class="fc bfc" id="L192" title="All 2 branches covered.">    if (values.isEmpty()) {</span>
+<span class="fc" id="L193">      return 0L;</span>
+    }
+<span class="fc" id="L195">    List&lt;Long&gt; sorted = new ArrayList&lt;&gt;(values);</span>
+<span class="fc" id="L196">    sorted.sort(Long::compareTo);</span>
+<span class="fc" id="L197">    int middle = sorted.size() / 2;</span>
+<span class="fc bfc" id="L198" title="All 2 branches covered.">    if ((sorted.size() &amp; 1) == 1) {</span>
+<span class="fc" id="L199">      return sorted.get(middle);</span>
+    }
+<span class="fc" id="L201">    return Math.round((sorted.get(middle - 1) + sorted.get(middle)) / 2.0);</span>
+  }
+
+  private static long max(List&lt;Long&gt; values) {
+<span class="fc" id="L205">    long max = 0L;</span>
+<span class="fc bfc" id="L206" title="All 2 branches covered.">    for (Long value : values) {</span>
+<span class="fc" id="L207">      max = Math.max(max, value);</span>
+<span class="fc" id="L208">    }</span>
+<span class="fc" id="L209">    return max;</span>
+  }
+
+<span class="fc" id="L212">  private record ClassificationSummary(</span>
+      int correctCount, int evaluatedCount, int skippedCount, int unavailableTruthCount) {
+    private ClassificationAccuracyMetric asMetric() {
+<span class="fc" id="L215">      return ClassificationAccuracyMetric.ofCounts(</span>
+          correctCount, evaluatedCount, skippedCount, unavailableTruthCount);
+    }
+  }
+
+  private static final class ComparisonAccumulator {
+<span class="fc" id="L221">    private final List&lt;Double&gt; distanceErrorsMeters = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L222">    private final List&lt;Double&gt; angularErrorsDegrees = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L223">    private final List&lt;Double&gt; absoluteFrequencyErrorsHz = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L224">    private final List&lt;Double&gt; relativeFrequencyErrors = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L225">    private final List&lt;Double&gt; absoluteDopplerErrorsMetersPerSecond = new ArrayList&lt;&gt;();</span>
+    private final List&lt;Long&gt; processingTimes;
+<span class="fc" id="L227">    private final Map&lt;String, Map&lt;Integer, Integer&gt;&gt; trackCountsBySource =</span>
+        new ConcurrentHashMap&lt;&gt;();
+<span class="fc" id="L229">    private final Set&lt;String&gt; continuityEvaluableSources = new HashSet&lt;&gt;();</span>
+    private long totalMeasuredObservations;
+    private long totalSpuriousTracks;
+    private long exactSourceCountFrames;
+    private long absoluteSourceCountError;
+    private int localizationSkippedCount;
+    private int localizationUnavailableTruthCount;
+    private int frequencySkippedCount;
+    private int frequencyUnavailableTruthCount;
+    private int dopplerSkippedCount;
+    private int dopplerUnavailableTruthCount;
+    private int continuityEvaluatedCount;
+    private int continuitySkippedCount;
+    private int continuityUnavailableTruthCount;
+
+<span class="fc" id="L244">    private ComparisonAccumulator(int expectedSnapshots) {</span>
+<span class="fc" id="L245">      this.processingTimes = new ArrayList&lt;&gt;(expectedSnapshots);</span>
+<span class="fc" id="L246">    }</span>
+
+    private void recordSnapshot(TrackingSnapshot snapshot, int expectedSourceCount) {
+<span class="fc" id="L249">      processingTimes.add(snapshot.processingNanos());</span>
+<span class="fc" id="L250">      totalMeasuredObservations += snapshot.tracks().size();</span>
+<span class="fc bfc" id="L251" title="All 2 branches covered.">      if (snapshot.tracks().size() == expectedSourceCount) {</span>
+<span class="fc" id="L252">        exactSourceCountFrames++;</span>
+      }
+<span class="fc" id="L254">      absoluteSourceCountError += Math.abs(snapshot.tracks().size() - expectedSourceCount);</span>
+<span class="fc" id="L255">    }</span>
+
+    private void recordMatchedObservation(
+        Vector2 arrayCenter, AlignedSourceObservation observation) {
+<span class="fc" id="L259">      TrackedSource track = observation.trackedSource();</span>
+<span class="fc" id="L260">      GroundTruthObservation groundTruth = observation.groundTruth();</span>
+<span class="fc" id="L261">      recordContinuityMatch(groundTruth.source().sourceId(), track.id(), groundTruth);</span>
+<span class="fc" id="L262">      recordLocalization(arrayCenter, track, groundTruth);</span>
+<span class="fc" id="L263">      recordFrequency(track, groundTruth);</span>
+<span class="fc" id="L264">      recordDoppler(arrayCenter, track, groundTruth);</span>
+<span class="fc" id="L265">    }</span>
+
+    private void recordContinuityMatch(
+        String sourceId, int trackId, GroundTruthObservation groundTruth) {
+<span class="pc bpc" id="L269" title="1 of 2 branches missed.">      if (groundTruth.hasAlignmentTruth()) {</span>
+<span class="fc" id="L270">        continuityEvaluableSources.add(sourceId);</span>
+<span class="fc" id="L271">        continuityEvaluatedCount++;</span>
+<span class="fc" id="L272">        trackCountsBySource</span>
+<span class="fc" id="L273">            .computeIfAbsent(sourceId, ignored -&gt; new ConcurrentHashMap&lt;&gt;())</span>
+<span class="fc" id="L274">            .merge(trackId, 1, Integer::sum);</span>
+      } else {
+<span class="nc" id="L276">        continuityUnavailableTruthCount++;</span>
+      }
+<span class="fc" id="L278">    }</span>
+
+    private void recordLocalization(
+        Vector2 arrayCenter, TrackedSource track, GroundTruthObservation groundTruth) {
+<span class="pc bpc" id="L282" title="1 of 2 branches missed.">      if (groundTruth.hasPositionTruth()) {</span>
+<span class="fc" id="L283">        distanceErrorsMeters.add(</span>
+<span class="fc" id="L284">            groundTruth.expectedPositionMeters().distanceTo(track.positionMeters()));</span>
+<span class="fc" id="L285">        angularErrorsDegrees.add(</span>
+<span class="fc" id="L286">            angularErrorDegrees(</span>
+<span class="fc" id="L287">                arrayCenter, groundTruth.expectedPositionMeters(), track.positionMeters()));</span>
+      } else {
+<span class="nc" id="L289">        localizationUnavailableTruthCount++;</span>
+      }
+<span class="fc" id="L291">    }</span>
+
+    private void recordFrequency(TrackedSource track, GroundTruthObservation groundTruth) {
+<span class="pc bpc" id="L294" title="1 of 2 branches missed.">      if (groundTruth.hasFrequencyTruth()) {</span>
+<span class="fc" id="L295">        double trueFrequency = groundTruth.expectedFrequencyHz();</span>
+<span class="fc" id="L296">        double absoluteErrorHz = Math.abs(track.frequencyHz() - trueFrequency);</span>
+<span class="fc" id="L297">        absoluteFrequencyErrorsHz.add(absoluteErrorHz);</span>
+<span class="fc" id="L298">        relativeFrequencyErrors.add(absoluteErrorHz / trueFrequency);</span>
+<span class="fc" id="L299">      } else {</span>
+<span class="nc" id="L300">        frequencyUnavailableTruthCount++;</span>
+      }
+<span class="fc" id="L302">    }</span>
+
+    private void recordDoppler(
+        Vector2 arrayCenter, TrackedSource track, GroundTruthObservation groundTruth) {
+<span class="pc bpc" id="L306" title="1 of 2 branches missed.">      if (groundTruth.hasDopplerTruth()) {</span>
+<span class="fc" id="L307">        double trueRadialVelocity =</span>
+<span class="fc" id="L308">            radialVelocityToward(</span>
+                arrayCenter,
+<span class="fc" id="L310">                groundTruth.expectedPositionMeters(),</span>
+<span class="fc" id="L311">                groundTruth.expectedVelocityMetersPerSecond());</span>
+<span class="fc" id="L312">        absoluteDopplerErrorsMetersPerSecond.add(</span>
+<span class="fc" id="L313">            Math.abs(track.radialVelocityMetersPerSecond() - trueRadialVelocity));</span>
+<span class="fc" id="L314">      } else {</span>
+<span class="nc" id="L315">        dopplerUnavailableTruthCount++;</span>
+      }
+<span class="fc" id="L317">    }</span>
+
+    private void recordMissingObservation(GroundTruthObservation missingSource) {
+<span class="fc" id="L320">      recordMissingContinuity(missingSource);</span>
+<span class="fc" id="L321">      recordMissingLocalization(missingSource);</span>
+<span class="fc" id="L322">      recordMissingFrequency(missingSource);</span>
+<span class="fc" id="L323">      recordMissingDoppler(missingSource);</span>
+<span class="fc" id="L324">    }</span>
+
+    private void recordMissingContinuity(GroundTruthObservation missingSource) {
+<span class="fc bfc" id="L327" title="All 2 branches covered.">      if (missingSource.hasAlignmentTruth()) {</span>
+<span class="fc" id="L328">        continuityEvaluableSources.add(missingSource.source().sourceId());</span>
+<span class="fc" id="L329">        continuitySkippedCount++;</span>
+      } else {
+<span class="fc" id="L331">        continuityUnavailableTruthCount++;</span>
+      }
+<span class="fc" id="L333">    }</span>
+
+    private void recordMissingLocalization(GroundTruthObservation missingSource) {
+<span class="fc bfc" id="L336" title="All 2 branches covered.">      if (missingSource.hasPositionTruth()) {</span>
+<span class="fc" id="L337">        localizationSkippedCount++;</span>
+      } else {
+<span class="fc" id="L339">        localizationUnavailableTruthCount++;</span>
+      }
+<span class="fc" id="L341">    }</span>
+
+    private void recordMissingFrequency(GroundTruthObservation missingSource) {
+<span class="fc bfc" id="L344" title="All 2 branches covered.">      if (missingSource.hasFrequencyTruth()) {</span>
+<span class="fc" id="L345">        frequencySkippedCount++;</span>
+      } else {
+<span class="fc" id="L347">        frequencyUnavailableTruthCount++;</span>
+      }
+<span class="fc" id="L349">    }</span>
+
+    private void recordMissingDoppler(GroundTruthObservation missingSource) {
+<span class="fc bfc" id="L352" title="All 2 branches covered.">      if (missingSource.hasDopplerTruth()) {</span>
+<span class="fc" id="L353">        dopplerSkippedCount++;</span>
+      } else {
+<span class="fc" id="L355">        dopplerUnavailableTruthCount++;</span>
+      }
+<span class="fc" id="L357">    }</span>
+
+    private BenchmarkReport toReport(
+        Scenario truth,
+        BenchmarkMeasurements measurements,
+        ClassificationSummary classificationSummary) {
+<span class="fc" id="L363">      int continuitySampleCount =</span>
+          continuityEvaluatedCount + continuitySkippedCount + continuityUnavailableTruthCount;
+<span class="fc" id="L365">      int continuityAvailableCount = continuityEvaluatedCount + continuitySkippedCount;</span>
+      Double trackContinuity =
+<span class="fc bfc" id="L367" title="All 2 branches covered.">          continuityAvailableCount == 0</span>
+<span class="fc" id="L368">              ? null</span>
+<span class="fc" id="L369">              : continuityEvaluatedCount / (double) continuityAvailableCount;</span>
+<span class="fc" id="L370">      Double idStability = idStability(continuityEvaluableSources, trackCountsBySource);</span>
+      Double sourceCountAccuracy =
+<span class="fc bfc" id="L372" title="All 2 branches covered.">          measurements.snapshots().isEmpty()</span>
+<span class="fc" id="L373">              ? null</span>
+<span class="fc" id="L374">              : exactSourceCountFrames / (double) measurements.snapshots().size();</span>
+      Double meanSourceCountError =
+<span class="fc bfc" id="L376" title="All 2 branches covered.">          measurements.snapshots().isEmpty()</span>
+<span class="fc" id="L377">              ? null</span>
+<span class="fc" id="L378">              : absoluteSourceCountError / (double) measurements.snapshots().size();</span>
+      Double falsePositiveRate =
+<span class="fc bfc" id="L380" title="All 2 branches covered.">          totalMeasuredObservations == 0L</span>
+<span class="fc" id="L381">              ? null</span>
+<span class="fc" id="L382">              : totalSpuriousTracks / (double) totalMeasuredObservations;</span>
+      Double falseNegativeRate =
+<span class="fc bfc" id="L384" title="All 2 branches covered.">          continuityAvailableCount == 0</span>
+<span class="fc" id="L385">              ? null</span>
+<span class="fc" id="L386">              : continuitySkippedCount / (double) continuityAvailableCount;</span>
+<span class="fc" id="L387">      return new BenchmarkReport(</span>
+<span class="fc" id="L388">          truth.id(),</span>
+<span class="fc" id="L389">          truth.sources().size(),</span>
+<span class="fc" id="L390">          measurements.snapshots().size(),</span>
+<span class="fc" id="L391">          LocalizationErrorMetric.ofSamples(</span>
+              distanceErrorsMeters,
+              angularErrorsDegrees,
+              localizationSkippedCount,
+              localizationUnavailableTruthCount),
+<span class="fc" id="L396">          FrequencyErrorMetric.ofSamples(</span>
+              absoluteFrequencyErrorsHz,
+              relativeFrequencyErrors,
+              frequencySkippedCount,
+              frequencyUnavailableTruthCount),
+<span class="fc" id="L401">          DopplerErrorMetric.ofSamples(</span>
+              absoluteDopplerErrorsMetersPerSecond,
+              dopplerSkippedCount,
+              dopplerUnavailableTruthCount),
+<span class="fc" id="L405">          classificationSummary.asMetric(),</span>
+          trackContinuity,
+          continuitySampleCount,
+          continuityEvaluatedCount,
+          continuitySkippedCount,
+          continuityUnavailableTruthCount,
+          idStability,
+          sourceCountAccuracy,
+          meanSourceCountError,
+          falsePositiveRate,
+          falseNegativeRate,
+<span class="fc" id="L416">          mean(processingTimes),</span>
+<span class="fc" id="L417">          median(processingTimes),</span>
+<span class="fc" id="L418">          max(processingTimes));</span>
+    }
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>SnapshotExecutionService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Core</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.execution</a> &gt; <span class="el_source">SnapshotExecutionService.java</span></div><h1>SnapshotExecutionService.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.execution;
+
+import java.time.Instant;
+import java.util.Objects;
+import org.hammer.audio.workflow.Workflow;
+import org.hammer.audio.workflow.dsl.WorkflowDslParser;
+import org.hammer.audio.workflow.store.CommitId;
+import org.hammer.audio.workflow.store.CommitInfo;
+import org.hammer.audio.workflow.store.VersionedWorkflowStore;
+import org.hammer.audio.workflow.store.WorkflowSnapshot;
+
+/**
+ * Application service for creating {@link ExecutionSnapshot} objects from stored workflow
+ * checkpoints and driving a complete dry-run execution pipeline.
+ *
+ * &lt;p&gt;This service bridges the persistence layer ({@link VersionedWorkflowStore}) and the execution
+ * model ({@link ExecutionSnapshot}, {@link ExecutionPlan}, {@link ExecutionContext}, {@link
+ * ExecutionResult}). It is the entry point for issue #211: &lt;em&gt;Create ExecutionSnapshot from stored
+ * experiment graph&lt;/em&gt;.
+ *
+ * &lt;p&gt;The {@link #run} method performs a &lt;em&gt;dry-run&lt;/em&gt; execution: all nodes are transitioned from
+ * {@link ExecutionStatus#IDLE} through {@link ExecutionStatus#RUNNING} to {@link
+ * ExecutionStatus#COMPLETED}. No actual node computation takes place. This approach satisfies the
+ * acceptance criteria that execution starts from a stable stored snapshot and that running
+ * execution is isolated from ongoing edits.
+ *
+ * &lt;p&gt;&lt;strong&gt;Dependency rules&lt;/strong&gt;: this class lives in the {@code workflow.execution} package
+ * and may import from {@code org.hammer.audio.workflow} (including sub-packages) and Java SE only.
+ * It must not depend on UI, Swing, JGit, Hibernate or recording packages.
+ *
+ * &lt;p&gt;&lt;strong&gt;Thread safety&lt;/strong&gt;: not thread-safe. Concurrent access must be serialised by the
+ * caller.
+ */
+public final class SnapshotExecutionService {
+
+  private final VersionedWorkflowStore store;
+  private final WorkflowDslParser parser;
+
+  /**
+   * Creates a service backed by the given workflow store and DSL parser.
+   *
+   * @param store versioned workflow checkpoint store
+   * @param parser DSL parser for deserialising stored workflows
+   */
+<span class="fc" id="L45">  public SnapshotExecutionService(VersionedWorkflowStore store, WorkflowDslParser parser) {</span>
+<span class="fc" id="L46">    this.store = Objects.requireNonNull(store, &quot;store&quot;);</span>
+<span class="fc" id="L47">    this.parser = Objects.requireNonNull(parser, &quot;parser&quot;);</span>
+<span class="fc" id="L48">  }</span>
+
+  /**
+   * Creates an {@link ExecutionSnapshot} from the workflow stored at the given commit.
+   *
+   * &lt;p&gt;The stored DSL text is parsed back into the workflow domain model and then frozen into an
+   * immutable snapshot. Subsequent edits to the stored workflow have no effect on the returned
+   * snapshot.
+   *
+   * @param commitId identifier of the stored workflow checkpoint
+   * @param snapshotId stable identifier for the resulting snapshot
+   * @param createdAt instant at which the snapshot is taken
+   * @return immutable snapshot of the workflow at the given commit
+   * @throws java.util.NoSuchElementException if the commit does not exist in the store
+   * @throws org.hammer.audio.workflow.dsl.WorkflowDslParseException if the stored DSL is malformed
+   */
+  public ExecutionSnapshot snapshotAtCommit(
+      CommitId commitId, String snapshotId, Instant createdAt) {
+<span class="fc" id="L66">    Objects.requireNonNull(commitId, &quot;commitId&quot;);</span>
+<span class="fc" id="L67">    Objects.requireNonNull(snapshotId, &quot;snapshotId&quot;);</span>
+<span class="fc" id="L68">    Objects.requireNonNull(createdAt, &quot;createdAt&quot;);</span>
+<span class="fc" id="L69">    WorkflowSnapshot stored = store.loadAtCommit(commitId);</span>
+<span class="fc" id="L70">    Workflow workflow = parser.parse(stored.dslText());</span>
+<span class="fc" id="L71">    return ExecutionSnapshot.of(snapshotId, workflow, createdAt);</span>
+  }
+
+  /**
+   * Runs a dry-run execution of the given snapshot and returns a {@link ReproducibilityBundle}.
+   *
+   * &lt;p&gt;The method derives an {@link ExecutionPlan} from the snapshot (topological sort), creates an
+   * {@link ExecutionContext} and transitions every node through {@link ExecutionStatus#RUNNING} to
+   * {@link ExecutionStatus#COMPLETED}. The resulting {@link ExecutionResult} is bundled together
+   * with the snapshot and the optional commit provenance into an immutable {@link
+   * ReproducibilityBundle}.
+   *
+   * &lt;p&gt;The {@code commitId} and {@code commitInfo} parameters may be {@code null} when the snapshot
+   * was created outside of version control (e.g. from the live editor state during testing).
+   *
+   * @param snapshot the workflow snapshot to execute
+   * @param planId stable identifier for the execution plan
+   * @param executionId stable identifier for this execution run
+   * @param commitId version-control identifier of the stored checkpoint (may be {@code null})
+   * @param commitInfo author, message and timestamp of the stored checkpoint (may be {@code null})
+   * @param startedAt instant at which the execution started
+   * @param completedAt instant at which the execution finished
+   * @return reproducibility bundle capturing the snapshot, result and optional provenance
+   * @throws IllegalArgumentException if the workflow graph contains a cycle
+   */
+  public ReproducibilityBundle run(
+      ExecutionSnapshot snapshot,
+      String planId,
+      String executionId,
+      CommitId commitId,
+      CommitInfo commitInfo,
+      Instant startedAt,
+      Instant completedAt) {
+<span class="fc" id="L104">    Objects.requireNonNull(snapshot, &quot;snapshot&quot;);</span>
+<span class="fc" id="L105">    StableExecutionIds.requireStable(planId, &quot;planId&quot;);</span>
+<span class="fc" id="L106">    StableExecutionIds.requireStable(executionId, &quot;executionId&quot;);</span>
+<span class="fc" id="L107">    Objects.requireNonNull(startedAt, &quot;startedAt&quot;);</span>
+<span class="fc" id="L108">    Objects.requireNonNull(completedAt, &quot;completedAt&quot;);</span>
+
+<span class="fc" id="L110">    ExecutionPlan executionPlan = ExecutionPlan.of(planId, snapshot);</span>
+<span class="fc" id="L111">    ExecutionContext context = new ExecutionContext(executionId, executionPlan, startedAt);</span>
+
+<span class="fc bfc" id="L113" title="All 2 branches covered.">    for (String nodeId : executionPlan.orderedNodeIds()) {</span>
+<span class="fc" id="L114">      context.updateNodeStatus(nodeId, ExecutionStatus.RUNNING);</span>
+<span class="fc" id="L115">      context.updateNodeStatus(nodeId, ExecutionStatus.COMPLETED);</span>
+<span class="fc" id="L116">    }</span>
+
+<span class="fc" id="L118">    ExecutionResult result = context.toResult(completedAt);</span>
+<span class="fc" id="L119">    return new ReproducibilityBundle(snapshot, result, commitId, commitInfo);</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

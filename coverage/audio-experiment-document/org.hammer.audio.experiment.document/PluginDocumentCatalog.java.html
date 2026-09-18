@@ -1,0 +1,365 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>PluginDocumentCatalog.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experiment Document</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experiment.document</a> &gt; <span class="el_source">PluginDocumentCatalog.java</span></div><h1>PluginDocumentCatalog.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experiment.document;
+
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.TreeMap;
+import org.hammer.audio.plugin.AudioAnalyzerPlugin;
+import org.hammer.audio.plugin.PluginDescriptor;
+import org.hammer.audio.plugin.document.DocumentDiagnostic;
+import org.hammer.audio.plugin.document.DocumentValidationResult;
+import org.hammer.audio.plugin.document.DocumentValue;
+import org.hammer.audio.plugin.document.ExperimentDocumentContribution;
+import org.hammer.audio.plugin.document.ExperimentSectionMigration;
+
+/**
+ * Installed-plugin catalog for safe experiment-document inspection, migration and normalization.
+ */
+@SuppressWarnings({&quot;PMD.CouplingBetweenObjects&quot;, &quot;PMD.LooseCoupling&quot;, &quot;PMD.UseExplicitTypes&quot;})
+public final class PluginDocumentCatalog {
+
+  private final Map&lt;String, RegisteredPlugin&gt; plugins;
+<span class="fc" id="L27">  private final LocalJsonSchemaValidator schemaValidator = new LocalJsonSchemaValidator();</span>
+
+  /** Build a catalog and reject duplicate plugin or section identities. */
+<span class="fc" id="L30">  public PluginDocumentCatalog(Collection&lt;? extends AudioAnalyzerPlugin&gt; installedPlugins) {</span>
+<span class="fc" id="L31">    Objects.requireNonNull(installedPlugins, &quot;installedPlugins&quot;);</span>
+<span class="fc" id="L32">    TreeMap&lt;String, RegisteredPlugin&gt; collected = new TreeMap&lt;&gt;();</span>
+<span class="fc bfc" id="L33" title="All 2 branches covered.">    for (AudioAnalyzerPlugin plugin : installedPlugins) {</span>
+<span class="fc" id="L34">      Objects.requireNonNull(plugin, &quot;plugin&quot;);</span>
+<span class="fc" id="L35">      PluginDescriptor descriptor =</span>
+<span class="fc" id="L36">          Objects.requireNonNull(plugin.descriptor(), &quot;plugin descriptor&quot;);</span>
+<span class="fc" id="L37">      TreeMap&lt;String, ExperimentDocumentContribution&gt; sections = new TreeMap&lt;&gt;();</span>
+<span class="fc bfc" id="L38" title="All 2 branches covered.">      for (ExperimentDocumentContribution contribution : plugin.experimentDocumentContributions()) {</span>
+<span class="fc" id="L39">        validateContribution(contribution);</span>
+<span class="fc" id="L40">        ExperimentDocumentContribution previous =</span>
+<span class="fc" id="L41">            sections.put(contribution.sectionId(), contribution);</span>
+<span class="pc bpc" id="L42" title="1 of 2 branches missed.">        if (previous != null) {</span>
+<span class="nc" id="L43">          throw new IllegalArgumentException(</span>
+              &quot;Duplicate experiment document section &quot;
+<span class="nc" id="L45">                  + descriptor.id()</span>
+                  + &quot;/&quot;
+<span class="nc" id="L47">                  + contribution.sectionId());</span>
+        }
+<span class="fc" id="L49">      }</span>
+<span class="fc" id="L50">      RegisteredPlugin previous =</span>
+<span class="fc" id="L51">          collected.put(descriptor.id(), new RegisteredPlugin(descriptor, Map.copyOf(sections)));</span>
+<span class="pc bpc" id="L52" title="1 of 2 branches missed.">      if (previous != null) {</span>
+<span class="nc" id="L53">        throw new IllegalArgumentException(&quot;Duplicate plugin id: &quot; + descriptor.id());</span>
+      }
+<span class="fc" id="L55">    }</span>
+<span class="fc" id="L56">    plugins = Map.copyOf(collected);</span>
+<span class="fc" id="L57">  }</span>
+
+  /** Return an empty catalog suitable for core-only inspection. */
+  public static PluginDocumentCatalog empty() {
+<span class="fc" id="L61">    return new PluginDocumentCatalog(List.of());</span>
+  }
+
+  /**
+   * Resolve installed plugins and return a non-mutating import preview.
+   *
+   * &lt;p&gt;The original document is never rewritten. The returned document is a normalized copy whose
+   * migration provenance is explicit.
+   */
+  public ExperimentDocumentPreview preview(ExperimentDocument input, ExperimentDocumentCodec codec)
+      throws ExperimentDocumentException {
+<span class="fc" id="L72">    Objects.requireNonNull(input, &quot;input&quot;);</span>
+<span class="fc" id="L73">    Objects.requireNonNull(codec, &quot;codec&quot;);</span>
+<span class="fc" id="L74">    ArrayList&lt;DocumentDiagnostic&gt; diagnostics = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L75">    ArrayList&lt;String&gt; migrations = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L76">    Set&lt;SectionKey&gt; required = requiredSections(input, diagnostics);</span>
+<span class="fc" id="L77">    TreeMap&lt;String, Map&lt;String, ExperimentDocument.PluginSection&gt;&gt; normalizedData = new TreeMap&lt;&gt;();</span>
+
+<span class="fc bfc" id="L79" title="All 2 branches covered.">    for (var pluginEntry : input.pluginData().entrySet()) {</span>
+<span class="fc" id="L80">      String pluginId = pluginEntry.getKey();</span>
+<span class="fc" id="L81">      TreeMap&lt;String, ExperimentDocument.PluginSection&gt; normalizedSections = new TreeMap&lt;&gt;();</span>
+<span class="fc" id="L82">      RegisteredPlugin installed = plugins.get(pluginId);</span>
+<span class="fc bfc" id="L83" title="All 2 branches covered.">      for (var sectionEntry : pluginEntry.getValue().entrySet()) {</span>
+<span class="fc" id="L84">        String sectionId = sectionEntry.getKey();</span>
+<span class="fc" id="L85">        SectionKey key = new SectionKey(pluginId, sectionId);</span>
+<span class="fc" id="L86">        boolean requiredSection = required.contains(key);</span>
+<span class="fc" id="L87">        String pointer = sectionPointer(pluginId, sectionId);</span>
+<span class="fc" id="L88">        ExperimentDocument.PluginSection section = sectionEntry.getValue();</span>
+<span class="fc bfc" id="L89" title="All 2 branches covered.">        if (installed == null) {</span>
+<span class="fc" id="L90">          diagnostics.add(</span>
+<span class="fc" id="L91">              diagnostic(</span>
+<span class="fc bfc" id="L92" title="All 2 branches covered.">                  requiredSection</span>
+<span class="fc" id="L93">                      ? DocumentDiagnostic.Severity.ERROR</span>
+<span class="fc" id="L94">                      : DocumentDiagnostic.Severity.WARNING,</span>
+                  pointer,
+                  &quot;missing-plugin&quot;,
+                  &quot;Plugin is not installed; section is preserved without interpretation&quot;));
+<span class="fc" id="L98">          normalizedSections.put(sectionId, section);</span>
+<span class="fc" id="L99">          continue;</span>
+        }
+<span class="fc" id="L101">        ExperimentDocumentContribution contribution = installed.sections().get(sectionId);</span>
+<span class="pc bpc" id="L102" title="1 of 2 branches missed.">        if (contribution == null) {</span>
+<span class="nc" id="L103">          diagnostics.add(</span>
+<span class="nc" id="L104">              diagnostic(</span>
+<span class="nc bnc" id="L105" title="All 2 branches missed.">                  requiredSection</span>
+<span class="nc" id="L106">                      ? DocumentDiagnostic.Severity.ERROR</span>
+<span class="nc" id="L107">                      : DocumentDiagnostic.Severity.WARNING,</span>
+                  pointer,
+                  &quot;missing-section&quot;,
+                  &quot;Installed plugin does not provide this section; data is preserved&quot;));
+<span class="nc" id="L111">          normalizedSections.put(sectionId, section);</span>
+<span class="nc" id="L112">          continue;</span>
+        }
+<span class="fc bfc" id="L114" title="All 2 branches covered.">        ExperimentDocument.PluginSection normalized =</span>
+<span class="fc" id="L115">            normalizeSection(</span>
+                contribution,
+                section,
+                pointer,
+<span class="pc bpc" id="L119" title="1 of 2 branches missed.">                requiredSection || contribution.requiredForExecution(),</span>
+<span class="fc" id="L120">                input.experiment().sourceMode(),</span>
+                diagnostics,
+                migrations);
+<span class="fc" id="L123">        normalizedSections.put(sectionId, normalized);</span>
+<span class="fc" id="L124">      }</span>
+<span class="fc" id="L125">      normalizedData.put(pluginId, Map.copyOf(normalizedSections));</span>
+<span class="fc" id="L126">    }</span>
+
+<span class="fc bfc" id="L128" title="All 2 branches covered.">    for (SectionKey key : required) {</span>
+<span class="fc" id="L129">      Map&lt;String, ExperimentDocument.PluginSection&gt; sections =</span>
+<span class="fc" id="L130">          input.pluginData().get(key.pluginId());</span>
+<span class="pc bpc" id="L131" title="2 of 4 branches missed.">      if (sections == null || !sections.containsKey(key.sectionId())) {</span>
+<span class="nc" id="L132">        diagnostics.add(</span>
+<span class="nc" id="L133">            diagnostic(</span>
+                DocumentDiagnostic.Severity.ERROR,
+<span class="nc" id="L135">                sectionPointer(key.pluginId(), key.sectionId()),</span>
+                &quot;required-section-absent&quot;,
+                &quot;Required plugin section is absent from the document&quot;));
+      }
+<span class="fc" id="L139">    }</span>
+
+<span class="fc" id="L141">    ExperimentDocument normalized = withPluginData(input, normalizedData, migrations);</span>
+<span class="fc" id="L142">    ExperimentDocument canonical = codec.decode(codec.encode(normalized));</span>
+<span class="fc" id="L143">    boolean hasErrors =</span>
+<span class="fc bfc" id="L144" title="All 2 branches covered.">        diagnostics.stream().anyMatch(item -&gt; item.severity() == DocumentDiagnostic.Severity.ERROR);</span>
+<span class="fc" id="L145">    boolean compatibilityWarning =</span>
+<span class="fc" id="L146">        diagnostics.stream()</span>
+<span class="fc" id="L147">            .anyMatch(</span>
+                item -&gt;
+<span class="fc bfc" id="L149" title="All 2 branches covered.">                    item.code().startsWith(&quot;missing-&quot;)</span>
+<span class="pc bpc" id="L150" title="1 of 2 branches missed.">                        || item.code().startsWith(&quot;future-&quot;)</span>
+<span class="pc bpc" id="L151" title="1 of 2 branches missed.">                        || item.code().endsWith(&quot;-incompatible&quot;));</span>
+<span class="fc" id="L152">    return new ExperimentDocumentPreview(</span>
+        canonical,
+<span class="fc bfc" id="L154" title="All 6 branches covered.">        canonical.provenance().canonicalSha256(),</span>
+        diagnostics,
+        migrations,
+        !hasErrors,
+        hasErrors || compatibilityWarning);
+  }
+
+  private ExperimentDocument.PluginSection normalizeSection(
+      ExperimentDocumentContribution contribution,
+      ExperimentDocument.PluginSection original,
+      String pointer,
+      boolean required,
+      String sourceMode,
+      List&lt;DocumentDiagnostic&gt; diagnostics,
+      List&lt;String&gt; migrations) {
+<span class="pc bpc" id="L169" title="1 of 2 branches missed.">    if (!contribution.supportedSourceModes().isEmpty()</span>
+<span class="nc bnc" id="L170" title="All 2 branches missed.">        &amp;&amp; !contribution.supportedSourceModes().contains(sourceMode)) {</span>
+<span class="nc" id="L171">      diagnostics.add(</span>
+<span class="nc" id="L172">          diagnostic(</span>
+<span class="nc bnc" id="L173" title="All 2 branches missed.">              required ? DocumentDiagnostic.Severity.ERROR : DocumentDiagnostic.Severity.WARNING,</span>
+              pointer,
+              &quot;source-mode-incompatible&quot;,
+              &quot;Plugin section does not support source mode &quot; + sourceMode));
+    }
+<span class="pc bpc" id="L178" title="1 of 2 branches missed.">    if (original.schemaVersion() &gt; contribution.schemaVersion()) {</span>
+<span class="nc" id="L179">      diagnostics.add(</span>
+<span class="nc" id="L180">          diagnostic(</span>
+<span class="nc bnc" id="L181" title="All 2 branches missed.">              required ? DocumentDiagnostic.Severity.ERROR : DocumentDiagnostic.Severity.WARNING,</span>
+              pointer + &quot;/schemaVersion&quot;,
+              &quot;future-schema-version&quot;,
+              &quot;Plugin section version is newer than the installed contribution&quot;));
+<span class="nc" id="L185">      return original;</span>
+    }
+<span class="fc bfc" id="L187" title="All 2 branches covered.">    if (!original.algorithmVersion().equals(contribution.algorithmVersion())) {</span>
+<span class="fc" id="L188">      diagnostics.add(</span>
+<span class="fc" id="L189">          diagnostic(</span>
+<span class="pc bpc" id="L190" title="1 of 2 branches missed.">              required ? DocumentDiagnostic.Severity.ERROR : DocumentDiagnostic.Severity.WARNING,</span>
+              pointer + &quot;/algorithmVersion&quot;,
+              &quot;algorithm-incompatible&quot;,
+              &quot;Document algorithm version differs from the installed contribution&quot;));
+<span class="fc" id="L194">      return original;</span>
+    }
+<span class="fc" id="L196">    List&lt;String&gt; sectionMigrations = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L197">    DocumentValue migratedValue = original.data();</span>
+<span class="fc" id="L198">    int version = original.schemaVersion();</span>
+<span class="fc bfc" id="L199" title="All 2 branches covered.">    while (version &lt; contribution.schemaVersion()) {</span>
+<span class="fc" id="L200">      ExperimentSectionMigration migration = migrationFrom(contribution.migrations(), version);</span>
+<span class="pc bpc" id="L201" title="2 of 4 branches missed.">      if (migration == null || migration.toVersion() != version + 1) {</span>
+<span class="nc" id="L202">        diagnostics.add(</span>
+<span class="nc" id="L203">            diagnostic(</span>
+                DocumentDiagnostic.Severity.ERROR,
+                pointer + &quot;/schemaVersion&quot;,
+                &quot;migration-gap&quot;,
+                &quot;No explicit adjacent migration from schema version &quot; + version));
+<span class="nc" id="L208">        return original;</span>
+      }
+      try {
+<span class="fc" id="L211">        migratedValue = Objects.requireNonNull(migration.migrate(migratedValue), &quot;migrated value&quot;);</span>
+<span class="nc" id="L212">      } catch (RuntimeException exception) {</span>
+<span class="nc" id="L213">        diagnostics.add(</span>
+<span class="nc" id="L214">            diagnostic(</span>
+                DocumentDiagnostic.Severity.ERROR,
+                pointer,
+                &quot;migration-failed&quot;,
+<span class="nc" id="L218">                &quot;Plugin migration failed: &quot; + exception.getClass().getSimpleName()));</span>
+<span class="nc" id="L219">        return original;</span>
+<span class="fc" id="L220">      }</span>
+<span class="fc" id="L221">      sectionMigrations.add(</span>
+<span class="fc" id="L222">          contribution.sectionId() + &quot;:&quot; + migration.fromVersion() + &quot;-&gt;&quot; + migration.toVersion());</span>
+<span class="fc" id="L223">      version = migration.toVersion();</span>
+<span class="fc" id="L224">    }</span>
+<span class="fc" id="L225">    diagnostics.addAll(</span>
+<span class="fc" id="L226">        schemaValidator.validate(</span>
+<span class="fc" id="L227">            contribution.schemaJson(),</span>
+<span class="fc" id="L228">            contribution.schemaSha256(),</span>
+            migratedValue,
+            pointer + &quot;/data&quot;));
+    DocumentValidationResult semantic;
+    try {
+<span class="fc" id="L233">      semantic = contribution.validateAndNormalize(migratedValue);</span>
+<span class="nc" id="L234">    } catch (RuntimeException exception) {</span>
+<span class="nc" id="L235">      diagnostics.add(</span>
+<span class="nc" id="L236">          diagnostic(</span>
+              DocumentDiagnostic.Severity.ERROR,
+              pointer,
+              &quot;plugin-validator-failed&quot;,
+<span class="nc" id="L240">              &quot;Plugin validation failed: &quot; + exception.getClass().getSimpleName()));</span>
+<span class="nc" id="L241">      return original;</span>
+<span class="fc" id="L242">    }</span>
+<span class="fc" id="L243">    diagnostics.addAll(semantic.diagnostics());</span>
+<span class="fc" id="L244">    migrations.addAll(sectionMigrations);</span>
+<span class="fc" id="L245">    return new ExperimentDocument.PluginSection(</span>
+<span class="fc" id="L246">        contribution.schemaVersion(), contribution.algorithmVersion(), semantic.normalizedValue());</span>
+  }
+
+  private Set&lt;SectionKey&gt; requiredSections(
+      ExperimentDocument document, List&lt;DocumentDiagnostic&gt; diagnostics) {
+<span class="fc" id="L251">    HashSet&lt;SectionKey&gt; required = new HashSet&lt;&gt;();</span>
+<span class="fc bfc" id="L252" title="All 2 branches covered.">    for (ExperimentDocument.PluginRequirement requirement : document.requiredPlugins()) {</span>
+<span class="fc" id="L253">      RegisteredPlugin installed = plugins.get(requirement.id());</span>
+<span class="fc bfc" id="L254" title="All 2 branches covered.">      if (installed != null</span>
+<span class="fc bfc" id="L255" title="All 2 branches covered.">          &amp;&amp; !&quot;*&quot;.equals(requirement.versionRange())</span>
+<span class="pc bpc" id="L256" title="1 of 2 branches missed.">          &amp;&amp; !installed.descriptor().version().equals(requirement.versionRange())) {</span>
+<span class="fc" id="L257">        diagnostics.add(</span>
+<span class="fc" id="L258">            diagnostic(</span>
+                DocumentDiagnostic.Severity.ERROR,
+                &quot;/requiredPlugins&quot;,
+                &quot;package-incompatible&quot;,
+                &quot;Required plugin package version mismatch for &quot;
+<span class="fc" id="L263">                    + requirement.id()</span>
+                    + &quot;: required &quot;
+<span class="fc" id="L265">                    + requirement.versionRange()</span>
+                    + &quot;, installed &quot;
+<span class="fc" id="L267">                    + installed.descriptor().version()));</span>
+      }
+<span class="fc bfc" id="L269" title="All 2 branches covered.">      for (String section : requirement.sections()) {</span>
+<span class="fc" id="L270">        required.add(new SectionKey(requirement.id(), section));</span>
+<span class="fc" id="L271">      }</span>
+<span class="fc" id="L272">    }</span>
+<span class="fc" id="L273">    return required;</span>
+  }
+
+  private static ExperimentSectionMigration migrationFrom(
+      List&lt;ExperimentSectionMigration&gt; migrations, int version) {
+<span class="fc" id="L278">    ExperimentSectionMigration found = null;</span>
+<span class="fc bfc" id="L279" title="All 2 branches covered.">    for (ExperimentSectionMigration migration : migrations) {</span>
+<span class="pc bpc" id="L280" title="1 of 2 branches missed.">      if (migration.fromVersion() == version) {</span>
+<span class="pc bpc" id="L281" title="1 of 2 branches missed.">        if (found != null) {</span>
+<span class="nc" id="L282">          throw new IllegalArgumentException(&quot;Duplicate migration from version &quot; + version);</span>
+        }
+<span class="fc" id="L284">        found = migration;</span>
+      }
+<span class="fc" id="L286">    }</span>
+<span class="fc" id="L287">    return found;</span>
+  }
+
+  private static ExperimentDocument withPluginData(
+      ExperimentDocument input,
+      Map&lt;String, Map&lt;String, ExperimentDocument.PluginSection&gt;&gt; pluginData,
+      List&lt;String&gt; migrations) {
+<span class="fc" id="L294">    ArrayList&lt;String&gt; notes = new ArrayList&lt;&gt;(input.provenance().migrationNotes());</span>
+<span class="fc" id="L295">    notes.addAll(migrations);</span>
+<span class="fc" id="L296">    ExperimentDocument.Provenance provenance =</span>
+        new ExperimentDocument.Provenance(
+<span class="fc" id="L298">            input.provenance().creatorDisplayName(),</span>
+<span class="fc" id="L299">            input.provenance().verifiedAccount(),</span>
+<span class="fc" id="L300">            input.provenance().createdAt(),</span>
+<span class="fc" id="L301">            input.provenance().modifiedAt(),</span>
+<span class="fc" id="L302">            input.provenance().softwareVersion(),</span>
+            &quot;&quot;,
+            notes,
+<span class="fc" id="L305">            input.provenance().algorithmVersions(),</span>
+<span class="fc" id="L306">            input.provenance().sourceCommit(),</span>
+<span class="fc" id="L307">            input.provenance().sourceRun());</span>
+<span class="fc" id="L308">    return new ExperimentDocument(</span>
+<span class="fc" id="L309">        input.schema(),</span>
+<span class="fc" id="L310">        input.format(),</span>
+<span class="fc" id="L311">        input.formatVersion(),</span>
+<span class="fc" id="L312">        input.experiment(),</span>
+<span class="fc" id="L313">        input.workflow(),</span>
+<span class="fc" id="L314">        input.profiles(),</span>
+<span class="fc" id="L315">        input.requiredPlugins(),</span>
+        pluginData,
+<span class="fc" id="L317">        input.assets(),</span>
+<span class="fc" id="L318">        input.outputs(),</span>
+        provenance);
+  }
+
+  private static void validateContribution(ExperimentDocumentContribution contribution) {
+<span class="fc" id="L323">    Objects.requireNonNull(contribution, &quot;document contribution&quot;);</span>
+<span class="fc" id="L324">    ExperimentDocument.requireIdentifier(contribution.sectionId(), &quot;section id&quot;);</span>
+<span class="pc bpc" id="L325" title="1 of 2 branches missed.">    if (contribution.schemaVersion() &lt; 1) {</span>
+<span class="nc" id="L326">      throw new IllegalArgumentException(&quot;schemaVersion must be positive&quot;);</span>
+    }
+<span class="fc" id="L328">    ExperimentDocument.requireNonBlank(contribution.algorithmVersion(), &quot;algorithmVersion&quot;);</span>
+<span class="fc" id="L329">    ExperimentDocument.requireNonBlank(contribution.name(), &quot;contribution name&quot;);</span>
+<span class="fc" id="L330">    ExperimentDocument.requireNonBlank(contribution.description(), &quot;contribution description&quot;);</span>
+<span class="fc" id="L331">    ExperimentDocument.requireNonBlank(contribution.schemaId(), &quot;schemaId&quot;);</span>
+<span class="fc" id="L332">    ExperimentDocument.requireNonBlank(contribution.schemaJson(), &quot;schemaJson&quot;);</span>
+<span class="fc" id="L333">    ExperimentDocument.requireSha256(contribution.schemaSha256(), &quot;schemaSha256&quot;);</span>
+<span class="fc" id="L334">    HashMap&lt;Integer, ExperimentSectionMigration&gt; migrations = new HashMap&lt;&gt;();</span>
+<span class="fc bfc" id="L335" title="All 2 branches covered.">    for (ExperimentSectionMigration migration : contribution.migrations()) {</span>
+<span class="fc" id="L336">      Objects.requireNonNull(migration, &quot;migration&quot;);</span>
+<span class="pc bpc" id="L337" title="2 of 4 branches missed.">      if (migration.fromVersion() &lt; 1 || migration.toVersion() != migration.fromVersion() + 1) {</span>
+<span class="nc" id="L338">        throw new IllegalArgumentException(&quot;Migrations must advance exactly one positive version&quot;);</span>
+      }
+<span class="pc bpc" id="L340" title="1 of 2 branches missed.">      if (migrations.put(migration.fromVersion(), migration) != null) {</span>
+<span class="nc" id="L341">        throw new IllegalArgumentException(</span>
+<span class="nc" id="L342">            &quot;Duplicate migration from version &quot; + migration.fromVersion());</span>
+      }
+<span class="fc" id="L344">    }</span>
+<span class="fc" id="L345">  }</span>
+
+  private static String sectionPointer(String pluginId, String sectionId) {
+<span class="fc" id="L348">    return DocumentValueJson.pointer(DocumentValueJson.pointer(&quot;/pluginData&quot;, pluginId), sectionId);</span>
+  }
+
+  private static DocumentDiagnostic diagnostic(
+      DocumentDiagnostic.Severity severity, String pointer, String code, String message) {
+<span class="fc" id="L353">    return new DocumentDiagnostic(severity, pointer, code, message);</span>
+  }
+
+<span class="fc" id="L356">  private record RegisteredPlugin(</span>
+      PluginDescriptor descriptor, Map&lt;String, ExperimentDocumentContribution&gt; sections) {
+    // Immutable installed plugin descriptor and section registry.
+  }
+
+<span class="fc" id="L361">  private record SectionKey(String pluginId, String sectionId) {</span>
+    // Immutable namespaced section identity.
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

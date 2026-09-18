@@ -1,0 +1,159 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WorkflowSemanticQueryService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.infrastructure.workflow.search</a> &gt; <span class="el_source">WorkflowSemanticQueryService.java</span></div><h1>WorkflowSemanticQueryService.java</h1><pre class="source lang-java linenums">package org.hammer.audio.infrastructure.workflow.search;
+
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
+import org.hammer.audio.workflow.history.WorkflowSemanticHistoryFilter;
+import org.hammer.audio.workflow.history.WorkflowSemanticHistoryQuery;
+import org.hammer.audio.workflow.history.WorkflowSemanticHistoryResult;
+import org.hammer.audio.workflow.store.CommitId;
+import org.hibernate.Session;
+import org.hibernate.SessionFactory;
+import org.hibernate.search.engine.search.predicate.dsl.BooleanPredicateClausesStep;
+import org.hibernate.search.engine.search.predicate.dsl.SearchPredicateFactory;
+import org.hibernate.search.mapper.orm.Search;
+import org.hibernate.search.mapper.orm.session.SearchSession;
+
+/** Executes branch-aware queries against the Audio Analyzer-owned semantic projection. */
+final class WorkflowSemanticQueryService {
+
+  private final SessionFactory sessionFactory;
+  private final String repositoryName;
+
+<span class="fc" id="L25">  WorkflowSemanticQueryService(SessionFactory sessionFactory, String repositoryName) {</span>
+<span class="fc" id="L26">    this.sessionFactory = Objects.requireNonNull(sessionFactory, &quot;sessionFactory&quot;);</span>
+<span class="fc" id="L27">    this.repositoryName = Objects.requireNonNull(repositoryName, &quot;repositoryName&quot;);</span>
+<span class="fc" id="L28">  }</span>
+
+  List&lt;WorkflowSemanticHistoryResult&gt; search(WorkflowSemanticHistoryQuery query) {
+<span class="fc" id="L31">    Objects.requireNonNull(query, &quot;query&quot;);</span>
+<span class="fc" id="L32">    try (Session session = sessionFactory.openSession()) {</span>
+<span class="fc" id="L33">      SearchSession searchSession = Search.session(session);</span>
+<span class="fc" id="L34">      return searchSession</span>
+<span class="fc" id="L35">          .search(WorkflowSemanticIndexEntity.class)</span>
+<span class="fc" id="L36">          .where(f -&gt; semanticPredicate(f, query.filter()))</span>
+<span class="fc" id="L37">          .sort(f -&gt; f.field(&quot;branchPosition&quot;).asc())</span>
+<span class="fc" id="L38">          .fetchHits(query.limit())</span>
+<span class="fc" id="L39">          .stream()</span>
+<span class="fc" id="L40">          .map(WorkflowSemanticQueryService::toResult)</span>
+<span class="fc" id="L41">          .toList();</span>
+    }
+  }
+
+  List&lt;CommitId&gt; findCandidateCommitIds(WorkflowSemanticHistoryFilter filter) {
+<span class="fc" id="L46">    Objects.requireNonNull(filter, &quot;filter&quot;);</span>
+<span class="fc" id="L47">    try (Session session = sessionFactory.openSession()) {</span>
+<span class="fc" id="L48">      SearchSession searchSession = Search.session(session);</span>
+<span class="fc" id="L49">      return searchSession</span>
+<span class="fc" id="L50">          .search(WorkflowSemanticIndexEntity.class)</span>
+<span class="fc" id="L51">          .where(f -&gt; semanticPredicate(f, filter))</span>
+<span class="fc" id="L52">          .sort(f -&gt; f.field(&quot;branchPosition&quot;).asc())</span>
+<span class="fc" id="L53">          .fetchAllHits()</span>
+<span class="fc" id="L54">          .stream()</span>
+<span class="fc" id="L55">          .map(row -&gt; new CommitId(row.getObjectId()))</span>
+<span class="fc" id="L56">          .toList();</span>
+    }
+  }
+
+  Map&lt;String, WorkflowSemanticHistoryResult&gt; findEvidence(
+      String branch, Collection&lt;CommitId&gt; commits) {
+<span class="fc" id="L62">    String normalizedBranch = WorkflowSemanticIndexService.normalizeBranch(branch);</span>
+<span class="fc" id="L63">    Objects.requireNonNull(commits, &quot;commits&quot;);</span>
+<span class="fc" id="L64">    List&lt;String&gt; objectIds = commits.stream().map(CommitId::value).distinct().toList();</span>
+<span class="fc bfc" id="L65" title="All 2 branches covered.">    if (objectIds.isEmpty()) {</span>
+<span class="fc" id="L66">      return Map.of();</span>
+    }
+<span class="fc" id="L68">    try (Session session = sessionFactory.openSession()) {</span>
+<span class="fc" id="L69">      List&lt;WorkflowSemanticIndexEntity&gt; rows =</span>
+          session
+<span class="fc" id="L71">              .createQuery(</span>
+                  &quot;FROM WorkflowSemanticIndexEntity s &quot;
+                      + &quot;WHERE s.repositoryName = :repository &quot;
+                      + &quot;AND s.branchName = :branch AND s.objectId IN :objectIds&quot;,
+                  WorkflowSemanticIndexEntity.class)
+<span class="fc" id="L76">              .setParameter(&quot;repository&quot;, repositoryName)</span>
+<span class="fc" id="L77">              .setParameter(&quot;branch&quot;, normalizedBranch)</span>
+<span class="fc" id="L78">              .setParameter(&quot;objectIds&quot;, objectIds)</span>
+<span class="fc" id="L79">              .getResultList();</span>
+<span class="fc" id="L80">      Map&lt;String, WorkflowSemanticHistoryResult&gt; evidence = new ConcurrentHashMap&lt;&gt;();</span>
+<span class="fc bfc" id="L81" title="All 2 branches covered.">      for (WorkflowSemanticIndexEntity row : rows) {</span>
+<span class="fc" id="L82">        evidence.put(row.getObjectId(), toResult(row));</span>
+<span class="fc" id="L83">      }</span>
+<span class="fc" id="L84">      return Map.copyOf(evidence);</span>
+    }
+  }
+
+  private BooleanPredicateClausesStep&lt;?, ?&gt; semanticPredicate(
+      SearchPredicateFactory f, WorkflowSemanticHistoryFilter filter) {
+<span class="fc" id="L90">    BooleanPredicateClausesStep&lt;?, ?&gt; predicate =</span>
+<span class="fc" id="L91">        f.bool()</span>
+<span class="fc" id="L92">            .filter(f.match().field(&quot;repositoryName&quot;).matching(repositoryName))</span>
+<span class="fc" id="L93">            .filter(</span>
+<span class="fc" id="L94">                f.match()</span>
+<span class="fc" id="L95">                    .field(&quot;branchName&quot;)</span>
+<span class="fc" id="L96">                    .matching(WorkflowSemanticIndexService.normalizeBranch(filter.branch())));</span>
+<span class="fc bfc" id="L97" title="All 2 branches covered.">    if (filter.workflowId() != null) {</span>
+<span class="fc" id="L98">      predicate.filter(f.match().field(&quot;workflowId&quot;).matching(filter.workflowId()));</span>
+    }
+<span class="fc bfc" id="L100" title="All 2 branches covered.">    if (filter.nodeId() != null) {</span>
+<span class="fc" id="L101">      predicate.filter(</span>
+<span class="fc" id="L102">          f.match().field(WorkflowSemanticIndexEntity.NODE_IDS_FIELD).matching(filter.nodeId()));</span>
+    }
+<span class="fc bfc" id="L104" title="All 2 branches covered.">    if (filter.nodeType() != null) {</span>
+<span class="fc" id="L105">      predicate.filter(</span>
+<span class="fc" id="L106">          f.match()</span>
+<span class="fc" id="L107">              .field(WorkflowSemanticIndexEntity.NODE_TYPES_FIELD)</span>
+<span class="fc" id="L108">              .matching(filter.nodeType()));</span>
+    }
+<span class="fc bfc" id="L110" title="All 2 branches covered.">    if (filter.labelText() != null) {</span>
+<span class="fc" id="L111">      predicate.must(</span>
+<span class="fc" id="L112">          f.simpleQueryString()</span>
+<span class="fc" id="L113">              .fields(&quot;workflowName&quot;, &quot;nodeLabelText&quot;)</span>
+<span class="fc" id="L114">              .matching(filter.labelText()));</span>
+    }
+<span class="fc" id="L116">    addPropertyPredicates(f, predicate, filter);</span>
+<span class="fc" id="L117">    return predicate;</span>
+  }
+
+  private static void addPropertyPredicates(
+      SearchPredicateFactory f,
+      BooleanPredicateClausesStep&lt;?, ?&gt; predicate,
+      WorkflowSemanticHistoryFilter filter) {
+<span class="pc bpc" id="L124" title="1 of 4 branches missed.">    if (filter.propertyKey() != null &amp;&amp; filter.propertyValue() != null) {</span>
+<span class="fc" id="L125">      predicate.filter(</span>
+<span class="fc" id="L126">          f.match()</span>
+<span class="fc" id="L127">              .field(WorkflowSemanticIndexEntity.PROPERTY_PAIRS_FIELD)</span>
+<span class="fc" id="L128">              .matching(</span>
+<span class="fc" id="L129">                  WorkflowSemanticProjectionValues.encodePair(</span>
+<span class="fc" id="L130">                      filter.propertyKey(), filter.propertyValue())));</span>
+<span class="fc" id="L131">      return;</span>
+    }
+<span class="pc bpc" id="L133" title="1 of 2 branches missed.">    if (filter.propertyKey() != null) {</span>
+<span class="nc" id="L134">      predicate.filter(</span>
+<span class="nc" id="L135">          f.match()</span>
+<span class="nc" id="L136">              .field(WorkflowSemanticIndexEntity.PROPERTY_KEYS_FIELD)</span>
+<span class="nc" id="L137">              .matching(filter.propertyKey()));</span>
+    }
+<span class="pc bpc" id="L139" title="1 of 2 branches missed.">    if (filter.propertyValue() != null) {</span>
+<span class="nc" id="L140">      predicate.filter(</span>
+<span class="nc" id="L141">          f.match()</span>
+<span class="nc" id="L142">              .field(WorkflowSemanticIndexEntity.PROPERTY_VALUES_FIELD)</span>
+<span class="nc" id="L143">              .matching(filter.propertyValue()));</span>
+    }
+<span class="fc" id="L145">  }</span>
+
+  private static WorkflowSemanticHistoryResult toResult(WorkflowSemanticIndexEntity row) {
+<span class="fc" id="L148">    return new WorkflowSemanticHistoryResult(</span>
+<span class="fc" id="L149">        new CommitId(row.getObjectId()),</span>
+<span class="fc" id="L150">        row.getBranchName(),</span>
+<span class="fc" id="L151">        row.getWorkflowId(),</span>
+<span class="fc" id="L152">        row.getWorkflowName(),</span>
+<span class="fc" id="L153">        row.getNodeIds(),</span>
+<span class="fc" id="L154">        row.getNodeTypes(),</span>
+<span class="fc" id="L155">        row.getNodeLabels(),</span>
+<span class="fc" id="L156">        WorkflowSemanticProjectionValues.decodePairs(row.getPropertyPairs()));</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

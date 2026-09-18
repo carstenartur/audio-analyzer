@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ResolveWorkflowMergeCommand.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Core</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.history</a> &gt; <span class="el_source">ResolveWorkflowMergeCommand.java</span></div><h1>ResolveWorkflowMergeCommand.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.history;
+
+import java.util.List;
+import java.util.Objects;
+import org.hammer.audio.workflow.merge.WorkflowMergeResolution;
+import org.hammer.audio.workflow.store.CommitId;
+import org.hammer.audio.workflow.store.CommitMetadata;
+
+/**
+ * Exact merge identities, decisions and audit metadata used to create one resolved checkpoint.
+ *
+ * @param preview exact commits and branches used by the preview
+ * @param expectedHead target-branch HEAD protected by optimistic concurrency
+ * @param resolutions immutable explicit semantic conflict decisions
+ * @param metadata user-facing author/message/timestamp for the resulting merge checkpoint
+ */
+public record ResolveWorkflowMergeCommand(
+    PreviewWorkflowMergeCommand preview,
+    CommitId expectedHead,
+    List&lt;WorkflowMergeResolution&gt; resolutions,
+    CommitMetadata metadata) {
+
+<span class="fc" id="L23">  public ResolveWorkflowMergeCommand {</span>
+<span class="fc" id="L24">    Objects.requireNonNull(preview, &quot;preview&quot;);</span>
+<span class="fc" id="L25">    Objects.requireNonNull(expectedHead, &quot;expectedHead&quot;);</span>
+<span class="fc" id="L26">    resolutions = List.copyOf(Objects.requireNonNull(resolutions, &quot;resolutions&quot;));</span>
+<span class="fc" id="L27">    Objects.requireNonNull(metadata, &quot;metadata&quot;);</span>
+<span class="pc bpc" id="L28" title="1 of 2 branches missed.">    if (!expectedHead.equals(preview.localCommit())) {</span>
+<span class="nc" id="L29">      throw new IllegalArgumentException(</span>
+          &quot;expectedHead must equal the exact local commit used by the merge preview&quot;);
+    }
+<span class="fc" id="L32">  }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

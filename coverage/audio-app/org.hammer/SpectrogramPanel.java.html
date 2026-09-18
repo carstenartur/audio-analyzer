@@ -1,0 +1,287 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>SpectrogramPanel.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer</a> &gt; <span class="el_source">SpectrogramPanel.java</span></div><h1>SpectrogramPanel.java</h1><pre class="source lang-java linenums">package org.hammer;
+
+import java.awt.Color;
+import java.awt.Dimension;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.Rectangle;
+import java.awt.image.BufferedImage;
+import java.util.List;
+import org.hammer.audio.AudioCaptureService;
+import org.hammer.audio.core.AudioBlock;
+import org.hammer.audio.spectrogram.SpectrogramAnalyzer;
+import org.hammer.audio.spectrogram.SpectrogramFrame;
+import org.hammer.audio.spectrogram.SpectrogramHistory;
+import org.hammer.audio.ui.theme.PlotRenderTheme;
+
+/**
+ * Realtime spectrogram / waterfall panel. Displays a rolling time history of FFT magnitude frames
+ * as a heatmap (time on the horizontal axis, frequency on the vertical axis, magnitude as colour).
+ *
+ * &lt;p&gt;New frames are pushed on the right edge; the oldest visible frame is at the left edge. Each
+ * column of the offscreen image corresponds to one historical frame. The panel uses a single shared
+ * {@link BufferedImage} backing buffer so the hot rendering path performs no allocations once the
+ * image is sized.
+ */
+public final class SpectrogramPanel extends javax.swing.JPanel {
+
+  private static final long serialVersionUID = 1L;
+  private static final int FFT_SIZE = 1024;
+  private static final int HISTORY_FRAMES = 256;
+  // Leaves room for frequency tick labels and the rotated Y-axis title.
+  private static final int LEFT_MARGIN = 52;
+  private static final int RIGHT_MARGIN = 12;
+  private static final int TOP_MARGIN = 18;
+  private static final int BOTTOM_MARGIN = 28;
+  private static final float SAMPLE_RATE_TOLERANCE = 0.0001f;
+
+  private AudioCaptureService audioCaptureService;
+  private transient SpectrogramAnalyzer analyzer;
+<span class="nc" id="L40">  private long lastAnalyzedFrameIndex = Long.MIN_VALUE;</span>
+<span class="nc" id="L41">  private long lastAnalyzedTimestampNanos = Long.MIN_VALUE;</span>
+<span class="nc" id="L42">  private float analyzerSampleRate = -1f;</span>
+  private boolean frozen;
+  private transient BufferedImage heatmapBuffer;
+
+  /** Create an empty spectrogram panel. */
+  public SpectrogramPanel() {
+<span class="nc" id="L48">    super(true);</span>
+<span class="nc" id="L49">    setPreferredSize(new Dimension(420, 220));</span>
+<span class="nc" id="L50">    javax.swing.Timer timer =</span>
+<span class="nc" id="L51">        new javax.swing.Timer(UiConstants.REFRESH_INTERVAL_MS, e -&gt; repaint());</span>
+<span class="nc" id="L52">    timer.start();</span>
+<span class="nc" id="L53">  }</span>
+
+  /**
+   * Set the audio capture service that supplies audio blocks.
+   *
+   * @param service the audio service
+   */
+  public void setAudioCaptureService(AudioCaptureService service) {
+<span class="nc" id="L61">    this.audioCaptureService = service;</span>
+<span class="nc" id="L62">    this.analyzer = null;</span>
+<span class="nc" id="L63">    this.analyzerSampleRate = -1f;</span>
+<span class="nc" id="L64">    this.lastAnalyzedFrameIndex = Long.MIN_VALUE;</span>
+<span class="nc" id="L65">    this.lastAnalyzedTimestampNanos = Long.MIN_VALUE;</span>
+<span class="nc" id="L66">    this.frozen = false;</span>
+<span class="nc" id="L67">  }</span>
+
+  /**
+   * Freeze or unfreeze the spectrogram. While frozen new audio blocks are not ingested.
+   *
+   * @param frozen true to freeze
+   */
+  public void setFrozen(boolean frozen) {
+<span class="nc" id="L75">    this.frozen = frozen;</span>
+<span class="nc" id="L76">    repaint();</span>
+<span class="nc" id="L77">  }</span>
+
+  /**
+   * @return the current spectrogram history (live or frozen), or {@code null} if no audio has been
+   *     analyzed yet
+   */
+  public SpectrogramHistory getHistory() {
+<span class="nc" id="L84">    pullLatestIntoHistory();</span>
+<span class="nc bnc" id="L85" title="All 2 branches missed.">    return analyzer == null ? null : analyzer.history();</span>
+  }
+
+  /**
+   * @return a defensive snapshot list of the frames in the rolling history, in chronological order
+   */
+  public List&lt;SpectrogramFrame&gt; snapshotFrames() {
+<span class="nc" id="L92">    SpectrogramHistory history = getHistory();</span>
+<span class="nc bnc" id="L93" title="All 2 branches missed.">    return history == null ? List.of() : history.snapshot();</span>
+  }
+
+  private void pullLatestIntoHistory() {
+<span class="nc bnc" id="L97" title="All 2 branches missed.">    if (frozen) {</span>
+<span class="nc" id="L98">      return;</span>
+    }
+<span class="nc" id="L100">    AudioCaptureService service = audioCaptureService;</span>
+<span class="nc bnc" id="L101" title="All 2 branches missed.">    if (service == null) {</span>
+<span class="nc" id="L102">      return;</span>
+    }
+<span class="nc" id="L104">    AudioBlock block = service.getLatestBlock();</span>
+<span class="nc bnc" id="L105" title="All 2 branches missed.">    if (block == null) {</span>
+<span class="nc" id="L106">      return;</span>
+    }
+<span class="nc bnc" id="L108" title="All 2 branches missed.">    if (block.frameIndex() == lastAnalyzedFrameIndex</span>
+<span class="nc bnc" id="L109" title="All 2 branches missed.">        &amp;&amp; block.timestampNanos() == lastAnalyzedTimestampNanos) {</span>
+<span class="nc" id="L110">      return;</span>
+    }
+<span class="nc" id="L112">    float sampleRate = block.format().sampleRate();</span>
+<span class="nc bnc" id="L113" title="All 2 branches missed.">    if (analyzer == null</span>
+<span class="nc bnc" id="L114" title="All 2 branches missed.">        || analyzer.fftSize() != FFT_SIZE</span>
+<span class="nc bnc" id="L115" title="All 2 branches missed.">        || Math.abs(analyzerSampleRate - sampleRate) &gt; SAMPLE_RATE_TOLERANCE) {</span>
+<span class="nc" id="L116">      analyzer = new SpectrogramAnalyzer(FFT_SIZE, 0, sampleRate, HISTORY_FRAMES);</span>
+<span class="nc" id="L117">      analyzerSampleRate = sampleRate;</span>
+    }
+<span class="nc" id="L119">    analyzer.analyze(block);</span>
+<span class="nc" id="L120">    lastAnalyzedFrameIndex = block.frameIndex();</span>
+<span class="nc" id="L121">    lastAnalyzedTimestampNanos = block.timestampNanos();</span>
+<span class="nc" id="L122">  }</span>
+
+  @Override
+  protected void paintComponent(Graphics g) {
+<span class="nc" id="L126">    super.paintComponent(g);</span>
+<span class="nc" id="L127">    Graphics2D g2 = (Graphics2D) g.create();</span>
+    try {
+<span class="nc" id="L129">      PlotRenderTheme.applyQualityRendering(g2);</span>
+<span class="nc" id="L130">      paintSpectrogram(g2);</span>
+    } finally {
+<span class="nc" id="L132">      g2.dispose();</span>
+    }
+<span class="nc" id="L134">  }</span>
+
+  private void paintSpectrogram(Graphics2D g) {
+<span class="nc" id="L137">    int width = getWidth();</span>
+<span class="nc" id="L138">    int height = getHeight();</span>
+<span class="nc" id="L139">    int plotX = LEFT_MARGIN;</span>
+<span class="nc" id="L140">    int plotY = TOP_MARGIN;</span>
+<span class="nc" id="L141">    int plotWidth = Math.max(1, width - LEFT_MARGIN - RIGHT_MARGIN);</span>
+<span class="nc" id="L142">    int plotHeight = Math.max(1, height - TOP_MARGIN - BOTTOM_MARGIN);</span>
+<span class="nc" id="L143">    Rectangle plotBounds = new Rectangle(plotX, plotY, plotWidth, plotHeight);</span>
+<span class="nc" id="L144">    PlotRenderTheme.drawPlotBackground(g, width, height, plotBounds);</span>
+<span class="nc bnc" id="L145" title="All 2 branches missed.">    PlotRenderTheme.drawTitle(g, plotBounds.x, 14, frozen ? &quot;Spectrogram (frozen)&quot; : &quot;Spectrogram&quot;);</span>
+
+<span class="nc" id="L147">    pullLatestIntoHistory();</span>
+<span class="nc bnc" id="L148" title="All 2 branches missed.">    SpectrogramHistory history = analyzer == null ? null : analyzer.history();</span>
+<span class="nc bnc" id="L149" title="All 4 branches missed.">    if (history == null || history.isEmpty()) {</span>
+<span class="nc" id="L150">      PlotRenderTheme.drawGrid(g, plotBounds, 8, 6);</span>
+<span class="nc" id="L151">      drawAxisLabels(g, plotBounds, null);</span>
+<span class="nc" id="L152">      PlotRenderTheme.drawEmptyState(g, plotBounds, &quot;No spectrogram data&quot;);</span>
+<span class="nc" id="L153">      return;</span>
+    }
+
+<span class="nc" id="L156">    renderHeatmapInto(history);</span>
+<span class="nc bnc" id="L157" title="All 2 branches missed.">    if (heatmapBuffer != null) {</span>
+<span class="nc" id="L158">      g.drawImage(</span>
+          heatmapBuffer,
+          plotBounds.x,
+          plotBounds.y,
+          plotBounds.x + plotBounds.width,
+          plotBounds.y + plotBounds.height,
+          0,
+          0,
+<span class="nc" id="L166">          heatmapBuffer.getWidth(),</span>
+<span class="nc" id="L167">          heatmapBuffer.getHeight(),</span>
+          null);
+    }
+<span class="nc" id="L170">    PlotRenderTheme.drawGrid(g, plotBounds, 8, 6);</span>
+<span class="nc" id="L171">    drawAxisLabels(g, plotBounds, history);</span>
+<span class="nc" id="L172">  }</span>
+
+  private void renderHeatmapInto(SpectrogramHistory history) {
+<span class="nc" id="L175">    int frames = history.size();</span>
+<span class="nc" id="L176">    int bins = history.binCount();</span>
+<span class="nc bnc" id="L177" title="All 4 branches missed.">    if (frames &lt; 1 || bins &lt; 2) {</span>
+<span class="nc" id="L178">      return;</span>
+    }
+<span class="nc bnc" id="L180" title="All 2 branches missed.">    if (heatmapBuffer == null</span>
+<span class="nc bnc" id="L181" title="All 2 branches missed.">        || heatmapBuffer.getWidth() != frames</span>
+<span class="nc bnc" id="L182" title="All 2 branches missed.">        || heatmapBuffer.getHeight() != bins - 1) {</span>
+<span class="nc" id="L183">      heatmapBuffer = new BufferedImage(frames, bins - 1, BufferedImage.TYPE_INT_RGB);</span>
+    }
+<span class="nc bnc" id="L185" title="All 2 branches missed.">    for (int x = 0; x &lt; frames; x++) {</span>
+<span class="nc" id="L186">      SpectrogramFrame frame = history.frameAt(x);</span>
+<span class="nc" id="L187">      float[] magnitudes = frame.magnitudesView();</span>
+<span class="nc" id="L188">      int rowCount = bins - 1;</span>
+<span class="nc bnc" id="L189" title="All 2 branches missed.">      for (int y = 0; y &lt; rowCount; y++) {</span>
+        // Flip vertically: high frequencies at top, low frequencies at bottom.
+<span class="nc" id="L191">        int bin = rowCount - y; // bins 1..rowCount (skip DC)</span>
+<span class="nc bnc" id="L192" title="All 2 branches missed.">        if (bin &gt;= magnitudes.length) {</span>
+<span class="nc" id="L193">          bin = magnitudes.length - 1;</span>
+        }
+<span class="nc" id="L195">        double norm = PlotRenderTheme.normalizedMagnitude(magnitudes[bin]);</span>
+<span class="nc" id="L196">        heatmapBuffer.setRGB(x, y, magnitudeColor(norm));</span>
+      }
+    }
+<span class="nc" id="L199">  }</span>
+
+  private static int magnitudeColor(double normalized) {
+<span class="nc" id="L202">    double v = Math.max(0.0, Math.min(1.0, normalized));</span>
+    // Approximate a viridis-like ramp: dark blue → cyan → green → yellow → orange → red.
+    double r;
+    double g;
+    double b;
+<span class="nc bnc" id="L207" title="All 2 branches missed.">    if (v &lt; 0.25) {</span>
+<span class="nc" id="L208">      double t = v / 0.25;</span>
+<span class="nc" id="L209">      r = 0.05 + 0.20 * t;</span>
+<span class="nc" id="L210">      g = 0.02 + 0.10 * t;</span>
+<span class="nc" id="L211">      b = 0.20 + 0.55 * t;</span>
+<span class="nc bnc" id="L212" title="All 2 branches missed.">    } else if (v &lt; 0.5) {</span>
+<span class="nc" id="L213">      double t = (v - 0.25) / 0.25;</span>
+<span class="nc" id="L214">      r = 0.25 - 0.20 * t;</span>
+<span class="nc" id="L215">      g = 0.12 + 0.45 * t;</span>
+<span class="nc" id="L216">      b = 0.75 - 0.30 * t;</span>
+<span class="nc bnc" id="L217" title="All 2 branches missed.">    } else if (v &lt; 0.75) {</span>
+<span class="nc" id="L218">      double t = (v - 0.5) / 0.25;</span>
+<span class="nc" id="L219">      r = 0.05 + 0.80 * t;</span>
+<span class="nc" id="L220">      g = 0.57 + 0.30 * t;</span>
+<span class="nc" id="L221">      b = 0.45 - 0.40 * t;</span>
+<span class="nc" id="L222">    } else {</span>
+<span class="nc" id="L223">      double t = (v - 0.75) / 0.25;</span>
+<span class="nc" id="L224">      r = 0.85 + 0.15 * t;</span>
+<span class="nc" id="L225">      g = 0.87 - 0.55 * t;</span>
+<span class="nc" id="L226">      b = 0.05;</span>
+    }
+<span class="nc" id="L228">    int ri = clampByte((int) Math.round(r * 255.0));</span>
+<span class="nc" id="L229">    int gi = clampByte((int) Math.round(g * 255.0));</span>
+<span class="nc" id="L230">    int bi = clampByte((int) Math.round(b * 255.0));</span>
+<span class="nc" id="L231">    return (ri &lt;&lt; 16) | (gi &lt;&lt; 8) | bi;</span>
+  }
+
+  private static int clampByte(int v) {
+<span class="nc bnc" id="L235" title="All 2 branches missed.">    if (v &lt; 0) {</span>
+<span class="nc" id="L236">      return 0;</span>
+    }
+<span class="nc bnc" id="L238" title="All 2 branches missed.">    if (v &gt; 255) {</span>
+<span class="nc" id="L239">      return 255;</span>
+    }
+<span class="nc" id="L241">    return v;</span>
+  }
+
+  private void drawAxisLabels(Graphics2D g, Rectangle plotBounds, SpectrogramHistory history) {
+<span class="nc" id="L245">    g.setColor(Color.WHITE);</span>
+<span class="nc" id="L246">    PlotRenderTheme.drawYAxisLabel(g, plotBounds, &quot;Frequency [Hz]&quot;);</span>
+<span class="nc bnc" id="L247" title="All 2 branches missed.">    if (history != null) {</span>
+<span class="nc" id="L248">      float nyquist = history.sampleRate() / 2.0f;</span>
+<span class="nc" id="L249">      PlotRenderTheme.drawYTicks(</span>
+          g,
+          plotBounds,
+          new double[] {0.0d, 0.5d, 1.0d},
+          new String[] {
+<span class="nc" id="L254">            String.format(&quot;%.0f Hz&quot;, nyquist), String.format(&quot;%.0f Hz&quot;, nyquist / 2.0f), &quot;0 Hz&quot;</span>
+          });
+<span class="nc" id="L256">      PlotRenderTheme.drawXTicks(</span>
+<span class="nc" id="L257">          g, plotBounds, new double[] {0.0d, 0.5d, 1.0d}, spectrogramTimeLabels(history));</span>
+    }
+<span class="nc" id="L259">    PlotRenderTheme.drawXAxisLabel(g, plotBounds, &quot;Time [frames; older → newer]&quot;);</span>
+<span class="nc" id="L260">  }</span>
+
+  /**
+   * Builds left/middle/right time tick labels for the visible spectrogram history.
+   *
+   * @param history rolling spectrogram history; may be empty during startup
+   * @return relative seconds labels when frame indices are available, otherwise frame-count labels
+   */
+  private String[] spectrogramTimeLabels(SpectrogramHistory history) {
+<span class="nc bnc" id="L269" title="All 4 branches missed.">    if (history == null || history.size() &lt;= 1) {</span>
+<span class="nc" id="L270">      return new String[] {&quot;0&quot;, &quot;0&quot;, &quot;0&quot;};</span>
+    }
+<span class="nc" id="L272">    long startFrame = history.frameAt(0).sourceFrameIndex();</span>
+<span class="nc" id="L273">    long endFrame = history.frameAt(history.size() - 1).sourceFrameIndex();</span>
+<span class="nc" id="L274">    double durationSeconds =</span>
+<span class="nc" id="L275">        Math.max(0.0d, (endFrame - startFrame) / (double) history.sampleRate());</span>
+<span class="nc bnc" id="L276" title="All 2 branches missed.">    if (durationSeconds &gt; 0.0d) {</span>
+<span class="nc" id="L277">      return new String[] {</span>
+        &quot;0.00 s&quot;,
+<span class="nc" id="L279">        String.format(&quot;%.2f s&quot;, durationSeconds / 2.0d),</span>
+<span class="nc" id="L280">        String.format(&quot;%.2f s&quot;, durationSeconds)</span>
+      };
+    }
+<span class="nc" id="L283">    int lastFrame = history.size() - 1;</span>
+<span class="nc" id="L284">    return new String[] {&quot;0&quot;, Integer.toString(lastFrame / 2), Integer.toString(lastFrame)};</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

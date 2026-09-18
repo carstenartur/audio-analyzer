@@ -1,0 +1,225 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WorkflowRunRecord.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Core</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.execution</a> &gt; <span class="el_source">WorkflowRunRecord.java</span></div><h1>WorkflowRunRecord.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.execution;
+
+import java.time.Clock;
+import java.time.Instant;
+import java.util.List;
+import java.util.Objects;
+import java.util.concurrent.locks.ReentrantLock;
+import org.hammer.audio.workflow.execution.WorkflowRunException.Code;
+import org.hammer.audio.workflow.execution.WorkflowRunModels.Control;
+import org.hammer.audio.workflow.execution.WorkflowRunModels.Input;
+import org.hammer.audio.workflow.execution.WorkflowRunModels.Mode;
+import org.hammer.audio.workflow.execution.WorkflowRunModels.Result;
+import org.hammer.audio.workflow.execution.WorkflowRunModels.Snapshot;
+import org.hammer.audio.workflow.execution.WorkflowRunModels.State;
+import org.hammer.audio.workflow.execution.WorkflowRunModels.Violation;
+
+/** Thread-safe mutable lifecycle record around one immutable workflow-run input. */
+final class WorkflowRunRecord {
+
+  private static final String BACKEND_FAILURE_CODE = &quot;BACKEND_FAILURE&quot;;
+
+  private final Input immutableInput;
+  private final Mode backendMode;
+  private final Clock wallClock;
+<span class="fc" id="L25">  private final ReentrantLock stateGuard = new ReentrantLock();</span>
+<span class="fc" id="L26">  private State lifecycleState = State.QUEUED;</span>
+  private Instant startedAt;
+  private Instant finishedAt;
+  private int progressPercent;
+<span class="fc" id="L30">  private String statusMessage = &quot;Queued&quot;;</span>
+<span class="fc" id="L31">  private List&lt;Violation&gt; violationDetails = List.of();</span>
+  private Result terminalResult;
+  private boolean cancellationRequested;
+
+<span class="fc" id="L35">  WorkflowRunRecord(Input input, Mode mode, Clock clock) {</span>
+<span class="fc" id="L36">    this.immutableInput = Objects.requireNonNull(input, &quot;input&quot;);</span>
+<span class="fc" id="L37">    this.backendMode = Objects.requireNonNull(mode, &quot;mode&quot;);</span>
+<span class="fc" id="L38">    this.wallClock = Objects.requireNonNull(clock, &quot;clock&quot;);</span>
+<span class="fc" id="L39">  }</span>
+
+  Input input() {
+<span class="fc" id="L42">    return immutableInput;</span>
+  }
+
+  Snapshot snapshot() {
+<span class="fc" id="L46">    stateGuard.lock();</span>
+    try {
+<span class="fc" id="L48">      return new Snapshot(</span>
+<span class="fc" id="L49">          immutableInput.runId(),</span>
+<span class="fc" id="L50">          immutableInput.startCommandId(),</span>
+          lifecycleState,
+          backendMode,
+<span class="fc" id="L53">          immutableInput.source(),</span>
+<span class="fc" id="L54">          immutableInput.snapshot().workflowId(),</span>
+<span class="fc" id="L55">          immutableInput.snapshot().snapshotId(),</span>
+<span class="fc" id="L56">          immutableInput.plan().planId(),</span>
+<span class="fc" id="L57">          immutableInput.fingerprint(),</span>
+<span class="fc" id="L58">          immutableInput.semanticRevision(),</span>
+<span class="fc" id="L59">          immutableInput.commitId(),</span>
+<span class="fc" id="L60">          immutableInput.capturedAt(),</span>
+          startedAt,
+          finishedAt,
+          progressPercent,
+          statusMessage,
+          violationDetails);
+    } finally {
+<span class="fc" id="L67">      stateGuard.unlock();</span>
+    }
+  }
+
+  boolean startRunning() {
+<span class="fc" id="L72">    stateGuard.lock();</span>
+    try {
+<span class="pc bpc" id="L74" title="1 of 2 branches missed.">      if (lifecycleState == State.CANCELLED) {</span>
+<span class="nc" id="L75">        return false;</span>
+      }
+<span class="fc bfc" id="L77" title="All 2 branches covered.">      if (lifecycleState == State.CANCEL_REQUESTED) {</span>
+<span class="fc" id="L78">        transition(State.CANCELLED);</span>
+<span class="fc" id="L79">        finishedAt = wallClock.instant();</span>
+<span class="fc" id="L80">        statusMessage = &quot;Cancelled before backend start&quot;;</span>
+<span class="fc" id="L81">        return false;</span>
+      }
+<span class="fc" id="L83">      transition(State.RUNNING);</span>
+<span class="fc" id="L84">      startedAt = wallClock.instant();</span>
+<span class="fc" id="L85">      statusMessage = &quot;Running&quot;;</span>
+<span class="fc" id="L86">      return true;</span>
+    } finally {
+<span class="fc" id="L88">      stateGuard.unlock();</span>
+    }
+  }
+
+  void requestCancellation() {
+<span class="fc" id="L93">    stateGuard.lock();</span>
+    try {
+<span class="fc" id="L95">      cancellationRequested = true;</span>
+<span class="pc bpc" id="L96" title="3 of 4 branches missed.">      if (lifecycleState == State.QUEUED || lifecycleState == State.RUNNING) {</span>
+<span class="fc" id="L97">        transition(State.CANCEL_REQUESTED);</span>
+<span class="fc" id="L98">        statusMessage = &quot;Cancellation requested&quot;;</span>
+      }
+    } finally {
+<span class="fc" id="L101">      stateGuard.unlock();</span>
+    }
+<span class="fc" id="L103">  }</span>
+
+  void complete(Result backendResult) {
+<span class="fc" id="L106">    Objects.requireNonNull(backendResult, &quot;backendResult&quot;);</span>
+<span class="fc" id="L107">    stateGuard.lock();</span>
+    try {
+<span class="fc" id="L109">      State target = terminalState(backendResult.reproducibilityBundle().result().overallStatus());</span>
+<span class="fc" id="L110">      transition(target);</span>
+<span class="fc" id="L111">      terminalResult = backendResult;</span>
+<span class="fc" id="L112">      finishedAt = wallClock.instant();</span>
+<span class="pc bpc" id="L113" title="1 of 2 branches missed.">      if (target == State.COMPLETED) {</span>
+<span class="fc" id="L114">        progressPercent = 100;</span>
+<span class="fc" id="L115">        statusMessage = &quot;Completed&quot;;</span>
+      } else {
+<span class="nc" id="L117">        statusMessage = target.name();</span>
+      }
+    } finally {
+<span class="fc" id="L120">      stateGuard.unlock();</span>
+    }
+<span class="fc" id="L122">  }</span>
+
+  void fail(Throwable failure) {
+<span class="nc" id="L125">    Objects.requireNonNull(failure, &quot;failure&quot;);</span>
+<span class="nc" id="L126">    stateGuard.lock();</span>
+    try {
+<span class="nc bnc" id="L128" title="All 2 branches missed.">      if (lifecycleState.terminal()) {</span>
+<span class="nc" id="L129">        return;</span>
+      }
+<span class="nc" id="L131">      transition(State.FAILED);</span>
+<span class="nc" id="L132">      finishedAt = wallClock.instant();</span>
+      String message =
+<span class="nc bnc" id="L134" title="All 4 branches missed.">          failure.getMessage() == null || failure.getMessage().isBlank()</span>
+<span class="nc" id="L135">              ? failure.getClass().getSimpleName()</span>
+<span class="nc" id="L136">              : failure.getMessage();</span>
+<span class="nc" id="L137">      violationDetails = List.of(new Violation(BACKEND_FAILURE_CODE, message, null));</span>
+<span class="nc" id="L138">      statusMessage = &quot;Failed&quot;;</span>
+    } finally {
+<span class="nc" id="L140">      stateGuard.unlock();</span>
+    }
+<span class="nc" id="L142">  }</span>
+
+  Result result() {
+<span class="fc" id="L145">    stateGuard.lock();</span>
+    try {
+<span class="fc bfc" id="L147" title="All 2 branches covered.">      if (terminalResult == null) {</span>
+<span class="fc" id="L148">        throw new WorkflowRunException(</span>
+            Code.RESULT_NOT_AVAILABLE,
+            &quot;Workflow run has no terminal result in state &quot; + lifecycleState,
+<span class="fc" id="L151">            immutableInput.runId(),</span>
+<span class="fc" id="L152">            immutableInput.startCommandId(),</span>
+            violationDetails);
+      }
+<span class="fc" id="L155">      return terminalResult;</span>
+    } finally {
+<span class="fc" id="L157">      stateGuard.unlock();</span>
+    }
+  }
+
+  Control control() {
+<span class="fc" id="L162">    return new BackendControl();</span>
+  }
+
+  private boolean isCancellationRequested() {
+<span class="fc" id="L166">    stateGuard.lock();</span>
+    try {
+<span class="fc" id="L168">      return cancellationRequested;</span>
+    } finally {
+<span class="fc" id="L170">      stateGuard.unlock();</span>
+    }
+  }
+
+  private void updateProgress(int percentage, String message) {
+<span class="pc bpc" id="L175" title="2 of 4 branches missed.">    if (percentage &lt; 0 || percentage &gt; 100) {</span>
+<span class="nc" id="L176">      throw new IllegalArgumentException(&quot;progress percentage must be between 0 and 100&quot;);</span>
+    }
+<span class="fc" id="L178">    stateGuard.lock();</span>
+    try {
+<span class="pc bpc" id="L180" title="1 of 2 branches missed.">      if (lifecycleState.terminal()) {</span>
+<span class="nc" id="L181">        return;</span>
+      }
+<span class="fc" id="L183">      progressPercent = Math.max(progressPercent, percentage);</span>
+<span class="pc bpc" id="L184" title="1 of 2 branches missed.">      statusMessage = message == null ? &quot;&quot; : message;</span>
+    } finally {
+<span class="fc" id="L186">      stateGuard.unlock();</span>
+    }
+<span class="fc" id="L188">  }</span>
+
+  private State terminalState(ExecutionStatus executionStatus) {
+<span class="pc bpc" id="L191" title="3 of 4 branches missed.">    return switch (executionStatus) {</span>
+<span class="fc" id="L192">      case COMPLETED -&gt; State.COMPLETED;</span>
+<span class="nc" id="L193">      case CANCELLED -&gt; State.CANCELLED;</span>
+<span class="nc" id="L194">      case FAILED, SKIPPED -&gt; State.FAILED;</span>
+      case IDLE, QUEUED, RUNNING -&gt;
+<span class="nc" id="L196">          throw new IllegalArgumentException(</span>
+              &quot;Backend returned non-terminal execution status &quot; + executionStatus);
+    };
+  }
+
+  private void transition(State target) {
+<span class="pc bpc" id="L202" title="1 of 2 branches missed.">    if (!lifecycleState.canTransitionTo(target)) {</span>
+<span class="nc" id="L203">      throw new WorkflowRunException(</span>
+          Code.ILLEGAL_TRANSITION,
+          &quot;Illegal workflow run transition &quot; + lifecycleState + &quot; -&gt; &quot; + target,
+<span class="nc" id="L206">          immutableInput.runId(),</span>
+<span class="nc" id="L207">          immutableInput.startCommandId(),</span>
+          violationDetails);
+    }
+<span class="fc" id="L210">    lifecycleState = target;</span>
+<span class="fc" id="L211">  }</span>
+
+<span class="fc" id="L213">  private final class BackendControl implements Control {</span>
+    @Override
+    public boolean cancellationRequested() {
+<span class="fc" id="L216">      return isCancellationRequested();</span>
+    }
+
+    @Override
+    public void progress(int percentage, String message) {
+<span class="fc" id="L221">      updateProgress(percentage, message);</span>
+<span class="fc" id="L222">    }</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

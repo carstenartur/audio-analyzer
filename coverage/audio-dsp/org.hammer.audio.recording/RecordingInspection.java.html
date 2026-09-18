@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>RecordingInspection.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer DSP and Analysis</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.recording</a> &gt; <span class="el_source">RecordingInspection.java</span></div><h1>RecordingInspection.java</h1><pre class="source lang-java linenums">package org.hammer.audio.recording;
+
+import java.util.Objects;
+import org.hammer.audio.core.AudioFormatDescriptor;
+
+/**
+ * Immutable structural and integrity summary for one recording.
+ *
+ * @param formatVersion parsed binary format version
+ * @param format normalized audio format from the recording header
+ * @param integrity structural, finalization and checksum classification
+ * @param blockCount number of complete readable block records
+ * @param totalFrames total frames in complete readable blocks
+ * @param firstFrameIndex first complete block's frame index, or {@link Long#MIN_VALUE}
+ * @param lastFrameIndex last complete block's frame index, or {@link Long#MIN_VALUE}
+ * @param firstTimestampNanos first complete block's source timestamp, or {@link Long#MIN_VALUE}
+ * @param lastTimestampNanos last complete block's source timestamp, or {@link Long#MIN_VALUE}
+ * @param continuityGapCount detected discontinuities between complete source blocks
+ * @param payloadBytes serialized bytes occupied by complete block records
+ * @param sha256 verified lowercase SHA-256 for a complete version-2 file, otherwise empty
+ * @param detail human-readable integrity explanation
+ */
+public record RecordingInspection(
+    int formatVersion,
+    AudioFormatDescriptor format,
+    RecordingIntegrity integrity,
+    long blockCount,
+    long totalFrames,
+    long firstFrameIndex,
+    long lastFrameIndex,
+    long firstTimestampNanos,
+    long lastTimestampNanos,
+    long continuityGapCount,
+    long payloadBytes,
+    String sha256,
+    String detail) {
+
+  // Normalize required and optional fields.
+<span class="fc" id="L39">  public RecordingInspection {</span>
+<span class="fc" id="L40">    Objects.requireNonNull(format, &quot;format&quot;);</span>
+<span class="fc" id="L41">    Objects.requireNonNull(integrity, &quot;integrity&quot;);</span>
+<span class="pc bpc" id="L42" title="1 of 2 branches missed.">    sha256 = sha256 == null ? &quot;&quot; : sha256;</span>
+<span class="pc bpc" id="L43" title="1 of 2 branches missed.">    detail = detail == null ? &quot;&quot; : detail;</span>
+<span class="fc" id="L44">  }</span>
+
+  /** Returns whether this file proves a clean version-2 finalization. */
+  public boolean complete() {
+<span class="nc bnc" id="L48" title="All 2 branches missed.">    return integrity == RecordingIntegrity.COMPLETE;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

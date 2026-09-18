@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ExecutionContext.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Core</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.execution</a> &gt; <span class="el_source">ExecutionContext.java</span></div><h1>ExecutionContext.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.execution;
+
+import java.time.Instant;
+import java.util.EnumSet;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+
+/**
+ * Mutable runtime context for a single workflow execution.
+ *
+ * &lt;p&gt;Tracks per-node {@link ExecutionStatus} transitions from {@link ExecutionStatus#IDLE} through
+ * to a terminal state. Once all nodes have reached a terminal state, call {@link
+ * #toResult(Instant)} to obtain an immutable {@link ExecutionResult}.
+ *
+ * &lt;p&gt;This class is &lt;em&gt;not&lt;/em&gt; thread-safe; external synchronization is required if instances are
+ * accessed from multiple threads concurrently.
+ */
+public final class ExecutionContext {
+
+<span class="fc" id="L22">  private static final Set&lt;ExecutionStatus&gt; TERMINAL_STATUSES =</span>
+<span class="fc" id="L23">      EnumSet.of(</span>
+          ExecutionStatus.COMPLETED,
+          ExecutionStatus.FAILED,
+          ExecutionStatus.SKIPPED,
+          ExecutionStatus.CANCELLED);
+
+  private final String executionId;
+  private final ExecutionPlan plan;
+  private final Instant startedAt;
+  private final Map&lt;String, ExecutionStatus&gt; nodeStatuses;
+
+  /**
+   * Creates a new execution context for the given plan. All nodes start with status {@link
+   * ExecutionStatus#IDLE}.
+   *
+   * @param executionId stable identifier for this execution
+   * @param plan the execution plan to run
+   * @param startedAt instant at which execution started
+   */
+<span class="fc" id="L42">  public ExecutionContext(String executionId, ExecutionPlan plan, Instant startedAt) {</span>
+<span class="fc" id="L43">    StableExecutionIds.requireStable(executionId, &quot;executionId&quot;);</span>
+<span class="fc" id="L44">    this.executionId = executionId;</span>
+<span class="fc" id="L45">    this.plan = Objects.requireNonNull(plan, &quot;plan&quot;);</span>
+<span class="fc" id="L46">    this.startedAt = Objects.requireNonNull(startedAt, &quot;startedAt&quot;);</span>
+<span class="fc" id="L47">    this.nodeStatuses = new HashMap&lt;&gt;();</span>
+<span class="fc bfc" id="L48" title="All 2 branches covered.">    for (String nodeId : plan.orderedNodeIds()) {</span>
+<span class="fc" id="L49">      nodeStatuses.put(nodeId, ExecutionStatus.IDLE);</span>
+<span class="fc" id="L50">    }</span>
+<span class="fc" id="L51">  }</span>
+
+  /** Returns the stable identifier for this execution. */
+  public String executionId() {
+<span class="nc" id="L55">    return executionId;</span>
+  }
+
+  /** Returns the plan driving this execution. */
+  public ExecutionPlan plan() {
+<span class="nc" id="L60">    return plan;</span>
+  }
+
+  /** Returns the instant at which this execution started. */
+  public Instant startedAt() {
+<span class="nc" id="L65">    return startedAt;</span>
+  }
+
+  /**
+   * Returns the current status of the node with the given identifier.
+   *
+   * @param nodeId node identifier
+   * @return current status
+   * @throws IllegalArgumentException if no node with that identifier exists in the plan
+   */
+  public ExecutionStatus nodeStatus(String nodeId) {
+<span class="fc" id="L76">    ExecutionStatus status = nodeStatuses.get(nodeId);</span>
+<span class="fc bfc" id="L77" title="All 2 branches covered.">    if (status == null) {</span>
+<span class="fc" id="L78">      throw new IllegalArgumentException(&quot;Unknown node: &quot; + nodeId);</span>
+    }
+<span class="fc" id="L80">    return status;</span>
+  }
+
+  /**
+   * Updates the status of a node in this execution context.
+   *
+   * @param nodeId node identifier
+   * @param status new status
+   * @throws IllegalArgumentException if no node with that identifier exists in the plan
+   */
+  public void updateNodeStatus(String nodeId, ExecutionStatus status) {
+<span class="fc" id="L91">    Objects.requireNonNull(status, &quot;status&quot;);</span>
+<span class="fc bfc" id="L92" title="All 2 branches covered.">    if (!nodeStatuses.containsKey(nodeId)) {</span>
+<span class="fc" id="L93">      throw new IllegalArgumentException(&quot;Unknown node: &quot; + nodeId);</span>
+    }
+<span class="fc" id="L95">    nodeStatuses.put(nodeId, status);</span>
+<span class="fc" id="L96">  }</span>
+
+  /**
+   * Returns {@code true} if every node has reached a terminal status ({@link
+   * ExecutionStatus#COMPLETED}, {@link ExecutionStatus#FAILED}, {@link ExecutionStatus#SKIPPED} or
+   * {@link ExecutionStatus#CANCELLED}).
+   */
+  public boolean isComplete() {
+<span class="fc" id="L104">    return nodeStatuses.values().stream().allMatch(TERMINAL_STATUSES::contains);</span>
+  }
+
+  /**
+   * Produces an immutable {@link ExecutionResult} from the current node statuses.
+   *
+   * @param completedAt instant at which the execution finished
+   * @return immutable result capturing the state of this context at the time of the call
+   */
+  public ExecutionResult toResult(Instant completedAt) {
+<span class="fc" id="L114">    Objects.requireNonNull(completedAt, &quot;completedAt&quot;);</span>
+<span class="fc bfc" id="L115" title="All 2 branches covered.">    if (!isComplete()) {</span>
+<span class="fc" id="L116">      throw new IllegalStateException(</span>
+          &quot;Execution is not complete and cannot be converted to result&quot;);
+    }
+<span class="fc" id="L119">    return new ExecutionResult(</span>
+<span class="fc" id="L120">        executionId, plan.planId(), Map.copyOf(nodeStatuses), startedAt, completedAt);</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

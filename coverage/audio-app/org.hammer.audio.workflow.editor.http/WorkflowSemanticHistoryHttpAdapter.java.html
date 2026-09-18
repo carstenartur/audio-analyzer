@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WorkflowSemanticHistoryHttpAdapter.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.editor.http</a> &gt; <span class="el_source">WorkflowSemanticHistoryHttpAdapter.java</span></div><h1>WorkflowSemanticHistoryHttpAdapter.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.editor.http;
+
+import java.util.List;
+import java.util.Objects;
+import org.hammer.audio.workflow.history.IndexedWorkflowSemanticHistorySearch;
+import org.hammer.audio.workflow.history.WorkflowSemanticHistoryQuery;
+import org.hammer.audio.workflow.history.WorkflowSemanticHistoryResult;
+import org.hammer.audio.workflow.history.WorkflowSemanticProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+/** HTTP boundary for branch-aware semantic workflow-history queries. */
+@RestController
+@RequestMapping(&quot;/workflow/history/semantic&quot;)
+@ConditionalOnBean(IndexedWorkflowSemanticHistorySearch.class)
+public final class WorkflowSemanticHistoryHttpAdapter {
+
+  private static final int DEFAULT_LIMIT = 20;
+  private final IndexedWorkflowSemanticHistorySearch semanticSearch;
+
+<span class="fc" id="L24">  public WorkflowSemanticHistoryHttpAdapter(IndexedWorkflowSemanticHistorySearch semanticSearch) {</span>
+<span class="fc" id="L25">    this.semanticSearch = Objects.requireNonNull(semanticSearch, &quot;semanticSearch&quot;);</span>
+<span class="fc" id="L26">  }</span>
+
+  /** Searches exact workflow semantics derived from commits reachable on one branch. */
+  @GetMapping
+  public List&lt;SemanticHitResponse&gt; search(@ModelAttribute SemanticSearchRequest request) {
+<span class="fc" id="L31">    return semanticSearch.searchSemantic(request.toQuery()).stream()</span>
+<span class="fc" id="L32">        .map(SemanticHitResponse::from)</span>
+<span class="fc" id="L33">        .toList();</span>
+  }
+
+  /**
+   * Bindable semantic-history query parameters.
+   *
+   * @param branch branch whose reachable commits are searched; defaults to {@code main}
+   * @param workflow exact workflow identifier
+   * @param node exact node identifier
+   * @param type exact node type
+   * @param label workflow-name or node-label full-text expression
+   * @param propertyKey exact metadata key
+   * @param propertyValue exact metadata value
+   * @param limit bounded result count; defaults to 20
+   */
+  public record SemanticSearchRequest(
+      String branch,
+      String workflow,
+      String node,
+      String type,
+      String label,
+      String propertyKey,
+      String propertyValue,
+      String limit) {
+
+<span class="fc" id="L58">    public SemanticSearchRequest {</span>
+<span class="pc bpc" id="L59" title="2 of 4 branches missed.">      branch = branch == null || branch.isBlank() ? &quot;main&quot; : branch.trim();</span>
+<span class="pc bpc" id="L60" title="2 of 4 branches missed.">      limit = limit == null || limit.isBlank() ? Integer.toString(DEFAULT_LIMIT) : limit.trim();</span>
+<span class="fc" id="L61">    }</span>
+
+    WorkflowSemanticHistoryQuery toQuery() {
+<span class="fc" id="L64">      return new WorkflowSemanticHistoryQuery(</span>
+<span class="fc" id="L65">          branch, workflow, node, type, label, propertyKey, propertyValue, Integer.parseInt(limit));</span>
+    }
+  }
+
+  /**
+   * Domain-semantic evidence tied to one exact authoritative Git commit.
+   *
+   * @param commitId exact Git commit identity
+   * @param branch branch for which the commit is reachable
+   * @param workflowId stable workflow identifier
+   * @param workflowName human-readable workflow name
+   * @param nodeIds stable node identifiers contained in the workflow
+   * @param nodeTypes logical node types contained in the workflow
+   * @param nodeLabels human-readable node labels contained in the workflow
+   * @param properties exact workflow and node metadata entries
+   */
+  public record SemanticHitResponse(
+      String commitId,
+      String branch,
+      String workflowId,
+      String workflowName,
+      List&lt;String&gt; nodeIds,
+      List&lt;String&gt; nodeTypes,
+      List&lt;String&gt; nodeLabels,
+      List&lt;WorkflowSemanticProperty&gt; properties) {
+
+<span class="fc" id="L91">    public SemanticHitResponse {</span>
+<span class="fc" id="L92">      commitId = Objects.requireNonNull(commitId, &quot;commitId&quot;);</span>
+<span class="fc" id="L93">      branch = Objects.requireNonNull(branch, &quot;branch&quot;);</span>
+<span class="fc" id="L94">      workflowId = Objects.requireNonNull(workflowId, &quot;workflowId&quot;);</span>
+<span class="fc" id="L95">      workflowName = Objects.requireNonNull(workflowName, &quot;workflowName&quot;);</span>
+<span class="fc" id="L96">      nodeIds = List.copyOf(Objects.requireNonNull(nodeIds, &quot;nodeIds&quot;));</span>
+<span class="fc" id="L97">      nodeTypes = List.copyOf(Objects.requireNonNull(nodeTypes, &quot;nodeTypes&quot;));</span>
+<span class="fc" id="L98">      nodeLabels = List.copyOf(Objects.requireNonNull(nodeLabels, &quot;nodeLabels&quot;));</span>
+<span class="fc" id="L99">      properties = List.copyOf(Objects.requireNonNull(properties, &quot;properties&quot;));</span>
+<span class="fc" id="L100">    }</span>
+
+    static SemanticHitResponse from(WorkflowSemanticHistoryResult result) {
+<span class="fc" id="L103">      return new SemanticHitResponse(</span>
+<span class="fc" id="L104">          result.commitId().value(),</span>
+<span class="fc" id="L105">          result.branch(),</span>
+<span class="fc" id="L106">          result.workflowId(),</span>
+<span class="fc" id="L107">          result.workflowName(),</span>
+<span class="fc" id="L108">          result.nodeIds(),</span>
+<span class="fc" id="L109">          result.nodeTypes(),</span>
+<span class="fc" id="L110">          result.nodeLabels(),</span>
+<span class="fc" id="L111">          result.properties());</span>
+    }
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

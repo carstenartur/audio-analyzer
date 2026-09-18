@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ReproducibilityBundle.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Core</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.execution</a> &gt; <span class="el_source">ReproducibilityBundle.java</span></div><h1>ReproducibilityBundle.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.execution;
+
+import java.util.Objects;
+import org.hammer.audio.workflow.store.CommitId;
+import org.hammer.audio.workflow.store.CommitInfo;
+
+/**
+ * Immutable reproducibility evidence bundle produced by a completed workflow run.
+ *
+ * &lt;p&gt;A bundle ties together the frozen workflow snapshot that was executed, the terminal result of
+ * that run and the optional version-control provenance (commit identifier and metadata). Together
+ * these three pieces of information are sufficient to reproduce or audit any past execution.
+ *
+ * &lt;p&gt;The {@code commitId} and {@code commitInfo} fields are optional. They are non-null when the
+ * execution was started from a stored checkpoint (the common production path). They are {@code
+ * null} when the execution was triggered from the live editor state outside of version control
+ * (testing or manual exploration).
+ *
+ * @param snapshot immutable workflow snapshot that was executed
+ * @param result terminal outcome of the execution run
+ * @param commitId version-control identifier of the stored checkpoint (may be {@code null})
+ * @param commitInfo author, message and timestamp of the stored checkpoint (may be {@code null})
+ */
+public record ReproducibilityBundle(
+    ExecutionSnapshot snapshot, ExecutionResult result, CommitId commitId, CommitInfo commitInfo) {
+
+<span class="fc" id="L27">  public ReproducibilityBundle {</span>
+<span class="fc" id="L28">    Objects.requireNonNull(snapshot, &quot;snapshot&quot;);</span>
+<span class="fc" id="L29">    Objects.requireNonNull(result, &quot;result&quot;);</span>
+<span class="fc bfc" id="L30" title="All 2 branches covered.">    if (commitInfo != null) {</span>
+<span class="fc bfc" id="L31" title="All 2 branches covered.">      if (commitId == null) {</span>
+<span class="fc" id="L32">        throw new IllegalArgumentException(&quot;commitId must not be null when commitInfo is present&quot;);</span>
+      }
+<span class="fc bfc" id="L34" title="All 2 branches covered.">      if (!commitId.equals(commitInfo.commitId())) {</span>
+<span class="fc" id="L35">        throw new IllegalArgumentException(</span>
+            &quot;commitId must equal commitInfo.commitId() but got commitId=&quot;
+                + commitId
+                + &quot; and commitInfo.commitId()=&quot;
+<span class="fc" id="L39">                + commitInfo.commitId());</span>
+      }
+    }
+<span class="fc" id="L42">  }</span>
+
+  /**
+   * Returns {@code true} if this bundle carries version-control provenance, i.e. both {@link
+   * #commitId()} and {@link #commitInfo()} are non-null.
+   */
+  public boolean hasStoredProvenance() {
+<span class="fc bfc" id="L49" title="All 4 branches covered.">    return commitId != null &amp;&amp; commitInfo != null;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

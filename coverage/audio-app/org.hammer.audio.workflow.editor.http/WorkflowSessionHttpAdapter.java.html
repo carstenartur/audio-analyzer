@@ -1,0 +1,189 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WorkflowSessionHttpAdapter.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.editor.http</a> &gt; <span class="el_source">WorkflowSessionHttpAdapter.java</span></div><h1>WorkflowSessionHttpAdapter.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.editor.http;
+
+import jakarta.validation.Valid;
+import java.net.URI;
+import java.util.List;
+import java.util.Objects;
+import org.hammer.audio.workflow.Workflow;
+import org.hammer.audio.workflow.WorkflowOperation;
+import org.hammer.audio.workflow.collaboration.OperationActor;
+import org.hammer.audio.workflow.collaboration.WorkflowSessionRegistry;
+import org.hammer.audio.workflow.editor.WorkflowProjection;
+import org.hammer.audio.workflow.editor.http.WorkflowHistoryApiModels.HistoryCapabilitiesRequest;
+import org.hammer.audio.workflow.editor.http.WorkflowHistoryApiModels.HistoryCapabilitiesResponse;
+import org.hammer.audio.workflow.editor.http.WorkflowHistoryApiModels.HistoryPageResponse;
+import org.hammer.audio.workflow.editor.http.WorkflowHistoryApiModels.HistoryQueryRequest;
+import org.hammer.audio.workflow.editor.http.WorkflowHistoryApiModels.RedoPreviewRequest;
+import org.hammer.audio.workflow.editor.http.WorkflowHistoryApiModels.RedoPreviewResponse;
+import org.hammer.audio.workflow.editor.http.WorkflowHistoryApiModels.UndoPreviewResponse;
+import org.hammer.audio.workflow.editor.http.WorkflowSessionApiModels.ActorIdRequest;
+import org.hammer.audio.workflow.editor.http.WorkflowSessionApiModels.CreateSessionRequest;
+import org.hammer.audio.workflow.editor.http.WorkflowSessionApiModels.HistoryCommandResponse;
+import org.hammer.audio.workflow.editor.http.WorkflowSessionApiModels.JoinSessionRequest;
+import org.hammer.audio.workflow.editor.http.WorkflowSessionApiModels.PresenceRequest;
+import org.hammer.audio.workflow.editor.http.WorkflowSessionApiModels.PresenceResponse;
+import org.hammer.audio.workflow.editor.http.WorkflowSessionApiModels.RedoCommandRequest;
+import org.hammer.audio.workflow.editor.http.WorkflowSessionApiModels.SessionOperationRequest;
+import org.hammer.audio.workflow.editor.http.WorkflowSessionApiModels.SessionResponse;
+import org.hammer.audio.workflow.editor.http.WorkflowSessionApiModels.UndoCommandRequest;
+import org.hammer.audio.workflow.editor.http.WorkflowSessionApiModels.UndoPreviewRequest;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.util.UriComponentsBuilder;
+
+/** Spring MVC REST controller for collaboration-session lifecycle and semantic commands. */
+@RestController
+@RequestMapping(&quot;/workflow/sessions&quot;)
+public final class WorkflowSessionHttpAdapter {
+
+  private static final String SESSION_ID = &quot;sessionId&quot;;
+
+  private final WorkflowSessionRegistry registry;
+
+  /** Creates the lifecycle REST controller. */
+<span class="fc" id="L51">  public WorkflowSessionHttpAdapter(WorkflowSessionRegistry registry) {</span>
+<span class="fc" id="L52">    this.registry = Objects.requireNonNull(registry, &quot;registry&quot;);</span>
+<span class="fc" id="L53">  }</span>
+
+  /** Creates a session and joins its owner. */
+  @PostMapping
+  public ResponseEntity&lt;SessionResponse&gt; create(@Valid @RequestBody CreateSessionRequest request) {
+<span class="fc" id="L58">    SessionResponse response =</span>
+<span class="fc" id="L59">        SessionResponse.from(</span>
+<span class="fc" id="L60">            registry.create(</span>
+<span class="fc" id="L61">                request.sessionId(),</span>
+<span class="fc" id="L62">                request.mode(),</span>
+<span class="fc" id="L63">                request.actor().toDomain(),</span>
+<span class="fc" id="L64">                request.initialWorkflow()));</span>
+<span class="fc" id="L65">    URI location =</span>
+<span class="fc" id="L66">        UriComponentsBuilder.fromPath(&quot;/workflow/sessions/{&quot; + SESSION_ID + &quot;}&quot;)</span>
+<span class="fc" id="L67">            .buildAndExpand(response.sessionId())</span>
+<span class="fc" id="L68">            .encode()</span>
+<span class="fc" id="L69">            .toUri();</span>
+<span class="fc" id="L70">    return ResponseEntity.created(location).body(response);</span>
+  }
+
+  /** Lists all current sessions in stable identifier order. */
+  @GetMapping
+  public List&lt;SessionResponse&gt; sessions() {
+<span class="nc" id="L76">    return registry.sessions().stream().map(SessionResponse::from).toList();</span>
+  }
+
+  /** Joins an existing session. */
+  @PostMapping(&quot;/{sessionId}/join&quot;)
+  public SessionResponse join(
+      @PathVariable(SESSION_ID) String sessionId, @Valid @RequestBody JoinSessionRequest request) {
+<span class="fc" id="L83">    return SessionResponse.from(registry.join(sessionId, request.toDomain()));</span>
+  }
+
+  /** Leaves a session while retaining it for reconnect. */
+  @PostMapping(&quot;/{sessionId}/leave&quot;)
+  public SessionResponse leave(
+      @PathVariable(SESSION_ID) String sessionId, @Valid @RequestBody ActorIdRequest request) {
+<span class="fc" id="L90">    return SessionResponse.from(registry.leave(sessionId, request.actorId()));</span>
+  }
+
+  /** Applies one joined actor's semantic operation and returns the canonical projection. */
+  @PostMapping(&quot;/{sessionId}/operations&quot;)
+  public WorkflowProjection applyOperation(
+      @PathVariable(SESSION_ID) String sessionId,
+      @Valid @RequestBody SessionOperationRequest request) {
+<span class="fc" id="L98">    OperationActor actor = request.actor().toDomain();</span>
+<span class="fc" id="L99">    WorkflowOperation operation =</span>
+<span class="fc" id="L100">        WorkflowOperationHttpParser.parse(request.operation(), actor.actorId());</span>
+    Workflow workflow =
+<span class="fc bfc" id="L102" title="All 2 branches covered.">        request.expectedRevision() == null</span>
+<span class="fc" id="L103">            ? registry.applyOperation(sessionId, request.mode(), actor, operation)</span>
+<span class="fc" id="L104">            : registry.applyOperation(</span>
+<span class="fc" id="L105">                sessionId, request.mode(), actor, request.expectedRevision(), operation);</span>
+<span class="fc" id="L106">    return WorkflowProjection.fromWorkflow(workflow);</span>
+  }
+
+  /** Returns one bounded newest-first page of durable semantic history. */
+  @PostMapping(&quot;/{sessionId}/history/query&quot;)
+  public HistoryPageResponse history(
+      @PathVariable(SESSION_ID) String sessionId, @Valid @RequestBody HistoryQueryRequest request) {
+<span class="fc" id="L113">    return HistoryPageResponse.from(</span>
+<span class="fc" id="L114">        registry.history(</span>
+            sessionId,
+<span class="fc" id="L116">            request.actor().toDomain(),</span>
+<span class="fc" id="L117">            request.beforeRevision(),</span>
+<span class="fc" id="L118">            request.resolvedLimit()));</span>
+  }
+
+  /** Returns actor-scoped undo, redo and shared-undo capabilities. */
+  @PostMapping(&quot;/{sessionId}/history/capabilities&quot;)
+  public HistoryCapabilitiesResponse capabilities(
+      @PathVariable(SESSION_ID) String sessionId,
+      @Valid @RequestBody HistoryCapabilitiesRequest request) {
+<span class="fc" id="L126">    return HistoryCapabilitiesResponse.from(</span>
+<span class="fc" id="L127">        registry.capabilities(sessionId, request.actor().toDomain()));</span>
+  }
+
+  /** Computes an immutable timestamp-aware undo preview at the current semantic revision. */
+  @PostMapping(&quot;/{sessionId}/undo/preview&quot;)
+  public UndoPreviewResponse previewUndo(
+      @PathVariable(SESSION_ID) String sessionId, @Valid @RequestBody UndoPreviewRequest request) {
+<span class="fc" id="L134">    return UndoPreviewResponse.from(</span>
+<span class="fc" id="L135">        registry.previewUndo(sessionId, request.actor().toDomain(), request.targetOperationId()));</span>
+  }
+
+  /** Applies one idempotent revision-aware semantic undo command. */
+  @PostMapping(&quot;/{sessionId}/undo&quot;)
+  public HistoryCommandResponse undo(
+      @PathVariable(SESSION_ID) String sessionId, @Valid @RequestBody UndoCommandRequest request) {
+<span class="fc" id="L142">    return HistoryCommandResponse.from(registry.undo(sessionId, request.toDomain()));</span>
+  }
+
+  /** Computes an immutable timestamp-aware redo preview at the current semantic revision. */
+  @PostMapping(&quot;/{sessionId}/redo/preview&quot;)
+  public RedoPreviewResponse previewRedo(
+      @PathVariable(SESSION_ID) String sessionId, @Valid @RequestBody RedoPreviewRequest request) {
+<span class="fc" id="L149">    return RedoPreviewResponse.from(</span>
+<span class="fc" id="L150">        registry.previewRedo(</span>
+<span class="fc" id="L151">            sessionId, request.actor().toDomain(), request.targetUndoOperationId()));</span>
+  }
+
+  /** Applies one idempotent revision-aware semantic redo command. */
+  @PostMapping(&quot;/{sessionId}/redo&quot;)
+  public HistoryCommandResponse redo(
+      @PathVariable(SESSION_ID) String sessionId, @Valid @RequestBody RedoCommandRequest request) {
+<span class="fc" id="L158">    return HistoryCommandResponse.from(registry.redo(sessionId, request.toDomain()));</span>
+  }
+
+  /** Updates non-semantic presence and broadcasts it separately from workflow history. */
+  @PutMapping(&quot;/{sessionId}/presence&quot;)
+  public PresenceResponse updatePresence(
+      @PathVariable(SESSION_ID) String sessionId, @Valid @RequestBody PresenceRequest request) {
+<span class="fc" id="L165">    OperationActor actor = request.actor().toDomain();</span>
+<span class="fc" id="L166">    return PresenceResponse.from(registry.updatePresence(sessionId, actor, request.toDomain()));</span>
+  }
+
+  /** Returns immutable session metadata. */
+  @GetMapping(&quot;/{sessionId}&quot;)
+  public SessionResponse inspect(@PathVariable(SESSION_ID) String sessionId) {
+<span class="fc" id="L172">    return SessionResponse.from(registry.inspect(sessionId));</span>
+  }
+
+  /** Returns the current server-authoritative workflow projection. */
+  @GetMapping(&quot;/{sessionId}/projection&quot;)
+  public WorkflowProjection projection(@PathVariable(SESSION_ID) String sessionId) {
+<span class="fc" id="L178">    return WorkflowProjection.fromWorkflow(registry.workflow(sessionId));</span>
+  }
+
+  /** Explicitly closes a session. Only its owner may close it. */
+  @DeleteMapping(&quot;/{sessionId}&quot;)
+  public ResponseEntity&lt;Void&gt; close(
+      @PathVariable(SESSION_ID) String sessionId, @Valid @RequestBody ActorIdRequest request) {
+<span class="fc" id="L185">    registry.close(sessionId, request.actorId());</span>
+<span class="fc" id="L186">    return ResponseEntity.noContent().build();</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>
