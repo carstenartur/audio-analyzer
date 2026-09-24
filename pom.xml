@@ -41,7 +41,7 @@
     <mockito.version>5.23.0</mockito.version>
     <flatlaf.version>3.7.2</flatlaf.version>
     <jackson.version>2.22.2</jackson.version>
-    <jgit.version>7.7.1.202607240634-r</jgit.version>
+    <jgit.version>7.8.0.202609011348-r</jgit.version>
     <hibernate.version>7.4.10.Final</hibernate.version>
     <jgit-storage-hibernate.version>0.11.3</jgit-storage-hibernate.version>
     <spring-boot.version>4.1.1</spring-boot.version>
