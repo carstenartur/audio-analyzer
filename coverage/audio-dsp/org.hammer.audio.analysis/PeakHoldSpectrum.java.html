@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>PeakHoldSpectrum.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer DSP and Analysis</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.analysis</a> &gt; <span class="el_source">PeakHoldSpectrum.java</span></div><h1>PeakHoldSpectrum.java</h1><pre class="source lang-java linenums">package org.hammer.audio.analysis;
+
+import java.util.Arrays;
+import java.util.Objects;
+
+/**
+ * Peak-hold trace over a one-sided FFT magnitude spectrum.
+ *
+ * &lt;p&gt;For each frequency bin the stored value is the maximum magnitude observed across all updates
+ * since the last {@link #reset()}, optionally decayed each update by an exponential factor so old
+ * peaks slowly fade rather than persist forever.
+ *
+ * &lt;p&gt;Instances are &lt;strong&gt;not thread-safe&lt;/strong&gt;; callers must synchronize externally if shared.
+ */
+public final class PeakHoldSpectrum {
+
+  /** Default per-update multiplicative decay factor (no decay). */
+  public static final float DEFAULT_DECAY_FACTOR = 1.0f;
+
+<span class="fc" id="L20">  private static final float[] EMPTY = new float[0];</span>
+
+  private float[] peaks;
+  private float decayFactor;
+  private int updates;
+
+  /** Create a peak-hold trace with no decay (sticky peaks). */
+  public PeakHoldSpectrum() {
+<span class="fc" id="L28">    this(DEFAULT_DECAY_FACTOR);</span>
+<span class="fc" id="L29">  }</span>
+
+  /**
+   * Create a peak-hold trace with the given per-update decay factor.
+   *
+   * @param decayFactor multiplicative factor applied to each held peak before max-merging the new
+   *     spectrum, in {@code [0, 1]}. {@code 1.0} disables decay.
+   */
+<span class="fc" id="L37">  public PeakHoldSpectrum(float decayFactor) {</span>
+<span class="fc" id="L38">    setDecayFactor(decayFactor);</span>
+<span class="fc" id="L39">  }</span>
+
+  /**
+   * @return current per-update decay factor in {@code [0, 1]}
+   */
+  public float decayFactor() {
+<span class="nc" id="L45">    return decayFactor;</span>
+  }
+
+  /**
+   * Update the per-update decay factor.
+   *
+   * @param decayFactor in {@code [0, 1]}, where {@code 1.0} disables decay
+   */
+  public void setDecayFactor(float decayFactor) {
+<span class="pc bpc" id="L54" title="1 of 6 branches missed.">    if (!(decayFactor &gt;= 0f) || !(decayFactor &lt;= 1f) || Float.isNaN(decayFactor)) {</span>
+<span class="fc" id="L55">      throw new IllegalArgumentException(&quot;decayFactor must be in [0,1], was &quot; + decayFactor);</span>
+    }
+<span class="fc" id="L57">    this.decayFactor = decayFactor;</span>
+<span class="fc" id="L58">  }</span>
+
+  /**
+   * @return number of accepted updates since the last {@link #reset()}
+   */
+  public int updates() {
+<span class="fc" id="L64">    return updates;</span>
+  }
+
+  /**
+   * @return number of bins currently tracked, or {@code 0} if empty
+   */
+  public int binCount() {
+<span class="nc bnc" id="L71" title="All 2 branches missed.">    return peaks == null ? 0 : peaks.length;</span>
+  }
+
+  /**
+   * @return defensive copy of the held peak magnitudes, or an empty array if no updates yet
+   */
+  public float[] peaks() {
+<span class="pc bpc" id="L78" title="1 of 2 branches missed.">    return peaks == null ? EMPTY : peaks.clone();</span>
+  }
+
+  /**
+   * Read-only access to the internal peak magnitudes array. Callers must not mutate the returned
+   * array. Intended for hot rendering paths that need to avoid per-frame allocations.
+   *
+   * @return the internal peak magnitudes array (do not mutate), or an empty array if no updates yet
+   */
+  public float[] peaksView() {
+<span class="nc bnc" id="L88" title="All 2 branches missed.">    return peaks == null ? EMPTY : peaks;</span>
+  }
+
+  /**
+   * Update the peak-hold trace from a new magnitude spectrum. If the bin count changes (e.g. FFT
+   * size changed), the existing peaks are reset.
+   *
+   * @param magnitudes new one-sided magnitude spectrum; must not be {@code null}
+   */
+  public void update(float[] magnitudes) {
+<span class="fc" id="L98">    Objects.requireNonNull(magnitudes, &quot;magnitudes&quot;);</span>
+<span class="pc bpc" id="L99" title="1 of 4 branches missed.">    if (peaks == null || peaks.length != magnitudes.length) {</span>
+<span class="fc" id="L100">      peaks = magnitudes.clone();</span>
+<span class="fc" id="L101">      updates = 1;</span>
+<span class="fc" id="L102">      return;</span>
+    }
+<span class="fc bfc" id="L104" title="All 2 branches covered.">    if (decayFactor &lt; 1f) {</span>
+<span class="fc bfc" id="L105" title="All 2 branches covered.">      for (int i = 0; i &lt; peaks.length; i++) {</span>
+<span class="fc" id="L106">        peaks[i] *= decayFactor;</span>
+<span class="pc bpc" id="L107" title="1 of 2 branches missed.">        if (magnitudes[i] &gt; peaks[i]) {</span>
+<span class="nc" id="L108">          peaks[i] = magnitudes[i];</span>
+        }
+      }
+    } else {
+<span class="fc bfc" id="L112" title="All 2 branches covered.">      for (int i = 0; i &lt; peaks.length; i++) {</span>
+<span class="fc bfc" id="L113" title="All 2 branches covered.">        if (magnitudes[i] &gt; peaks[i]) {</span>
+<span class="fc" id="L114">          peaks[i] = magnitudes[i];</span>
+        }
+      }
+    }
+<span class="fc" id="L118">    updates++;</span>
+<span class="fc" id="L119">  }</span>
+
+  /** Reset the peak-hold trace, discarding all stored peaks. */
+  public void reset() {
+<span class="pc bpc" id="L123" title="1 of 2 branches missed.">    if (peaks != null) {</span>
+<span class="fc" id="L124">      Arrays.fill(peaks, 0f);</span>
+    }
+<span class="fc" id="L126">    updates = 0;</span>
+<span class="fc" id="L127">  }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

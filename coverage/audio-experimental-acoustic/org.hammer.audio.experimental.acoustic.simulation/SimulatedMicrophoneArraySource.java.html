@@ -1,0 +1,150 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>SimulatedMicrophoneArraySource.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.simulation</a> &gt; <span class="el_source">SimulatedMicrophoneArraySource.java</span></div><h1>SimulatedMicrophoneArraySource.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.simulation;
+
+import java.util.List;
+import java.util.Optional;
+import java.util.Random;
+import org.hammer.audio.acquisition.Microphone;
+import org.hammer.audio.acquisition.MicrophoneArray;
+import org.hammer.audio.acquisition.MultiChannelAudioSource;
+import org.hammer.audio.acquisition.SampleClock;
+import org.hammer.audio.core.AudioBlock;
+import org.hammer.audio.core.AudioFormatDescriptor;
+import org.hammer.audio.geometry.Vector2;
+
+/** Deterministic synthetic synchronized multichannel source for virtual room experiments. */
+public final class SimulatedMicrophoneArraySource implements MultiChannelAudioSource {
+
+  /** Default speed of sound in air for experiments. */
+  public static final double DEFAULT_SPEED_OF_SOUND_METERS_PER_SECOND = 343.0;
+
+  private final Room2D room;
+  private final MicrophoneArray array;
+  private final List&lt;AcousticEmitter2D&gt; emitters;
+  private final AudioFormatDescriptor audioFormat;
+  private final SampleClock clock;
+  private final Random random;
+  private final long totalFrames;
+  private long nextFrameIndex;
+
+  /** Create a deterministic simulation source. */
+  public SimulatedMicrophoneArraySource(
+      Room2D room,
+      MicrophoneArray array,
+      List&lt;AcousticEmitter2D&gt; emitters,
+      float sampleRate,
+      double durationSeconds,
+<span class="fc" id="L36">      long randomSeed) {</span>
+<span class="fc bfc" id="L37" title="All 2 branches covered.">    if (room == null) {</span>
+<span class="fc" id="L38">      throw new IllegalArgumentException(&quot;room must not be null&quot;);</span>
+    }
+<span class="fc bfc" id="L40" title="All 2 branches covered.">    if (array == null) {</span>
+<span class="fc" id="L41">      throw new IllegalArgumentException(&quot;array must not be null&quot;);</span>
+    }
+<span class="pc bpc" id="L43" title="2 of 4 branches missed.">    if (emitters == null || emitters.isEmpty()) {</span>
+<span class="nc" id="L44">      throw new IllegalArgumentException(&quot;emitters must not be empty&quot;);</span>
+    }
+<span class="pc bpc" id="L46" title="2 of 4 branches missed.">    if (durationSeconds &lt;= 0.0 || !Double.isFinite(durationSeconds)) {</span>
+<span class="nc" id="L47">      throw new IllegalArgumentException(&quot;durationSeconds must be finite and &gt; 0&quot;);</span>
+    }
+<span class="fc" id="L49">    this.room = room;</span>
+<span class="fc" id="L50">    this.array = array;</span>
+<span class="fc" id="L51">    this.emitters = List.copyOf(emitters);</span>
+<span class="fc" id="L52">    this.audioFormat = new AudioFormatDescriptor(sampleRate, array.channels(), 32);</span>
+<span class="fc" id="L53">    this.clock = new SampleClock(sampleRate, 0L);</span>
+<span class="fc" id="L54">    this.random = new Random(randomSeed);</span>
+<span class="fc" id="L55">    this.totalFrames = Math.round(durationSeconds * sampleRate);</span>
+<span class="fc" id="L56">  }</span>
+
+  @Override
+  public AudioFormatDescriptor format() {
+<span class="nc" id="L60">    return audioFormat;</span>
+  }
+
+  @Override
+  public MicrophoneArray microphoneArray() {
+<span class="fc" id="L65">    return array;</span>
+  }
+
+  @Override
+  public Optional&lt;AudioBlock&gt; readBlock(int frames) {
+<span class="pc bpc" id="L70" title="1 of 2 branches missed.">    if (frames &lt;= 0) {</span>
+<span class="nc" id="L71">      throw new IllegalArgumentException(&quot;frames must be &gt; 0&quot;);</span>
+    }
+<span class="pc bpc" id="L73" title="1 of 2 branches missed.">    if (nextFrameIndex &gt;= totalFrames) {</span>
+<span class="nc" id="L74">      return Optional.empty();</span>
+    }
+<span class="fc" id="L76">    int blockFrames = (int) Math.min(frames, totalFrames - nextFrameIndex);</span>
+<span class="fc" id="L77">    float[][] samples = new float[array.channels()][blockFrames];</span>
+<span class="fc bfc" id="L78" title="All 2 branches covered.">    for (int frame = 0; frame &lt; blockFrames; frame++) {</span>
+<span class="fc" id="L79">      long absoluteFrame = nextFrameIndex + frame;</span>
+<span class="fc" id="L80">      double receiverTime = absoluteFrame / audioFormat.sampleRate();</span>
+<span class="fc bfc" id="L81" title="All 2 branches covered.">      for (Microphone mic : array.microphones()) {</span>
+<span class="fc" id="L82">        samples[mic.channel()][frame] = (float) sampleAt(mic.positionMeters(), receiverTime);</span>
+<span class="fc" id="L83">      }</span>
+    }
+<span class="fc" id="L85">    AudioBlock block =</span>
+<span class="fc" id="L86">        AudioBlock.wrap(</span>
+<span class="fc" id="L87">            audioFormat, samples, nextFrameIndex, clock.timestampForFrame(nextFrameIndex));</span>
+<span class="fc" id="L88">    nextFrameIndex += blockFrames;</span>
+<span class="fc" id="L89">    return Optional.of(block);</span>
+  }
+
+  private double sampleAt(Vector2 microphonePosition, double receiverTimeSeconds) {
+<span class="fc" id="L93">    double sample = room.noiseAmplitude() * (random.nextDouble() * 2.0 - 1.0);</span>
+<span class="fc bfc" id="L94" title="All 2 branches covered.">    for (AcousticEmitter2D emitter : emitters) {</span>
+<span class="fc" id="L95">      Vector2 emitterPosition = emitter.positionAt(receiverTimeSeconds);</span>
+<span class="fc" id="L96">      double distance = Math.max(0.01, microphonePosition.distanceTo(emitterPosition));</span>
+<span class="fc" id="L97">      double travelSeconds = distance / DEFAULT_SPEED_OF_SOUND_METERS_PER_SECOND;</span>
+<span class="fc" id="L98">      double observedFrequency =</span>
+<span class="fc" id="L99">          observedFrequencyAt(emitter, microphonePosition, receiverTimeSeconds);</span>
+<span class="fc" id="L100">      sample += emitter.sampleAt(receiverTimeSeconds - travelSeconds, observedFrequency) / distance;</span>
+<span class="fc bfc" id="L101" title="All 2 branches covered.">      if (room.reflectionGain() &gt; 0.0) {</span>
+<span class="fc" id="L102">        Vector2 reflected =</span>
+<span class="fc" id="L103">            new Vector2(room.widthMeters() - emitterPosition.x(), emitterPosition.y());</span>
+<span class="fc" id="L104">        double reflectedDistance = Math.max(0.01, microphonePosition.distanceTo(reflected));</span>
+<span class="fc" id="L105">        double reflectedTravel = reflectedDistance / DEFAULT_SPEED_OF_SOUND_METERS_PER_SECOND;</span>
+<span class="fc" id="L106">        Vector2 reflectedVelocity =</span>
+            new Vector2(
+<span class="fc" id="L108">                -emitter.velocityMetersPerSecond().x(), emitter.velocityMetersPerSecond().y());</span>
+<span class="fc" id="L109">        double reflectedObservedFrequency =</span>
+<span class="fc" id="L110">            observedFrequencyAt(</span>
+<span class="fc" id="L111">                reflected, reflectedVelocity, emitter.frequencyHz(), microphonePosition);</span>
+<span class="fc" id="L112">        sample +=</span>
+<span class="fc" id="L113">            room.reflectionGain()</span>
+<span class="fc" id="L114">                * emitter.sampleAt(</span>
+                    receiverTimeSeconds - reflectedTravel, reflectedObservedFrequency)
+                / reflectedDistance;
+      }
+<span class="fc" id="L118">    }</span>
+<span class="fc" id="L119">    return Math.max(-1.0, Math.min(1.0, sample));</span>
+  }
+
+  /**
+   * Doppler-shifted frequency at a microphone; positive radial velocity means motion toward mic.
+   */
+  public static double observedFrequencyAt(
+      AcousticEmitter2D emitter, Vector2 microphonePosition, double receiverTimeSeconds) {
+<span class="fc" id="L127">    Vector2 emitterPosition = emitter.positionAt(receiverTimeSeconds);</span>
+<span class="fc" id="L128">    return observedFrequencyAt(</span>
+        emitterPosition,
+<span class="fc" id="L130">        emitter.velocityMetersPerSecond(),</span>
+<span class="fc" id="L131">        emitter.frequencyHz(),</span>
+        microphonePosition);
+  }
+
+  private static double observedFrequencyAt(
+      Vector2 sourcePosition,
+      Vector2 sourceVelocity,
+      double sourceFrequencyHz,
+      Vector2 microphonePosition) {
+<span class="fc" id="L140">    Vector2 sourceToMicrophone = microphonePosition.minus(sourcePosition).normalized();</span>
+<span class="fc" id="L141">    double radialTowardMicrophone = sourceVelocity.dot(sourceToMicrophone);</span>
+<span class="pc bpc" id="L142" title="1 of 2 branches missed.">    if (radialTowardMicrophone &gt;= DEFAULT_SPEED_OF_SOUND_METERS_PER_SECOND) {</span>
+<span class="nc" id="L143">      throw new IllegalArgumentException(&quot;radial source speed must be below the speed of sound&quot;);</span>
+    }
+<span class="fc" id="L145">    return sourceFrequencyHz</span>
+        * (DEFAULT_SPEED_OF_SOUND_METERS_PER_SECOND
+            / (DEFAULT_SPEED_OF_SOUND_METERS_PER_SECOND - radialTowardMicrophone));
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

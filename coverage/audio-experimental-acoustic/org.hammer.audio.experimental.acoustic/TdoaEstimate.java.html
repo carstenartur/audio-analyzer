@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>TdoaEstimate.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic</a> &gt; <span class="el_source">TdoaEstimate.java</span></div><h1>TdoaEstimate.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic;
+
+import org.hammer.audio.geometry.LocalizationConstraint2D;
+
+/** Time-difference-of-arrival estimate for one microphone pair. */
+public record TdoaEstimate(
+    String firstMicrophoneId,
+    String secondMicrophoneId,
+    int delaySamples,
+    double delaySeconds,
+    double pathDifferenceMeters,
+    double confidence) {
+
+  /** Create a TDOA estimate. */
+<span class="fc" id="L15">  public TdoaEstimate {</span>
+<span class="pc bpc" id="L16" title="2 of 4 branches missed.">    if (firstMicrophoneId == null || firstMicrophoneId.isBlank()) {</span>
+<span class="nc" id="L17">      throw new IllegalArgumentException(&quot;firstMicrophoneId must not be blank&quot;);</span>
+    }
+<span class="pc bpc" id="L19" title="2 of 4 branches missed.">    if (secondMicrophoneId == null || secondMicrophoneId.isBlank()) {</span>
+<span class="nc" id="L20">      throw new IllegalArgumentException(&quot;secondMicrophoneId must not be blank&quot;);</span>
+    }
+<span class="pc bpc" id="L22" title="2 of 4 branches missed.">    if (!Double.isFinite(delaySeconds) || !Double.isFinite(pathDifferenceMeters)) {</span>
+<span class="nc" id="L23">      throw new IllegalArgumentException(&quot;delay and path difference must be finite&quot;);</span>
+    }
+<span class="pc bpc" id="L25" title="3 of 6 branches missed.">    if (!Double.isFinite(confidence) || confidence &lt; 0.0 || confidence &gt; 1.0) {</span>
+<span class="nc" id="L26">      throw new IllegalArgumentException(&quot;confidence must be finite and in [0,1]&quot;);</span>
+    }
+<span class="fc" id="L28">  }</span>
+
+  /** Convert to a reusable 2D localization constraint. */
+  public LocalizationConstraint2D asConstraint() {
+<span class="fc" id="L32">    return new LocalizationConstraint2D(</span>
+        firstMicrophoneId, secondMicrophoneId, pathDifferenceMeters, confidence);
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

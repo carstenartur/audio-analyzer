@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WorkflowOutboxRetentionService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Core</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.collaboration.retention</a> &gt; <span class="el_source">WorkflowOutboxRetentionService.java</span></div><h1>WorkflowOutboxRetentionService.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.collaboration.retention;
+
+import java.time.Clock;
+import java.time.Instant;
+import java.util.Objects;
+
+/** Creates deterministic retention previews and executes them through one persistence boundary. */
+public final class WorkflowOutboxRetentionService {
+
+  private final WorkflowOutboxRetentionStore store;
+  private final Clock clock;
+  private final WorkflowOutboxRetentionSettings retentionSettings;
+
+  /** Creates a service with injectable time and conservative validated settings. */
+  public WorkflowOutboxRetentionService(
+<span class="fc" id="L16">      WorkflowOutboxRetentionStore store, Clock clock, WorkflowOutboxRetentionSettings settings) {</span>
+<span class="fc" id="L17">    this.store = Objects.requireNonNull(store, &quot;store&quot;);</span>
+<span class="fc" id="L18">    this.clock = Objects.requireNonNull(clock, &quot;clock&quot;);</span>
+<span class="fc" id="L19">    this.retentionSettings = Objects.requireNonNull(settings, &quot;settings&quot;);</span>
+<span class="fc" id="L20">  }</span>
+
+  /** Captures one immutable dry-run plan at the current injected-clock instant. */
+  public WorkflowOutboxRetentionPlan plan() {
+<span class="fc" id="L24">    Instant plannedAt = clock.instant();</span>
+<span class="fc" id="L25">    Instant cutoff = retentionSettings.publishedCutoffAt(plannedAt);</span>
+<span class="fc" id="L26">    WorkflowOutboxRetentionSelection selection =</span>
+<span class="fc" id="L27">        store.selectPublishedBefore(cutoff, retentionSettings.batchSize());</span>
+<span class="fc" id="L28">    return new WorkflowOutboxRetentionPlan(</span>
+        plannedAt,
+        cutoff,
+<span class="fc" id="L31">        retentionSettings.batchSize(),</span>
+<span class="fc" id="L32">        selection.scannedCount(),</span>
+<span class="fc" id="L33">        selection.candidates());</span>
+  }
+
+  /** Revalidates and executes a previously captured immutable plan. */
+  public WorkflowOutboxRetentionDeletionResult delete(WorkflowOutboxRetentionPlan plan) {
+<span class="fc" id="L38">    return store.deletePublished(Objects.requireNonNull(plan, &quot;plan&quot;));</span>
+  }
+
+  /** Returns the immutable settings used for every plan. */
+  public WorkflowOutboxRetentionSettings settings() {
+<span class="nc" id="L43">    return retentionSettings;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

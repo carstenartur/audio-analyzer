@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>VersionedWorkflowStore.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Core</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.store</a> &gt; <span class="el_source">VersionedWorkflowStore.java</span></div><h1>VersionedWorkflowStore.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.store;
+
+import java.util.List;
+import java.util.Objects;
+
+/**
+ * Persistence facade for versioned workflow checkpoints.
+ *
+ * &lt;p&gt;This interface is the only acceptable boundary between Audio Analyzer workflow services and
+ * any concrete storage back end (e.g. JGit/Hibernate). All JGit and Hibernate types must stay
+ * behind implementations of this interface and must never be exposed to callers.
+ *
+ * &lt;p&gt;&lt;b&gt;Allowed callers&lt;/b&gt;: application services. Must not be called directly from editor
+ * adapters, UI components or workflow domain objects.
+ *
+ * &lt;p&gt;&lt;b&gt;Dependency rule&lt;/b&gt;: implementations may depend on JGit and Hibernate. Callers must depend
+ * only on this interface and the value types in this package.
+ */
+public interface VersionedWorkflowStore {
+
+  /**
+   * Commits a workflow snapshot on the given branch and returns the new commit identifier.
+   *
+   * @param branch branch name (non-blank)
+   * @param snapshot canonical DSL snapshot to persist
+   * @param metadata author, message and timestamp for this commit
+   * @return new commit identifier
+   */
+  CommitId commit(String branch, WorkflowSnapshot snapshot, CommitMetadata metadata);
+
+  /**
+   * Conditionally commits a workflow snapshot only while the branch still has the expected HEAD.
+   *
+   * &lt;p&gt;Implementations backed by an atomic ref store should override this method so the comparison
+   * and ref publication share one optimistic-concurrency boundary. The default implementation keeps
+   * test and lightweight stores compatible, but cannot eliminate a race between the history check
+   * and {@link #commit(String, WorkflowSnapshot, CommitMetadata)}.
+   *
+   * @param branch branch name
+   * @param expectedHead commit the caller expects at HEAD, or {@code null} for a new branch
+   * @param snapshot canonical DSL snapshot to persist
+   * @param metadata author, message and timestamp
+   * @return new commit identifier
+   * @throws StaleWorkflowHeadException when the observed HEAD differs
+   */
+  default CommitId commitIfHead(
+      String branch, CommitId expectedHead, WorkflowSnapshot snapshot, CommitMetadata metadata) {
+<span class="fc" id="L48">    List&lt;CommitInfo&gt; current = history(branch, 1);</span>
+<span class="pc bpc" id="L49" title="1 of 2 branches missed.">    CommitId actualHead = current.isEmpty() ? null : current.getFirst().commitId();</span>
+<span class="pc bpc" id="L50" title="1 of 2 branches missed.">    if (!Objects.equals(expectedHead, actualHead)) {</span>
+<span class="nc" id="L51">      throw new StaleWorkflowHeadException(branch, expectedHead, actualHead);</span>
+    }
+<span class="fc" id="L53">    return commit(branch, snapshot, metadata);</span>
+  }
+
+  /**
+   * Loads the workflow snapshot at the given commit.
+   *
+   * @param commitId commit identifier returned by a previous {@link #commit} call
+   * @return snapshot at that commit
+   * @throws java.util.NoSuchElementException if the commit does not exist
+   */
+  WorkflowSnapshot loadAtCommit(CommitId commitId);
+
+  /**
+   * Loads the workflow snapshot at the HEAD of the given branch.
+   *
+   * @param branch branch name
+   * @return snapshot at HEAD
+   * @throws java.util.NoSuchElementException if the branch does not exist
+   */
+  WorkflowSnapshot loadHead(String branch);
+
+  /**
+   * Performs an optimistic-concurrency ref update on the given ref.
+   *
+   * &lt;p&gt;The update succeeds only if the ref currently points to {@code expectedOldCommit}. If
+   * another writer has advanced the ref in the meantime, {@link RefUpdateResult#STALE} is returned
+   * and the caller must retry.
+   *
+   * @param refName ref name to update
+   * @param expectedOldCommit the commit the caller believes to be current HEAD
+   * @param newCommit the commit to set as the new HEAD
+   * @return update result
+   */
+  RefUpdateResult updateRef(String refName, CommitId expectedOldCommit, CommitId newCommit);
+
+  /**
+   * Returns a reverse-chronological list of recent commits on the given ref.
+   *
+   * @param refName ref or branch name
+   * @param limit maximum number of entries to return
+   * @return commit history, most recent first
+   */
+  List&lt;CommitInfo&gt; history(String refName, int limit);
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

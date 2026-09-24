@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>TdoaAlgorithmBenchmarkRunner.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.benchmark.tdoa</a> &gt; <span class="el_source">TdoaAlgorithmBenchmarkRunner.java</span></div><h1>TdoaAlgorithmBenchmarkRunner.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.benchmark.tdoa;
+
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Objects;
+import java.util.Set;
+import org.hammer.audio.experimental.acoustic.DiagnosticTdoaEstimate;
+import org.hammer.audio.experimental.acoustic.DiagnosticTdoaEstimator;
+import org.hammer.audio.experimental.acoustic.TdoaEstimate;
+
+/** Runs named TDOA estimators over identical deterministic known-delay cases. */
+public final class TdoaAlgorithmBenchmarkRunner {
+
+  private final List&lt;NamedTdoaEstimator&gt; estimators;
+
+  /** Creates a runner with unique non-empty estimator registrations. */
+<span class="fc" id="L18">  public TdoaAlgorithmBenchmarkRunner(List&lt;NamedTdoaEstimator&gt; estimators) {</span>
+<span class="fc" id="L19">    this.estimators = List.copyOf(Objects.requireNonNull(estimators, &quot;estimators&quot;));</span>
+<span class="pc bpc" id="L20" title="1 of 2 branches missed.">    if (this.estimators.isEmpty()) {</span>
+<span class="nc" id="L21">      throw new IllegalArgumentException(&quot;estimators must not be empty&quot;);</span>
+    }
+<span class="fc" id="L23">    Set&lt;String&gt; names = new HashSet&lt;&gt;();</span>
+<span class="fc bfc" id="L24" title="All 2 branches covered.">    for (NamedTdoaEstimator estimator : this.estimators) {</span>
+<span class="pc bpc" id="L25" title="1 of 2 branches missed.">      if (!names.add(estimator.name())) {</span>
+<span class="nc" id="L26">        throw new IllegalArgumentException(&quot;duplicate estimator name: &quot; + estimator.name());</span>
+      }
+<span class="fc" id="L28">    }</span>
+<span class="fc" id="L29">  }</span>
+
+  /** Evaluates every estimator over the same ordered benchmark cases. */
+  public TdoaAlgorithmBenchmarkReport run(List&lt;TdoaBenchmarkCase&gt; cases) {
+<span class="fc" id="L33">    List&lt;TdoaBenchmarkCase&gt; requiredCases = List.copyOf(Objects.requireNonNull(cases, &quot;cases&quot;));</span>
+<span class="pc bpc" id="L34" title="1 of 2 branches missed.">    if (requiredCases.isEmpty()) {</span>
+<span class="nc" id="L35">      throw new IllegalArgumentException(&quot;cases must not be empty&quot;);</span>
+    }
+<span class="fc" id="L37">    List&lt;TdoaAlgorithmBenchmarkResult&gt; results = new ArrayList&lt;&gt;(estimators.size());</span>
+<span class="fc bfc" id="L38" title="All 2 branches covered.">    for (NamedTdoaEstimator named : estimators) {</span>
+<span class="fc" id="L39">      results.add(runEstimator(named, requiredCases));</span>
+<span class="fc" id="L40">    }</span>
+<span class="fc" id="L41">    return new TdoaAlgorithmBenchmarkReport(results);</span>
+  }
+
+  private static TdoaAlgorithmBenchmarkResult runEstimator(
+      NamedTdoaEstimator named, List&lt;TdoaBenchmarkCase&gt; cases) {
+<span class="fc" id="L46">    double totalAbsoluteError = 0.0;</span>
+<span class="fc" id="L47">    double maximumAbsoluteError = 0.0;</span>
+<span class="fc" id="L48">    double totalConfidence = 0.0;</span>
+<span class="fc" id="L49">    int ambiguousCount = 0;</span>
+<span class="fc bfc" id="L50" title="All 2 branches covered.">    for (TdoaBenchmarkCase benchmarkCase : cases) {</span>
+      TdoaEstimate estimate;
+<span class="fc bfc" id="L52" title="All 2 branches covered.">      if (named.estimator() instanceof DiagnosticTdoaEstimator diagnostic) {</span>
+<span class="fc" id="L53">        DiagnosticTdoaEstimate detailed =</span>
+<span class="fc" id="L54">            diagnostic.estimateDetailed(</span>
+<span class="fc" id="L55">                benchmarkCase.block(),</span>
+<span class="fc" id="L56">                benchmarkCase.array(),</span>
+<span class="fc" id="L57">                benchmarkCase.firstChannel(),</span>
+<span class="fc" id="L58">                benchmarkCase.secondChannel());</span>
+<span class="fc" id="L59">        estimate = detailed.estimate();</span>
+<span class="pc bpc" id="L60" title="1 of 2 branches missed.">        if (detailed.diagnostics().ambiguous()) {</span>
+<span class="nc" id="L61">          ambiguousCount++;</span>
+        }
+<span class="fc" id="L63">      } else {</span>
+<span class="fc" id="L64">        estimate =</span>
+            named
+<span class="fc" id="L66">                .estimator()</span>
+<span class="fc" id="L67">                .estimate(</span>
+<span class="fc" id="L68">                    benchmarkCase.block(),</span>
+<span class="fc" id="L69">                    benchmarkCase.array(),</span>
+<span class="fc" id="L70">                    benchmarkCase.firstChannel(),</span>
+<span class="fc" id="L71">                    benchmarkCase.secondChannel());</span>
+      }
+<span class="fc" id="L73">      double estimatedDelaySamples =</span>
+<span class="fc" id="L74">          estimate.delaySeconds() * benchmarkCase.block().format().sampleRate();</span>
+<span class="fc" id="L75">      double absoluteError = Math.abs(estimatedDelaySamples - benchmarkCase.expectedDelaySamples());</span>
+<span class="fc" id="L76">      totalAbsoluteError += absoluteError;</span>
+<span class="fc" id="L77">      maximumAbsoluteError = Math.max(maximumAbsoluteError, absoluteError);</span>
+<span class="fc" id="L78">      totalConfidence += estimate.confidence();</span>
+<span class="fc" id="L79">    }</span>
+<span class="fc" id="L80">    return new TdoaAlgorithmBenchmarkResult(</span>
+<span class="fc" id="L81">        named.name(),</span>
+<span class="fc" id="L82">        cases.size(),</span>
+<span class="fc" id="L83">        totalAbsoluteError / cases.size(),</span>
+        maximumAbsoluteError,
+<span class="fc" id="L85">        totalConfidence / cases.size(),</span>
+        ambiguousCount);
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

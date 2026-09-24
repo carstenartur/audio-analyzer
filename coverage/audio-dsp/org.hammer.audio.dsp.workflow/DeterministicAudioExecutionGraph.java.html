@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>DeterministicAudioExecutionGraph.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer DSP and Analysis</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.dsp.workflow</a> &gt; <span class="el_source">DeterministicAudioExecutionGraph.java</span></div><h1>DeterministicAudioExecutionGraph.java</h1><pre class="source lang-java linenums">package org.hammer.audio.dsp.workflow;
+
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import org.hammer.audio.core.AudioBlock;
+import org.hammer.audio.workflow.Edge;
+import org.hammer.audio.workflow.Node;
+import org.hammer.audio.workflow.catalog.ExperimentNodeProtocol;
+import org.hammer.audio.workflow.execution.WorkflowRunModels.Input;
+
+/** Compiled immutable node and edge lookup for one validated deterministic workflow input. */
+final class DeterministicAudioExecutionGraph {
+
+  private final Map&lt;String, Node&gt; nodesById;
+  private final Map&lt;String, Edge&gt; incomingByTargetNodeId;
+  private final String terminalIdentity;
+
+  private DeterministicAudioExecutionGraph(
+      Map&lt;String, Node&gt; nodesById,
+      Map&lt;String, Edge&gt; incomingByTargetNodeId,
+<span class="fc" id="L23">      String terminalNodeId) {</span>
+<span class="fc" id="L24">    this.nodesById = Map.copyOf(nodesById);</span>
+<span class="fc" id="L25">    this.incomingByTargetNodeId = Map.copyOf(incomingByTargetNodeId);</span>
+<span class="fc" id="L26">    this.terminalIdentity = Objects.requireNonNull(terminalNodeId, &quot;terminalNodeId&quot;);</span>
+<span class="fc" id="L27">  }</span>
+
+  static DeterministicAudioExecutionGraph from(Input input) {
+<span class="fc" id="L30">    Objects.requireNonNull(input, &quot;input&quot;);</span>
+<span class="fc" id="L31">    Map&lt;String, Node&gt; nodes = new ConcurrentHashMap&lt;&gt;();</span>
+<span class="fc bfc" id="L32" title="All 2 branches covered.">    for (Node node : input.snapshot().nodes()) {</span>
+<span class="fc" id="L33">      nodes.put(node.id(), node);</span>
+<span class="fc" id="L34">    }</span>
+<span class="fc" id="L35">    Map&lt;String, Edge&gt; incoming = new ConcurrentHashMap&lt;&gt;();</span>
+<span class="fc" id="L36">    Set&lt;String&gt; sourceNodeIds = ConcurrentHashMap.newKeySet();</span>
+<span class="fc bfc" id="L37" title="All 2 branches covered.">    for (Edge edge : input.snapshot().edges()) {</span>
+<span class="fc" id="L38">      incoming.put(edge.targetNodeId(), edge);</span>
+<span class="fc" id="L39">      sourceNodeIds.add(edge.sourceNodeId());</span>
+<span class="fc" id="L40">    }</span>
+<span class="fc" id="L41">    String terminal =</span>
+<span class="fc" id="L42">        input.snapshot().nodes().stream()</span>
+<span class="fc" id="L43">            .map(Node::id)</span>
+<span class="fc bfc" id="L44" title="All 2 branches covered.">            .filter(nodeId -&gt; !sourceNodeIds.contains(nodeId))</span>
+<span class="fc" id="L45">            .findFirst()</span>
+<span class="fc" id="L46">            .orElseThrow(</span>
+<span class="nc" id="L47">                () -&gt; new IllegalStateException(&quot;Validated workflow has no terminal node&quot;));</span>
+<span class="fc" id="L48">    return new DeterministicAudioExecutionGraph(nodes, incoming, terminal);</span>
+  }
+
+  Node node(String nodeId) {
+<span class="fc" id="L52">    Node node = nodesById.get(nodeId);</span>
+<span class="pc bpc" id="L53" title="1 of 2 branches missed.">    if (node == null) {</span>
+<span class="nc" id="L54">      throw new IllegalArgumentException(&quot;Unknown deterministic execution node: &quot; + nodeId);</span>
+    }
+<span class="fc" id="L56">    return node;</span>
+  }
+
+  AudioBlock upstreamInput(String nodeId, Map&lt;String, AudioBlock&gt; outputs) {
+<span class="fc" id="L60">    Edge incoming = incomingByTargetNodeId.get(nodeId);</span>
+<span class="fc bfc" id="L61" title="All 2 branches covered.">    if (incoming == null) {</span>
+<span class="fc" id="L62">      return null;</span>
+    }
+<span class="fc" id="L64">    AudioBlock source = outputs.get(incoming.sourceNodeId());</span>
+<span class="pc bpc" id="L65" title="1 of 2 branches missed.">    if (source == null) {</span>
+<span class="nc" id="L66">      throw new IllegalStateException(</span>
+<span class="nc" id="L67">          &quot;Source node '&quot; + incoming.sourceNodeId() + &quot;' has no computed audio block&quot;);</span>
+    }
+<span class="fc" id="L69">    return source;</span>
+  }
+
+  String terminalNodeId() {
+<span class="fc" id="L73">    return terminalIdentity;</span>
+  }
+
+  String terminalOutputPortId() {
+<span class="fc" id="L77">    return ExperimentNodeProtocol.AUDIO_OUTPUT_PORT;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

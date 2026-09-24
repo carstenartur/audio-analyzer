@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ClassifierBenchmarkResult.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.benchmark.classifier</a> &gt; <span class="el_source">ClassifierBenchmarkResult.java</span></div><h1>ClassifierBenchmarkResult.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.benchmark.classifier;
+
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+
+/**
+ * Result of running a {@link ClassifierBenchmark} on a labelled dataset.
+ *
+ * &lt;p&gt;Provides the full confusion matrix plus per-label precision, recall and F1, and macro-averaged
+ * F1 across all labels.
+ *
+ * @param confusionMatrix the confusion matrix; must not be {@code null}
+ * @param precisionPerLabel per-label precision ({@code null} entries indicate no predictions for
+ *     that label)
+ * @param recallPerLabel per-label recall ({@code null} entries indicate no samples for that label)
+ * @param f1PerLabel per-label F1 ({@code null} entries indicate unavailable precision or recall)
+ * @param macroF1 macro-average F1 across labels for which F1 is defined, or {@code 0} when no F1 is
+ *     defined
+ */
+@SuppressWarnings(&quot;PMD.UseConcurrentHashMap&quot;)
+public record ClassifierBenchmarkResult(
+    ConfusionMatrix confusionMatrix,
+    Map&lt;String, Double&gt; precisionPerLabel,
+    Map&lt;String, Double&gt; recallPerLabel,
+    Map&lt;String, Double&gt; f1PerLabel,
+    double macroF1) {
+
+  /** Validate and defensively copy fields. */
+<span class="fc" id="L32">  public ClassifierBenchmarkResult {</span>
+<span class="fc" id="L33">    Objects.requireNonNull(confusionMatrix, &quot;confusionMatrix&quot;);</span>
+<span class="fc" id="L34">    Objects.requireNonNull(precisionPerLabel, &quot;precisionPerLabel&quot;);</span>
+<span class="fc" id="L35">    Objects.requireNonNull(recallPerLabel, &quot;recallPerLabel&quot;);</span>
+<span class="fc" id="L36">    Objects.requireNonNull(f1PerLabel, &quot;f1PerLabel&quot;);</span>
+<span class="pc bpc" id="L37" title="3 of 6 branches missed.">    if (!Double.isFinite(macroF1) || macroF1 &lt; 0.0 || macroF1 &gt; 1.0) {</span>
+<span class="nc" id="L38">      throw new IllegalArgumentException(&quot;macroF1 must be finite and in [0,1]&quot;);</span>
+    }
+<span class="fc" id="L40">    precisionPerLabel = Collections.unmodifiableMap(new LinkedHashMap&lt;&gt;(precisionPerLabel));</span>
+<span class="fc" id="L41">    recallPerLabel = Collections.unmodifiableMap(new LinkedHashMap&lt;&gt;(recallPerLabel));</span>
+<span class="fc" id="L42">    f1PerLabel = Collections.unmodifiableMap(new LinkedHashMap&lt;&gt;(f1PerLabel));</span>
+<span class="fc" id="L43">  }</span>
+
+  /**
+   * Build a result from a confusion matrix by computing all metrics.
+   *
+   * @param matrix populated confusion matrix; must not be {@code null}
+   * @return result record; never {@code null}
+   */
+  public static ClassifierBenchmarkResult of(ConfusionMatrix matrix) {
+<span class="fc" id="L52">    Objects.requireNonNull(matrix, &quot;matrix&quot;);</span>
+<span class="fc" id="L53">    Set&lt;String&gt; labels = matrix.labels();</span>
+<span class="fc" id="L54">    Map&lt;String, Double&gt; precision = new LinkedHashMap&lt;&gt;();</span>
+<span class="fc" id="L55">    Map&lt;String, Double&gt; recall = new LinkedHashMap&lt;&gt;();</span>
+<span class="fc" id="L56">    Map&lt;String, Double&gt; f1 = new LinkedHashMap&lt;&gt;();</span>
+<span class="fc" id="L57">    double f1Sum = 0.0;</span>
+<span class="fc" id="L58">    int f1Count = 0;</span>
+<span class="fc bfc" id="L59" title="All 2 branches covered.">    for (String label : labels) {</span>
+<span class="fc" id="L60">      Double p = matrix.precision(label);</span>
+<span class="fc" id="L61">      Double r = matrix.recall(label);</span>
+<span class="fc" id="L62">      Double f = matrix.f1(label);</span>
+<span class="fc" id="L63">      precision.put(label, p);</span>
+<span class="fc" id="L64">      recall.put(label, r);</span>
+<span class="fc" id="L65">      f1.put(label, f);</span>
+<span class="fc bfc" id="L66" title="All 2 branches covered.">      if (f != null) {</span>
+<span class="fc" id="L67">        f1Sum += f;</span>
+<span class="fc" id="L68">        f1Count++;</span>
+      }
+<span class="fc" id="L70">    }</span>
+<span class="fc bfc" id="L71" title="All 2 branches covered.">    double macroF1 = f1Count == 0 ? 0.0 : f1Sum / f1Count;</span>
+<span class="fc" id="L72">    return new ClassifierBenchmarkResult(matrix, precision, recall, f1, macroF1);</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

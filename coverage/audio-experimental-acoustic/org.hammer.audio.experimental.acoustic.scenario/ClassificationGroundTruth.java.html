@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ClassificationGroundTruth.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.scenario</a> &gt; <span class="el_source">ClassificationGroundTruth.java</span></div><h1>ClassificationGroundTruth.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.scenario;
+
+import java.util.Map;
+import java.util.Objects;
+
+/**
+ * Classification ground truth for a single acoustic source in a scenario.
+ *
+ * &lt;p&gt;All string fields ({@link #species()}, {@link #sex()}, {@link #age()}, {@link
+ * #feedingStatus()}) may be {@code null} to represent unknown classification. The {@link #labels()}
+ * map allows arbitrary key-value annotations and is never {@code null} (use an empty map when no
+ * custom labels are available).
+ *
+ * &lt;p&gt;Use {@link #ofSpecies(String)} to create a minimal instance, or {@link #unknown()} when no
+ * classification is available.
+ *
+ * @param species optional species label
+ * @param sex optional sex label
+ * @param age optional age label
+ * @param feedingStatus optional feeding-status label
+ * @param labels arbitrary additional classification labels (never {@code null})
+ */
+public record ClassificationGroundTruth(
+    String species, String sex, String age, String feedingStatus, Map&lt;String, String&gt; labels) {
+
+  /* Validate and defensively copy the custom label map. */
+<span class="fc" id="L27">  public ClassificationGroundTruth {</span>
+<span class="fc" id="L28">    Objects.requireNonNull(labels, &quot;labels&quot;);</span>
+<span class="fc" id="L29">    labels = Map.copyOf(labels);</span>
+<span class="fc" id="L30">  }</span>
+
+  /**
+   * Create a classification truth that only specifies the species.
+   *
+   * @param species species identifier; must not be {@code null}
+   */
+  public static ClassificationGroundTruth ofSpecies(String species) {
+<span class="fc" id="L38">    Objects.requireNonNull(species, &quot;species&quot;);</span>
+<span class="fc" id="L39">    return new ClassificationGroundTruth(species, null, null, null, Map.of());</span>
+  }
+
+  /**
+   * Create a classification truth for synthetic fixtures while keeping biological species labels
+   * separate.
+   *
+   * @param customLabel synthetic fixture label; must not be {@code null}
+   */
+  public static ClassificationGroundTruth synthetic(String customLabel) {
+<span class="fc" id="L49">    Objects.requireNonNull(customLabel, &quot;customLabel&quot;);</span>
+<span class="fc" id="L50">    return new ClassificationGroundTruth(</span>
+<span class="fc" id="L51">        &quot;unknown&quot;, null, null, null, Map.of(&quot;customLabel&quot;, customLabel));</span>
+  }
+
+  /** Create a classification truth with no known classification fields. */
+  public static ClassificationGroundTruth unknown() {
+<span class="fc" id="L56">    return new ClassificationGroundTruth(null, null, null, null, Map.of());</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

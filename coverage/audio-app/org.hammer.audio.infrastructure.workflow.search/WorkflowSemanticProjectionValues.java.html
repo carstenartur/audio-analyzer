@@ -1,0 +1,166 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WorkflowSemanticProjectionValues.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.infrastructure.workflow.search</a> &gt; <span class="el_source">WorkflowSemanticProjectionValues.java</span></div><h1>WorkflowSemanticProjectionValues.java</h1><pre class="source lang-java linenums">package org.hammer.audio.infrastructure.workflow.search;
+
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Base64;
+import java.util.Collection;
+import java.util.Comparator;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
+import org.hammer.audio.workflow.Node;
+import org.hammer.audio.workflow.Workflow;
+import org.hammer.audio.workflow.dsl.WorkflowDslParser;
+import org.hammer.audio.workflow.history.WorkflowSemanticProperty;
+import org.hammer.audio.workflow.store.WorkflowSnapshot;
+
+/** Deterministically extracted workflow-domain values used by the disposable semantic index. */
+record WorkflowSemanticProjectionValues(
+    String workflowId,
+    String workflowName,
+    List&lt;String&gt; nodeIds,
+    List&lt;String&gt; nodeTypes,
+    List&lt;String&gt; nodeLabels,
+    List&lt;String&gt; propertyKeys,
+    List&lt;String&gt; propertyValues,
+    List&lt;String&gt; propertyPairs) {
+
+  private static final String ENCODING_PREFIX = &quot;v1_&quot;;
+<span class="fc" id="L32">  private static final Base64.Encoder ENCODER = Base64.getUrlEncoder().withoutPadding();</span>
+<span class="fc" id="L33">  private static final Base64.Decoder DECODER = Base64.getUrlDecoder();</span>
+
+<span class="fc" id="L35">  WorkflowSemanticProjectionValues {</span>
+<span class="fc" id="L36">    workflowId = requireNotBlank(workflowId, &quot;workflowId&quot;);</span>
+<span class="fc" id="L37">    workflowName = requireNotBlank(workflowName, &quot;workflowName&quot;);</span>
+<span class="fc" id="L38">    nodeIds = normalizedValues(nodeIds);</span>
+<span class="fc" id="L39">    nodeTypes = normalizedValues(nodeTypes);</span>
+<span class="fc" id="L40">    nodeLabels = normalizedValues(nodeLabels);</span>
+<span class="fc" id="L41">    propertyKeys = normalizedValues(propertyKeys);</span>
+<span class="fc" id="L42">    propertyValues = normalizedValues(propertyValues);</span>
+<span class="fc" id="L43">    propertyPairs = normalizedValues(propertyPairs);</span>
+<span class="fc" id="L44">  }</span>
+
+  static WorkflowSemanticProjectionValues from(
+      WorkflowSnapshot snapshot, WorkflowDslParser parser) {
+<span class="fc" id="L48">    Objects.requireNonNull(snapshot, &quot;snapshot&quot;);</span>
+<span class="fc" id="L49">    Workflow workflow = Objects.requireNonNull(parser, &quot;parser&quot;).parse(snapshot.dslText());</span>
+<span class="pc bpc" id="L50" title="1 of 2 branches missed.">    if (!snapshot.workflowId().equals(workflow.id())) {</span>
+<span class="nc" id="L51">      throw new IllegalArgumentException(</span>
+          &quot;workflow.id and workflow DSL id differ: &quot;
+<span class="nc" id="L53">              + snapshot.workflowId()</span>
+              + &quot; != &quot;
+<span class="nc" id="L55">              + workflow.id());</span>
+    }
+
+<span class="fc" id="L58">    List&lt;Node&gt; nodes = workflow.nodes().stream().sorted(Comparator.comparing(Node::id)).toList();</span>
+<span class="fc" id="L59">    List&lt;String&gt; propertyKeys = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L60">    List&lt;String&gt; propertyValues = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L61">    List&lt;String&gt; propertyPairs = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L62">    addMetadata(workflow.metadata().entries(), propertyKeys, propertyValues, propertyPairs);</span>
+<span class="fc bfc" id="L63" title="All 2 branches covered.">    for (Node node : nodes) {</span>
+<span class="fc" id="L64">      addMetadata(node.metadata().entries(), propertyKeys, propertyValues, propertyPairs);</span>
+<span class="fc" id="L65">    }</span>
+
+<span class="fc" id="L67">    return new WorkflowSemanticProjectionValues(</span>
+<span class="fc" id="L68">        workflow.id(),</span>
+<span class="fc" id="L69">        workflow.name(),</span>
+<span class="fc" id="L70">        nodes.stream().map(Node::id).toList(),</span>
+<span class="fc" id="L71">        nodes.stream().map(Node::type).toList(),</span>
+<span class="fc" id="L72">        nodes.stream().map(Node::label).toList(),</span>
+        propertyKeys,
+        propertyValues,
+        propertyPairs);
+  }
+
+  static String encodeValues(Collection&lt;String&gt; values) {
+<span class="fc" id="L79">    return normalizedValues(values).stream()</span>
+<span class="fc" id="L80">        .map(WorkflowSemanticProjectionValues::encodeValue)</span>
+<span class="fc" id="L81">        .collect(Collectors.joining(&quot;\n&quot;));</span>
+  }
+
+  static List&lt;String&gt; decodeValues(String encodedValues) {
+<span class="pc bpc" id="L85" title="1 of 4 branches missed.">    if (encodedValues == null || encodedValues.isBlank()) {</span>
+<span class="fc" id="L86">      return List.of();</span>
+    }
+<span class="fc" id="L88">    return encodedValues</span>
+<span class="fc" id="L89">        .lines()</span>
+<span class="pc bpc" id="L90" title="1 of 2 branches missed.">        .filter(value -&gt; !value.isBlank())</span>
+<span class="fc" id="L91">        .map(WorkflowSemanticProjectionValues::decodeValue)</span>
+<span class="fc" id="L92">        .toList();</span>
+  }
+
+  static String encodePair(String key, String value) {
+<span class="fc" id="L96">    return encodeValue(requireNotBlank(key, &quot;propertyKey&quot;))</span>
+        + &quot;.&quot;
+<span class="fc" id="L98">        + encodeValue(Objects.requireNonNull(value, &quot;propertyValue&quot;));</span>
+  }
+
+  static List&lt;WorkflowSemanticProperty&gt; decodePairs(Collection&lt;String&gt; encodedPairs) {
+<span class="fc" id="L102">    Objects.requireNonNull(encodedPairs, &quot;encodedPairs&quot;);</span>
+<span class="fc" id="L103">    return encodedPairs.stream()</span>
+<span class="fc" id="L104">        .map(WorkflowSemanticProjectionValues::decodePair)</span>
+<span class="fc" id="L105">        .sorted(</span>
+<span class="fc" id="L106">            Comparator.comparing(WorkflowSemanticProperty::key)</span>
+<span class="fc" id="L107">                .thenComparing(WorkflowSemanticProperty::value))</span>
+<span class="fc" id="L108">        .toList();</span>
+  }
+
+  private static WorkflowSemanticProperty decodePair(String encodedPair) {
+<span class="fc" id="L112">    int separator = Objects.requireNonNull(encodedPair, &quot;encodedPair&quot;).indexOf('.');</span>
+<span class="pc bpc" id="L113" title="2 of 4 branches missed.">    if (separator &lt;= 0 || separator == encodedPair.length() - 1) {</span>
+<span class="nc" id="L114">      throw new IllegalArgumentException(&quot;Invalid semantic property-pair encoding&quot;);</span>
+    }
+<span class="fc" id="L116">    return new WorkflowSemanticProperty(</span>
+<span class="fc" id="L117">        decodeValue(encodedPair.substring(0, separator)),</span>
+<span class="fc" id="L118">        decodeValue(encodedPair.substring(separator + 1)));</span>
+  }
+
+  private static void addMetadata(
+      Map&lt;String, String&gt; entries, List&lt;String&gt; keys, List&lt;String&gt; values, List&lt;String&gt; pairs) {
+<span class="fc" id="L123">    entries.entrySet().stream()</span>
+<span class="fc" id="L124">        .sorted(Map.Entry.comparingByKey())</span>
+<span class="fc" id="L125">        .forEach(</span>
+            entry -&gt; {
+<span class="fc" id="L127">              String key = requireNotBlank(entry.getKey(), &quot;propertyKey&quot;);</span>
+<span class="fc" id="L128">              String value = Objects.requireNonNull(entry.getValue(), &quot;propertyValue&quot;);</span>
+<span class="fc" id="L129">              keys.add(key);</span>
+<span class="fc" id="L130">              values.add(value);</span>
+<span class="fc" id="L131">              pairs.add(encodePair(key, value));</span>
+<span class="fc" id="L132">            });</span>
+<span class="fc" id="L133">  }</span>
+
+  private static List&lt;String&gt; normalizedValues(Collection&lt;String&gt; values) {
+<span class="fc" id="L136">    Objects.requireNonNull(values, &quot;values&quot;);</span>
+<span class="fc" id="L137">    Set&lt;String&gt; normalized = new LinkedHashSet&lt;&gt;();</span>
+<span class="fc" id="L138">    values.stream()</span>
+<span class="fc" id="L139">        .map(value -&gt; Objects.requireNonNull(value, &quot;value&quot;))</span>
+<span class="fc" id="L140">        .sorted()</span>
+<span class="fc" id="L141">        .forEach(normalized::add);</span>
+<span class="fc" id="L142">    return List.copyOf(normalized);</span>
+  }
+
+  private static String encodeValue(String value) {
+<span class="fc" id="L146">    return ENCODING_PREFIX + ENCODER.encodeToString(value.getBytes(StandardCharsets.UTF_8));</span>
+  }
+
+  private static String decodeValue(String encodedValue) {
+<span class="pc bpc" id="L150" title="1 of 2 branches missed.">    if (!encodedValue.startsWith(ENCODING_PREFIX)) {</span>
+<span class="nc" id="L151">      throw new IllegalArgumentException(&quot;Unsupported semantic projection value encoding&quot;);</span>
+    }
+<span class="fc" id="L153">    return new String(</span>
+<span class="fc" id="L154">        DECODER.decode(encodedValue.substring(ENCODING_PREFIX.length())), StandardCharsets.UTF_8);</span>
+  }
+
+  private static String requireNotBlank(String value, String name) {
+<span class="fc" id="L158">    Objects.requireNonNull(value, name);</span>
+<span class="fc" id="L159">    String normalized = value.trim();</span>
+<span class="pc bpc" id="L160" title="1 of 2 branches missed.">    if (normalized.isEmpty()) {</span>
+<span class="nc" id="L161">      throw new IllegalArgumentException(name + &quot; must not be blank&quot;);</span>
+    }
+<span class="fc" id="L163">    return normalized;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

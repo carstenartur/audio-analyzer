@@ -1,0 +1,241 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WorkflowHistoryCommandHttpAdapter.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.editor.http</a> &gt; <span class="el_source">WorkflowHistoryCommandHttpAdapter.java</span></div><h1>WorkflowHistoryCommandHttpAdapter.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.editor.http;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import java.time.Instant;
+import java.util.List;
+import java.util.Objects;
+import org.hammer.audio.workflow.editor.WorkflowProjection;
+import org.hammer.audio.workflow.history.CreateWorkflowBranchCommand;
+import org.hammer.audio.workflow.history.RestoreWorkflowVersionCommand;
+import org.hammer.audio.workflow.history.WorkflowBranchCreationResult;
+import org.hammer.audio.workflow.history.WorkflowChange;
+import org.hammer.audio.workflow.history.WorkflowHistoryCommandService;
+import org.hammer.audio.workflow.history.WorkflowHistoryComparison;
+import org.hammer.audio.workflow.history.WorkflowRestoreResult;
+import org.hammer.audio.workflow.store.CommitId;
+import org.hammer.audio.workflow.store.CommitMetadata;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+/** HTTP boundary for explicit branch-scoped workflow comparison, branching and restore. */
+@RestController
+@RequestMapping(&quot;/workflow/history&quot;)
+@ConditionalOnProperty(name = &quot;workbench.persistence.mode&quot;, havingValue = &quot;hibernate&quot;)
+public final class WorkflowHistoryCommandHttpAdapter {
+
+  private final WorkflowHistoryCommandService commandService;
+
+  /**
+   * Creates the history-command controller.
+   *
+   * @param commandService compare, branch and restore application service
+   */
+<span class="fc" id="L38">  public WorkflowHistoryCommandHttpAdapter(WorkflowHistoryCommandService commandService) {</span>
+<span class="fc" id="L39">    this.commandService = Objects.requireNonNull(commandService, &quot;commandService&quot;);</span>
+<span class="fc" id="L40">  }</span>
+
+  /** Creates a new branch from one exact source-branch-reachable commit. */
+  @PostMapping(&quot;/branches&quot;)
+  public BranchResponse createBranch(@Valid @RequestBody BranchRequest request) {
+<span class="nc" id="L45">    return BranchResponse.from(</span>
+<span class="nc" id="L46">        commandService.createBranch(</span>
+            new CreateWorkflowBranchCommand(
+<span class="nc" id="L48">                request.sourceBranch(),</span>
+<span class="nc" id="L49">                request.newBranch(),</span>
+<span class="nc" id="L50">                new CommitId(request.fromCommitId()))));</span>
+  }
+
+  /** Compares two exact commits reachable from one branch. */
+  @PostMapping(&quot;/compare&quot;)
+  public ComparisonResponse compare(@Valid @RequestBody CompareRequest request) {
+<span class="fc" id="L56">    return ComparisonResponse.from(</span>
+<span class="fc" id="L57">        commandService.compare(</span>
+<span class="fc" id="L58">            request.branch(),</span>
+<span class="fc" id="L59">            new CommitId(request.beforeCommitId()),</span>
+<span class="fc" id="L60">            new CommitId(request.afterCommitId())));</span>
+  }
+
+  /** Restores a historical snapshot as a new audit commit on the expected current HEAD. */
+  @PostMapping(&quot;/restore&quot;)
+  public RestoreResponse restore(@Valid @RequestBody RestoreRequest request) {
+<span class="fc" id="L66">    WorkflowRestoreResult result =</span>
+<span class="fc" id="L67">        commandService.restore(</span>
+            new RestoreWorkflowVersionCommand(
+<span class="fc" id="L69">                request.branch(),</span>
+<span class="fc" id="L70">                new CommitId(request.targetCommitId()),</span>
+<span class="fc" id="L71">                new CommitId(request.expectedHeadCommitId()),</span>
+<span class="fc" id="L72">                new CommitMetadata(request.author(), request.message(), request.timestamp())));</span>
+<span class="fc" id="L73">    return RestoreResponse.from(result);</span>
+  }
+
+  /**
+   * Exact new-branch creation request.
+   *
+   * @param sourceBranch source branch proving commit reachability
+   * @param newBranch branch name that must not already exist
+   * @param fromCommitId exact initial branch HEAD
+   */
+  public record BranchRequest(
+      @NotBlank String sourceBranch, @NotBlank String newBranch, @NotBlank String fromCommitId) {
+
+<span class="nc" id="L86">    public BranchRequest {</span>
+      // Bean validation owns request-contract checks at the HTTP boundary.
+<span class="nc" id="L88">    }</span>
+  }
+
+  /**
+   * Newly created branch identity and exact initial workflow checkpoint.
+   *
+   * @param sourceBranch source branch from which the exact commit was selected
+   * @param branch newly created branch name
+   * @param headCommitId exact initial HEAD commit of the new branch
+   * @param workflowId workflow identity stored at the initial branch checkpoint
+   */
+<span class="nc" id="L99">  public record BranchResponse(</span>
+      String sourceBranch, String branch, String headCommitId, String workflowId) {
+
+    static BranchResponse from(WorkflowBranchCreationResult result) {
+<span class="nc" id="L103">      return new BranchResponse(</span>
+<span class="nc" id="L104">          result.sourceBranch(), result.branch(), result.head().value(), result.workflowId());</span>
+    }
+  }
+
+  /**
+   * Branch-scoped comparison request.
+   *
+   * @param branch branch from which both commits must be reachable
+   * @param beforeCommitId exact earlier commit
+   * @param afterCommitId exact later commit
+   */
+  public record CompareRequest(
+      @NotBlank String branch, @NotBlank String beforeCommitId, @NotBlank String afterCommitId) {
+
+<span class="fc" id="L118">    public CompareRequest {</span>
+      // Bean validation owns request-contract checks at the HTTP boundary.
+<span class="fc" id="L120">    }</span>
+  }
+
+  /**
+   * Non-destructive restore request.
+   *
+   * @param branch branch receiving the new restore commit
+   * @param targetCommitId reachable historical commit whose snapshot is restored
+   * @param expectedHeadCommitId optimistic-concurrency branch HEAD
+   * @param author restore commit author
+   * @param message restore commit message
+   * @param timestamp restore commit timestamp
+   */
+  public record RestoreRequest(
+      @NotBlank String branch,
+      @NotBlank String targetCommitId,
+      @NotBlank String expectedHeadCommitId,
+      @NotBlank String author,
+      @NotBlank String message,
+      @NotNull Instant timestamp) {
+
+<span class="fc" id="L141">    public RestoreRequest {</span>
+      // Bean validation owns request-contract checks at the HTTP boundary.
+<span class="fc" id="L143">    }</span>
+  }
+
+  /**
+   * Transport-safe comparison including both graph states and semantic change atoms.
+   *
+   * @param beforeCommitId exact before commit
+   * @param afterCommitId exact after commit
+   * @param before graph projection before the change
+   * @param after graph projection after the change
+   * @param changes ordered semantic changes
+   */
+  public record ComparisonResponse(
+      String beforeCommitId,
+      String afterCommitId,
+      WorkflowProjection before,
+      WorkflowProjection after,
+      List&lt;ChangeResponse&gt; changes) {
+
+<span class="fc" id="L162">    public ComparisonResponse {</span>
+<span class="fc" id="L163">      beforeCommitId = Objects.requireNonNull(beforeCommitId, &quot;beforeCommitId&quot;);</span>
+<span class="fc" id="L164">      afterCommitId = Objects.requireNonNull(afterCommitId, &quot;afterCommitId&quot;);</span>
+<span class="fc" id="L165">      before = Objects.requireNonNull(before, &quot;before&quot;);</span>
+<span class="fc" id="L166">      after = Objects.requireNonNull(after, &quot;after&quot;);</span>
+<span class="fc" id="L167">      changes = List.copyOf(Objects.requireNonNull(changes, &quot;changes&quot;));</span>
+<span class="fc" id="L168">    }</span>
+
+    static ComparisonResponse from(WorkflowHistoryComparison comparison) {
+<span class="fc" id="L171">      return new ComparisonResponse(</span>
+<span class="fc" id="L172">          comparison.beforeCommit().value(),</span>
+<span class="fc" id="L173">          comparison.afterCommit().value(),</span>
+<span class="fc" id="L174">          WorkflowProjection.fromWorkflow(comparison.beforeWorkflow()),</span>
+<span class="fc" id="L175">          WorkflowProjection.fromWorkflow(comparison.afterWorkflow()),</span>
+<span class="fc" id="L176">          comparison.diff().changes().stream().map(ChangeResponse::from).toList());</span>
+    }
+  }
+
+  /**
+   * Transport-safe semantic change atom.
+   *
+   * @param kind stable change kind
+   * @param targetId affected workflow, node or edge identifier
+   * @param propertyKey metadata key or stable semantic field path
+   * @param oldValue previous canonical value
+   * @param newValue new canonical value
+   */
+<span class="fc" id="L189">  public record ChangeResponse(</span>
+      String kind, String targetId, String propertyKey, String oldValue, String newValue) {
+
+    static ChangeResponse from(WorkflowChange change) {
+<span class="pc bpc" id="L193" title="4 of 6 branches missed.">      return switch (change) {</span>
+<span class="fc" id="L194">        case WorkflowChange.NodeAdded added -&gt;</span>
+<span class="fc" id="L195">            new ChangeResponse(&quot;NODE_ADDED&quot;, added.node().id(), null, null, added.node().label());</span>
+<span class="nc" id="L196">        case WorkflowChange.NodeRemoved removed -&gt;</span>
+<span class="nc" id="L197">            new ChangeResponse(</span>
+<span class="nc" id="L198">                &quot;NODE_REMOVED&quot;, removed.node().id(), null, removed.node().label(), null);</span>
+<span class="nc" id="L199">        case WorkflowChange.EdgeAdded added -&gt;</span>
+<span class="nc" id="L200">            new ChangeResponse(&quot;EDGE_ADDED&quot;, added.edge().id(), null, null, null);</span>
+<span class="nc" id="L201">        case WorkflowChange.EdgeRemoved removed -&gt;</span>
+<span class="nc" id="L202">            new ChangeResponse(&quot;EDGE_REMOVED&quot;, removed.edge().id(), null, null, null);</span>
+<span class="nc" id="L203">        case WorkflowChange.ParameterChanged parameter -&gt;</span>
+<span class="nc" id="L204">            new ChangeResponse(</span>
+                &quot;PARAMETER_CHANGED&quot;,
+<span class="nc" id="L206">                parameter.targetId(),</span>
+<span class="nc" id="L207">                parameter.propertyKey(),</span>
+<span class="nc" id="L208">                parameter.oldValue(),</span>
+<span class="nc" id="L209">                parameter.newValue());</span>
+<span class="fc" id="L210">        case WorkflowChange.FieldChanged field -&gt;</span>
+<span class="fc" id="L211">            new ChangeResponse(</span>
+<span class="fc" id="L212">                field.elementKind().name() + &quot;_FIELD_CHANGED&quot;,</span>
+<span class="fc" id="L213">                field.targetId(),</span>
+<span class="fc" id="L214">                field.fieldPath(),</span>
+<span class="fc" id="L215">                field.oldValue(),</span>
+<span class="fc" id="L216">                field.newValue());</span>
+      };
+    }
+  }
+
+  /**
+   * Audit response for a completed non-destructive restore.
+   *
+   * @param branch restored branch
+   * @param targetCommitId historical source commit
+   * @param previousHeadCommitId HEAD protected by optimistic concurrency
+   * @param restoredCommitId newly created audit commit
+   */
+<span class="fc" id="L229">  public record RestoreResponse(</span>
+      String branch, String targetCommitId, String previousHeadCommitId, String restoredCommitId) {
+
+    static RestoreResponse from(WorkflowRestoreResult result) {
+<span class="fc" id="L233">      return new RestoreResponse(</span>
+<span class="fc" id="L234">          result.branch(),</span>
+<span class="fc" id="L235">          result.targetCommit().value(),</span>
+<span class="fc" id="L236">          result.previousHead().value(),</span>
+<span class="fc" id="L237">          result.restoredCommit().value());</span>
+    }
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

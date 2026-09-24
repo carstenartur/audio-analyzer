@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>FeatureDistributionComparison.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.wingbeat</a> &gt; <span class="el_source">FeatureDistributionComparison.java</span></div><h1>FeatureDistributionComparison.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.wingbeat;
+
+import java.util.Locale;
+import java.util.Objects;
+import org.hammer.audio.experimental.acoustic.dataset.DatasetAnalytics;
+
+/**
+ * Comparison of the distribution of a single feature between a synthetic dataset and a real
+ * dataset.
+ *
+ * &lt;p&gt;A {@code FeatureDistributionComparison} captures descriptive statistics for the same feature
+ * extracted from two corpora — synthetic (simulated) recordings and real field recordings — along
+ * with computed absolute and relative differences between the two means.
+ *
+ * &lt;p&gt;Use {@link #of(String, DatasetAnalytics.DistributionStats, DatasetAnalytics.DistributionStats)
+ * } to construct an instance from pre-computed statistics and {@link #toMarkdown()} to render a
+ * human-readable comparison table suitable for evaluation reports.
+ *
+ * @param featureName human-readable feature name; must not be blank
+ * @param syntheticStats descriptive statistics over the synthetic dataset; must not be {@code null}
+ * @param realStats descriptive statistics over the real dataset; must not be {@code null}
+ * @param absoluteDifference absolute difference between the two means ({@code |real − synthetic|});
+ *     must be finite
+ * @param relativeDifference relative difference as a fraction ({@code absoluteDifference /
+ *     |syntheticMean|}, or {@code 0} when the synthetic mean is zero); must be finite
+ */
+@SuppressWarnings(&quot;PMD.DanglingJavadoc&quot;)
+public record FeatureDistributionComparison(
+    String featureName,
+    DatasetAnalytics.DistributionStats syntheticStats,
+    DatasetAnalytics.DistributionStats realStats,
+    double absoluteDifference,
+    double relativeDifference) {
+
+  /** Validate fields. */
+<span class="fc" id="L36">  public FeatureDistributionComparison {</span>
+<span class="fc" id="L37">    Objects.requireNonNull(featureName, &quot;featureName&quot;);</span>
+<span class="fc" id="L38">    Objects.requireNonNull(syntheticStats, &quot;syntheticStats&quot;);</span>
+<span class="fc" id="L39">    Objects.requireNonNull(realStats, &quot;realStats&quot;);</span>
+<span class="fc bfc" id="L40" title="All 2 branches covered.">    if (featureName.isBlank()) {</span>
+<span class="fc" id="L41">      throw new IllegalArgumentException(&quot;featureName must not be blank&quot;);</span>
+    }
+<span class="pc bpc" id="L43" title="1 of 2 branches missed.">    if (!Double.isFinite(absoluteDifference)) {</span>
+<span class="nc" id="L44">      throw new IllegalArgumentException(&quot;absoluteDifference must be finite&quot;);</span>
+    }
+<span class="pc bpc" id="L46" title="1 of 2 branches missed.">    if (!Double.isFinite(relativeDifference)) {</span>
+<span class="nc" id="L47">      throw new IllegalArgumentException(&quot;relativeDifference must be finite&quot;);</span>
+    }
+<span class="fc" id="L49">  }</span>
+
+  /**
+   * Build a comparison from pre-computed statistics for the same feature in two corpora.
+   *
+   * &lt;p&gt;The absolute difference is {@code |realMean − syntheticMean|}. The relative difference is
+   * {@code absoluteDifference / |syntheticMean|} when {@code syntheticMean != 0}, or {@code 0}
+   * otherwise.
+   *
+   * @param featureName feature name; must not be blank
+   * @param synthetic statistics over the synthetic corpus; must not be {@code null}
+   * @param real statistics over the real corpus; must not be {@code null}
+   * @return comparison record; never {@code null}
+   */
+  public static FeatureDistributionComparison of(
+      String featureName,
+      DatasetAnalytics.DistributionStats synthetic,
+      DatasetAnalytics.DistributionStats real) {
+<span class="fc" id="L67">    Objects.requireNonNull(featureName, &quot;featureName&quot;);</span>
+<span class="fc" id="L68">    Objects.requireNonNull(synthetic, &quot;synthetic&quot;);</span>
+<span class="fc" id="L69">    Objects.requireNonNull(real, &quot;real&quot;);</span>
+<span class="fc" id="L70">    double absDiff = Math.abs(real.mean() - synthetic.mean());</span>
+<span class="fc bfc" id="L71" title="All 2 branches covered.">    double relDiff = synthetic.mean() == 0.0 ? 0.0 : absDiff / Math.abs(synthetic.mean());</span>
+<span class="fc" id="L72">    return new FeatureDistributionComparison(featureName, synthetic, real, absDiff, relDiff);</span>
+  }
+
+  /**
+   * Render this comparison as a Markdown table section.
+   *
+   * @return Markdown snippet; never {@code null}
+   */
+  @SuppressWarnings({
+    &quot;PMD.ConsecutiveLiteralAppends&quot;,
+    &quot;PMD.ConsecutiveAppendsShouldReuse&quot;,
+    &quot;PMD.AvoidDuplicateLiterals&quot;
+  })
+  public String toMarkdown() {
+<span class="fc" id="L86">    StringBuilder sb = new StringBuilder(256);</span>
+<span class="fc" id="L87">    sb.append(&quot;### &quot;).append(featureName).append(&quot;\n\n&quot;);</span>
+<span class="fc" id="L88">    sb.append(&quot;| Statistic | Synthetic | Real | Δ abs | Δ rel |\n|---|---:|---:|---:|---:|\n&quot;);</span>
+<span class="fc" id="L89">    sb.append(&quot;| Count | &quot;)</span>
+<span class="fc" id="L90">        .append(syntheticStats.count())</span>
+<span class="fc" id="L91">        .append(&quot; | &quot;)</span>
+<span class="fc" id="L92">        .append(realStats.count())</span>
+<span class="fc" id="L93">        .append(&quot; | | |\n&quot;);</span>
+<span class="fc" id="L94">    sb.append(&quot;| Mean | &quot;)</span>
+<span class="fc" id="L95">        .append(String.format(Locale.ROOT, &quot;%.3f&quot;, syntheticStats.mean()))</span>
+<span class="fc" id="L96">        .append(&quot; | &quot;)</span>
+<span class="fc" id="L97">        .append(String.format(Locale.ROOT, &quot;%.3f&quot;, realStats.mean()))</span>
+<span class="fc" id="L98">        .append(&quot; | &quot;)</span>
+<span class="fc" id="L99">        .append(String.format(Locale.ROOT, &quot;%.3f&quot;, absoluteDifference))</span>
+<span class="fc" id="L100">        .append(&quot; | &quot;)</span>
+<span class="fc" id="L101">        .append(String.format(Locale.ROOT, &quot;%.1f%%&quot;, relativeDifference * 100.0))</span>
+<span class="fc" id="L102">        .append(&quot; |\n&quot;);</span>
+<span class="fc" id="L103">    sb.append(&quot;| Std dev | &quot;)</span>
+<span class="fc" id="L104">        .append(String.format(Locale.ROOT, &quot;%.3f&quot;, syntheticStats.stddev()))</span>
+<span class="fc" id="L105">        .append(&quot; | &quot;)</span>
+<span class="fc" id="L106">        .append(String.format(Locale.ROOT, &quot;%.3f&quot;, realStats.stddev()))</span>
+<span class="fc" id="L107">        .append(&quot; | | |\n&quot;);</span>
+<span class="fc" id="L108">    sb.append(&quot;| Min | &quot;)</span>
+<span class="fc" id="L109">        .append(String.format(Locale.ROOT, &quot;%.3f&quot;, syntheticStats.min()))</span>
+<span class="fc" id="L110">        .append(&quot; | &quot;)</span>
+<span class="fc" id="L111">        .append(String.format(Locale.ROOT, &quot;%.3f&quot;, realStats.min()))</span>
+<span class="fc" id="L112">        .append(&quot; | | |\n&quot;);</span>
+<span class="fc" id="L113">    sb.append(&quot;| Max | &quot;)</span>
+<span class="fc" id="L114">        .append(String.format(Locale.ROOT, &quot;%.3f&quot;, syntheticStats.max()))</span>
+<span class="fc" id="L115">        .append(&quot; | &quot;)</span>
+<span class="fc" id="L116">        .append(String.format(Locale.ROOT, &quot;%.3f&quot;, realStats.max()))</span>
+<span class="fc" id="L117">        .append(&quot; | | |\n&quot;);</span>
+<span class="fc" id="L118">    sb.append('\n');</span>
+<span class="fc" id="L119">    return sb.toString();</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

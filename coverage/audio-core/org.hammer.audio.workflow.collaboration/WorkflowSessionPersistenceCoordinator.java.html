@@ -1,0 +1,444 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WorkflowSessionPersistenceCoordinator.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Core</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.collaboration</a> &gt; <span class="el_source">WorkflowSessionPersistenceCoordinator.java</span></div><h1>WorkflowSessionPersistenceCoordinator.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.collaboration;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+import org.hammer.audio.workflow.Workflow;
+import org.hammer.audio.workflow.WorkflowOperation;
+import org.hammer.audio.workflow.collaboration.store.StoredWorkflowOperation;
+import org.hammer.audio.workflow.collaboration.store.StoredWorkflowSession;
+import org.hammer.audio.workflow.collaboration.store.WorkflowOperationBodyCodec;
+import org.hammer.audio.workflow.collaboration.store.WorkflowOperationCommandMetadata;
+import org.hammer.audio.workflow.collaboration.store.WorkflowOperationPersistenceCodec;
+import org.hammer.audio.workflow.collaboration.store.WorkflowOperationPersistenceData;
+import org.hammer.audio.workflow.collaboration.store.WorkflowOutboxEventData;
+import org.hammer.audio.workflow.collaboration.store.WorkflowSessionAppendCommand;
+import org.hammer.audio.workflow.collaboration.store.WorkflowSessionAppendResult;
+import org.hammer.audio.workflow.collaboration.store.WorkflowSessionRevisionConflictException;
+import org.hammer.audio.workflow.collaboration.store.WorkflowSessionStateStore;
+import org.hammer.audio.workflow.dsl.WorkflowDslParser;
+import org.hammer.audio.workflow.dsl.WorkflowDslSerializer;
+
+/**
+ * Coordinates optional durable persistence without leaking storage details into session runtime.
+ */
+final class WorkflowSessionPersistenceCoordinator {
+
+  private static final String OPERATION_EVENT_TYPE = &quot;WORKFLOW_OPERATION_ACCEPTED&quot;;
+
+  private final WorkflowSessionStateStore stateStore;
+<span class="fc" id="L31">  private final WorkflowDslParser parser = new WorkflowDslParser();</span>
+<span class="fc" id="L32">  private final WorkflowDslSerializer serializer = new WorkflowDslSerializer();</span>
+
+<span class="fc" id="L34">  private WorkflowSessionPersistenceCoordinator(WorkflowSessionStateStore stateStore) {</span>
+<span class="fc" id="L35">    this.stateStore = stateStore;</span>
+<span class="fc" id="L36">  }</span>
+
+  static WorkflowSessionPersistenceCoordinator inMemory() {
+<span class="fc" id="L39">    return new WorkflowSessionPersistenceCoordinator(null);</span>
+  }
+
+  static WorkflowSessionPersistenceCoordinator durable(WorkflowSessionStateStore stateStore) {
+<span class="fc" id="L43">    return new WorkflowSessionPersistenceCoordinator(</span>
+<span class="fc" id="L44">        Objects.requireNonNull(stateStore, &quot;stateStore&quot;));</span>
+  }
+
+  boolean durable() {
+<span class="fc bfc" id="L48" title="All 2 branches covered.">    return stateStore != null;</span>
+  }
+
+  List&lt;RecoveredSession&gt; recoverOpenSessions() {
+<span class="pc bpc" id="L52" title="1 of 2 branches missed.">    if (!durable()) {</span>
+<span class="nc" id="L53">      return List.of();</span>
+    }
+<span class="fc" id="L55">    return stateStore.openSessions().stream().map(this::recover).toList();</span>
+  }
+
+  void create(
+      String sessionId,
+      CollaborationMode mode,
+      OperationActor owner,
+      Instant createdAt,
+      Workflow workflow,
+      long initialSequence) {
+<span class="pc bpc" id="L65" title="1 of 2 branches missed.">    if (!durable()) {</span>
+<span class="fc" id="L66">      return;</span>
+    }
+<span class="nc" id="L68">    stateStore.create(</span>
+        new StoredWorkflowSession(
+            sessionId,
+            mode,
+            owner,
+            createdAt,
+<span class="nc" id="L74">            workflow.id(),</span>
+<span class="nc" id="L75">            serializer.serialize(workflow),</span>
+            0,
+            initialSequence,
+            false));
+<span class="nc" id="L79">  }</span>
+
+  void compensateFailedCreate(
+      String sessionId, long expectedRevision, long expectedSequence, RuntimeException failure) {
+<span class="nc bnc" id="L83" title="All 2 branches missed.">    if (!durable()) {</span>
+<span class="nc" id="L84">      return;</span>
+    }
+    try {
+<span class="nc" id="L87">      stateStore.close(sessionId, expectedRevision, expectedSequence);</span>
+<span class="nc" id="L88">    } catch (RuntimeException cleanupFailure) {</span>
+<span class="nc" id="L89">      failure.addSuppressed(cleanupFailure);</span>
+<span class="nc" id="L90">    }</span>
+<span class="nc" id="L91">  }</span>
+
+  OperationIdentity identity(WorkflowOperation operation) {
+<span class="nc" id="L94">    return identity(operation, WorkflowOperationCommandMetadata.normal(operation.operationId()));</span>
+  }
+
+  OperationIdentity identity(
+      WorkflowOperation operation, WorkflowOperationCommandMetadata command) {
+<span class="fc" id="L99">    return OperationIdentity.from(WorkflowOperationPersistenceCodec.encode(operation, command));</span>
+  }
+
+  void requireExpectedRevision(String sessionId, long expectedRevision, long actualRevision) {
+<span class="fc bfc" id="L103" title="All 2 branches covered.">    if (expectedRevision != actualRevision) {</span>
+<span class="fc" id="L104">      throw new WorkflowSessionRevisionConflictException(</span>
+          sessionId, expectedRevision, actualRevision);
+    }
+<span class="fc" id="L107">  }</span>
+
+  AppendOutcome append(
+      String sessionId,
+      long expectedRevision,
+      long expectedSequence,
+      WorkflowOperation operation,
+      Workflow updatedWorkflow) {
+<span class="nc" id="L115">    return append(</span>
+        sessionId,
+        expectedRevision,
+        expectedSequence,
+        operation,
+        updatedWorkflow,
+<span class="nc" id="L121">        WorkflowOperationCommandMetadata.normal(operation.operationId()));</span>
+  }
+
+  AppendOutcome append(
+      String sessionId,
+      long expectedRevision,
+      long expectedSequence,
+      WorkflowOperation operation,
+      Workflow updatedWorkflow,
+      WorkflowOperationCommandMetadata command) {
+<span class="fc" id="L131">    WorkflowOperationPersistenceData persistenceData =</span>
+<span class="fc" id="L132">        WorkflowOperationPersistenceCodec.encode(operation, command);</span>
+<span class="fc" id="L133">    OperationIdentity candidate = OperationIdentity.from(persistenceData);</span>
+<span class="fc" id="L134">    long nextRevision = Math.addExact(expectedRevision, 1);</span>
+<span class="fc" id="L135">    long nextSequence = Math.addExact(expectedSequence, 1);</span>
+<span class="pc bpc" id="L136" title="1 of 2 branches missed.">    if (!durable()) {</span>
+<span class="fc" id="L137">      return new AppendOutcome(</span>
+          updatedWorkflow,
+<span class="fc" id="L139">          candidate.withOrdering(nextRevision, nextSequence),</span>
+          nextRevision,
+          nextSequence,
+          false);
+    }
+
+<span class="nc" id="L145">    WorkflowSessionAppendResult result =</span>
+<span class="nc" id="L146">        stateStore.append(</span>
+            new WorkflowSessionAppendCommand(
+                sessionId,
+                expectedRevision,
+                persistenceData,
+<span class="nc" id="L151">                updatedWorkflow.id(),</span>
+<span class="nc" id="L152">                serializer.serialize(updatedWorkflow),</span>
+                new WorkflowOutboxEventData(
+                    sessionId + &quot;:&quot; + nextSequence,
+                    OPERATION_EVENT_TYPE,
+<span class="nc" id="L156">                    operation.timestamp(),</span>
+<span class="nc" id="L157">                    persistenceData.payload())));</span>
+<span class="nc" id="L158">    validateAppendResult(sessionId, expectedSequence, result);</span>
+<span class="nc bnc" id="L159" title="All 2 branches missed.">    Workflow durableWorkflow = result.duplicate() ? parse(result.session()) : updatedWorkflow;</span>
+<span class="nc" id="L160">    return new AppendOutcome(</span>
+        durableWorkflow,
+<span class="nc" id="L162">        OperationIdentity.from(result.operation()),</span>
+<span class="nc" id="L163">        result.session().revision(),</span>
+<span class="nc" id="L164">        result.session().sequence(),</span>
+<span class="nc" id="L165">        result.duplicate());</span>
+  }
+
+  long advanceEventSequence(String sessionId, long currentRevision, long currentSequence) {
+<span class="fc" id="L169">    long nextSequence = Math.addExact(currentSequence, 1);</span>
+<span class="fc bfc" id="L170" title="All 2 branches covered.">    if (!durable()) {</span>
+<span class="fc" id="L171">      return nextSequence;</span>
+    }
+<span class="fc" id="L173">    StoredWorkflowSession advanced = stateStore.advanceEventSequence(sessionId, currentSequence);</span>
+<span class="fc" id="L174">    validateLifecycleState(sessionId, advanced, currentRevision, nextSequence, false);</span>
+<span class="fc" id="L175">    return advanced.sequence();</span>
+  }
+
+  long close(String sessionId, long currentRevision, long currentSequence) {
+<span class="fc" id="L179">    long nextSequence = Math.addExact(currentSequence, 1);</span>
+<span class="pc bpc" id="L180" title="1 of 2 branches missed.">    if (!durable()) {</span>
+<span class="fc" id="L181">      return nextSequence;</span>
+    }
+<span class="nc" id="L183">    StoredWorkflowSession closed = stateStore.close(sessionId, currentRevision, currentSequence);</span>
+<span class="nc" id="L184">    validateLifecycleState(sessionId, closed, currentRevision, nextSequence, true);</span>
+<span class="nc" id="L185">    return closed.sequence();</span>
+  }
+
+  private RecoveredSession recover(StoredWorkflowSession storedSession) {
+<span class="fc" id="L189">    String sessionId = storedSession.sessionId();</span>
+    try {
+<span class="fc" id="L191">      Workflow workflow = parse(storedSession);</span>
+<span class="fc" id="L192">      List&lt;StoredWorkflowOperation&gt; operations = stateStore.operations(sessionId);</span>
+<span class="fc" id="L193">      validateRecoveredHistory(storedSession, operations);</span>
+<span class="fc" id="L194">      List&lt;OperationIdentity&gt; identities =</span>
+<span class="fc" id="L195">          operations.stream().map(OperationIdentity::from).toList();</span>
+<span class="fc" id="L196">      long distinctIds = identities.stream().map(OperationIdentity::operationId).distinct().count();</span>
+<span class="pc bpc" id="L197" title="1 of 2 branches missed.">      if (distinctIds != identities.size()) {</span>
+<span class="nc" id="L198">        throw new WorkflowSessionRecoveryException(</span>
+            sessionId, &quot;Duplicate durable operation id in session &quot; + sessionId);
+      }
+<span class="fc" id="L201">      return new RecoveredSession(</span>
+          sessionId,
+<span class="fc" id="L203">          storedSession.mode(),</span>
+<span class="fc" id="L204">          storedSession.owner(),</span>
+<span class="fc" id="L205">          storedSession.createdAt(),</span>
+          workflow,
+          identities,
+<span class="fc" id="L208">          storedSession.revision(),</span>
+<span class="fc" id="L209">          storedSession.sequence());</span>
+<span class="nc" id="L210">    } catch (WorkflowSessionRecoveryException failure) {</span>
+<span class="nc" id="L211">      throw failure;</span>
+<span class="nc" id="L212">    } catch (RuntimeException failure) {</span>
+<span class="nc" id="L213">      throw new WorkflowSessionRecoveryException(</span>
+          sessionId, &quot;Failed to recover durable collaboration session &quot; + sessionId, failure);
+    }
+  }
+
+  private Workflow parse(StoredWorkflowSession session) {
+<span class="fc" id="L219">    Workflow workflow = parser.parse(session.workflowDsl());</span>
+<span class="pc bpc" id="L220" title="1 of 2 branches missed.">    if (!workflow.id().equals(session.workflowId())) {</span>
+<span class="nc" id="L221">      throw new WorkflowSessionRecoveryException(</span>
+<span class="nc" id="L222">          session.sessionId(),</span>
+          &quot;Recovered workflow id '&quot;
+<span class="nc" id="L224">              + workflow.id()</span>
+              + &quot;' does not match durable id '&quot;
+<span class="nc" id="L226">              + session.workflowId()</span>
+              + &quot;'&quot;);
+    }
+<span class="fc" id="L229">    return workflow;</span>
+  }
+
+  private static void validateRecoveredHistory(
+      StoredWorkflowSession session, List&lt;StoredWorkflowOperation&gt; operations) {
+<span class="fc" id="L234">    long expectedRevision = 1;</span>
+<span class="fc" id="L235">    long previousSequence = 0;</span>
+<span class="fc bfc" id="L236" title="All 2 branches covered.">    for (StoredWorkflowOperation operation : operations) {</span>
+<span class="pc bpc" id="L237" title="1 of 2 branches missed.">      if (!operation.sessionId().equals(session.sessionId())) {</span>
+<span class="nc" id="L238">        throw recoveryFailure(</span>
+            session,
+<span class="nc" id="L240">            &quot;Durable operation belongs to a different session: &quot; + operation.operationId());</span>
+      }
+<span class="pc bpc" id="L242" title="1 of 2 branches missed.">      if (operation.revision() != expectedRevision) {</span>
+<span class="nc" id="L243">        throw recoveryFailure(</span>
+            session,
+            &quot;Durable semantic revisions are not contiguous at operation &quot;
+<span class="nc" id="L246">                + operation.operationId());</span>
+      }
+<span class="pc bpc" id="L248" title="2 of 4 branches missed.">      if (operation.sequence() &lt;= previousSequence || operation.sequence() &gt; session.sequence()) {</span>
+<span class="nc" id="L249">        throw recoveryFailure(</span>
+<span class="nc" id="L250">            session, &quot;Durable event sequence is invalid at operation &quot; + operation.operationId());</span>
+      }
+<span class="fc" id="L252">      expectedRevision++;</span>
+<span class="fc" id="L253">      previousSequence = operation.sequence();</span>
+<span class="fc" id="L254">    }</span>
+<span class="pc bpc" id="L255" title="1 of 2 branches missed.">    if (session.revision() != operations.size()) {</span>
+<span class="nc" id="L256">      throw recoveryFailure(session, &quot;Durable aggregate revision does not match operation history&quot;);</span>
+    }
+<span class="pc bpc" id="L258" title="2 of 4 branches missed.">    if (session.sequence() &lt; previousSequence || session.sequence() &lt; session.revision()) {</span>
+<span class="nc" id="L259">      throw recoveryFailure(session, &quot;Durable aggregate event sequence precedes recovered history&quot;);</span>
+    }
+<span class="fc" id="L261">  }</span>
+
+  private static void validateAppendResult(
+      String sessionId, long expectedSequence, WorkflowSessionAppendResult result) {
+<span class="nc" id="L265">    StoredWorkflowSession session = result.session();</span>
+<span class="nc" id="L266">    long nextSequence = Math.addExact(expectedSequence, 1);</span>
+<span class="nc bnc" id="L267" title="All 2 branches missed.">    if (!session.sessionId().equals(sessionId)</span>
+<span class="nc bnc" id="L268" title="All 2 branches missed.">        || session.closed()</span>
+<span class="nc bnc" id="L269" title="All 2 branches missed.">        || session.revision() != result.operation().revision()</span>
+<span class="nc bnc" id="L270" title="All 2 branches missed.">        || session.sequence() != nextSequence</span>
+<span class="nc bnc" id="L271" title="All 2 branches missed.">        || result.operation().sequence() != nextSequence</span>
+<span class="nc bnc" id="L272" title="All 2 branches missed.">        || !result.operation().hasOperationBody()</span>
+<span class="nc bnc" id="L273" title="All 2 branches missed.">        || !result.outboxEntry().sessionId().equals(sessionId)</span>
+<span class="nc bnc" id="L274" title="All 2 branches missed.">        || result.outboxEntry().sequence() != nextSequence) {</span>
+<span class="nc" id="L275">      throw new IllegalStateException(</span>
+          &quot;Durable append result is inconsistent for session &quot; + sessionId);
+    }
+<span class="nc" id="L278">  }</span>
+
+  private static void validateLifecycleState(
+      String sessionId,
+      StoredWorkflowSession state,
+      long expectedRevision,
+      long expectedSequence,
+      boolean expectedClosed) {
+<span class="pc bpc" id="L286" title="1 of 2 branches missed.">    if (!state.sessionId().equals(sessionId)</span>
+<span class="pc bpc" id="L287" title="1 of 2 branches missed.">        || state.revision() != expectedRevision</span>
+<span class="pc bpc" id="L288" title="1 of 2 branches missed.">        || state.sequence() != expectedSequence</span>
+<span class="pc bpc" id="L289" title="1 of 2 branches missed.">        || state.closed() != expectedClosed) {</span>
+<span class="nc" id="L290">      throw new IllegalStateException(</span>
+          &quot;Durable lifecycle result is inconsistent for session &quot; + sessionId);
+    }
+<span class="fc" id="L293">  }</span>
+
+  private static WorkflowSessionRecoveryException recoveryFailure(
+      StoredWorkflowSession session, String message) {
+<span class="nc" id="L297">    return new WorkflowSessionRecoveryException(session.sessionId(), message);</span>
+  }
+
+  record OperationIdentity(
+      String operationId,
+      String operationType,
+      String actorId,
+      Instant occurredAt,
+      long revision,
+      long sequence,
+      String payload,
+      int bodyVersion,
+      String operationBody,
+      WorkflowOperationCommandMetadata command) {
+
+<span class="fc" id="L312">    OperationIdentity {</span>
+<span class="fc" id="L313">      Objects.requireNonNull(operationId, &quot;operationId&quot;);</span>
+<span class="fc" id="L314">      Objects.requireNonNull(operationType, &quot;operationType&quot;);</span>
+<span class="fc" id="L315">      Objects.requireNonNull(actorId, &quot;actorId&quot;);</span>
+<span class="fc" id="L316">      Objects.requireNonNull(occurredAt, &quot;occurredAt&quot;);</span>
+<span class="fc" id="L317">      Objects.requireNonNull(payload, &quot;payload&quot;);</span>
+<span class="fc" id="L318">      Objects.requireNonNull(command, &quot;command&quot;);</span>
+<span class="pc bpc" id="L319" title="3 of 10 branches missed.">      if (revision &lt; 0 || sequence &lt; revision || (revision == 0) != (sequence == 0)) {</span>
+<span class="nc" id="L320">        throw new IllegalArgumentException(&quot;Invalid operation revision/event sequence&quot;);</span>
+      }
+<span class="pc bpc" id="L322" title="1 of 2 branches missed.">      if (bodyVersion &lt; 0) {</span>
+<span class="nc" id="L323">        throw new IllegalArgumentException(&quot;bodyVersion must be &gt;= 0&quot;);</span>
+      }
+<span class="fc bfc" id="L325" title="All 2 branches covered.">      if (bodyVersion == 0) {</span>
+<span class="fc" id="L326">        operationBody = null;</span>
+      } else {
+<span class="fc" id="L328">        Objects.requireNonNull(operationBody, &quot;operationBody&quot;);</span>
+<span class="fc" id="L329">        WorkflowOperationBodyCodec.decode(bodyVersion, operationBody);</span>
+      }
+<span class="fc" id="L331">    }</span>
+
+    static OperationIdentity from(WorkflowOperationPersistenceData operation) {
+<span class="fc" id="L334">      return new OperationIdentity(</span>
+<span class="fc" id="L335">          operation.operationId(),</span>
+<span class="fc" id="L336">          operation.operationType(),</span>
+<span class="fc" id="L337">          operation.actorId(),</span>
+<span class="fc" id="L338">          operation.occurredAt(),</span>
+          0,
+          0,
+<span class="fc" id="L341">          operation.payload(),</span>
+<span class="fc" id="L342">          operation.bodyVersion(),</span>
+<span class="fc" id="L343">          operation.operationBody(),</span>
+<span class="fc" id="L344">          operation.command());</span>
+    }
+
+    static OperationIdentity from(StoredWorkflowOperation operation) {
+<span class="fc" id="L348">      return new OperationIdentity(</span>
+<span class="fc" id="L349">          operation.operationId(),</span>
+<span class="fc" id="L350">          operation.operationType(),</span>
+<span class="fc" id="L351">          operation.actorId(),</span>
+<span class="fc" id="L352">          operation.occurredAt(),</span>
+<span class="fc" id="L353">          operation.revision(),</span>
+<span class="fc" id="L354">          operation.sequence(),</span>
+<span class="fc" id="L355">          operation.payload(),</span>
+<span class="fc" id="L356">          operation.bodyVersion(),</span>
+<span class="fc" id="L357">          operation.operationBody(),</span>
+<span class="fc" id="L358">          operation.command());</span>
+    }
+
+    OperationIdentity withOrdering(long acceptedRevision, long acceptedSequence) {
+<span class="fc" id="L362">      return new OperationIdentity(</span>
+          operationId,
+          operationType,
+          actorId,
+          occurredAt,
+          acceptedRevision,
+          acceptedSequence,
+          payload,
+          bodyVersion,
+          operationBody,
+          command);
+    }
+
+    boolean hasOperationBody() {
+<span class="fc bfc" id="L376" title="All 2 branches covered.">      return bodyVersion &gt; 0;</span>
+    }
+
+    Optional&lt;WorkflowOperation&gt; operation() {
+<span class="fc bfc" id="L380" title="All 2 branches covered.">      return hasOperationBody()</span>
+<span class="fc" id="L381">          ? Optional.of(WorkflowOperationBodyCodec.decode(bodyVersion, operationBody))</span>
+<span class="fc" id="L382">          : Optional.empty();</span>
+    }
+
+    boolean matchesRetry(OperationIdentity candidate) {
+<span class="fc" id="L386">      Objects.requireNonNull(candidate, &quot;candidate&quot;);</span>
+<span class="pc bpc" id="L387" title="1 of 2 branches missed.">      if (!operationId.equals(candidate.operationId)</span>
+<span class="pc bpc" id="L388" title="1 of 2 branches missed.">          || !operationType.equals(candidate.operationType)</span>
+<span class="pc bpc" id="L389" title="1 of 2 branches missed.">          || !actorId.equals(candidate.actorId)</span>
+<span class="fc bfc" id="L390" title="All 2 branches covered.">          || !payload.equals(candidate.payload)</span>
+<span class="pc bpc" id="L391" title="1 of 2 branches missed.">          || !command.equals(candidate.command)) {</span>
+<span class="fc" id="L392">        return false;</span>
+      }
+<span class="pc bpc" id="L394" title="2 of 4 branches missed.">      if (!hasOperationBody() || !candidate.hasOperationBody()) {</span>
+<span class="nc" id="L395">        return true;</span>
+      }
+<span class="fc" id="L397">      WorkflowOperation storedOperation = operation().orElseThrow();</span>
+<span class="fc" id="L398">      WorkflowOperation candidateOperation = candidate.operation().orElseThrow();</span>
+<span class="fc" id="L399">      WorkflowOperation normalizedCandidate =</span>
+<span class="fc" id="L400">          WorkflowOperationBodyCodec.reidentify(</span>
+              candidateOperation,
+<span class="fc" id="L402">              candidateOperation.operationId(),</span>
+<span class="fc" id="L403">              storedOperation.timestamp(),</span>
+<span class="fc" id="L404">              candidateOperation.author());</span>
+<span class="fc" id="L405">      WorkflowOperationBodyCodec.EncodedBody normalizedBody =</span>
+<span class="fc" id="L406">          WorkflowOperationBodyCodec.encode(normalizedCandidate);</span>
+<span class="pc bpc" id="L407" title="2 of 4 branches missed.">      return bodyVersion == normalizedBody.version() &amp;&amp; operationBody.equals(normalizedBody.body());</span>
+    }
+  }
+
+  record RecoveredSession(
+      String sessionId,
+      CollaborationMode mode,
+      OperationActor owner,
+      Instant createdAt,
+      Workflow workflow,
+      List&lt;OperationIdentity&gt; operations,
+      long revision,
+      long sequence) {
+
+<span class="fc" id="L421">    RecoveredSession {</span>
+<span class="fc" id="L422">      Objects.requireNonNull(sessionId, &quot;sessionId&quot;);</span>
+<span class="fc" id="L423">      Objects.requireNonNull(mode, &quot;mode&quot;);</span>
+<span class="fc" id="L424">      Objects.requireNonNull(owner, &quot;owner&quot;);</span>
+<span class="fc" id="L425">      Objects.requireNonNull(createdAt, &quot;createdAt&quot;);</span>
+<span class="fc" id="L426">      Objects.requireNonNull(workflow, &quot;workflow&quot;);</span>
+<span class="fc" id="L427">      operations = List.copyOf(Objects.requireNonNull(operations, &quot;operations&quot;));</span>
+<span class="fc" id="L428">    }</span>
+  }
+
+  record AppendOutcome(
+      Workflow workflow,
+      OperationIdentity identity,
+      long revision,
+      long sequence,
+      boolean duplicate) {
+
+<span class="fc" id="L438">    AppendOutcome {</span>
+<span class="fc" id="L439">      Objects.requireNonNull(workflow, &quot;workflow&quot;);</span>
+<span class="fc" id="L440">      Objects.requireNonNull(identity, &quot;identity&quot;);</span>
+<span class="fc" id="L441">    }</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>
