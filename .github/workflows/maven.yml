@@ -101,7 +101,7 @@ jobs:
       - name: Publish JUnit check summary
         if: always()
         continue-on-error: true
-        uses: dorny/test-reporter@v3.0.0
+        uses: dorny/test-reporter@v3.2.0
         with:
           name: JUnit Tests
           path: |
