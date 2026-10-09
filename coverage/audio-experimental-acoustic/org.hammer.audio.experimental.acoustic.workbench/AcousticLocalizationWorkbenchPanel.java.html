@@ -1,0 +1,1599 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>AcousticLocalizationWorkbenchPanel.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.workbench</a> &gt; <span class="el_source">AcousticLocalizationWorkbenchPanel.java</span></div><h1>AcousticLocalizationWorkbenchPanel.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.workbench;
+
+import java.awt.BasicStroke;
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Dimension;
+import java.awt.FlowLayout;
+import java.awt.Font;
+import java.awt.FontMetrics;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
+import java.awt.Insets;
+import java.awt.RenderingHints;
+import java.awt.Stroke;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import javax.swing.BorderFactory;
+import javax.swing.JButton;
+import javax.swing.JComboBox;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
+import javax.swing.JScrollPane;
+import javax.swing.JSlider;
+import javax.swing.JSpinner;
+import javax.swing.JSplitPane;
+import javax.swing.JTabbedPane;
+import javax.swing.JTextArea;
+import javax.swing.SpinnerListModel;
+import javax.swing.SpinnerNumberModel;
+import javax.swing.SwingUtilities;
+import javax.swing.SwingWorker;
+import javax.swing.Timer;
+import org.hammer.audio.acquisition.Microphone;
+import org.hammer.audio.acquisition.SynchronizationStatus;
+import org.hammer.audio.experimental.acoustic.benchmark.AlignedSourceObservation;
+import org.hammer.audio.experimental.acoustic.benchmark.SnapshotAlignment;
+import org.hammer.audio.experimental.acoustic.benchmark.SnapshotGroundTruthAligner;
+import org.hammer.audio.experimental.acoustic.benchmark.classifier.ClassifierBenchmarkResult;
+import org.hammer.audio.experimental.acoustic.benchmark.classifier.ClassifierBenchmarkRunner;
+import org.hammer.audio.experimental.acoustic.benchmark.localization.LocalizationBenchmarkResult;
+import org.hammer.audio.experimental.acoustic.benchmark.localization.LocalizationBenchmarkRunner;
+import org.hammer.audio.experimental.acoustic.feature.comparison.FeatureDifference;
+import org.hammer.audio.experimental.acoustic.feature.comparison.SyntheticRealComparison;
+import org.hammer.audio.experimental.acoustic.feature.comparison.SyntheticRealComparisonReport;
+import org.hammer.audio.experimental.acoustic.feature.evaluation.FeatureEvaluationEntry;
+import org.hammer.audio.experimental.acoustic.feature.evaluation.FeatureEvaluationReport;
+import org.hammer.audio.experimental.acoustic.feature.evaluation.FeatureEvaluationService;
+import org.hammer.audio.experimental.acoustic.feature.ranking.FeatureRankingEntry;
+import org.hammer.audio.experimental.acoustic.feature.ranking.FeatureRankingService;
+import org.hammer.audio.experimental.acoustic.scenario.Scenario;
+import org.hammer.audio.experimental.acoustic.simulation.AcousticEmitter2D;
+import org.hammer.audio.experimental.acoustic.simulation.SimulationScenarios;
+import org.hammer.audio.experimental.acoustic.simulation.SimulationScenarios.SimulationScenario;
+import org.hammer.audio.experimental.acoustic.simulation.WingbeatSignalParameters;
+import org.hammer.audio.experimental.acoustic.simulation.calibration.CalibrationResult;
+import org.hammer.audio.experimental.acoustic.simulation.calibration.GeneratorCalibrationService;
+import org.hammer.audio.experimental.acoustic.tracking.FrameSchedule;
+import org.hammer.audio.experimental.acoustic.tracking.FrequencyCluster;
+import org.hammer.audio.experimental.acoustic.tracking.TrackedSource;
+import org.hammer.audio.experimental.acoustic.tracking.TrackingSnapshot;
+import org.hammer.audio.experimental.acoustic.wingbeat.WingbeatFeatureVector;
+import org.hammer.audio.experimental.acoustic.wingbeat.WingbeatLabel;
+import org.hammer.audio.geometry.Vector2;
+
+/**
+ * Swing panel implementing the acoustic localization research workbench.
+ *
+ * &lt;p&gt;This panel lets a user:
+ *
+ * &lt;ol&gt;
+ *   &lt;li&gt;Select one of the deterministic {@link SimulationScenarios simulation scenarios}.
+ *   &lt;li&gt;Adjust core pipeline parameters (block size, FFT size, max peaks, SNR threshold, frequency
+ *       band, TDOA estimator choice, candidate grid resolution, tracker tolerance).
+ *   &lt;li&gt;Run the scenario block-by-block through the {@link WorkbenchScenarioRunner} on a background
+ *       thread, with live per-frame updates in the log area.
+ *   &lt;li&gt;Inspect a 2-D room map showing microphone positions, emitter ground-truth positions and
+ *       estimated source tracks after the run.
+ *   &lt;li&gt;Export the run summary as Markdown, CSV or JSON via the tabs at the bottom.
+ * &lt;/ol&gt;
+ *
+ * &lt;p&gt;&lt;strong&gt;Experimental research panel.&lt;/strong&gt; This is not a production localization tool. All
+ * labels and descriptions preserve the experimental/non-production wording used throughout the
+ * {@code audio-experimental-acoustic} module.
+ */
+public final class AcousticLocalizationWorkbenchPanel extends JPanel {
+
+<span class="fc" id="L97">  private static final Logger LOGGER =</span>
+<span class="fc" id="L98">      Logger.getLogger(AcousticLocalizationWorkbenchPanel.class.getName());</span>
+  private static final long serialVersionUID = 1L;
+  private static final String COMPUTING_ANALYSIS_MESSAGE = &quot;Computing analysis …&quot;;
+
+  // --- controls ---
+  private final JComboBox&lt;ScenarioItem&gt; scenarioCombo;
+  private final JSpinner blockSizeSpinner;
+  private final JSpinner fftSizeSpinner;
+  private final JSpinner maxPeaksSpinner;
+  private final JSpinner minSnrSpinner;
+  private final JSpinner bandMinSpinner;
+  private final JSpinner bandMaxSpinner;
+  private final JSpinner gridStepsSpinner;
+  private final JComboBox&lt;WorkbenchParameters.TdoaEstimatorType&gt; tdoaCombo;
+  private final JButton runButton;
+  private final JButton stopButton;
+
+  // --- output ---
+  private final JTextArea logArea;
+  private final JTextArea markdownArea;
+  private final JTextArea csvArea;
+  private final JTextArea jsonArea;
+  private final JTextArea benchmarkArea;
+  private final JTextArea featureRankingArea;
+  private final JTextArea featureComparisonArea;
+  private final JTextArea syntheticRealArea;
+  private final JTextArea classifierComparisonArea;
+  private final JTextArea localizationComparisonArea;
+  private final JTextArea calibrationArea;
+  private final JLabel statusLabel;
+  private final RoomMapPanel roomMapPanel;
+
+  // --- playback controls ---
+  private final JButton firstButton;
+  private final JButton stepBackButton;
+  private final JButton playPauseButton;
+  private final JButton stepForwardButton;
+  private final JButton lastButton;
+  private final JSlider timelineSlider;
+  private final JLabel frameLabel;
+  private final JTextArea playbackDetailArea;
+
+  // --- state ---
+  private transient volatile WorkbenchRunResult lastRunResult;
+<span class="fc" id="L142">  private final AtomicBoolean running = new AtomicBoolean(false);</span>
+  private volatile SwingWorker&lt;WorkbenchRunResult, String&gt; currentWorker;
+  private volatile SwingWorker&lt;AnalysisTabContent, Void&gt; analysisWorker;
+  private transient PlaybackModel playbackModel;
+  private transient Timer playTimer;
+
+  /** Guard flag to prevent slider change listener from re-entering on programmatic updates. */
+  private boolean updatingSlider;
+
+  private static final class AnalysisTabContent {
+    private final String featureRankingText;
+    private final String featureComparisonText;
+    private final String syntheticRealText;
+    private final String classifierComparisonText;
+    private final String localizationComparisonText;
+    private final String calibrationText;
+
+    AnalysisTabContent(
+        String featureRankingText,
+        String featureComparisonText,
+        String syntheticRealText,
+        String classifierComparisonText,
+        String localizationComparisonText,
+<span class="nc" id="L165">        String calibrationText) {</span>
+<span class="nc" id="L166">      this.featureRankingText = featureRankingText;</span>
+<span class="nc" id="L167">      this.featureComparisonText = featureComparisonText;</span>
+<span class="nc" id="L168">      this.syntheticRealText = syntheticRealText;</span>
+<span class="nc" id="L169">      this.classifierComparisonText = classifierComparisonText;</span>
+<span class="nc" id="L170">      this.localizationComparisonText = localizationComparisonText;</span>
+<span class="nc" id="L171">      this.calibrationText = calibrationText;</span>
+<span class="nc" id="L172">    }</span>
+  }
+
+  /** Create the workbench panel. All Swing construction is performed on the calling thread. */
+  public AcousticLocalizationWorkbenchPanel() {
+<span class="fc" id="L177">    super(new BorderLayout(4, 4));</span>
+<span class="fc" id="L178">    setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));</span>
+
+    // --- scenario combo ---
+<span class="fc" id="L181">    List&lt;SimulationScenario&gt; scenarios = SimulationScenarios.all();</span>
+<span class="fc" id="L182">    ScenarioItem[] items = new ScenarioItem[scenarios.size()];</span>
+<span class="fc bfc" id="L183" title="All 2 branches covered.">    for (int i = 0; i &lt; scenarios.size(); i++) {</span>
+<span class="fc" id="L184">      items[i] = new ScenarioItem(scenarios.get(i));</span>
+    }
+<span class="fc" id="L186">    scenarioCombo = new JComboBox&lt;&gt;(items);</span>
+
+    // --- parameter spinners ---
+<span class="fc" id="L189">    blockSizeSpinner = new JSpinner(new SpinnerNumberModel(1024, 256, 8192, 256));</span>
+<span class="fc" id="L190">    fftSizeSpinner = new JSpinner(new SpinnerListModel(List.of(256, 512, 1024, 2048, 4096, 8192)));</span>
+<span class="fc" id="L191">    fftSizeSpinner.setValue(1024);</span>
+<span class="fc" id="L192">    maxPeaksSpinner = new JSpinner(new SpinnerNumberModel(3, 1, 10, 1));</span>
+<span class="fc" id="L193">    minSnrSpinner = new JSpinner(new SpinnerNumberModel(2.0, 0.0, 20.0, 0.5));</span>
+<span class="fc" id="L194">    bandMinSpinner = new JSpinner(new SpinnerNumberModel(150.0, 50.0, 20000.0, 50.0));</span>
+<span class="fc" id="L195">    bandMaxSpinner = new JSpinner(new SpinnerNumberModel(2500.0, 100.0, 24000.0, 100.0));</span>
+<span class="fc" id="L196">    gridStepsSpinner = new JSpinner(new SpinnerNumberModel(8, 2, 32, 1));</span>
+<span class="fc" id="L197">    tdoaCombo = new JComboBox&lt;&gt;(WorkbenchParameters.TdoaEstimatorType.values());</span>
+
+    // --- buttons ---
+<span class="fc" id="L200">    runButton = new JButton(&quot;▶ Run&quot;);</span>
+<span class="fc" id="L201">    stopButton = new JButton(&quot;■ Stop&quot;);</span>
+<span class="fc" id="L202">    stopButton.setEnabled(false);</span>
+<span class="pc" id="L203">    runButton.addActionListener(e -&gt; startRun());</span>
+<span class="pc" id="L204">    stopButton.addActionListener(e -&gt; stopRun());</span>
+
+    // --- output areas ---
+<span class="fc" id="L207">    logArea = newReadOnlyTextArea(20, 60);</span>
+<span class="fc" id="L208">    markdownArea = newReadOnlyTextArea(20, 60);</span>
+<span class="fc" id="L209">    csvArea = newReadOnlyTextArea(20, 60);</span>
+<span class="fc" id="L210">    jsonArea = newReadOnlyTextArea(20, 60);</span>
+<span class="fc" id="L211">    benchmarkArea = newReadOnlyTextArea(20, 60);</span>
+<span class="fc" id="L212">    featureRankingArea = newReadOnlyTextArea(20, 60);</span>
+<span class="fc" id="L213">    featureComparisonArea = newReadOnlyTextArea(20, 60);</span>
+<span class="fc" id="L214">    syntheticRealArea = newReadOnlyTextArea(20, 60);</span>
+<span class="fc" id="L215">    classifierComparisonArea = newReadOnlyTextArea(20, 60);</span>
+<span class="fc" id="L216">    localizationComparisonArea = newReadOnlyTextArea(20, 60);</span>
+<span class="fc" id="L217">    calibrationArea = newReadOnlyTextArea(20, 60);</span>
+<span class="fc" id="L218">    statusLabel = new JLabel(&quot;Ready — select a scenario and press Run.&quot;);</span>
+<span class="fc" id="L219">    roomMapPanel = new RoomMapPanel();</span>
+
+    // --- playback controls (disabled until run completes) ---
+<span class="fc" id="L222">    firstButton = new JButton(&quot;|&lt;&quot;);</span>
+<span class="fc" id="L223">    stepBackButton = new JButton(&quot;&lt;&lt;&quot;);</span>
+<span class="fc" id="L224">    playPauseButton = new JButton(&quot;▶&quot;);</span>
+<span class="fc" id="L225">    stepForwardButton = new JButton(&quot;&gt;&gt;&quot;);</span>
+<span class="fc" id="L226">    lastButton = new JButton(&quot;&gt;|&quot;);</span>
+<span class="fc" id="L227">    timelineSlider = new JSlider(0, 0, 0);</span>
+<span class="fc" id="L228">    frameLabel = new JLabel(&quot;Frame: — / —&quot;);</span>
+<span class="fc" id="L229">    playbackDetailArea = newReadOnlyTextArea(10, 60);</span>
+<span class="fc" id="L230">    setPlaybackControlsEnabled(false);</span>
+
+<span class="pc" id="L232">    firstButton.addActionListener(e -&gt; onPlaybackFirst());</span>
+<span class="pc" id="L233">    stepBackButton.addActionListener(e -&gt; onPlaybackStepBack());</span>
+<span class="pc" id="L234">    playPauseButton.addActionListener(e -&gt; onPlaybackPlayPause());</span>
+<span class="pc" id="L235">    stepForwardButton.addActionListener(e -&gt; onPlaybackStepForward());</span>
+<span class="pc" id="L236">    lastButton.addActionListener(e -&gt; onPlaybackLast());</span>
+<span class="pc" id="L237">    timelineSlider.addChangeListener(e -&gt; onTimelineSliderChanged());</span>
+
+    // --- layout ---
+<span class="fc" id="L240">    add(buildTopPanel(), BorderLayout.NORTH);</span>
+<span class="fc" id="L241">    add(buildCenterSplit(), BorderLayout.CENTER);</span>
+<span class="fc" id="L242">    add(buildStatusBar(), BorderLayout.SOUTH);</span>
+<span class="fc" id="L243">  }</span>
+
+  // -------------------------------------------------------------------------
+  // Layout helpers
+  // -------------------------------------------------------------------------
+
+  private JPanel buildTopPanel() {
+<span class="fc" id="L250">    JPanel top = new JPanel(new BorderLayout(4, 4));</span>
+<span class="fc" id="L251">    top.setBorder(</span>
+<span class="fc" id="L252">        BorderFactory.createTitledBorder(</span>
+            &quot;Experimental Acoustic Localization Workbench (simulation only)&quot;));
+<span class="fc" id="L254">    top.add(buildScenarioRow(), BorderLayout.NORTH);</span>
+<span class="fc" id="L255">    top.add(buildParamPanel(), BorderLayout.CENTER);</span>
+<span class="fc" id="L256">    top.add(buildButtonRow(), BorderLayout.SOUTH);</span>
+<span class="fc" id="L257">    return top;</span>
+  }
+
+  private JPanel buildScenarioRow() {
+<span class="fc" id="L261">    JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));</span>
+<span class="fc" id="L262">    row.add(new JLabel(&quot;Scenario:&quot;));</span>
+<span class="fc" id="L263">    scenarioCombo.setPreferredSize(new Dimension(260, 24));</span>
+<span class="fc" id="L264">    row.add(scenarioCombo);</span>
+<span class="fc" id="L265">    return row;</span>
+  }
+
+  private JPanel buildParamPanel() {
+<span class="fc" id="L269">    JPanel p = new JPanel(new GridBagLayout());</span>
+<span class="fc" id="L270">    GridBagConstraints lc = new GridBagConstraints();</span>
+<span class="fc" id="L271">    lc.anchor = GridBagConstraints.WEST;</span>
+<span class="fc" id="L272">    lc.insets = new Insets(2, 4, 2, 2);</span>
+<span class="fc" id="L273">    GridBagConstraints vc = new GridBagConstraints();</span>
+<span class="fc" id="L274">    vc.fill = GridBagConstraints.HORIZONTAL;</span>
+<span class="fc" id="L275">    vc.weightx = 0.15;</span>
+<span class="fc" id="L276">    vc.insets = new Insets(2, 0, 2, 8);</span>
+
+<span class="fc" id="L278">    int row = 0;</span>
+<span class="fc" id="L279">    addParam(p, lc, vc, row, 0, &quot;Block size:&quot;, blockSizeSpinner);</span>
+<span class="fc" id="L280">    addParam(p, lc, vc, row, 3, &quot;FFT size:&quot;, fftSizeSpinner);</span>
+<span class="fc" id="L281">    row++;</span>
+<span class="fc" id="L282">    addParam(p, lc, vc, row, 0, &quot;Max peaks:&quot;, maxPeaksSpinner);</span>
+<span class="fc" id="L283">    addParam(p, lc, vc, row, 3, &quot;Min SNR:&quot;, minSnrSpinner);</span>
+<span class="fc" id="L284">    row++;</span>
+<span class="fc" id="L285">    addParam(p, lc, vc, row, 0, &quot;Band min (Hz):&quot;, bandMinSpinner);</span>
+<span class="fc" id="L286">    addParam(p, lc, vc, row, 3, &quot;Band max (Hz):&quot;, bandMaxSpinner);</span>
+<span class="fc" id="L287">    row++;</span>
+<span class="fc" id="L288">    addParam(p, lc, vc, row, 0, &quot;Grid steps:&quot;, gridStepsSpinner);</span>
+<span class="fc" id="L289">    addParam(p, lc, vc, row, 3, &quot;TDOA estimator:&quot;, tdoaCombo);</span>
+
+<span class="fc" id="L291">    return p;</span>
+  }
+
+  private static void addParam(
+      JPanel panel,
+      GridBagConstraints lc,
+      GridBagConstraints vc,
+      int row,
+      int colOffset,
+      String label,
+      java.awt.Component field) {
+<span class="fc" id="L302">    lc.gridx = colOffset;</span>
+<span class="fc" id="L303">    lc.gridy = row;</span>
+<span class="fc" id="L304">    panel.add(new JLabel(label), lc);</span>
+<span class="fc" id="L305">    vc.gridx = colOffset + 1;</span>
+<span class="fc" id="L306">    vc.gridy = row;</span>
+<span class="fc" id="L307">    panel.add(field, vc);</span>
+<span class="fc" id="L308">  }</span>
+
+  private JPanel buildButtonRow() {
+<span class="fc" id="L311">    JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));</span>
+<span class="fc" id="L312">    row.add(runButton);</span>
+<span class="fc" id="L313">    row.add(stopButton);</span>
+<span class="fc" id="L314">    return row;</span>
+  }
+
+  private JSplitPane buildCenterSplit() {
+<span class="fc" id="L318">    JTabbedPane outputTabs = buildOutputTabs();</span>
+<span class="fc" id="L319">    JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, outputTabs, roomMapPanel);</span>
+<span class="fc" id="L320">    split.setResizeWeight(0.55);</span>
+<span class="fc" id="L321">    split.setDividerLocation(460);</span>
+<span class="fc" id="L322">    return split;</span>
+  }
+
+  private JTabbedPane buildOutputTabs() {
+<span class="fc" id="L326">    JTabbedPane tabs = new JTabbedPane();</span>
+<span class="fc" id="L327">    tabs.addTab(&quot;Log&quot;, new JScrollPane(logArea));</span>
+<span class="fc" id="L328">    tabs.addTab(&quot;Playback&quot;, buildPlaybackTab());</span>
+<span class="fc" id="L329">    tabs.addTab(&quot;Benchmark&quot;, new JScrollPane(benchmarkArea));</span>
+<span class="fc" id="L330">    tabs.addTab(&quot;Markdown&quot;, new JScrollPane(markdownArea));</span>
+<span class="fc" id="L331">    tabs.addTab(&quot;CSV&quot;, new JScrollPane(csvArea));</span>
+<span class="fc" id="L332">    tabs.addTab(&quot;JSON-lines&quot;, new JScrollPane(jsonArea));</span>
+<span class="fc" id="L333">    tabs.addTab(&quot;Feature Ranking&quot;, new JScrollPane(featureRankingArea));</span>
+<span class="fc" id="L334">    tabs.addTab(&quot;Feature Comparison&quot;, new JScrollPane(featureComparisonArea));</span>
+<span class="fc" id="L335">    tabs.addTab(&quot;Synthetic vs Real&quot;, new JScrollPane(syntheticRealArea));</span>
+<span class="fc" id="L336">    tabs.addTab(&quot;Classifier Comparison&quot;, new JScrollPane(classifierComparisonArea));</span>
+<span class="fc" id="L337">    tabs.addTab(&quot;Localization Comparison&quot;, new JScrollPane(localizationComparisonArea));</span>
+<span class="fc" id="L338">    tabs.addTab(&quot;Generator Calibration&quot;, new JScrollPane(calibrationArea));</span>
+<span class="fc" id="L339">    return tabs;</span>
+  }
+
+  private JPanel buildPlaybackTab() {
+<span class="fc" id="L343">    JPanel tab = new JPanel(new BorderLayout(4, 4));</span>
+<span class="fc" id="L344">    tab.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));</span>
+
+    // Controls row
+<span class="fc" id="L347">    JPanel controls = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));</span>
+<span class="fc" id="L348">    controls.add(firstButton);</span>
+<span class="fc" id="L349">    controls.add(stepBackButton);</span>
+<span class="fc" id="L350">    controls.add(playPauseButton);</span>
+<span class="fc" id="L351">    controls.add(stepForwardButton);</span>
+<span class="fc" id="L352">    controls.add(lastButton);</span>
+<span class="fc" id="L353">    controls.add(frameLabel);</span>
+
+    // Slider row
+<span class="fc" id="L356">    JPanel sliderRow = new JPanel(new BorderLayout(4, 0));</span>
+<span class="fc" id="L357">    sliderRow.add(new JLabel(&quot;Timeline:&quot;), BorderLayout.WEST);</span>
+<span class="fc" id="L358">    sliderRow.add(timelineSlider, BorderLayout.CENTER);</span>
+
+<span class="fc" id="L360">    JPanel top = new JPanel(new BorderLayout(0, 2));</span>
+<span class="fc" id="L361">    top.add(controls, BorderLayout.NORTH);</span>
+<span class="fc" id="L362">    top.add(sliderRow, BorderLayout.SOUTH);</span>
+
+<span class="fc" id="L364">    tab.add(top, BorderLayout.NORTH);</span>
+<span class="fc" id="L365">    tab.add(new JScrollPane(playbackDetailArea), BorderLayout.CENTER);</span>
+<span class="fc" id="L366">    return tab;</span>
+  }
+
+  private JPanel buildStatusBar() {
+<span class="fc" id="L370">    JPanel bar = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));</span>
+<span class="fc" id="L371">    bar.setBorder(BorderFactory.createEtchedBorder());</span>
+<span class="fc" id="L372">    bar.add(statusLabel);</span>
+<span class="fc" id="L373">    return bar;</span>
+  }
+
+  private static JTextArea newReadOnlyTextArea(int rows, int cols) {
+<span class="fc" id="L377">    JTextArea area = new JTextArea(rows, cols);</span>
+<span class="fc" id="L378">    area.setEditable(false);</span>
+<span class="fc" id="L379">    area.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 11));</span>
+<span class="fc" id="L380">    area.setLineWrap(false);</span>
+<span class="fc" id="L381">    return area;</span>
+  }
+
+  // -------------------------------------------------------------------------
+  // Run / stop logic
+  // -------------------------------------------------------------------------
+
+  private void startRun() {
+<span class="nc bnc" id="L389" title="All 2 branches missed.">    if (running.get()) {</span>
+<span class="nc" id="L390">      return;</span>
+    }
+<span class="nc" id="L392">    ScenarioItem selected = (ScenarioItem) scenarioCombo.getSelectedItem();</span>
+<span class="nc bnc" id="L393" title="All 2 branches missed.">    if (selected == null) {</span>
+<span class="nc" id="L394">      updateStatus(&quot;No scenario selected.&quot;);</span>
+<span class="nc" id="L395">      return;</span>
+    }
+<span class="nc" id="L397">    SimulationScenario scenario = selected.scenario;</span>
+    WorkbenchParameters params;
+    try {
+<span class="nc" id="L400">      params = readParameters();</span>
+<span class="nc" id="L401">    } catch (IllegalArgumentException ex) {</span>
+<span class="nc" id="L402">      updateStatus(&quot;Invalid parameters: &quot; + ex.getMessage());</span>
+<span class="nc" id="L403">      return;</span>
+<span class="nc" id="L404">    }</span>
+
+<span class="nc" id="L406">    logArea.setText(&quot;&quot;);</span>
+<span class="nc" id="L407">    markdownArea.setText(&quot;&quot;);</span>
+<span class="nc" id="L408">    csvArea.setText(&quot;&quot;);</span>
+<span class="nc" id="L409">    jsonArea.setText(&quot;&quot;);</span>
+<span class="nc" id="L410">    benchmarkArea.setText(&quot;&quot;);</span>
+<span class="nc" id="L411">    featureRankingArea.setText(&quot;&quot;);</span>
+<span class="nc" id="L412">    featureComparisonArea.setText(&quot;&quot;);</span>
+<span class="nc" id="L413">    syntheticRealArea.setText(&quot;&quot;);</span>
+<span class="nc" id="L414">    classifierComparisonArea.setText(&quot;&quot;);</span>
+<span class="nc" id="L415">    localizationComparisonArea.setText(&quot;&quot;);</span>
+<span class="nc" id="L416">    calibrationArea.setText(&quot;&quot;);</span>
+<span class="nc" id="L417">    SwingWorker&lt;AnalysisTabContent, Void&gt; currentAnalysis = analysisWorker;</span>
+<span class="nc bnc" id="L418" title="All 2 branches missed.">    if (currentAnalysis != null) {</span>
+<span class="nc" id="L419">      currentAnalysis.cancel(true);</span>
+<span class="nc" id="L420">      analysisWorker = null;</span>
+    }
+<span class="nc" id="L422">    roomMapPanel.clear(scenario);</span>
+<span class="nc" id="L423">    setRunning(true);</span>
+<span class="nc" id="L424">    appendLog(&quot;Starting scenario: &quot; + scenario.name());</span>
+<span class="nc" id="L425">    appendLog(</span>
+<span class="nc" id="L426">        String.format(</span>
+            Locale.ROOT,
+            &quot;Parameters: blockSize=%d fftSize=%d maxPeaks=%d minSnr=%.1f band=[%.0f,%.0f] &quot;
+                + &quot;grid=%d TDOA=%s&quot;,
+<span class="nc" id="L430">            params.blockSize(),</span>
+<span class="nc" id="L431">            params.fftSize(),</span>
+<span class="nc" id="L432">            params.maxPeaks(),</span>
+<span class="nc" id="L433">            params.minSnr(),</span>
+<span class="nc" id="L434">            params.bandMinHz(),</span>
+<span class="nc" id="L435">            params.bandMaxHz(),</span>
+<span class="nc" id="L436">            params.candidateGridSteps(),</span>
+<span class="nc" id="L437">            params.tdoaEstimatorType()));</span>
+<span class="nc" id="L438">    appendLog(&quot;---&quot;);</span>
+
+<span class="nc" id="L440">    currentWorker = new ScenarioWorker(scenario, params);</span>
+<span class="nc" id="L441">    currentWorker.execute();</span>
+<span class="nc" id="L442">  }</span>
+
+  private void stopRun() {
+<span class="nc" id="L445">    SwingWorker&lt;WorkbenchRunResult, String&gt; w = currentWorker;</span>
+<span class="nc bnc" id="L446" title="All 2 branches missed.">    if (w != null) {</span>
+<span class="nc" id="L447">      w.cancel(true);</span>
+    }
+<span class="nc" id="L449">  }</span>
+
+  private void setRunning(boolean isRunning) {
+<span class="nc" id="L452">    running.set(isRunning);</span>
+<span class="nc" id="L453">    SwingUtilities.invokeLater(</span>
+        () -&gt; {
+<span class="nc bnc" id="L455" title="All 2 branches missed.">          runButton.setEnabled(!isRunning);</span>
+<span class="nc" id="L456">          stopButton.setEnabled(isRunning);</span>
+<span class="nc" id="L457">        });</span>
+<span class="nc" id="L458">  }</span>
+
+  private void appendLog(String line) {
+<span class="nc" id="L461">    SwingUtilities.invokeLater(</span>
+        () -&gt; {
+<span class="nc" id="L463">          logArea.append(line);</span>
+<span class="nc" id="L464">          logArea.append(&quot;\n&quot;);</span>
+<span class="nc" id="L465">          logArea.setCaretPosition(logArea.getDocument().getLength());</span>
+<span class="nc" id="L466">        });</span>
+<span class="nc" id="L467">  }</span>
+
+  private WorkbenchParameters readParameters() {
+<span class="nc" id="L470">    return WorkbenchParameters.defaults()</span>
+<span class="nc" id="L471">        .blockSize((Integer) blockSizeSpinner.getValue())</span>
+<span class="nc" id="L472">        .fftSize((Integer) fftSizeSpinner.getValue())</span>
+<span class="nc" id="L473">        .maxPeaks((Integer) maxPeaksSpinner.getValue())</span>
+<span class="nc" id="L474">        .minSnr((Double) minSnrSpinner.getValue())</span>
+<span class="nc" id="L475">        .bandMinHz((Double) bandMinSpinner.getValue())</span>
+<span class="nc" id="L476">        .bandMaxHz((Double) bandMaxSpinner.getValue())</span>
+<span class="nc" id="L477">        .candidateGridSteps((Integer) gridStepsSpinner.getValue())</span>
+<span class="nc" id="L478">        .tdoaEstimatorType((WorkbenchParameters.TdoaEstimatorType) tdoaCombo.getSelectedItem())</span>
+<span class="nc" id="L479">        .build();</span>
+  }
+
+  // -------------------------------------------------------------------------
+  // Playback logic
+  // -------------------------------------------------------------------------
+
+  private void loadPlayback(WorkbenchRunResult result) {
+<span class="nc" id="L487">    SwingUtilities.invokeLater(</span>
+        () -&gt; {
+<span class="nc" id="L489">          stopPlayTimer();</span>
+<span class="nc" id="L490">          playbackModel = new PlaybackModel(result);</span>
+<span class="nc" id="L491">          int last = Math.max(0, result.snapshots().size() - 1);</span>
+<span class="nc" id="L492">          timelineSlider.setMinimum(0);</span>
+<span class="nc" id="L493">          timelineSlider.setMaximum(last);</span>
+<span class="nc" id="L494">          syncSliderToModel(playbackModel);</span>
+<span class="nc bnc" id="L495" title="All 2 branches missed.">          setPlaybackControlsEnabled(!result.snapshots().isEmpty());</span>
+<span class="nc bnc" id="L496" title="All 2 branches missed.">          if (result.snapshots().isEmpty()) {</span>
+<span class="nc" id="L497">            frameLabel.setText(&quot;Frame: — / —&quot;);</span>
+<span class="nc" id="L498">            playbackDetailArea.setText(&quot;No frames in this run.&quot;);</span>
+          } else {
+<span class="nc" id="L500">            refreshPlaybackFrame(0);</span>
+          }
+<span class="nc" id="L502">        });</span>
+<span class="nc" id="L503">  }</span>
+
+  private void setPlaybackControlsEnabled(boolean enabled) {
+<span class="fc" id="L506">    firstButton.setEnabled(enabled);</span>
+<span class="fc" id="L507">    stepBackButton.setEnabled(enabled);</span>
+<span class="fc" id="L508">    playPauseButton.setEnabled(enabled);</span>
+<span class="fc" id="L509">    stepForwardButton.setEnabled(enabled);</span>
+<span class="fc" id="L510">    lastButton.setEnabled(enabled);</span>
+<span class="fc" id="L511">    timelineSlider.setEnabled(enabled);</span>
+<span class="fc" id="L512">  }</span>
+
+  private void onPlaybackFirst() {
+<span class="nc" id="L515">    PlaybackModel model = playbackModel;</span>
+<span class="nc bnc" id="L516" title="All 2 branches missed.">    if (model == null) {</span>
+<span class="nc" id="L517">      return;</span>
+    }
+<span class="nc" id="L519">    model.first();</span>
+<span class="nc" id="L520">    syncSliderToModel(model);</span>
+<span class="nc" id="L521">    refreshPlaybackFrame(model.currentFrame());</span>
+<span class="nc" id="L522">  }</span>
+
+  private void onPlaybackLast() {
+<span class="nc" id="L525">    PlaybackModel model = playbackModel;</span>
+<span class="nc bnc" id="L526" title="All 2 branches missed.">    if (model == null) {</span>
+<span class="nc" id="L527">      return;</span>
+    }
+<span class="nc" id="L529">    model.last();</span>
+<span class="nc" id="L530">    syncSliderToModel(model);</span>
+<span class="nc" id="L531">    refreshPlaybackFrame(model.currentFrame());</span>
+<span class="nc" id="L532">  }</span>
+
+  private void onPlaybackStepBack() {
+<span class="nc" id="L535">    PlaybackModel model = playbackModel;</span>
+<span class="nc bnc" id="L536" title="All 2 branches missed.">    if (model == null) {</span>
+<span class="nc" id="L537">      return;</span>
+    }
+<span class="nc" id="L539">    model.stepBack();</span>
+<span class="nc" id="L540">    syncSliderToModel(model);</span>
+<span class="nc" id="L541">    refreshPlaybackFrame(model.currentFrame());</span>
+<span class="nc" id="L542">  }</span>
+
+  private void onPlaybackStepForward() {
+<span class="nc" id="L545">    PlaybackModel model = playbackModel;</span>
+<span class="nc bnc" id="L546" title="All 2 branches missed.">    if (model == null) {</span>
+<span class="nc" id="L547">      return;</span>
+    }
+<span class="nc" id="L549">    model.stepForward();</span>
+<span class="nc" id="L550">    syncSliderToModel(model);</span>
+<span class="nc" id="L551">    refreshPlaybackFrame(model.currentFrame());</span>
+<span class="nc" id="L552">  }</span>
+
+  private void onPlaybackPlayPause() {
+<span class="nc bnc" id="L555" title="All 4 branches missed.">    if (playTimer != null &amp;&amp; playTimer.isRunning()) {</span>
+<span class="nc" id="L556">      stopPlayTimer();</span>
+    } else {
+<span class="nc" id="L558">      startPlayTimer();</span>
+    }
+<span class="nc" id="L560">  }</span>
+
+  private void startPlayTimer() {
+<span class="nc bnc" id="L563" title="All 4 branches missed.">    if (playbackModel == null || playbackModel.isEmpty()) {</span>
+<span class="nc" id="L564">      return;</span>
+    }
+<span class="nc" id="L566">    playPauseButton.setText(&quot;⏸&quot;);</span>
+<span class="nc" id="L567">    playTimer =</span>
+        new Timer(
+            150,
+            e -&gt; {
+<span class="nc" id="L571">              PlaybackModel model = playbackModel;</span>
+<span class="nc bnc" id="L572" title="All 2 branches missed.">              if (model == null) {</span>
+<span class="nc" id="L573">                stopPlayTimer();</span>
+<span class="nc" id="L574">                return;</span>
+              }
+<span class="nc" id="L576">              boolean advanced = model.stepForward();</span>
+<span class="nc" id="L577">              syncSliderToModel(model);</span>
+<span class="nc" id="L578">              refreshPlaybackFrame(model.currentFrame());</span>
+<span class="nc bnc" id="L579" title="All 2 branches missed.">              if (!advanced) {</span>
+<span class="nc" id="L580">                stopPlayTimer();</span>
+              }
+<span class="nc" id="L582">            });</span>
+<span class="nc" id="L583">    playTimer.start();</span>
+<span class="nc" id="L584">  }</span>
+
+  private void stopPlayTimer() {
+<span class="nc bnc" id="L587" title="All 2 branches missed.">    if (playTimer != null) {</span>
+<span class="nc" id="L588">      playTimer.stop();</span>
+<span class="nc" id="L589">      playTimer = null;</span>
+    }
+<span class="nc" id="L591">    playPauseButton.setText(&quot;▶&quot;);</span>
+<span class="nc" id="L592">  }</span>
+
+  private void onTimelineSliderChanged() {
+<span class="nc bnc" id="L595" title="All 2 branches missed.">    if (updatingSlider) {</span>
+<span class="nc" id="L596">      return;</span>
+    }
+<span class="nc" id="L598">    PlaybackModel model = playbackModel;</span>
+<span class="nc bnc" id="L599" title="All 4 branches missed.">    if (model == null || model.isEmpty()) {</span>
+<span class="nc" id="L600">      return;</span>
+    }
+<span class="nc" id="L602">    int value = timelineSlider.getValue();</span>
+<span class="nc" id="L603">    model.seekTo(value);</span>
+<span class="nc" id="L604">    refreshPlaybackFrame(model.currentFrame());</span>
+<span class="nc" id="L605">  }</span>
+
+  // PMD cannot see that updatingSlider is read by onTimelineSliderChanged, which is triggered
+  // as a side-effect of timelineSlider.setValue() firing the registered ChangeListener.
+  @SuppressWarnings(&quot;PMD.UnusedAssignment&quot;)
+  private void syncSliderToModel(PlaybackModel model) {
+<span class="nc" id="L611">    updatingSlider = true;</span>
+    try {
+<span class="nc" id="L613">      timelineSlider.setValue(model.currentFrame());</span>
+    } finally {
+<span class="nc" id="L615">      updatingSlider = false;</span>
+    }
+<span class="nc" id="L617">  }</span>
+
+  static String formatSynchronizationDetails(TrackingSnapshot snapshot) {
+<span class="fc" id="L620">    return String.format(</span>
+        Locale.ROOT,
+        &quot;Synchronization: %s / %s (error=%.4f samples, %.2f µs)%n&quot;,
+<span class="fc" id="L623">        snapshot.synchronization().mode(),</span>
+<span class="fc" id="L624">        snapshot.synchronization().status(),</span>
+<span class="fc" id="L625">        snapshot.synchronization().estimatedErrorSamples(),</span>
+<span class="fc" id="L626">        snapshot.synchronization().estimatedErrorSeconds() * 1_000_000.0);</span>
+  }
+
+  @SuppressWarnings(&quot;PMD.ConsecutiveAppendsShouldReuse&quot;)
+  private void refreshPlaybackFrame(int frameIndex) {
+<span class="nc" id="L631">    PlaybackModel model = playbackModel;</span>
+<span class="nc bnc" id="L632" title="All 4 branches missed.">    if (model == null || model.isEmpty()) {</span>
+<span class="nc" id="L633">      return;</span>
+    }
+<span class="nc" id="L635">    TrackingSnapshot snap = model.result().snapshots().get(frameIndex);</span>
+<span class="nc" id="L636">    int total = model.frameCount();</span>
+<span class="nc" id="L637">    frameLabel.setText(</span>
+<span class="nc" id="L638">        String.format(</span>
+            Locale.ROOT,
+            &quot;Frame: %d / %d  (t=%.1f ms)&quot;,
+<span class="nc" id="L641">            frameIndex + 1,</span>
+<span class="nc" id="L642">            total,</span>
+<span class="nc" id="L643">            snap.sourceTimestampNanos() / 1_000_000.0));</span>
+
+    // Update room map to show state up to this frame
+<span class="nc" id="L646">    roomMapPanel.setFrame(model.result(), frameIndex);</span>
+
+    // Build per-frame detail text
+<span class="nc" id="L649">    StringBuilder sb = new StringBuilder(512);</span>
+<span class="nc" id="L650">    sb.append(String.format(Locale.ROOT, &quot;Frame %d / %d%n&quot;, frameIndex + 1, total));</span>
+<span class="nc" id="L651">    sb.append(</span>
+<span class="nc" id="L652">        String.format(</span>
+<span class="nc" id="L653">            Locale.ROOT, &quot;Timestamp:   %.3f ms%n&quot;, snap.sourceTimestampNanos() / 1_000_000.0));</span>
+<span class="nc" id="L654">    sb.append(String.format(Locale.ROOT, &quot;Source frame: %d%n&quot;, snap.sourceFrameIndex()));</span>
+<span class="nc" id="L655">    sb.append(</span>
+<span class="nc" id="L656">        String.format(Locale.ROOT, &quot;Processing:  %.1f µs%n&quot;, snap.processingNanos() / 1_000.0));</span>
+<span class="nc" id="L657">    sb.append(formatSynchronizationDetails(snap));</span>
+<span class="nc bnc" id="L658" title="All 2 branches missed.">    if (snap.synchronization().status() != SynchronizationStatus.TRUSTED) {</span>
+<span class="nc" id="L659">      sb.append(&quot;⚠ Synchronization quality requires attention: &quot;)</span>
+<span class="nc" id="L660">          .append(String.join(&quot; &quot;, snap.synchronization().diagnostics()))</span>
+<span class="nc" id="L661">          .append('\n');</span>
+    }
+<span class="nc bnc" id="L663" title="All 2 branches missed.">    if (model.result().isFrameOverBudget(snap)) {</span>
+<span class="nc" id="L664">      sb.append(&quot;⚠ Frame exceeded real-time budget\n&quot;);</span>
+    }
+<span class="nc" id="L666">    sb.append(String.format(Locale.ROOT, &quot;Clusters:    %d%n&quot;, snap.clusters().size()));</span>
+<span class="nc" id="L667">    sb.append(String.format(Locale.ROOT, &quot;Tracks:      %d%n&quot;, snap.tracks().size()));</span>
+
+<span class="nc bnc" id="L669" title="All 2 branches missed.">    if (!snap.tracks().isEmpty()) {</span>
+<span class="nc" id="L670">      sb.append(&quot;\n--- Estimated tracks ---\n&quot;);</span>
+<span class="nc bnc" id="L671" title="All 2 branches missed.">      for (org.hammer.audio.experimental.acoustic.tracking.TrackedSource t : snap.tracks()) {</span>
+<span class="nc" id="L672">        sb.append(</span>
+<span class="nc" id="L673">            String.format(</span>
+                Locale.ROOT,
+                &quot;  id=%d  freq=%.0f Hz  pos=(%.3f, %.3f) m  conf=%.2f  obs=%d%n&quot;,
+<span class="nc" id="L676">                t.id(),</span>
+<span class="nc" id="L677">                t.frequencyHz(),</span>
+<span class="nc" id="L678">                t.positionMeters().x(),</span>
+<span class="nc" id="L679">                t.positionMeters().y(),</span>
+<span class="nc" id="L680">                t.confidence(),</span>
+<span class="nc" id="L681">                t.observationCount()));</span>
+<span class="nc bnc" id="L682" title="All 2 branches missed.">        if (!snap.classificationResults().isEmpty()) {</span>
+<span class="nc" id="L683">          org.hammer.audio.experimental.acoustic.wingbeat.ClassificationResult cls =</span>
+<span class="nc" id="L684">              snap.classificationResults().get(t.id());</span>
+<span class="nc bnc" id="L685" title="All 2 branches missed.">          if (cls != null) {</span>
+<span class="nc" id="L686">            sb.append(</span>
+<span class="nc" id="L687">                String.format(</span>
+                    Locale.ROOT,
+                    &quot;    classification: %s (confidence=%.3f)%n&quot;,
+<span class="nc" id="L690">                    cls.label(),</span>
+<span class="nc" id="L691">                    cls.confidence()));</span>
+          }
+        }
+<span class="nc" id="L694">      }</span>
+    }
+
+    // Ground-truth comparison using SnapshotGroundTruthAligner
+    try {
+<span class="nc" id="L699">      org.hammer.audio.experimental.acoustic.scenario.Scenario truth =</span>
+<span class="nc" id="L700">          model.result().scenario().groundTruth();</span>
+<span class="nc" id="L701">      long startTs = model.result().snapshots().get(0).sourceTimestampNanos();</span>
+<span class="nc" id="L702">      SnapshotAlignment alignment = new SnapshotGroundTruthAligner().align(truth, snap, startTs);</span>
+<span class="nc" id="L703">      sb.append(&quot;\n--- Ground-truth alignment ---\n&quot;);</span>
+<span class="nc" id="L704">      sb.append(</span>
+<span class="nc" id="L705">          String.format(</span>
+              Locale.ROOT,
+              &quot;t=%.3f s  matched=%d  missing=%d  spurious=%d%n&quot;,
+<span class="nc" id="L708">              alignment.timestampSeconds(),</span>
+<span class="nc" id="L709">              alignment.matchedSources().size(),</span>
+<span class="nc" id="L710">              alignment.missingSources().size(),</span>
+<span class="nc" id="L711">              alignment.spuriousTracks().size()));</span>
+<span class="nc bnc" id="L712" title="All 2 branches missed.">      for (AlignedSourceObservation obs : alignment.matchedSources()) {</span>
+<span class="nc bnc" id="L713" title="All 2 branches missed.">        if (obs.groundTruth().hasPositionTruth()) {</span>
+<span class="nc" id="L714">          double posErr =</span>
+<span class="nc" id="L715">              obs.groundTruth()</span>
+<span class="nc" id="L716">                  .expectedPositionMeters()</span>
+<span class="nc" id="L717">                  .distanceTo(obs.trackedSource().positionMeters());</span>
+<span class="nc" id="L718">          sb.append(</span>
+<span class="nc" id="L719">              String.format(</span>
+                  Locale.ROOT,
+                  &quot;  src=%s → track %d  posErr=%.3f m&quot;,
+<span class="nc" id="L722">                  obs.groundTruth().source().sourceId(),</span>
+<span class="nc" id="L723">                  obs.trackedSource().id(),</span>
+<span class="nc" id="L724">                  posErr));</span>
+        }
+<span class="nc bnc" id="L726" title="All 2 branches missed.">        if (obs.groundTruth().hasFrequencyTruth()) {</span>
+<span class="nc" id="L727">          double freqErr =</span>
+<span class="nc" id="L728">              Math.abs(obs.trackedSource().frequencyHz() - obs.groundTruth().expectedFrequencyHz());</span>
+<span class="nc" id="L729">          sb.append(String.format(Locale.ROOT, &quot;  freqErr=%.1f Hz&quot;, freqErr));</span>
+        }
+<span class="nc" id="L731">        sb.append('\n');</span>
+<span class="nc" id="L732">      }</span>
+<span class="nc" id="L733">    } catch (RuntimeException ignored) {</span>
+      // alignment failure is non-critical; skip the ground-truth section
+<span class="nc" id="L735">    }</span>
+
+<span class="nc" id="L737">    playbackDetailArea.setText(sb.toString());</span>
+<span class="nc" id="L738">    playbackDetailArea.setCaretPosition(0);</span>
+<span class="nc" id="L739">  }</span>
+
+  private AnalysisTabContent buildAnalysisTabContent(SimulationScenario completedScenario) {
+    // Build a small deterministic demo dataset for feature analysis.
+    // Two groups: female-likely (430–550 Hz) and male-likely (580–750 Hz).
+<span class="nc" id="L744">    List&lt;WingbeatFeatureVector&gt; synthetic = buildDemoSyntheticVectors();</span>
+<span class="nc" id="L745">    List&lt;WingbeatFeatureVector&gt; real = buildDemoRealVectors();</span>
+<span class="nc" id="L746">    List&lt;WingbeatFeatureVector&gt; allVectors = new java.util.ArrayList&lt;&gt;();</span>
+<span class="nc" id="L747">    allVectors.addAll(synthetic);</span>
+<span class="nc" id="L748">    allVectors.addAll(real);</span>
+<span class="nc" id="L749">    List&lt;String&gt; allLabels = new java.util.ArrayList&lt;&gt;();</span>
+<span class="nc bnc" id="L750" title="All 2 branches missed.">    for (WingbeatFeatureVector v : synthetic) {</span>
+<span class="nc" id="L751">      allLabels.add(</span>
+<span class="nc bnc" id="L752" title="All 2 branches missed.">          v.fundamentalFrequencyHz() &lt; 560.0</span>
+<span class="nc" id="L753">              ? WingbeatLabel.FEMALE_LIKELY</span>
+<span class="nc" id="L754">              : WingbeatLabel.MALE_LIKELY);</span>
+<span class="nc" id="L755">    }</span>
+<span class="nc bnc" id="L756" title="All 2 branches missed.">    for (WingbeatFeatureVector v : real) {</span>
+<span class="nc" id="L757">      allLabels.add(</span>
+<span class="nc bnc" id="L758" title="All 2 branches missed.">          v.fundamentalFrequencyHz() &lt; 560.0</span>
+<span class="nc" id="L759">              ? WingbeatLabel.FEMALE_LIKELY</span>
+<span class="nc" id="L760">              : WingbeatLabel.MALE_LIKELY);</span>
+<span class="nc" id="L761">    }</span>
+
+    // Feature evaluation
+<span class="nc" id="L764">    FeatureEvaluationService evalService = new FeatureEvaluationService();</span>
+<span class="nc" id="L765">    FeatureEvaluationReport evalReport = evalService.evaluate(allVectors, allLabels);</span>
+
+    // Feature ranking
+<span class="nc" id="L768">    FeatureRankingService rankingService = FeatureRankingService.defaultService();</span>
+<span class="nc" id="L769">    List&lt;FeatureRankingEntry&gt; ranking = rankingService.rank(evalReport);</span>
+
+    // Synthetic vs real
+<span class="nc" id="L772">    SyntheticRealComparison srComparison = new SyntheticRealComparison();</span>
+<span class="nc" id="L773">    SyntheticRealComparisonReport srReport = srComparison.compare(synthetic, real);</span>
+
+    // Classifier comparison
+<span class="nc" id="L776">    ClassifierBenchmarkRunner classifierRunner = ClassifierBenchmarkRunner.defaultRunner();</span>
+<span class="nc" id="L777">    Map&lt;String, ClassifierBenchmarkResult&gt; classifierResults =</span>
+<span class="nc" id="L778">        classifierRunner.run(allVectors, allLabels);</span>
+
+    // Localization comparison (run only the current scenario to keep the workbench responsive)
+<span class="nc" id="L781">    LocalizationBenchmarkRunner locRunner = LocalizationBenchmarkRunner.defaultRunner();</span>
+<span class="nc" id="L782">    Map&lt;String, List&lt;LocalizationBenchmarkResult&gt;&gt; locResults =</span>
+<span class="nc" id="L783">        locRunner.run(List.of(completedScenario));</span>
+
+    // Calibration
+<span class="nc" id="L786">    WingbeatSignalParameters baseline = WingbeatSignalParameters.mosquitoLike(500.0);</span>
+<span class="nc" id="L787">    GeneratorCalibrationService calibrationService = new GeneratorCalibrationService();</span>
+<span class="nc" id="L788">    CalibrationResult calibrationResult = calibrationService.calibrate(baseline, real);</span>
+
+<span class="nc" id="L790">    return new AnalysisTabContent(</span>
+<span class="nc" id="L791">        buildFeatureRankingText(ranking),</span>
+<span class="nc" id="L792">        buildFeatureComparisonText(evalReport),</span>
+<span class="nc" id="L793">        buildSyntheticRealText(srReport),</span>
+<span class="nc" id="L794">        buildClassifierComparisonText(classifierResults),</span>
+<span class="nc" id="L795">        buildLocalizationComparisonText(locResults),</span>
+<span class="nc" id="L796">        buildCalibrationText(calibrationResult));</span>
+  }
+
+  private void populateAnalysisTabsAsync(SimulationScenario completedScenario) {
+<span class="nc" id="L800">    featureRankingArea.setText(COMPUTING_ANALYSIS_MESSAGE);</span>
+<span class="nc" id="L801">    featureComparisonArea.setText(COMPUTING_ANALYSIS_MESSAGE);</span>
+<span class="nc" id="L802">    syntheticRealArea.setText(COMPUTING_ANALYSIS_MESSAGE);</span>
+<span class="nc" id="L803">    classifierComparisonArea.setText(COMPUTING_ANALYSIS_MESSAGE);</span>
+<span class="nc" id="L804">    localizationComparisonArea.setText(COMPUTING_ANALYSIS_MESSAGE);</span>
+<span class="nc" id="L805">    calibrationArea.setText(COMPUTING_ANALYSIS_MESSAGE);</span>
+
+<span class="nc" id="L807">    SwingWorker&lt;AnalysisTabContent, Void&gt; worker =</span>
+<span class="nc" id="L808">        new SwingWorker&lt;&gt;() {</span>
+          @Override
+          protected AnalysisTabContent doInBackground() {
+<span class="nc" id="L811">            return buildAnalysisTabContent(completedScenario);</span>
+          }
+
+          @Override
+          protected void done() {
+<span class="nc bnc" id="L816" title="All 2 branches missed.">            if (isCancelled()) {</span>
+<span class="nc" id="L817">              return;</span>
+            }
+            try {
+<span class="nc" id="L820">              AnalysisTabContent content = get();</span>
+<span class="nc" id="L821">              featureRankingArea.setText(content.featureRankingText);</span>
+<span class="nc" id="L822">              featureComparisonArea.setText(content.featureComparisonText);</span>
+<span class="nc" id="L823">              syntheticRealArea.setText(content.syntheticRealText);</span>
+<span class="nc" id="L824">              classifierComparisonArea.setText(content.classifierComparisonText);</span>
+<span class="nc" id="L825">              localizationComparisonArea.setText(content.localizationComparisonText);</span>
+<span class="nc" id="L826">              calibrationArea.setText(content.calibrationText);</span>
+<span class="nc" id="L827">            } catch (ExecutionException ex) {</span>
+<span class="nc" id="L828">              LOGGER.log(Level.WARNING, &quot;Failed to compute analysis tabs&quot;, ex);</span>
+<span class="nc" id="L829">              String errorMessage = &quot;Analysis failed: &quot; + ex.getCause().getMessage();</span>
+<span class="nc" id="L830">              featureRankingArea.setText(errorMessage);</span>
+<span class="nc" id="L831">              featureComparisonArea.setText(errorMessage);</span>
+<span class="nc" id="L832">              syntheticRealArea.setText(errorMessage);</span>
+<span class="nc" id="L833">              classifierComparisonArea.setText(errorMessage);</span>
+<span class="nc" id="L834">              localizationComparisonArea.setText(errorMessage);</span>
+<span class="nc" id="L835">              calibrationArea.setText(errorMessage);</span>
+<span class="nc" id="L836">            } catch (InterruptedException ex) {</span>
+<span class="nc" id="L837">              Thread.currentThread().interrupt();</span>
+<span class="nc" id="L838">            }</span>
+<span class="nc" id="L839">          }</span>
+        };
+<span class="nc" id="L841">    analysisWorker = worker;</span>
+<span class="nc" id="L842">    worker.execute();</span>
+<span class="nc" id="L843">  }</span>
+
+  private static List&lt;WingbeatFeatureVector&gt; buildDemoSyntheticVectors() {
+<span class="nc" id="L846">    double[] freqs = {450.0, 470.0, 490.0, 510.0, 530.0, 600.0, 630.0, 660.0, 690.0, 720.0};</span>
+<span class="nc" id="L847">    List&lt;WingbeatFeatureVector&gt; list = new java.util.ArrayList&lt;&gt;();</span>
+<span class="nc bnc" id="L848" title="All 2 branches missed.">    for (double f : freqs) {</span>
+<span class="nc" id="L849">      list.add(</span>
+          new WingbeatFeatureVector(
+<span class="nc" id="L851">              f, List.of(), List.of(), f, 20.0, 0.0, 5.0, 0.1, 6.0, 1.0, 0.9));</span>
+    }
+<span class="nc" id="L853">    return list;</span>
+  }
+
+  private static List&lt;WingbeatFeatureVector&gt; buildDemoRealVectors() {
+    // Slightly different means to simulate real-vs-synthetic divergence
+<span class="nc" id="L858">    double[] freqs = {455.0, 475.0, 495.0, 515.0, 535.0, 590.0, 625.0, 655.0, 685.0, 715.0};</span>
+<span class="nc" id="L859">    List&lt;WingbeatFeatureVector&gt; list = new java.util.ArrayList&lt;&gt;();</span>
+<span class="nc bnc" id="L860" title="All 2 branches missed.">    for (double f : freqs) {</span>
+<span class="nc" id="L861">      list.add(</span>
+          new WingbeatFeatureVector(
+<span class="nc" id="L863">              f, List.of(), List.of(), f, 22.0, 0.0, 6.0, 0.12, 5.5, 1.0, 0.85));</span>
+    }
+<span class="nc" id="L865">    return list;</span>
+  }
+
+  @SuppressWarnings(&quot;PMD.ConsecutiveAppendsShouldReuse&quot;)
+  private static String buildFeatureRankingText(List&lt;FeatureRankingEntry&gt; ranking) {
+<span class="nc" id="L870">    StringBuilder sb = new StringBuilder(&quot;# Feature Ranking\n\n&quot;);</span>
+<span class="nc" id="L871">    sb.append(String.format(Locale.ROOT, &quot;%-30s %12s%n&quot;, &quot;Feature&quot;, &quot;Mean Score&quot;));</span>
+<span class="nc" id="L872">    sb.append(&quot;-&quot;.repeat(45)).append('\n');</span>
+<span class="nc bnc" id="L873" title="All 2 branches missed.">    for (FeatureRankingEntry entry : ranking) {</span>
+<span class="nc" id="L874">      sb.append(</span>
+<span class="nc" id="L875">          String.format(Locale.ROOT, &quot;%-30s %12.4f%n&quot;, entry.featureName(), entry.meanScore()));</span>
+<span class="nc" id="L876">    }</span>
+<span class="nc" id="L877">    return sb.toString();</span>
+  }
+
+  @SuppressWarnings(&quot;PMD.ConsecutiveAppendsShouldReuse&quot;)
+  private static String buildFeatureComparisonText(FeatureEvaluationReport report) {
+<span class="nc" id="L882">    StringBuilder sb = new StringBuilder(&quot;# Feature Evaluation\n\n&quot;);</span>
+<span class="nc" id="L883">    sb.append(</span>
+<span class="nc" id="L884">        String.format(</span>
+            Locale.ROOT, &quot;%-30s %10s %10s %10s%n&quot;, &quot;Feature&quot;, &quot;Mean&quot;, &quot;StdDev&quot;, &quot;FisherRatio&quot;));
+<span class="nc" id="L886">    sb.append(&quot;-&quot;.repeat(65)).append('\n');</span>
+<span class="nc bnc" id="L887" title="All 2 branches missed.">    for (FeatureEvaluationEntry entry : report.entries()) {</span>
+<span class="nc" id="L888">      sb.append(</span>
+<span class="nc" id="L889">          String.format(</span>
+              Locale.ROOT,
+              &quot;%-30s %10.3f %10.3f %10.4f%n&quot;,
+<span class="nc" id="L892">              entry.featureName(),</span>
+<span class="nc" id="L893">              entry.statistics().mean(),</span>
+<span class="nc" id="L894">              entry.statistics().stdDev(),</span>
+<span class="nc" id="L895">              entry.separation().fisherRatio()));</span>
+<span class="nc" id="L896">    }</span>
+<span class="nc" id="L897">    return sb.toString();</span>
+  }
+
+  @SuppressWarnings(&quot;PMD.ConsecutiveAppendsShouldReuse&quot;)
+  private static String buildSyntheticRealText(SyntheticRealComparisonReport report) {
+<span class="nc" id="L902">    StringBuilder sb = new StringBuilder(256);</span>
+<span class="nc" id="L903">    sb.append(&quot;# Synthetic vs Real Comparison\n\n&quot;);</span>
+<span class="nc" id="L904">    sb.append(</span>
+<span class="nc" id="L905">        String.format(</span>
+            Locale.ROOT, &quot;%-30s %10s %10s %10s%n&quot;, &quot;Feature&quot;, &quot;Synthetic&quot;, &quot;Real&quot;, &quot;Rel.Diff&quot;));
+<span class="nc" id="L907">    sb.append(&quot;-&quot;.repeat(65)).append('\n');</span>
+<span class="nc bnc" id="L908" title="All 2 branches missed.">    for (FeatureDifference diff : report.differences()) {</span>
+<span class="nc" id="L909">      sb.append(</span>
+<span class="nc" id="L910">          String.format(</span>
+              Locale.ROOT,
+              &quot;%-30s %10.3f %10.3f %9.1f%%%n&quot;,
+<span class="nc" id="L913">              diff.featureName(),</span>
+<span class="nc" id="L914">              diff.syntheticMean(),</span>
+<span class="nc" id="L915">              diff.realMean(),</span>
+<span class="nc" id="L916">              diff.relativeDifference() * 100.0));</span>
+<span class="nc" id="L917">    }</span>
+<span class="nc bnc" id="L918" title="All 2 branches missed.">    if (!report.generatorWeaknesses().isEmpty()) {</span>
+<span class="nc" id="L919">      sb.append(&quot;\n## Generator Weaknesses (rel.diff &gt; &quot;)</span>
+<span class="nc" id="L920">          .append(String.format(Locale.ROOT, &quot;%.0f%%&quot;, report.weaknessThreshold() * 100.0))</span>
+<span class="nc" id="L921">          .append(&quot;)\n&quot;);</span>
+<span class="nc bnc" id="L922" title="All 2 branches missed.">      for (FeatureDifference diff : report.generatorWeaknesses()) {</span>
+<span class="nc" id="L923">        sb.append(&quot;  - &quot;).append(diff.featureName()).append('\n');</span>
+<span class="nc" id="L924">      }</span>
+    }
+<span class="nc" id="L926">    return sb.toString();</span>
+  }
+
+  @SuppressWarnings(&quot;PMD.ConsecutiveAppendsShouldReuse&quot;)
+  private static String buildClassifierComparisonText(
+      Map&lt;String, ClassifierBenchmarkResult&gt; results) {
+<span class="nc" id="L932">    StringBuilder sb = new StringBuilder(&quot;# Classifier Comparison\n\n&quot;);</span>
+<span class="nc bnc" id="L933" title="All 2 branches missed.">    for (Map.Entry&lt;String, ClassifierBenchmarkResult&gt; entry : results.entrySet()) {</span>
+<span class="nc" id="L934">      ClassifierBenchmarkResult r = entry.getValue();</span>
+<span class="nc" id="L935">      sb.append(&quot;## &quot;).append(entry.getKey()).append('\n');</span>
+<span class="nc" id="L936">      sb.append(</span>
+<span class="nc" id="L937">          String.format(</span>
+              Locale.ROOT,
+              &quot;Accuracy: %.3f  MacroF1: %.3f%n&quot;,
+<span class="nc" id="L940">              r.confusionMatrix().accuracy(),</span>
+<span class="nc" id="L941">              r.macroF1()));</span>
+<span class="nc" id="L942">      sb.append('\n');</span>
+<span class="nc" id="L943">      sb.append(r.confusionMatrix().toMarkdown()).append('\n');</span>
+<span class="nc" id="L944">    }</span>
+<span class="nc" id="L945">    return sb.toString();</span>
+  }
+
+  @SuppressWarnings(&quot;PMD.ConsecutiveAppendsShouldReuse&quot;)
+  private static String buildLocalizationComparisonText(
+      Map&lt;String, List&lt;LocalizationBenchmarkResult&gt;&gt; results) {
+<span class="nc" id="L951">    StringBuilder sb = new StringBuilder(&quot;# Localization Benchmark\n\n&quot;);</span>
+<span class="nc bnc" id="L952" title="All 2 branches missed.">    for (Map.Entry&lt;String, List&lt;LocalizationBenchmarkResult&gt;&gt; entry : results.entrySet()) {</span>
+<span class="nc" id="L953">      sb.append(&quot;## &quot;).append(entry.getKey()).append('\n');</span>
+<span class="nc" id="L954">      sb.append(</span>
+<span class="nc" id="L955">          String.format(</span>
+              Locale.ROOT,
+              &quot;%-25s %12s %10s %4s %4s%n&quot;,
+              &quot;Scenario&quot;,
+              &quot;MeanLocErr(m)&quot;,
+              &quot;TrackErr&quot;,
+              &quot;FP&quot;,
+              &quot;FN&quot;));
+<span class="nc" id="L963">      sb.append(&quot;-&quot;.repeat(60)).append('\n');</span>
+<span class="nc bnc" id="L964" title="All 2 branches missed.">      for (LocalizationBenchmarkResult r : entry.getValue()) {</span>
+<span class="nc" id="L965">        sb.append(</span>
+<span class="nc" id="L966">            String.format(</span>
+                Locale.ROOT,
+                &quot;%-25s %12.3f %10.3f %4d %4d%n&quot;,
+<span class="nc" id="L969">                r.scenarioId(),</span>
+<span class="nc" id="L970">                r.meanLocalizationErrorMeters(),</span>
+<span class="nc" id="L971">                r.trackingError(),</span>
+<span class="nc" id="L972">                r.falsePositiveCount(),</span>
+<span class="nc" id="L973">                r.falseNegativeCount()));</span>
+<span class="nc" id="L974">      }</span>
+<span class="nc" id="L975">      sb.append('\n');</span>
+<span class="nc" id="L976">    }</span>
+<span class="nc" id="L977">    return sb.toString();</span>
+  }
+
+  @SuppressWarnings(&quot;PMD.ConsecutiveAppendsShouldReuse&quot;)
+  private static String buildCalibrationText(CalibrationResult result) {
+<span class="nc" id="L982">    StringBuilder sb = new StringBuilder(512);</span>
+<span class="nc" id="L983">    sb.append(&quot;# Generator Calibration\n\n## Baseline Parameters\n\n&quot;);</span>
+<span class="nc" id="L984">    appendParamRow(</span>
+<span class="nc" id="L985">        sb, &quot;fundamentalFrequencyHz&quot;, result.baselineParameters().fundamentalFrequencyHz());</span>
+<span class="nc" id="L986">    appendParamRow(sb, &quot;harmonicCount&quot;, result.baselineParameters().harmonicCount());</span>
+<span class="nc" id="L987">    appendParamRow(sb, &quot;jitterHz&quot;, result.baselineParameters().jitterHz());</span>
+<span class="nc" id="L988">    appendParamRow(sb, &quot;modulationDepth&quot;, result.baselineParameters().modulationDepth());</span>
+<span class="nc" id="L989">    appendParamRow(sb, &quot;noiseAmplitude&quot;, result.baselineParameters().noiseAmplitude());</span>
+<span class="nc" id="L990">    sb.append(&quot;\n## Calibrated Parameters\n\n&quot;);</span>
+<span class="nc" id="L991">    appendParamRow(</span>
+<span class="nc" id="L992">        sb, &quot;fundamentalFrequencyHz&quot;, result.calibratedParameters().fundamentalFrequencyHz());</span>
+<span class="nc" id="L993">    appendParamRow(sb, &quot;harmonicCount&quot;, result.calibratedParameters().harmonicCount());</span>
+<span class="nc" id="L994">    appendParamRow(sb, &quot;jitterHz&quot;, result.calibratedParameters().jitterHz());</span>
+<span class="nc" id="L995">    appendParamRow(sb, &quot;modulationDepth&quot;, result.calibratedParameters().modulationDepth());</span>
+<span class="nc" id="L996">    appendParamRow(sb, &quot;noiseAmplitude&quot;, result.calibratedParameters().noiseAmplitude());</span>
+<span class="nc" id="L997">    sb.append(&quot;\n## Feature Deviation Report\n\n&quot;);</span>
+<span class="nc" id="L998">    sb.append(</span>
+<span class="nc" id="L999">        String.format(</span>
+            Locale.ROOT, &quot;%-30s %10s %10s %10s%n&quot;, &quot;Feature&quot;, &quot;Before&quot;, &quot;After&quot;, &quot;Improvement&quot;));
+<span class="nc" id="L1001">    sb.append(&quot;-&quot;.repeat(65)).append('\n');</span>
+<span class="nc" id="L1002">    List&lt;FeatureDifference&gt; beforeDiffs = result.beforeCalibration().differences();</span>
+<span class="nc" id="L1003">    List&lt;FeatureDifference&gt; afterDiffs = result.afterCalibration().differences();</span>
+<span class="nc" id="L1004">    int size = Math.min(beforeDiffs.size(), afterDiffs.size());</span>
+<span class="nc bnc" id="L1005" title="All 2 branches missed.">    for (int i = 0; i &lt; size; i++) {</span>
+<span class="nc" id="L1006">      double before = beforeDiffs.get(i).relativeDifference();</span>
+<span class="nc" id="L1007">      double after = afterDiffs.get(i).relativeDifference();</span>
+<span class="nc" id="L1008">      sb.append(</span>
+<span class="nc" id="L1009">          String.format(</span>
+              Locale.ROOT,
+              &quot;%-30s %9.1f%% %9.1f%% %9.1f%%%n&quot;,
+<span class="nc" id="L1012">              beforeDiffs.get(i).featureName(),</span>
+<span class="nc" id="L1013">              before * 100.0,</span>
+<span class="nc" id="L1014">              after * 100.0,</span>
+<span class="nc" id="L1015">              (before - after) * 100.0));</span>
+    }
+<span class="nc" id="L1017">    sb.append('\n');</span>
+<span class="nc" id="L1018">    sb.append(</span>
+<span class="nc" id="L1019">        String.format(Locale.ROOT, &quot;Overall improvement: %.1f%%%n&quot;, result.improvement() * 100.0));</span>
+<span class="nc" id="L1020">    sb.append(</span>
+<span class="nc" id="L1021">        String.format(</span>
+            Locale.ROOT,
+            &quot;Mean relative diff before: %.1f%%  after: %.1f%%%n&quot;,
+<span class="nc" id="L1024">            result.meanRelativeDifferenceBefore() * 100.0,</span>
+<span class="nc" id="L1025">            result.meanRelativeDifferenceAfter() * 100.0));</span>
+<span class="nc bnc" id="L1026" title="All 2 branches missed.">    if (!result.afterCalibration().generatorWeaknesses().isEmpty()) {</span>
+<span class="nc" id="L1027">      sb.append(&quot;\n## Remaining Deviations (rel.diff &gt; &quot;)</span>
+<span class="nc" id="L1028">          .append(</span>
+<span class="nc" id="L1029">              String.format(</span>
+<span class="nc" id="L1030">                  Locale.ROOT, &quot;%.0f%%&quot;, result.afterCalibration().weaknessThreshold() * 100.0))</span>
+<span class="nc" id="L1031">          .append(&quot;)\n&quot;);</span>
+<span class="nc bnc" id="L1032" title="All 2 branches missed.">      for (FeatureDifference diff : result.afterCalibration().generatorWeaknesses()) {</span>
+<span class="nc" id="L1033">        sb.append(</span>
+<span class="nc" id="L1034">            String.format(</span>
+                Locale.ROOT,
+                &quot;  - %s (%.1f%%)%n&quot;,
+<span class="nc" id="L1037">                diff.featureName(),</span>
+<span class="nc" id="L1038">                diff.relativeDifference() * 100.0));</span>
+<span class="nc" id="L1039">      }</span>
+    }
+<span class="nc" id="L1041">    return sb.toString();</span>
+  }
+
+  private static void appendParamRow(StringBuilder sb, String name, double value) {
+<span class="nc" id="L1045">    sb.append(String.format(Locale.ROOT, &quot;  %-30s %.6f%n&quot;, name + &quot;:&quot;, value));</span>
+<span class="nc" id="L1046">  }</span>
+
+  private static void appendParamRow(StringBuilder sb, String name, int value) {
+<span class="nc" id="L1049">    sb.append(String.format(Locale.ROOT, &quot;  %-30s %d%n&quot;, name + &quot;:&quot;, value));</span>
+<span class="nc" id="L1050">  }</span>
+
+  // -------------------------------------------------------------------------
+  // Background worker
+  // -------------------------------------------------------------------------
+
+  private final class ScenarioWorker extends SwingWorker&lt;WorkbenchRunResult, String&gt; {
+
+    private final SimulationScenario scenario;
+    private final WorkbenchParameters params;
+    private final long budgetNanos;
+    private int blockIndex;
+
+<span class="nc" id="L1063">    ScenarioWorker(SimulationScenario scenario, WorkbenchParameters params) {</span>
+<span class="nc" id="L1064">      this.scenario = scenario;</span>
+<span class="nc" id="L1065">      this.params = params;</span>
+<span class="nc" id="L1066">      this.budgetNanos =</span>
+          new FrameSchedule(
+<span class="nc" id="L1068">                  scenario.sampleRate(),</span>
+<span class="nc" id="L1069">                  params.blockSize(),</span>
+                  WorkbenchScenarioRunner.PIPELINE_MAX_LOAD_FRACTION)
+<span class="nc" id="L1071">              .maxProcessingNanos();</span>
+<span class="nc" id="L1072">    }</span>
+
+    @Override
+    protected WorkbenchRunResult doInBackground() {
+<span class="nc" id="L1076">      return WorkbenchScenarioRunner.run(</span>
+          scenario,
+          params,
+          (snapshot, idx) -&gt; {
+<span class="nc bnc" id="L1080" title="All 2 branches missed.">            if (isCancelled()) {</span>
+<span class="nc" id="L1081">              return;</span>
+            }
+<span class="nc" id="L1083">            this.blockIndex = idx;</span>
+<span class="nc" id="L1084">            publish(formatBlockLine(snapshot, idx));</span>
+<span class="nc" id="L1085">          });</span>
+    }
+
+    @Override
+    protected void process(List&lt;String&gt; chunks) {
+<span class="nc bnc" id="L1090" title="All 2 branches missed.">      for (String line : chunks) {</span>
+<span class="nc" id="L1091">        appendLog(line);</span>
+<span class="nc" id="L1092">      }</span>
+<span class="nc" id="L1093">      updateStatus(&quot;Running block &quot; + blockIndex + &quot; …&quot;);</span>
+<span class="nc" id="L1094">    }</span>
+
+    @Override
+    protected void done() {
+<span class="nc" id="L1098">      setRunning(false);</span>
+<span class="nc bnc" id="L1099" title="All 2 branches missed.">      if (isCancelled()) {</span>
+<span class="nc" id="L1100">        updateStatus(&quot;Run cancelled.&quot;);</span>
+<span class="nc" id="L1101">        appendLog(&quot;--- Run cancelled ---&quot;);</span>
+<span class="nc" id="L1102">        return;</span>
+      }
+      try {
+<span class="nc" id="L1105">        WorkbenchRunResult result = get();</span>
+<span class="nc" id="L1106">        lastRunResult = result;</span>
+<span class="nc" id="L1107">        appendLog(&quot;--- Run complete ---&quot;);</span>
+<span class="nc" id="L1108">        appendLog(</span>
+<span class="nc" id="L1109">            String.format(</span>
+                Locale.ROOT,
+                &quot;Blocks: %d  |  Max tracks: %d  |  Distinct IDs: %d  |  Avg proc: %.1f µs&quot;,
+<span class="nc" id="L1112">                result.blockCount(),</span>
+<span class="nc" id="L1113">                result.maxTracksInAnyFrame(),</span>
+<span class="nc" id="L1114">                result.distinctTrackCount(),</span>
+<span class="nc" id="L1115">                result.averageProcessingNanosPerBlock() / 1_000.0));</span>
+<span class="nc" id="L1116">        long overBudget = result.overBudgetFrameCount();</span>
+<span class="nc bnc" id="L1117" title="All 2 branches missed.">        if (overBudget &gt; 0) {</span>
+<span class="nc" id="L1118">          appendLog(</span>
+<span class="nc" id="L1119">              String.format(</span>
+                  Locale.ROOT,
+                  &quot;⚠ %d frame(s) exceeded the real-time budget (budget=%.1f µs per block).&quot;,
+<span class="nc" id="L1122">                  overBudget,</span>
+<span class="nc bnc" id="L1123" title="All 2 branches missed.">                  result.frameSchedule() != null</span>
+<span class="nc" id="L1124">                      ? result.frameSchedule().maxProcessingNanos() / 1_000.0</span>
+<span class="nc" id="L1125">                      : 0.0));</span>
+        }
+<span class="nc" id="L1127">        updateStatus(</span>
+<span class="nc" id="L1128">            String.format(</span>
+                Locale.ROOT,
+                &quot;Done. %d blocks, %d distinct tracks, avg %.1f µs/block.&quot;,
+<span class="nc" id="L1131">                result.blockCount(),</span>
+<span class="nc" id="L1132">                result.distinctTrackCount(),</span>
+<span class="nc" id="L1133">                result.averageProcessingNanosPerBlock() / 1_000.0));</span>
+<span class="nc" id="L1134">        appendLog(&quot;Synchronization: worst status &quot; + result.worstSynchronizationStatus());</span>
+<span class="nc bnc" id="L1135" title="All 2 branches missed.">        if (result.hasSynchronizationWarning()) {</span>
+<span class="nc" id="L1136">          appendLog(&quot;⚠ At least one frame has degraded or rejected synchronization.&quot;);</span>
+        }
+<span class="nc" id="L1138">        markdownArea.setText(WorkbenchRunExporter.toMarkdown(result));</span>
+<span class="nc" id="L1139">        csvArea.setText(WorkbenchRunExporter.toCsv(result));</span>
+<span class="nc" id="L1140">        jsonArea.setText(WorkbenchRunExporter.toJsonLines(result));</span>
+<span class="nc" id="L1141">        benchmarkArea.setText(WorkbenchRunExporter.toBenchmarkMarkdown(result));</span>
+<span class="nc" id="L1142">        roomMapPanel.setResult(result);</span>
+<span class="nc" id="L1143">        loadPlayback(result);</span>
+<span class="nc" id="L1144">        populateAnalysisTabsAsync(result.scenario());</span>
+<span class="nc" id="L1145">      } catch (ExecutionException ex) {</span>
+<span class="nc" id="L1146">        LOGGER.log(Level.WARNING, &quot;Workbench run failed&quot;, ex);</span>
+<span class="nc" id="L1147">        updateStatus(&quot;Run failed: &quot; + ex.getCause().getMessage());</span>
+<span class="nc" id="L1148">        appendLog(&quot;ERROR: &quot; + ex.getCause().getMessage());</span>
+<span class="nc" id="L1149">      } catch (InterruptedException ex) {</span>
+<span class="nc" id="L1150">        Thread.currentThread().interrupt();</span>
+<span class="nc" id="L1151">        updateStatus(&quot;Run interrupted.&quot;);</span>
+<span class="nc" id="L1152">      }</span>
+<span class="nc" id="L1153">    }</span>
+
+    private String formatBlockLine(TrackingSnapshot snapshot, int idx) {
+<span class="nc" id="L1156">      StringBuilder sb = new StringBuilder();</span>
+<span class="nc" id="L1157">      sb.append(</span>
+<span class="nc" id="L1158">              String.format(</span>
+                  Locale.ROOT,
+                  &quot;Block %4d  frame=%6d  time=%6.1f ms  clusters=%d  tracks=%d  proc=%.1f µs&quot;,
+<span class="nc" id="L1161">                  idx,</span>
+<span class="nc" id="L1162">                  snapshot.sourceFrameIndex(),</span>
+<span class="nc" id="L1163">                  snapshot.sourceTimestampNanos() / 1_000_000.0,</span>
+<span class="nc" id="L1164">                  snapshot.clusters().size(),</span>
+<span class="nc" id="L1165">                  snapshot.tracks().size(),</span>
+<span class="nc" id="L1166">                  snapshot.processingNanos() / 1_000.0))</span>
+<span class="nc" id="L1167">          .append(</span>
+<span class="nc" id="L1168">              String.format(</span>
+                  Locale.ROOT,
+                  &quot;  sync=%s/%s err=%.4f samples&quot;,
+<span class="nc" id="L1171">                  snapshot.synchronization().mode(),</span>
+<span class="nc" id="L1172">                  snapshot.synchronization().status(),</span>
+<span class="nc" id="L1173">                  snapshot.synchronization().estimatedErrorSamples()));</span>
+<span class="nc bnc" id="L1174" title="All 2 branches missed.">      if (snapshot.processingNanos() &gt; budgetNanos) {</span>
+<span class="nc" id="L1175">        sb.append(&quot;  ⚠ OVER BUDGET&quot;);</span>
+      }
+<span class="nc bnc" id="L1177" title="All 2 branches missed.">      for (FrequencyCluster c : snapshot.clusters()) {</span>
+<span class="nc" id="L1178">        sb.append(String.format(Locale.ROOT, &quot;  [%.0f Hz]&quot;, c.centerFrequencyHz()));</span>
+<span class="nc" id="L1179">      }</span>
+<span class="nc bnc" id="L1180" title="All 2 branches missed.">      for (TrackedSource t : snapshot.tracks()) {</span>
+<span class="nc" id="L1181">        sb.append(</span>
+<span class="nc" id="L1182">            String.format(</span>
+                Locale.ROOT,
+                &quot;  {id=%d f=%.0f Hz pos=(%.2f,%.2f) conf=%.2f n=%d}&quot;,
+<span class="nc" id="L1185">                t.id(),</span>
+<span class="nc" id="L1186">                t.frequencyHz(),</span>
+<span class="nc" id="L1187">                t.positionMeters().x(),</span>
+<span class="nc" id="L1188">                t.positionMeters().y(),</span>
+<span class="nc" id="L1189">                t.confidence(),</span>
+<span class="nc" id="L1190">                t.observationCount()));</span>
+<span class="nc" id="L1191">      }</span>
+<span class="nc" id="L1192">      return sb.toString();</span>
+    }
+  }
+
+  private void updateStatus(String text) {
+<span class="nc" id="L1197">    SwingUtilities.invokeLater(() -&gt; statusLabel.setText(text));</span>
+<span class="nc" id="L1198">  }</span>
+
+  // -------------------------------------------------------------------------
+  // Room map panel (inner class)
+  // -------------------------------------------------------------------------
+
+  /**
+   * Simple 2-D room-map visualization panel.
+   *
+   * &lt;p&gt;Renders the room rectangle, microphone positions, emitter ground-truth trajectories,
+   * accumulated estimated track paths, and localization error lines between matched ground-truth
+   * and estimated positions in the last frame. All rendering is done in Swing paint thread.
+   */
+  static final class RoomMapPanel extends JPanel {
+
+    private static final long serialVersionUID = 1L;
+    private static final int MARGIN = 20;
+    private static final int LABEL_OFFSET_X = 9;
+    private static final int LABEL_OFFSET_Y = -4;
+<span class="fc" id="L1217">    private static final Color COLOR_ROOM = new Color(245, 245, 245);</span>
+<span class="fc" id="L1218">    private static final Color COLOR_MIC = new Color(30, 100, 200);</span>
+<span class="fc" id="L1219">    private static final Color COLOR_EMITTER = new Color(20, 160, 60);</span>
+<span class="fc" id="L1220">    private static final Color COLOR_TRACK = new Color(200, 50, 30);</span>
+<span class="fc" id="L1221">    private static final Color COLOR_TRACK_PATH = new Color(200, 50, 30, 80);</span>
+<span class="fc" id="L1222">    private static final Color COLOR_ERROR = new Color(220, 140, 0);</span>
+<span class="fc" id="L1223">    private static final Color COLOR_GRID = new Color(210, 210, 210);</span>
+
+    private transient SimulationScenario scenario;
+<span class="fc" id="L1226">    private List&lt;TrackedSource&gt; lastTracks = List.of();</span>
+<span class="fc" id="L1227">    private List&lt;Vector2&gt; gridPoints = List.of();</span>
+
+    /** Accumulated positions per track ID (in appearance order). */
+<span class="fc" id="L1230">    private Map&lt;Integer, List&lt;Vector2&gt;&gt; trackHistory = new ConcurrentHashMap&lt;&gt;();</span>
+
+    /** Alignment of the last snapshot against ground truth (for error lines). */
+    private transient SnapshotAlignment lastAlignment;
+
+    private transient WorkbenchRunResult cachedPlaybackResult;
+<span class="fc" id="L1236">    private int cachedHistoryFrameIndex = -1;</span>
+<span class="fc" id="L1237">    private Map&lt;Integer, List&lt;Vector2&gt;&gt; cachedPlaybackHistory = new ConcurrentHashMap&lt;&gt;();</span>
+
+<span class="fc" id="L1239">    RoomMapPanel() {</span>
+<span class="fc" id="L1240">      setPreferredSize(new Dimension(300, 300));</span>
+<span class="fc" id="L1241">      setBorder(BorderFactory.createTitledBorder(&quot;Room map (2D, experimental)&quot;));</span>
+<span class="fc" id="L1242">      setBackground(Color.WHITE);</span>
+<span class="fc" id="L1243">    }</span>
+
+    void clear(SimulationScenario s) {
+<span class="fc" id="L1246">      this.scenario = s;</span>
+<span class="fc" id="L1247">      this.lastTracks = List.of();</span>
+<span class="fc" id="L1248">      this.gridPoints = List.of();</span>
+<span class="fc" id="L1249">      this.trackHistory = new ConcurrentHashMap&lt;&gt;();</span>
+<span class="fc" id="L1250">      this.lastAlignment = null;</span>
+<span class="fc" id="L1251">      this.cachedPlaybackResult = null;</span>
+<span class="fc" id="L1252">      this.cachedHistoryFrameIndex = -1;</span>
+<span class="fc" id="L1253">      this.cachedPlaybackHistory = new ConcurrentHashMap&lt;&gt;();</span>
+<span class="fc" id="L1254">      repaint();</span>
+<span class="fc" id="L1255">    }</span>
+
+    void setResult(WorkbenchRunResult result) {
+<span class="fc" id="L1258">      this.scenario = result.scenario();</span>
+      TrackingSnapshot last =
+<span class="pc bpc" id="L1260" title="1 of 2 branches missed.">          result.snapshots().isEmpty()</span>
+<span class="nc" id="L1261">              ? null</span>
+<span class="fc" id="L1262">              : result.snapshots().get(result.snapshots().size() - 1);</span>
+<span class="pc bpc" id="L1263" title="1 of 2 branches missed.">      this.lastTracks = last == null ? List.of() : last.tracks();</span>
+
+      // Accumulate full track history (all positions per track ID across all frames)
+<span class="fc" id="L1266">      Map&lt;Integer, List&lt;Vector2&gt;&gt; history = new ConcurrentHashMap&lt;&gt;();</span>
+<span class="fc bfc" id="L1267" title="All 2 branches covered.">      for (TrackingSnapshot snap : result.snapshots()) {</span>
+<span class="fc bfc" id="L1268" title="All 2 branches covered.">        for (TrackedSource track : snap.tracks()) {</span>
+<span class="fc" id="L1269">          history</span>
+<span class="fc" id="L1270">              .computeIfAbsent(track.id(), ignored -&gt; new ArrayList&lt;&gt;())</span>
+<span class="fc" id="L1271">              .add(track.positionMeters());</span>
+<span class="fc" id="L1272">        }</span>
+<span class="fc" id="L1273">      }</span>
+<span class="fc" id="L1274">      this.trackHistory = history;</span>
+
+      // Compute ground-truth-to-estimated alignment for the last snapshot (for error lines)
+<span class="fc" id="L1277">      this.lastAlignment = null;</span>
+<span class="pc bpc" id="L1278" title="1 of 2 branches missed.">      if (last != null) {</span>
+        try {
+<span class="fc" id="L1280">          Scenario truth = result.scenario().groundTruth();</span>
+          long startTs =
+<span class="pc bpc" id="L1282" title="1 of 2 branches missed.">              result.snapshots().isEmpty() ? 0L : result.snapshots().get(0).sourceTimestampNanos();</span>
+<span class="fc" id="L1283">          this.lastAlignment = new SnapshotGroundTruthAligner().align(truth, last, startTs);</span>
+<span class="nc" id="L1284">        } catch (RuntimeException ignored) {</span>
+          // alignment failure is non-critical; error lines will simply not be drawn
+<span class="fc" id="L1286">        }</span>
+      }
+
+      // Build candidate grid for display
+<span class="fc" id="L1290">      List&lt;Vector2&gt; grid = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L1291">      int steps = result.parameters().candidateGridSteps();</span>
+<span class="fc" id="L1292">      double w = result.scenario().room().widthMeters();</span>
+<span class="fc" id="L1293">      double h = result.scenario().room().heightMeters();</span>
+<span class="fc bfc" id="L1294" title="All 2 branches covered.">      for (int xi = 0; xi &lt;= steps; xi++) {</span>
+<span class="fc bfc" id="L1295" title="All 2 branches covered.">        for (int yi = 0; yi &lt;= steps; yi++) {</span>
+<span class="fc" id="L1296">          grid.add(new Vector2(w * xi / steps, h * yi / steps));</span>
+        }
+      }
+<span class="fc" id="L1299">      this.gridPoints = List.copyOf(grid);</span>
+<span class="fc" id="L1300">      this.cachedPlaybackResult = null;</span>
+<span class="fc" id="L1301">      this.cachedHistoryFrameIndex = -1;</span>
+<span class="fc" id="L1302">      this.cachedPlaybackHistory = new ConcurrentHashMap&lt;&gt;();</span>
+<span class="fc" id="L1303">      repaint();</span>
+<span class="fc" id="L1304">    }</span>
+
+    /**
+     * Render the room map for a specific frame index, showing track history up to that frame.
+     *
+     * @param result the completed run result
+     * @param frameIndex 0-based index of the frame to display; silently clamped to valid range
+     */
+    void setFrame(WorkbenchRunResult result, int frameIndex) {
+<span class="nc" id="L1313">      this.scenario = result.scenario();</span>
+<span class="nc bnc" id="L1314" title="All 2 branches missed.">      if (result.snapshots().isEmpty()) {</span>
+<span class="nc" id="L1315">        this.lastTracks = List.of();</span>
+<span class="nc" id="L1316">        this.trackHistory = new ConcurrentHashMap&lt;&gt;();</span>
+<span class="nc" id="L1317">        this.lastAlignment = null;</span>
+<span class="nc" id="L1318">        this.gridPoints = List.of();</span>
+<span class="nc" id="L1319">        this.cachedPlaybackResult = null;</span>
+<span class="nc" id="L1320">        this.cachedHistoryFrameIndex = -1;</span>
+<span class="nc" id="L1321">        this.cachedPlaybackHistory = new ConcurrentHashMap&lt;&gt;();</span>
+<span class="nc" id="L1322">        repaint();</span>
+<span class="nc" id="L1323">        return;</span>
+      }
+<span class="nc bnc" id="L1325" title="All 2 branches missed.">      boolean newResult = !Objects.equals(this.cachedPlaybackResult, result);</span>
+<span class="nc bnc" id="L1326" title="All 2 branches missed.">      if (newResult) {</span>
+<span class="nc" id="L1327">        this.cachedPlaybackResult = result;</span>
+<span class="nc" id="L1328">        this.cachedHistoryFrameIndex = -1;</span>
+<span class="nc" id="L1329">        this.cachedPlaybackHistory = new ConcurrentHashMap&lt;&gt;();</span>
+
+<span class="nc" id="L1331">        List&lt;Vector2&gt; grid = new ArrayList&lt;&gt;();</span>
+<span class="nc" id="L1332">        int steps = result.parameters().candidateGridSteps();</span>
+<span class="nc" id="L1333">        double w = result.scenario().room().widthMeters();</span>
+<span class="nc" id="L1334">        double h = result.scenario().room().heightMeters();</span>
+<span class="nc bnc" id="L1335" title="All 2 branches missed.">        for (int xi = 0; xi &lt;= steps; xi++) {</span>
+<span class="nc bnc" id="L1336" title="All 2 branches missed.">          for (int yi = 0; yi &lt;= steps; yi++) {</span>
+<span class="nc" id="L1337">            grid.add(new Vector2(w * xi / steps, h * yi / steps));</span>
+          }
+        }
+<span class="nc" id="L1340">        this.gridPoints = List.copyOf(grid);</span>
+      }
+<span class="nc" id="L1342">      int idx = Math.max(0, Math.min(frameIndex, result.snapshots().size() - 1));</span>
+<span class="nc" id="L1343">      TrackingSnapshot snap = result.snapshots().get(idx);</span>
+<span class="nc" id="L1344">      this.lastTracks = snap.tracks();</span>
+
+<span class="nc bnc" id="L1346" title="All 2 branches missed.">      if (idx &lt; cachedHistoryFrameIndex) {</span>
+<span class="nc" id="L1347">        cachedPlaybackHistory = new ConcurrentHashMap&lt;&gt;();</span>
+<span class="nc" id="L1348">        cachedHistoryFrameIndex = -1;</span>
+      }
+<span class="nc bnc" id="L1350" title="All 2 branches missed.">      if (idx &gt; cachedHistoryFrameIndex) {</span>
+<span class="nc bnc" id="L1351" title="All 2 branches missed.">        for (int i = cachedHistoryFrameIndex + 1; i &lt;= idx; i++) {</span>
+<span class="nc bnc" id="L1352" title="All 2 branches missed.">          for (TrackedSource track : result.snapshots().get(i).tracks()) {</span>
+<span class="nc" id="L1353">            cachedPlaybackHistory</span>
+<span class="nc" id="L1354">                .computeIfAbsent(track.id(), ignored -&gt; new ArrayList&lt;&gt;())</span>
+<span class="nc" id="L1355">                .add(track.positionMeters());</span>
+<span class="nc" id="L1356">          }</span>
+        }
+<span class="nc" id="L1358">        cachedHistoryFrameIndex = idx;</span>
+      }
+<span class="nc" id="L1360">      this.trackHistory = cachedPlaybackHistory;</span>
+
+      // Compute alignment for this specific frame
+<span class="nc" id="L1363">      this.lastAlignment = null;</span>
+      try {
+<span class="nc" id="L1365">        Scenario truth = result.scenario().groundTruth();</span>
+<span class="nc" id="L1366">        long startTs = result.snapshots().get(0).sourceTimestampNanos();</span>
+<span class="nc" id="L1367">        this.lastAlignment = new SnapshotGroundTruthAligner().align(truth, snap, startTs);</span>
+<span class="nc" id="L1368">      } catch (RuntimeException ignored) {</span>
+        // alignment failure is non-critical; error lines will simply not be drawn
+<span class="nc" id="L1370">      }</span>
+
+<span class="nc" id="L1372">      repaint();</span>
+<span class="nc" id="L1373">    }</span>
+
+    @Override
+    protected void paintComponent(Graphics g) {
+<span class="nc" id="L1377">      super.paintComponent(g);</span>
+<span class="nc bnc" id="L1378" title="All 2 branches missed.">      if (scenario == null) {</span>
+<span class="nc" id="L1379">        g.setFont(g.getFont().deriveFont(Font.ITALIC));</span>
+<span class="nc" id="L1380">        g.setColor(Color.GRAY);</span>
+<span class="nc" id="L1381">        g.drawString(&quot;No scenario loaded — press Run&quot;, MARGIN, getHeight() / 2);</span>
+<span class="nc" id="L1382">        return;</span>
+      }
+<span class="nc" id="L1384">      Graphics2D g2 = (Graphics2D) g;</span>
+<span class="nc" id="L1385">      g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);</span>
+
+<span class="nc" id="L1387">      double roomW = scenario.room().widthMeters();</span>
+<span class="nc" id="L1388">      double roomH = scenario.room().heightMeters();</span>
+<span class="nc" id="L1389">      int canvasW = getWidth() - 2 * MARGIN;</span>
+<span class="nc" id="L1390">      int canvasH = getHeight() - 2 * MARGIN;</span>
+<span class="nc" id="L1391">      double scaleX = canvasW / roomW;</span>
+<span class="nc" id="L1392">      double scaleY = canvasH / roomH;</span>
+
+<span class="nc" id="L1394">      paintRoomBackground(g2, canvasW, canvasH);</span>
+<span class="nc" id="L1395">      paintGridDots(g2, scaleX, scaleY, canvasH);</span>
+<span class="nc" id="L1396">      paintMicrophones(g2, scaleX, scaleY, canvasH);</span>
+<span class="nc" id="L1397">      paintEmitterTrajectories(g2, scaleX, scaleY, canvasH);</span>
+<span class="nc" id="L1398">      paintTrackPaths(g2, scaleX, scaleY, canvasH);</span>
+<span class="nc" id="L1399">      paintErrorLines(g2, scaleX, scaleY, canvasH);</span>
+<span class="nc" id="L1400">      paintEstimatedTracks(g2, scaleX, scaleY, canvasH);</span>
+<span class="nc" id="L1401">      paintLegend(g2);</span>
+<span class="nc" id="L1402">    }</span>
+
+    private void paintRoomBackground(Graphics2D g2, int canvasW, int canvasH) {
+<span class="nc" id="L1405">      g2.setColor(COLOR_ROOM);</span>
+<span class="nc" id="L1406">      g2.fillRect(MARGIN, MARGIN, canvasW, canvasH);</span>
+<span class="nc" id="L1407">      g2.setColor(Color.DARK_GRAY);</span>
+<span class="nc" id="L1408">      g2.drawRect(MARGIN, MARGIN, canvasW, canvasH);</span>
+<span class="nc" id="L1409">    }</span>
+
+    private void paintGridDots(Graphics2D g2, double scaleX, double scaleY, int canvasH) {
+<span class="nc" id="L1412">      g2.setColor(COLOR_GRID);</span>
+<span class="nc bnc" id="L1413" title="All 2 branches missed.">      for (Vector2 pt : gridPoints) {</span>
+<span class="nc" id="L1414">        int px = toPixelX(pt.x(), MARGIN, scaleX);</span>
+<span class="nc" id="L1415">        int py = toPixelY(pt.y(), MARGIN, scaleY, canvasH);</span>
+<span class="nc" id="L1416">        g2.fillOval(px - 1, py - 1, 3, 3);</span>
+<span class="nc" id="L1417">      }</span>
+<span class="nc" id="L1418">    }</span>
+
+    private void paintMicrophones(Graphics2D g2, double scaleX, double scaleY, int canvasH) {
+<span class="nc" id="L1421">      g2.setColor(COLOR_MIC);</span>
+<span class="nc bnc" id="L1422" title="All 2 branches missed.">      for (Microphone mic : scenario.array().microphones()) {</span>
+<span class="nc" id="L1423">        int px = toPixelX(mic.positionMeters().x(), MARGIN, scaleX);</span>
+<span class="nc" id="L1424">        int py = toPixelY(mic.positionMeters().y(), MARGIN, scaleY, canvasH);</span>
+<span class="nc" id="L1425">        g2.fillOval(px - 5, py - 5, 10, 10);</span>
+<span class="nc" id="L1426">        g2.setColor(Color.WHITE);</span>
+<span class="nc" id="L1427">        drawCenteredString(g2, mic.id(), px, py);</span>
+<span class="nc" id="L1428">        g2.setColor(COLOR_MIC);</span>
+<span class="nc" id="L1429">      }</span>
+<span class="nc" id="L1430">    }</span>
+
+    private void paintEmitterTrajectories(
+        Graphics2D g2, double scaleX, double scaleY, int canvasH) {
+<span class="nc" id="L1434">      Stroke defaultStroke = g2.getStroke();</span>
+<span class="nc" id="L1435">      g2.setColor(COLOR_EMITTER);</span>
+<span class="nc" id="L1436">      g2.setStroke(new BasicStroke(2.0f));</span>
+<span class="nc bnc" id="L1437" title="All 2 branches missed.">      for (AcousticEmitter2D emitter : scenario.emitters()) {</span>
+<span class="nc" id="L1438">        int px = toPixelX(emitter.startMeters().x(), MARGIN, scaleX);</span>
+<span class="nc" id="L1439">        int py = toPixelY(emitter.startMeters().y(), MARGIN, scaleY, canvasH);</span>
+<span class="nc" id="L1440">        drawTriangle(g2, px, py, 8);</span>
+<span class="nc" id="L1441">        g2.drawString(</span>
+<span class="nc" id="L1442">            String.format(Locale.ROOT, &quot;%.0f Hz&quot;, emitter.frequencyHz()),</span>
+            px + LABEL_OFFSET_X,
+            py + LABEL_OFFSET_Y);
+<span class="nc" id="L1445">        Vector2 vel = emitter.velocityMetersPerSecond();</span>
+<span class="nc bnc" id="L1446" title="All 4 branches missed.">        if (vel.x() != 0.0 || vel.y() != 0.0) {</span>
+<span class="nc" id="L1447">          double duration = scenario.durationSeconds();</span>
+<span class="nc" id="L1448">          int ex = toPixelX(emitter.startMeters().x() + vel.x() * duration, MARGIN, scaleX);</span>
+<span class="nc" id="L1449">          int ey =</span>
+<span class="nc" id="L1450">              toPixelY(emitter.startMeters().y() + vel.y() * duration, MARGIN, scaleY, canvasH);</span>
+<span class="nc" id="L1451">          g2.drawLine(px, py, ex, ey);</span>
+<span class="nc" id="L1452">          drawTriangle(g2, ex, ey, 5);</span>
+        }
+<span class="nc" id="L1454">      }</span>
+<span class="nc" id="L1455">      g2.setStroke(defaultStroke);</span>
+<span class="nc" id="L1456">    }</span>
+
+    private void paintTrackPaths(Graphics2D g2, double scaleX, double scaleY, int canvasH) {
+<span class="nc" id="L1459">      Stroke defaultStroke = g2.getStroke();</span>
+<span class="nc" id="L1460">      Stroke dashed =</span>
+          new BasicStroke(
+              1.0f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_BEVEL, 0, new float[] {4, 4}, 0);
+<span class="nc" id="L1463">      g2.setColor(COLOR_TRACK_PATH);</span>
+<span class="nc" id="L1464">      g2.setStroke(dashed);</span>
+<span class="nc bnc" id="L1465" title="All 2 branches missed.">      for (List&lt;Vector2&gt; path : trackHistory.values()) {</span>
+<span class="nc bnc" id="L1466" title="All 2 branches missed.">        for (int i = 1; i &lt; path.size(); i++) {</span>
+<span class="nc" id="L1467">          g2.drawLine(</span>
+<span class="nc" id="L1468">              toPixelX(path.get(i - 1).x(), MARGIN, scaleX),</span>
+<span class="nc" id="L1469">              toPixelY(path.get(i - 1).y(), MARGIN, scaleY, canvasH),</span>
+<span class="nc" id="L1470">              toPixelX(path.get(i).x(), MARGIN, scaleX),</span>
+<span class="nc" id="L1471">              toPixelY(path.get(i).y(), MARGIN, scaleY, canvasH));</span>
+        }
+<span class="nc" id="L1473">      }</span>
+<span class="nc" id="L1474">      g2.setStroke(defaultStroke);</span>
+<span class="nc" id="L1475">    }</span>
+
+    private void paintErrorLines(Graphics2D g2, double scaleX, double scaleY, int canvasH) {
+<span class="nc bnc" id="L1478" title="All 2 branches missed.">      if (lastAlignment == null) {</span>
+<span class="nc" id="L1479">        return;</span>
+      }
+<span class="nc" id="L1481">      Stroke defaultStroke = g2.getStroke();</span>
+<span class="nc" id="L1482">      Stroke errorStroke =</span>
+          new BasicStroke(
+              1.5f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_BEVEL, 0, new float[] {2, 4}, 0);
+<span class="nc" id="L1485">      g2.setColor(COLOR_ERROR);</span>
+<span class="nc" id="L1486">      g2.setStroke(errorStroke);</span>
+<span class="nc bnc" id="L1487" title="All 2 branches missed.">      for (AlignedSourceObservation obs : lastAlignment.matchedSources()) {</span>
+<span class="nc bnc" id="L1488" title="All 2 branches missed.">        if (obs.groundTruth().expectedPositionMeters() != null) {</span>
+<span class="nc" id="L1489">          Vector2 truth = obs.groundTruth().expectedPositionMeters();</span>
+<span class="nc" id="L1490">          Vector2 est = obs.trackedSource().positionMeters();</span>
+<span class="nc" id="L1491">          int tx = toPixelX(truth.x(), MARGIN, scaleX);</span>
+<span class="nc" id="L1492">          int ty = toPixelY(truth.y(), MARGIN, scaleY, canvasH);</span>
+<span class="nc" id="L1493">          int ex = toPixelX(est.x(), MARGIN, scaleX);</span>
+<span class="nc" id="L1494">          int ey = toPixelY(est.y(), MARGIN, scaleY, canvasH);</span>
+<span class="nc" id="L1495">          g2.drawLine(tx, ty, ex, ey);</span>
+<span class="nc" id="L1496">          double errorM = truth.distanceTo(est);</span>
+<span class="nc" id="L1497">          g2.drawString(</span>
+<span class="nc" id="L1498">              String.format(Locale.ROOT, &quot;err=%.2fm&quot;, errorM),</span>
+              (tx + ex) / 2 + 2,
+              (ty + ey) / 2 - 2);
+        }
+<span class="nc" id="L1502">      }</span>
+<span class="nc" id="L1503">      g2.setStroke(defaultStroke);</span>
+<span class="nc" id="L1504">    }</span>
+
+    private void paintEstimatedTracks(Graphics2D g2, double scaleX, double scaleY, int canvasH) {
+<span class="nc" id="L1507">      g2.setColor(COLOR_TRACK);</span>
+<span class="nc bnc" id="L1508" title="All 2 branches missed.">      for (TrackedSource track : lastTracks) {</span>
+<span class="nc" id="L1509">        int px = toPixelX(track.positionMeters().x(), MARGIN, scaleX);</span>
+<span class="nc" id="L1510">        int py = toPixelY(track.positionMeters().y(), MARGIN, scaleY, canvasH);</span>
+<span class="nc" id="L1511">        g2.fillOval(px - 7, py - 7, 14, 14);</span>
+<span class="nc" id="L1512">        g2.setColor(Color.WHITE);</span>
+<span class="nc" id="L1513">        drawCenteredString(g2, String.valueOf(track.id()), px, py);</span>
+<span class="nc" id="L1514">        g2.setColor(COLOR_TRACK);</span>
+<span class="nc" id="L1515">        g2.drawString(</span>
+<span class="nc" id="L1516">            String.format(</span>
+<span class="nc" id="L1517">                Locale.ROOT, &quot;%.0f Hz  conf=%.2f&quot;, track.frequencyHz(), track.confidence()),</span>
+            px + LABEL_OFFSET_X,
+            py + LABEL_OFFSET_Y);
+<span class="nc" id="L1520">      }</span>
+<span class="nc" id="L1521">    }</span>
+
+    private void paintLegend(Graphics2D g2) {
+<span class="nc" id="L1524">      int lx = MARGIN + 4;</span>
+<span class="nc" id="L1525">      int ly = getHeight() - MARGIN - 70;</span>
+<span class="nc" id="L1526">      g2.setColor(new Color(255, 255, 255, 200));</span>
+<span class="nc" id="L1527">      g2.fillRoundRect(lx - 2, ly - 12, 160, 76, 4, 4);</span>
+<span class="nc" id="L1528">      g2.setColor(COLOR_MIC);</span>
+<span class="nc" id="L1529">      g2.fillOval(lx, ly, 8, 8);</span>
+<span class="nc" id="L1530">      g2.setColor(Color.BLACK);</span>
+<span class="nc" id="L1531">      g2.drawString(&quot;Microphone&quot;, lx + 14, ly + 9);</span>
+<span class="nc" id="L1532">      ly += 16;</span>
+<span class="nc" id="L1533">      g2.setColor(COLOR_EMITTER);</span>
+<span class="nc" id="L1534">      drawTriangle(g2, lx + 4, ly + 4, 5);</span>
+<span class="nc" id="L1535">      g2.setColor(Color.BLACK);</span>
+<span class="nc" id="L1536">      g2.drawString(&quot;Ground truth (trajectory)&quot;, lx + 14, ly + 9);</span>
+<span class="nc" id="L1537">      ly += 16;</span>
+<span class="nc" id="L1538">      g2.setColor(COLOR_TRACK);</span>
+<span class="nc" id="L1539">      g2.fillOval(lx, ly, 8, 8);</span>
+<span class="nc" id="L1540">      g2.setColor(Color.BLACK);</span>
+<span class="nc" id="L1541">      g2.drawString(&quot;Estimated track (last frame)&quot;, lx + 14, ly + 9);</span>
+<span class="nc" id="L1542">      ly += 16;</span>
+<span class="nc" id="L1543">      g2.setColor(COLOR_ERROR);</span>
+<span class="nc" id="L1544">      g2.drawLine(lx, ly + 4, lx + 10, ly + 4);</span>
+<span class="nc" id="L1545">      g2.setColor(Color.BLACK);</span>
+<span class="nc" id="L1546">      g2.drawString(&quot;Localization error&quot;, lx + 14, ly + 9);</span>
+<span class="nc" id="L1547">    }</span>
+
+    private static int toPixelX(double meters, int margin, double scale) {
+<span class="nc" id="L1550">      return margin + (int) Math.round(meters * scale);</span>
+    }
+
+    private static int toPixelY(double meters, int margin, double scale, int canvasH) {
+      // flip Y so that y=0 is at the bottom of the canvas
+<span class="nc" id="L1555">      return margin + canvasH - (int) Math.round(meters * scale);</span>
+    }
+
+    private static void drawCenteredString(Graphics2D g2, String text, int cx, int cy) {
+<span class="nc" id="L1559">      Font f = g2.getFont().deriveFont(Font.BOLD, 9f);</span>
+<span class="nc" id="L1560">      FontMetrics fm = g2.getFontMetrics(f);</span>
+<span class="nc" id="L1561">      Font orig = g2.getFont();</span>
+<span class="nc" id="L1562">      g2.setFont(f);</span>
+<span class="nc" id="L1563">      int tx = cx - fm.stringWidth(text) / 2;</span>
+<span class="nc" id="L1564">      int ty = cy + fm.getAscent() / 2 - 1;</span>
+<span class="nc" id="L1565">      g2.drawString(text, tx, ty);</span>
+<span class="nc" id="L1566">      g2.setFont(orig);</span>
+<span class="nc" id="L1567">    }</span>
+
+    private static void drawTriangle(Graphics2D g2, int cx, int cy, int r) {
+<span class="nc" id="L1570">      int[] xs = {cx, cx - r, cx + r};</span>
+<span class="nc" id="L1571">      int[] ys = {cy - r, cy + r, cy + r};</span>
+<span class="nc" id="L1572">      g2.fillPolygon(xs, ys, 3);</span>
+<span class="nc" id="L1573">    }</span>
+  }
+
+  // -------------------------------------------------------------------------
+  // Helpers
+  // -------------------------------------------------------------------------
+
+  /** Wrapper for combo box display. */
+  private static final class ScenarioItem {
+    final SimulationScenario scenario;
+
+<span class="fc" id="L1584">    ScenarioItem(SimulationScenario scenario) {</span>
+<span class="fc" id="L1585">      this.scenario = Objects.requireNonNull(scenario, &quot;scenario&quot;);</span>
+<span class="fc" id="L1586">    }</span>
+
+    @Override
+    public String toString() {
+<span class="nc" id="L1590">      return scenario.name();</span>
+    }
+  }
+
+  /** Return the last completed run result, or {@code null} if no run has completed yet. */
+  public WorkbenchRunResult lastResult() {
+<span class="fc" id="L1596">    return lastRunResult;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

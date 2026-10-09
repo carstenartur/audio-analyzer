@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>PluginLoadResult.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.pluginhost</a> &gt; <span class="el_source">PluginLoadResult.java</span></div><h1>PluginLoadResult.java</h1><pre class="source lang-java linenums">package org.hammer.audio.pluginhost;
+
+import java.util.Objects;
+import java.util.Optional;
+import org.hammer.audio.plugin.AudioAnalyzerPlugin;
+import org.hammer.audio.plugin.PluginDescriptor;
+
+/**
+ * Outcome of attempting to load a single plugin.
+ *
+ * &lt;p&gt;Either {@link #plugin()} is present (successful load) or {@link #failure()} is present
+ * (initialization or descriptor failure isolated from the rest of the application). The {@link
+ * #descriptor()} is always populated; for failed loads, a synthetic descriptor identifying the
+ * failing service-provider class name is used.
+ */
+public final class PluginLoadResult {
+
+  private final PluginDescriptor descriptor;
+  private final AudioAnalyzerPlugin plugin;
+  private final Throwable failure;
+
+  private PluginLoadResult(
+<span class="fc" id="L23">      PluginDescriptor descriptor, AudioAnalyzerPlugin plugin, Throwable failure) {</span>
+<span class="fc" id="L24">    this.descriptor = Objects.requireNonNull(descriptor, &quot;descriptor&quot;);</span>
+<span class="fc" id="L25">    this.plugin = plugin;</span>
+<span class="fc" id="L26">    this.failure = failure;</span>
+<span class="fc" id="L27">  }</span>
+
+  /** Construct a successful load result. */
+  public static PluginLoadResult success(AudioAnalyzerPlugin plugin) {
+<span class="fc" id="L31">    Objects.requireNonNull(plugin, &quot;plugin&quot;);</span>
+<span class="fc" id="L32">    return new PluginLoadResult(plugin.descriptor(), plugin, null);</span>
+  }
+
+  /**
+   * Construct a successful load result reusing a previously evaluated descriptor.
+   *
+   * &lt;p&gt;This avoids invoking {@link AudioAnalyzerPlugin#descriptor()} more than once per plugin
+   * during discovery.
+   */
+  public static PluginLoadResult success(AudioAnalyzerPlugin plugin, PluginDescriptor descriptor) {
+<span class="fc" id="L42">    Objects.requireNonNull(plugin, &quot;plugin&quot;);</span>
+<span class="fc" id="L43">    Objects.requireNonNull(descriptor, &quot;descriptor&quot;);</span>
+<span class="fc" id="L44">    return new PluginLoadResult(descriptor, plugin, null);</span>
+  }
+
+  /** Construct a failure result with a synthetic descriptor identifying the failing class. */
+  public static PluginLoadResult failure(String providerClassName, Throwable cause) {
+<span class="fc" id="L49">    Objects.requireNonNull(providerClassName, &quot;providerClassName&quot;);</span>
+<span class="fc" id="L50">    Objects.requireNonNull(cause, &quot;cause&quot;);</span>
+<span class="fc" id="L51">    PluginDescriptor synthetic =</span>
+        new PluginDescriptor(
+            &quot;failed:&quot; + providerClassName,
+            providerClassName,
+            &quot;n/a&quot;,
+<span class="fc" id="L56">            &quot;Plugin failed to load: &quot; + cause.getClass().getSimpleName(),</span>
+            null,
+            true);
+<span class="fc" id="L59">    return new PluginLoadResult(synthetic, null, cause);</span>
+  }
+
+  /** Descriptor of the (attempted) plugin. */
+  public PluginDescriptor descriptor() {
+<span class="fc" id="L64">    return descriptor;</span>
+  }
+
+  /** The loaded plugin, if successful. */
+  public Optional&lt;AudioAnalyzerPlugin&gt; plugin() {
+<span class="fc" id="L69">    return Optional.ofNullable(plugin);</span>
+  }
+
+  /** The failure, if loading failed. */
+  public Optional&lt;Throwable&gt; failure() {
+<span class="fc" id="L74">    return Optional.ofNullable(failure);</span>
+  }
+
+  /** {@code true} if the plugin loaded successfully. */
+  public boolean isSuccess() {
+<span class="fc bfc" id="L79" title="All 2 branches covered.">    return plugin != null;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

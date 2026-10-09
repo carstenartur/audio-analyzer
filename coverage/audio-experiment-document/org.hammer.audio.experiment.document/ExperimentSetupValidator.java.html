@@ -1,0 +1,188 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ExperimentSetupValidator.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experiment Document</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experiment.document</a> &gt; <span class="el_source">ExperimentSetupValidator.java</span></div><h1>ExperimentSetupValidator.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experiment.document;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import java.time.Instant;
+import java.util.HashSet;
+import java.util.Locale;
+import java.util.Set;
+import org.hammer.audio.workflow.Edge;
+import org.hammer.audio.workflow.Metadata;
+import org.hammer.audio.workflow.Node;
+import org.hammer.audio.workflow.Port;
+import org.hammer.audio.workflow.Workflow;
+
+/** Cross-field invariants that JSON Schema alone cannot express. */
+final class ExperimentSetupValidator {
+
+  private static final String PROFILES = &quot;/profiles/&quot;;
+  private static final String INVALID_SETUP = &quot;invalid-setup&quot;;
+  private static final String OUTPUTS = &quot;outputs&quot;;
+  private static final String OUTPUT_POINTER = &quot;/outputs&quot;;
+  private static final String CALIBRATION = &quot;calibration&quot;;
+  private static final String MICROPHONE_ARRAY = &quot;microphoneArray&quot;;
+  private static final String MICROPHONES = &quot;microphones&quot;;
+  private static final String CHANNELS = &quot;channels&quot;;
+  private static final String CHANNEL = &quot;channel&quot;;
+  private static final String CAPTURE = &quot;capture&quot;;
+  private static final String SOURCE = &quot;source&quot;;
+<span class="fc" id="L28">  private static final Set&lt;String&gt; LOCAL_OR_ACTIVE_KEYS =</span>
+<span class="fc" id="L29">      Set.of(</span>
+          &quot;class&quot;,
+          &quot;classname&quot;,
+          &quot;javaclass&quot;,
+          &quot;implementation&quot;,
+          &quot;implementationclass&quot;,
+          &quot;script&quot;,
+          &quot;shell&quot;,
+          &quot;command&quot;,
+          &quot;password&quot;,
+          &quot;token&quot;,
+          &quot;accesstoken&quot;,
+          &quot;apikey&quot;,
+          &quot;deviceid&quot;,
+          &quot;outputdirectory&quot;,
+          &quot;outputpath&quot;);
+
+  private ExperimentSetupValidator() {
+    // utility class
+  }
+
+  static void validate(JsonNode root) throws ExperimentDocumentException {
+<span class="fc" id="L51">    Set&lt;String&gt; assets = unique(root.path(&quot;assets&quot;), &quot;id&quot;, &quot;/assets&quot;);</span>
+<span class="fc" id="L52">    unique(root.path(OUTPUTS), &quot;id&quot;, OUTPUT_POINTER);</span>
+<span class="fc" id="L53">    unique(root.path(&quot;requiredPlugins&quot;), &quot;id&quot;, &quot;/requiredPlugins&quot;);</span>
+<span class="fc" id="L54">    Set&lt;String&gt; outputNames = new HashSet&lt;&gt;();</span>
+<span class="fc bfc" id="L55" title="All 2 branches covered.">    for (JsonNode output : root.path(OUTPUTS)) {</span>
+<span class="fc" id="L56">      String name = portableName(output.path(&quot;baseName&quot;).textValue(), &quot;/outputs/baseName&quot;);</span>
+<span class="fc bfc" id="L57" title="All 2 branches covered.">      if (!outputNames.add(name.toLowerCase(Locale.ROOT))) {</span>
+<span class="fc" id="L58">        throw failure(OUTPUT_POINTER, &quot;Output basenames must be unique across platforms&quot;);</span>
+      }
+<span class="fc" id="L60">    }</span>
+<span class="fc bfc" id="L61" title="All 2 branches covered.">    for (JsonNode asset : root.path(&quot;assets&quot;)) {</span>
+      try {
+<span class="fc" id="L63">        PortableNames.requireRelativePath(asset.path(&quot;relativePath&quot;).textValue());</span>
+<span class="nc" id="L64">      } catch (IllegalArgumentException exception) {</span>
+<span class="nc" id="L65">        throw new ExperimentDocumentException(</span>
+            &quot;/assets&quot;, INVALID_SETUP, &quot;Asset path is not portable&quot;, exception);
+<span class="fc" id="L67">      }</span>
+<span class="fc" id="L68">    }</span>
+<span class="fc" id="L69">    JsonNode profiles = root.path(&quot;profiles&quot;);</span>
+<span class="fc bfc" id="L70" title="All 2 branches covered.">    if (profiles.has(SOURCE)) {</span>
+<span class="fc" id="L71">      requireAsset(assets, profiles.path(SOURCE).path(&quot;assetId&quot;), PROFILES + &quot;source/assetId&quot;);</span>
+    }
+<span class="fc" id="L73">    String mode = root.path(&quot;experiment&quot;).path(&quot;sourceMode&quot;).textValue();</span>
+<span class="pc bpc" id="L74" title="1 of 4 branches missed.">    if (Set.of(&quot;recording&quot;, &quot;dataset&quot;, &quot;replay&quot;).contains(mode) &amp;&amp; !profiles.has(SOURCE)) {</span>
+<span class="nc" id="L75">      throw failure(PROFILES + SOURCE, &quot;Recorded input requires a portable source asset&quot;);</span>
+    }
+<span class="fc bfc" id="L77" title="All 2 branches covered.">    if (profiles.has(MICROPHONE_ARRAY)) {</span>
+<span class="fc" id="L78">      validateArray(profiles);</span>
+    }
+<span class="fc bfc" id="L80" title="All 2 branches covered.">    if (profiles.has(CALIBRATION)) {</span>
+<span class="fc" id="L81">      validateCalibration(profiles, assets);</span>
+    }
+<span class="fc" id="L83">  }</span>
+
+  private static void validateArray(JsonNode profiles) throws ExperimentDocumentException {
+<span class="fc" id="L86">    JsonNode microphones = profiles.path(MICROPHONE_ARRAY).path(MICROPHONES);</span>
+<span class="fc" id="L87">    String pointer = PROFILES + &quot;microphoneArray/microphones&quot;;</span>
+<span class="fc" id="L88">    unique(microphones, &quot;id&quot;, pointer);</span>
+<span class="fc" id="L89">    Set&lt;String&gt; channels = unique(microphones, CHANNEL, pointer);</span>
+<span class="fc bfc" id="L90" title="All 2 branches covered.">    for (int channel = 0; channel &lt; microphones.size(); channel++) {</span>
+<span class="pc bpc" id="L91" title="1 of 2 branches missed.">      if (!channels.contains(Integer.toString(channel))) {</span>
+<span class="nc" id="L92">        throw failure(pointer, &quot;Microphone channels must cover 0 through channel count minus one&quot;);</span>
+      }
+    }
+<span class="pc bpc" id="L95" title="1 of 2 branches missed.">    if (profiles.has(CAPTURE)</span>
+<span class="fc bfc" id="L96" title="All 2 branches covered.">        &amp;&amp; profiles.path(CAPTURE).path(CHANNELS).intValue() != microphones.size()) {</span>
+<span class="fc" id="L97">      throw failure(PROFILES + &quot;capture/channels&quot;, &quot;Capture and geometry channel counts differ&quot;);</span>
+    }
+<span class="fc" id="L99">  }</span>
+
+  private static void validateCalibration(JsonNode profiles, Set&lt;String&gt; assets)
+      throws ExperimentDocumentException {
+<span class="fc" id="L103">    JsonNode calibration = profiles.path(CALIBRATION);</span>
+<span class="pc bpc" id="L104" title="1 of 2 branches missed.">    if (!profiles.has(MICROPHONE_ARRAY)) {</span>
+<span class="nc" id="L105">      throw failure(PROFILES + CALIBRATION, &quot;Calibration requires microphone geometry&quot;);</span>
+    }
+<span class="fc" id="L107">    requireAsset(</span>
+<span class="fc" id="L108">        assets, calibration.path(&quot;evidenceAssetId&quot;), PROFILES + &quot;calibration/evidenceAssetId&quot;);</span>
+<span class="fc" id="L109">    int count = profiles.path(MICROPHONE_ARRAY).path(MICROPHONES).size();</span>
+<span class="fc" id="L110">    Set&lt;String&gt; channels =</span>
+<span class="fc" id="L111">        unique(calibration.path(CHANNELS), CHANNEL, PROFILES + &quot;calibration/channels&quot;);</span>
+<span class="pc bpc" id="L112" title="1 of 4 branches missed.">    if (channels.size() != count || calibration.path(&quot;referenceChannel&quot;).intValue() &gt;= count) {</span>
+<span class="fc" id="L113">      throw failure(PROFILES + CALIBRATION, &quot;Calibration channels must match the geometry&quot;);</span>
+    }
+<span class="fc bfc" id="L115" title="All 2 branches covered.">    for (int channel = 0; channel &lt; count; channel++) {</span>
+<span class="pc bpc" id="L116" title="1 of 2 branches missed.">      if (!channels.contains(Integer.toString(channel))) {</span>
+<span class="nc" id="L117">        throw failure(PROFILES + &quot;calibration/channels&quot;, &quot;Missing microphone calibration channel&quot;);</span>
+      }
+    }
+<span class="fc" id="L120">    Instant calibrated = Instant.parse(calibration.path(&quot;calibratedAt&quot;).textValue());</span>
+<span class="fc" id="L121">    Instant until = Instant.parse(calibration.path(&quot;validUntil&quot;).textValue());</span>
+<span class="fc bfc" id="L122" title="All 2 branches covered.">    if (!until.isAfter(calibrated)) {</span>
+<span class="fc" id="L123">      throw failure(PROFILES + &quot;calibration/validUntil&quot;, &quot;Validity must end after calibration&quot;);</span>
+    }
+<span class="fc" id="L125">  }</span>
+
+  private static Set&lt;String&gt; unique(JsonNode values, String field, String pointer)
+      throws ExperimentDocumentException {
+<span class="fc" id="L129">    Set&lt;String&gt; seen = new HashSet&lt;&gt;();</span>
+<span class="fc" id="L130">    int index = 0;</span>
+<span class="fc bfc" id="L131" title="All 2 branches covered.">    for (JsonNode item : values) {</span>
+<span class="fc bfc" id="L132" title="All 2 branches covered.">      if (!seen.add(item.path(field).asText())) {</span>
+<span class="fc" id="L133">        throw failure(pointer + &quot;/&quot; + index + &quot;/&quot; + field, &quot;Duplicate &quot; + field);</span>
+      }
+<span class="fc" id="L135">      index++;</span>
+<span class="fc" id="L136">    }</span>
+<span class="fc" id="L137">    return seen;</span>
+  }
+
+  private static void requireAsset(Set&lt;String&gt; assets, JsonNode reference, String pointer)
+      throws ExperimentDocumentException {
+<span class="fc bfc" id="L142" title="All 2 branches covered.">    if (!assets.contains(reference.textValue())) {</span>
+<span class="fc" id="L143">      throw failure(pointer, &quot;Referenced asset is absent from the document&quot;);</span>
+    }
+<span class="fc" id="L145">  }</span>
+
+  private static String portableName(String name, String pointer)
+      throws ExperimentDocumentException {
+    try {
+<span class="fc" id="L150">      return PortableNames.requireBaseName(name);</span>
+<span class="nc" id="L151">    } catch (IllegalArgumentException exception) {</span>
+<span class="nc" id="L152">      throw new ExperimentDocumentException(</span>
+          pointer, INVALID_SETUP, &quot;Output basename is not portable&quot;, exception);
+    }
+  }
+
+  static void validateWorkflow(Workflow workflow) throws ExperimentDocumentException {
+<span class="fc" id="L158">    validateMetadata(workflow.metadata());</span>
+<span class="fc bfc" id="L159" title="All 2 branches covered.">    for (Node node : workflow.nodes()) {</span>
+<span class="fc" id="L160">      validateMetadata(node.metadata());</span>
+<span class="fc bfc" id="L161" title="All 2 branches covered.">      for (Port port : node.inputPorts()) {</span>
+<span class="fc" id="L162">        validateMetadata(port.metadata());</span>
+<span class="fc" id="L163">      }</span>
+<span class="fc bfc" id="L164" title="All 2 branches covered.">      for (Port port : node.outputPorts()) {</span>
+<span class="fc" id="L165">        validateMetadata(port.metadata());</span>
+<span class="fc" id="L166">      }</span>
+<span class="fc" id="L167">    }</span>
+<span class="fc bfc" id="L168" title="All 2 branches covered.">    for (Edge edge : workflow.edges()) {</span>
+<span class="fc" id="L169">      validateMetadata(edge.metadata());</span>
+<span class="fc" id="L170">    }</span>
+<span class="fc" id="L171">  }</span>
+
+  private static void validateMetadata(Metadata metadata) throws ExperimentDocumentException {
+<span class="fc bfc" id="L174" title="All 2 branches covered.">    for (String key : metadata.entries().keySet()) {</span>
+<span class="fc" id="L175">      String normalized = key.toLowerCase(Locale.ROOT).replaceAll(&quot;[._:-]&quot;, &quot;&quot;);</span>
+<span class="pc bpc" id="L176" title="1 of 2 branches missed.">      if (LOCAL_OR_ACTIVE_KEYS.stream().anyMatch(normalized::endsWith)) {</span>
+<span class="fc" id="L177">        throw failure(</span>
+            &quot;/workflow/content&quot;,
+            &quot;Local bindings, secrets and active metadata are not portable: &quot; + key);
+      }
+<span class="nc" id="L181">    }</span>
+<span class="fc" id="L182">  }</span>
+
+  private static ExperimentDocumentException failure(String pointer, String message) {
+<span class="fc" id="L185">    return new ExperimentDocumentException(pointer, INVALID_SETUP, message);</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

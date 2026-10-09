@@ -1,0 +1,374 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WorkflowDslParser.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Core</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.dsl</a> &gt; <span class="el_source">WorkflowDslParser.java</span></div><h1>WorkflowDslParser.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.dsl;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import org.hammer.audio.workflow.DataType;
+import org.hammer.audio.workflow.Edge;
+import org.hammer.audio.workflow.Metadata;
+import org.hammer.audio.workflow.Node;
+import org.hammer.audio.workflow.Port;
+import org.hammer.audio.workflow.PortDirection;
+import org.hammer.audio.workflow.PortMultiplicity;
+import org.hammer.audio.workflow.Workflow;
+
+/**
+ * Deterministic text parser for {@link Workflow} objects serialized by {@link
+ * WorkflowDslSerializer}.
+ *
+ * &lt;p&gt;Rebuilds the full workflow domain model from the canonical DSL text. Instances are stateless
+ * and may be safely reused across parse invocations.
+ *
+ * &lt;p&gt;Owned by the DSL layer. May be used by the persistence facade and application services, but
+ * must not depend on UI, JGit or execution internals.
+ *
+ * @see WorkflowDslSerializer
+ */
+<span class="fc" id="L28">public final class WorkflowDslParser {</span>
+
+  private static final String KEY_METADATA = &quot;metadata&quot;;
+  private static final String KEY_NODES = &quot;nodes&quot;;
+  private static final String KEY_EDGES = &quot;edges&quot;;
+
+  /**
+   * Parses a workflow from the canonical DSL text produced by {@link WorkflowDslSerializer}.
+   *
+   * @param text DSL text
+   * @return reconstructed workflow
+   * @throws WorkflowDslParseException if the text is malformed
+   */
+  public Workflow parse(String text) {
+<span class="fc" id="L42">    List&lt;String&gt; lines = splitLines(text);</span>
+<span class="fc" id="L43">    ParserState state = new ParserState(lines);</span>
+<span class="fc" id="L44">    Workflow workflow = parseWorkflow(state);</span>
+<span class="pc bpc" id="L45" title="1 of 2 branches missed.">    if (state.currentLine() != null) {</span>
+<span class="nc" id="L46">      throw new WorkflowDslParseException(&quot;Unexpected trailing workflow content&quot;);</span>
+    }
+<span class="fc" id="L48">    return workflow;</span>
+  }
+
+  private Workflow parseWorkflow(ParserState state) {
+<span class="fc" id="L52">    state.expectKeyword(&quot;workflow&quot;);</span>
+<span class="fc" id="L53">    String id = state.readField(&quot;id&quot;);</span>
+<span class="fc" id="L54">    String name = state.readField(&quot;name&quot;);</span>
+<span class="fc" id="L55">    Metadata meta = Metadata.empty();</span>
+<span class="fc bfc" id="L56" title="All 2 branches covered.">    if (state.peekKey(KEY_METADATA)) {</span>
+<span class="fc" id="L57">      meta = parseMetadata(state);</span>
+    }
+<span class="fc" id="L59">    List&lt;Node&gt; nodes = new ArrayList&lt;&gt;();</span>
+<span class="pc bpc" id="L60" title="1 of 2 branches missed.">    if (state.peekKey(KEY_NODES)) {</span>
+<span class="fc" id="L61">      nodes = parseNodes(state);</span>
+    }
+<span class="fc" id="L63">    List&lt;Edge&gt; edges = new ArrayList&lt;&gt;();</span>
+<span class="pc bpc" id="L64" title="1 of 2 branches missed.">    if (state.peekKey(KEY_EDGES)) {</span>
+<span class="fc" id="L65">      edges = parseEdges(state);</span>
+    }
+<span class="fc" id="L67">    return new Workflow(id, name, nodes, edges, meta);</span>
+  }
+
+  private List&lt;Node&gt; parseNodes(ParserState state) {
+<span class="fc" id="L71">    state.expectSectionHeader(KEY_NODES);</span>
+<span class="fc" id="L72">    List&lt;Node&gt; nodes = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L73" title="All 2 branches covered.">    while (state.peekListItem(2)) {</span>
+<span class="fc" id="L74">      nodes.add(parseNode(state));</span>
+    }
+<span class="fc" id="L76">    return nodes;</span>
+  }
+
+  private Node parseNode(ParserState state) {
+<span class="fc" id="L80">    String id = state.readListItemField(&quot;id&quot;, 2);</span>
+<span class="fc" id="L81">    String type = state.readField(&quot;type&quot;, 3);</span>
+<span class="fc" id="L82">    String label = state.readField(&quot;label&quot;, 3);</span>
+<span class="fc" id="L83">    Metadata metadata = Metadata.empty();</span>
+<span class="fc bfc" id="L84" title="All 2 branches covered.">    if (state.peekKey(KEY_METADATA, 3)) {</span>
+<span class="fc" id="L85">      metadata = parseMetadata(state, 3);</span>
+    }
+<span class="fc" id="L87">    List&lt;Port&gt; inputPorts = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L88" title="All 2 branches covered.">    if (state.peekKey(&quot;inputPorts&quot;, 3)) {</span>
+<span class="fc" id="L89">      inputPorts = parsePorts(state, 3);</span>
+    }
+<span class="fc" id="L91">    List&lt;Port&gt; outputPorts = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L92" title="All 2 branches covered.">    if (state.peekKey(&quot;outputPorts&quot;, 3)) {</span>
+<span class="fc" id="L93">      outputPorts = parsePorts(state, 3);</span>
+    }
+<span class="fc" id="L95">    return new Node(id, type, label, inputPorts, outputPorts, metadata);</span>
+  }
+
+  private List&lt;Port&gt; parsePorts(ParserState state, int parentIndentLevel) {
+<span class="fc" id="L99">    state.expectSectionHeader(parentIndentLevel);</span>
+<span class="fc" id="L100">    List&lt;Port&gt; ports = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L101" title="All 2 branches covered.">    while (state.peekListItem(parentIndentLevel + 1)) {</span>
+<span class="fc" id="L102">      ports.add(parsePort(state, parentIndentLevel + 1));</span>
+    }
+<span class="fc" id="L104">    return ports;</span>
+  }
+
+  private Port parsePort(ParserState state, int level) {
+<span class="fc" id="L108">    String id = state.readListItemField(&quot;id&quot;, level);</span>
+<span class="fc" id="L109">    String name = state.readField(&quot;name&quot;, level + 1);</span>
+<span class="fc" id="L110">    PortDirection direction = PortDirection.valueOf(state.readField(&quot;direction&quot;, level + 1));</span>
+<span class="fc" id="L111">    DataType dataType = new DataType(state.readField(&quot;dataType&quot;, level + 1));</span>
+<span class="fc" id="L112">    String requiredValue = state.readField(&quot;required&quot;, level + 1);</span>
+<span class="pc bpc" id="L113" title="1 of 4 branches missed.">    if (!&quot;true&quot;.equals(requiredValue) &amp;&amp; !&quot;false&quot;.equals(requiredValue)) {</span>
+<span class="nc" id="L114">      throw new WorkflowDslParseException(&quot;Port required must be true or false&quot;);</span>
+    }
+<span class="fc" id="L116">    boolean required = Boolean.parseBoolean(requiredValue);</span>
+<span class="fc" id="L117">    PortMultiplicity multiplicity =</span>
+<span class="fc" id="L118">        PortMultiplicity.valueOf(state.readField(&quot;multiplicity&quot;, level + 1));</span>
+<span class="fc" id="L119">    Metadata metadata = Metadata.empty();</span>
+<span class="fc bfc" id="L120" title="All 2 branches covered.">    if (state.peekKey(KEY_METADATA, level + 1)) {</span>
+<span class="fc" id="L121">      metadata = parseMetadata(state, level + 1);</span>
+    }
+<span class="fc" id="L123">    return new Port(id, name, direction, dataType, required, multiplicity, metadata);</span>
+  }
+
+  private List&lt;Edge&gt; parseEdges(ParserState state) {
+<span class="fc" id="L127">    state.expectSectionHeader(KEY_EDGES);</span>
+<span class="fc" id="L128">    List&lt;Edge&gt; edges = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L129" title="All 2 branches covered.">    while (state.peekListItem(2)) {</span>
+<span class="fc" id="L130">      edges.add(parseEdge(state));</span>
+    }
+<span class="fc" id="L132">    return edges;</span>
+  }
+
+  private Edge parseEdge(ParserState state) {
+<span class="fc" id="L136">    String id = state.readListItemField(&quot;id&quot;, 2);</span>
+<span class="fc" id="L137">    String sourceNodeId = state.readField(&quot;sourceNodeId&quot;, 3);</span>
+<span class="fc" id="L138">    String sourcePortId = state.readField(&quot;sourcePortId&quot;, 3);</span>
+<span class="fc" id="L139">    String targetNodeId = state.readField(&quot;targetNodeId&quot;, 3);</span>
+<span class="fc" id="L140">    String targetPortId = state.readField(&quot;targetPortId&quot;, 3);</span>
+<span class="fc" id="L141">    Metadata metadata = Metadata.empty();</span>
+<span class="pc bpc" id="L142" title="1 of 2 branches missed.">    if (state.peekKey(KEY_METADATA, 3)) {</span>
+<span class="nc" id="L143">      metadata = parseMetadata(state, 3);</span>
+    }
+<span class="fc" id="L145">    return new Edge(id, sourceNodeId, sourcePortId, targetNodeId, targetPortId, metadata);</span>
+  }
+
+  private Metadata parseMetadata(ParserState state) {
+<span class="fc" id="L149">    return parseMetadata(state, 1);</span>
+  }
+
+  private Metadata parseMetadata(ParserState state, int parentIndentLevel) {
+<span class="fc" id="L153">    state.expectSectionHeader(parentIndentLevel);</span>
+<span class="fc" id="L154">    Map&lt;String, String&gt; entries = new HashMap&lt;&gt;();</span>
+<span class="fc bfc" id="L155" title="All 2 branches covered.">    while (state.peekScalarField(parentIndentLevel + 1)) {</span>
+<span class="fc" id="L156">      String[] kv = state.readScalarKV(parentIndentLevel + 1);</span>
+<span class="pc bpc" id="L157" title="1 of 2 branches missed.">      if (entries.containsKey(kv[0])) {</span>
+<span class="nc" id="L158">        throw new WorkflowDslParseException(&quot;Duplicate metadata key: &quot; + kv[0]);</span>
+      }
+<span class="fc" id="L160">      entries.put(kv[0], kv[1]);</span>
+<span class="fc" id="L161">    }</span>
+<span class="fc" id="L162">    return new Metadata(entries);</span>
+  }
+
+  private static List&lt;String&gt; splitLines(String text) {
+<span class="fc" id="L166">    List&lt;String&gt; lines = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L167" title="All 2 branches covered.">    for (String line : text.split(&quot;\n&quot;, -1)) {</span>
+<span class="fc bfc" id="L168" title="All 2 branches covered.">      if (!line.isBlank()) {</span>
+<span class="fc" id="L169">        lines.add(line);</span>
+      }
+    }
+<span class="fc" id="L172">    return lines;</span>
+  }
+
+  // ---------------------------------------------------------------------------
+  // Inner parser state
+  // ---------------------------------------------------------------------------
+
+  private static final class ParserState {
+    private static final String EXPECTED_QUOTE = &quot;Expected '&quot;;
+    private static final String AT_LINE = &quot;' at line &quot;;
+    private static final String BUT_GOT = &quot; but got: &quot;;
+
+    private final List&lt;String&gt; lines;
+    private int pos;
+
+<span class="fc" id="L187">    ParserState(List&lt;String&gt; lines) {</span>
+<span class="fc" id="L188">      this.lines = lines;</span>
+<span class="fc" id="L189">      this.pos = 0;</span>
+<span class="fc" id="L190">    }</span>
+
+    private String currentLine() {
+<span class="fc bfc" id="L193" title="All 2 branches covered.">      if (pos &gt;= lines.size()) {</span>
+<span class="fc" id="L194">        return null;</span>
+      }
+<span class="fc" id="L196">      return lines.get(pos);</span>
+    }
+
+    private int indentOf(String line) {
+<span class="fc" id="L200">      int count = 0;</span>
+<span class="pc bpc" id="L201" title="1 of 2 branches missed.">      for (char c : line.toCharArray()) {</span>
+<span class="fc bfc" id="L202" title="All 2 branches covered.">        if (c == ' ') {</span>
+<span class="fc" id="L203">          count++;</span>
+        } else {
+          break;
+        }
+      }
+<span class="fc" id="L208">      return count / 2;</span>
+    }
+
+    void expectKeyword(String keyword) {
+<span class="fc" id="L212">      String line = currentLine();</span>
+<span class="pc bpc" id="L213" title="1 of 4 branches missed.">      if (line == null || !line.trim().equals(keyword)) {</span>
+<span class="fc" id="L214">        throw new WorkflowDslParseException(</span>
+            EXPECTED_QUOTE + keyword + AT_LINE + pos + BUT_GOT + line);
+      }
+<span class="fc" id="L217">      pos++;</span>
+<span class="fc" id="L218">    }</span>
+
+    void expectSectionHeader(String key) {
+<span class="fc" id="L221">      String line = currentLine();</span>
+<span class="pc bpc" id="L222" title="2 of 4 branches missed.">      if (line == null || !line.trim().equals(key + &quot;:&quot;)) {</span>
+<span class="nc" id="L223">        throw new WorkflowDslParseException(</span>
+            EXPECTED_QUOTE + key + &quot;:&quot; + AT_LINE + pos + BUT_GOT + line);
+      }
+<span class="fc" id="L226">      pos++;</span>
+<span class="fc" id="L227">    }</span>
+
+    void expectSectionHeader(int indentLevel) {
+<span class="fc" id="L230">      String line = currentLine();</span>
+<span class="pc bpc" id="L231" title="1 of 2 branches missed.">      if (line == null) {</span>
+<span class="nc" id="L232">        throw new WorkflowDslParseException(&quot;Expected section header at line &quot; + pos);</span>
+      }
+<span class="fc" id="L234">      String trimmed = line.trim();</span>
+<span class="pc bpc" id="L235" title="1 of 2 branches missed.">      if (!trimmed.endsWith(&quot;:&quot;)) {</span>
+<span class="nc" id="L236">        throw new WorkflowDslParseException(</span>
+            &quot;Expected section header '...:'  at line &quot; + pos + BUT_GOT + line);
+      }
+<span class="fc" id="L239">      pos++;</span>
+<span class="fc" id="L240">    }</span>
+
+    String readField(String key) {
+<span class="fc" id="L243">      return readField(key, 1);</span>
+    }
+
+    String readField(String key, int level) {
+<span class="fc" id="L247">      String line = currentLine();</span>
+<span class="pc bpc" id="L248" title="1 of 2 branches missed.">      if (line == null) {</span>
+<span class="nc" id="L249">        throw new WorkflowDslParseException(EXPECTED_QUOTE + key + AT_LINE + pos);</span>
+      }
+<span class="fc" id="L251">      int indent = indentOf(line);</span>
+<span class="pc bpc" id="L252" title="1 of 2 branches missed.">      if (indent != level) {</span>
+<span class="nc" id="L253">        throw new WorkflowDslParseException(</span>
+            &quot;Expected indent &quot; + level + &quot; for field &quot; + EXPECTED_QUOTE + key + AT_LINE + pos);
+      }
+<span class="fc" id="L256">      String trimmed = line.trim();</span>
+<span class="fc" id="L257">      String prefix = key + &quot;: &quot;;</span>
+<span class="pc bpc" id="L258" title="1 of 2 branches missed.">      if (!trimmed.startsWith(prefix)) {</span>
+<span class="nc" id="L259">        throw new WorkflowDslParseException(</span>
+            EXPECTED_QUOTE + prefix + AT_LINE + pos + BUT_GOT + trimmed);
+      }
+<span class="fc" id="L262">      pos++;</span>
+<span class="fc" id="L263">      return unescapeValue(trimmed.substring(prefix.length()));</span>
+    }
+
+    String readListItemField(String key, int level) {
+<span class="fc" id="L267">      String line = currentLine();</span>
+<span class="pc bpc" id="L268" title="1 of 2 branches missed.">      if (line == null) {</span>
+<span class="nc" id="L269">        throw new WorkflowDslParseException(&quot;Expected list item at line &quot; + pos);</span>
+      }
+<span class="fc" id="L271">      int indent = indentOf(line);</span>
+<span class="pc bpc" id="L272" title="1 of 2 branches missed.">      if (indent != level) {</span>
+<span class="nc" id="L273">        throw new WorkflowDslParseException(</span>
+            &quot;Expected indent &quot; + level + &quot; for list item at line &quot; + pos);
+      }
+<span class="fc" id="L276">      String trimmed = line.trim();</span>
+<span class="fc" id="L277">      String prefix = &quot;- &quot; + key + &quot;: &quot;;</span>
+<span class="pc bpc" id="L278" title="1 of 2 branches missed.">      if (!trimmed.startsWith(prefix)) {</span>
+<span class="nc" id="L279">        throw new WorkflowDslParseException(</span>
+            EXPECTED_QUOTE + prefix + AT_LINE + pos + BUT_GOT + trimmed);
+      }
+<span class="fc" id="L282">      pos++;</span>
+<span class="fc" id="L283">      return unescapeValue(trimmed.substring(prefix.length()));</span>
+    }
+
+    boolean peekKey(String key) {
+<span class="fc" id="L287">      return peekKey(key, 1);</span>
+    }
+
+    boolean peekKey(String key, int level) {
+<span class="fc" id="L291">      String line = currentLine();</span>
+<span class="fc bfc" id="L292" title="All 2 branches covered.">      if (line == null) {</span>
+<span class="fc" id="L293">        return false;</span>
+      }
+<span class="fc" id="L295">      int indent = indentOf(line);</span>
+<span class="fc bfc" id="L296" title="All 2 branches covered.">      if (indent != level) {</span>
+<span class="fc" id="L297">        return false;</span>
+      }
+<span class="fc" id="L299">      String trimmed = line.trim();</span>
+<span class="pc bpc" id="L300" title="1 of 4 branches missed.">      return trimmed.equals(key + &quot;:&quot;) || trimmed.startsWith(key + &quot;: &quot;);</span>
+    }
+
+    boolean peekListItem(int level) {
+<span class="fc" id="L304">      String line = currentLine();</span>
+<span class="fc bfc" id="L305" title="All 2 branches covered.">      if (line == null) {</span>
+<span class="fc" id="L306">        return false;</span>
+      }
+<span class="fc" id="L308">      int indent = indentOf(line);</span>
+<span class="pc bpc" id="L309" title="1 of 4 branches missed.">      return indent == level &amp;&amp; line.trim().startsWith(&quot;- &quot;);</span>
+    }
+
+    boolean peekScalarField(int level) {
+<span class="fc" id="L313">      String line = currentLine();</span>
+<span class="pc bpc" id="L314" title="1 of 2 branches missed.">      if (line == null) {</span>
+<span class="nc" id="L315">        return false;</span>
+      }
+<span class="fc" id="L317">      int indent = indentOf(line);</span>
+<span class="fc bfc" id="L318" title="All 2 branches covered.">      if (indent != level) {</span>
+<span class="fc" id="L319">        return false;</span>
+      }
+<span class="fc" id="L321">      String trimmed = line.trim();</span>
+<span class="pc bpc" id="L322" title="3 of 6 branches missed.">      return !trimmed.startsWith(&quot;- &quot;) &amp;&amp; !trimmed.endsWith(&quot;:&quot;) &amp;&amp; trimmed.contains(&quot;: &quot;);</span>
+    }
+
+    String[] readScalarKV(int level) {
+<span class="fc" id="L326">      String line = currentLine();</span>
+<span class="pc bpc" id="L327" title="1 of 2 branches missed.">      if (line == null) {</span>
+<span class="nc" id="L328">        throw new WorkflowDslParseException(&quot;Expected scalar key-value at line &quot; + pos);</span>
+      }
+<span class="fc" id="L330">      String trimmed = line.trim();</span>
+<span class="fc" id="L331">      int colonIdx = trimmed.indexOf(&quot;: &quot;);</span>
+<span class="pc bpc" id="L332" title="1 of 2 branches missed.">      if (colonIdx &lt; 0) {</span>
+<span class="nc" id="L333">        throw new WorkflowDslParseException(&quot;Malformed key-value line at &quot; + pos + &quot;: &quot; + trimmed);</span>
+      }
+<span class="fc" id="L335">      pos++;</span>
+<span class="fc" id="L336">      String key = unescapeValue(trimmed.substring(0, colonIdx));</span>
+<span class="fc" id="L337">      String value = unescapeValue(trimmed.substring(colonIdx + 2));</span>
+<span class="fc" id="L338">      return new String[] {key, value};</span>
+    }
+
+    private static String unescapeValue(String raw) {
+<span class="pc bpc" id="L342" title="1 of 2 branches missed.">      if (&quot;~&quot;.equals(raw)) {</span>
+<span class="nc" id="L343">        return null;</span>
+      }
+<span class="pc bpc" id="L345" title="2 of 6 branches missed.">      if (raw.startsWith(&quot;\&quot;&quot;) &amp;&amp; raw.endsWith(&quot;\&quot;&quot;) &amp;&amp; raw.length() &gt;= 2) {</span>
+<span class="fc" id="L346">        return unescapeQuotedValue(raw.substring(1, raw.length() - 1));</span>
+      }
+<span class="fc" id="L348">      return raw;</span>
+    }
+
+    private static String unescapeQuotedValue(String raw) {
+<span class="fc" id="L352">      StringBuilder value = new StringBuilder(raw.length());</span>
+<span class="fc" id="L353">      int index = 0;</span>
+<span class="fc bfc" id="L354" title="All 2 branches covered.">      while (index &lt; raw.length()) {</span>
+<span class="fc" id="L355">        char current = raw.charAt(index);</span>
+<span class="pc bpc" id="L356" title="1 of 4 branches missed.">        if (current != '\\' || index + 1 &gt;= raw.length()) {</span>
+<span class="fc" id="L357">          value.append(current);</span>
+<span class="fc" id="L358">          index++;</span>
+<span class="fc" id="L359">          continue;</span>
+        }
+<span class="fc" id="L361">        char escaped = raw.charAt(index + 1);</span>
+<span class="pc bpc" id="L362" title="1 of 4 branches missed.">        switch (escaped) {</span>
+<span class="fc" id="L363">          case 'n' -&gt; value.append('\n');</span>
+<span class="fc" id="L364">          case '&quot;' -&gt; value.append('&quot;');</span>
+<span class="fc" id="L365">          case '\\' -&gt; value.append('\\');</span>
+<span class="nc" id="L366">          default -&gt; value.append(raw, index, index + 2);</span>
+        }
+<span class="fc" id="L368">        index += 2;</span>
+<span class="fc" id="L369">      }</span>
+<span class="fc" id="L370">      return value.toString();</span>
+    }
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

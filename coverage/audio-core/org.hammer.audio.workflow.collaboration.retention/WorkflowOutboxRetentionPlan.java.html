@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WorkflowOutboxRetentionPlan.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Core</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.collaboration.retention</a> &gt; <span class="el_source">WorkflowOutboxRetentionPlan.java</span></div><h1>WorkflowOutboxRetentionPlan.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.collaboration.retention;
+
+import java.time.Instant;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+/**
+ * Immutable, bounded retention plan created at one injected-clock instant.
+ *
+ * @param plannedAt logical time used to compute eligibility
+ * @param publishedCutoff inclusive publication cutoff
+ * @param batchSize configured maximum batch size
+ * @param scannedCount number of published rows considered when the plan was created
+ * @param candidates stable ordered candidates captured for preview and deletion
+ */
+public record WorkflowOutboxRetentionPlan(
+    Instant plannedAt,
+    Instant publishedCutoff,
+    int batchSize,
+    long scannedCount,
+    List&lt;WorkflowOutboxRetentionCandidate&gt; candidates) {
+
+<span class="fc" id="L29">  public WorkflowOutboxRetentionPlan {</span>
+<span class="fc" id="L30">    Objects.requireNonNull(plannedAt, &quot;plannedAt&quot;);</span>
+<span class="fc" id="L31">    Objects.requireNonNull(publishedCutoff, &quot;publishedCutoff&quot;);</span>
+<span class="pc bpc" id="L32" title="1 of 2 branches missed.">    if (publishedCutoff.isAfter(plannedAt)) {</span>
+<span class="nc" id="L33">      throw new IllegalArgumentException(&quot;publishedCutoff must not be after plannedAt&quot;);</span>
+    }
+<span class="pc bpc" id="L35" title="2 of 4 branches missed.">    if (batchSize &lt;= 0 || batchSize &gt; WorkflowOutboxRetentionSettings.MAXIMUM_BATCH_SIZE) {</span>
+<span class="nc" id="L36">      throw new IllegalArgumentException(</span>
+          &quot;batchSize must be between 1 and &quot; + WorkflowOutboxRetentionSettings.MAXIMUM_BATCH_SIZE);
+    }
+<span class="pc bpc" id="L39" title="1 of 2 branches missed.">    if (scannedCount &lt; 0) {</span>
+<span class="nc" id="L40">      throw new IllegalArgumentException(&quot;scannedCount must be &gt;= 0&quot;);</span>
+    }
+<span class="fc" id="L42">    candidates = List.copyOf(Objects.requireNonNull(candidates, &quot;candidates&quot;));</span>
+<span class="pc bpc" id="L43" title="1 of 2 branches missed.">    if (candidates.size() &gt; batchSize) {</span>
+<span class="nc" id="L44">      throw new IllegalArgumentException(&quot;candidate count exceeds batchSize&quot;);</span>
+    }
+<span class="pc bpc" id="L46" title="1 of 2 branches missed.">    if (scannedCount &lt; candidates.size()) {</span>
+<span class="nc" id="L47">      throw new IllegalArgumentException(&quot;scannedCount must be &gt;= candidate count&quot;);</span>
+    }
+<span class="fc" id="L49">    Set&lt;String&gt; eventIds = new HashSet&lt;&gt;();</span>
+<span class="fc" id="L50">    Instant previousPublication = null;</span>
+<span class="fc" id="L51">    String previousEventId = null;</span>
+<span class="fc bfc" id="L52" title="All 2 branches covered.">    for (WorkflowOutboxRetentionCandidate candidate : candidates) {</span>
+<span class="fc" id="L53">      Objects.requireNonNull(candidate, &quot;candidate&quot;);</span>
+<span class="pc bpc" id="L54" title="1 of 2 branches missed.">      if (candidate.publishedAt().isAfter(publishedCutoff)) {</span>
+<span class="nc" id="L55">        throw new IllegalArgumentException(</span>
+<span class="nc" id="L56">            &quot;candidate publication is after cutoff: &quot; + candidate.eventId());</span>
+      }
+<span class="pc bpc" id="L58" title="1 of 2 branches missed.">      if (!eventIds.add(candidate.eventId())) {</span>
+<span class="nc" id="L59">        throw new IllegalArgumentException(&quot;duplicate candidate eventId: &quot; + candidate.eventId());</span>
+      }
+<span class="pc bpc" id="L61" title="1 of 2 branches missed.">      if (previousPublication != null) {</span>
+<span class="nc" id="L62">        int timestampOrder = previousPublication.compareTo(candidate.publishedAt());</span>
+<span class="nc bnc" id="L63" title="All 4 branches missed.">        if (timestampOrder &gt; 0</span>
+<span class="nc bnc" id="L64" title="All 2 branches missed.">            || (timestampOrder == 0 &amp;&amp; previousEventId.compareTo(candidate.eventId()) &gt; 0)) {</span>
+<span class="nc" id="L65">          throw new IllegalArgumentException(</span>
+              &quot;candidates must be ordered by publishedAt and eventId&quot;);
+        }
+      }
+<span class="fc" id="L69">      previousPublication = candidate.publishedAt();</span>
+<span class="fc" id="L70">      previousEventId = candidate.eventId();</span>
+<span class="fc" id="L71">    }</span>
+<span class="fc" id="L72">  }</span>
+
+  /** Number of entries evaluated as eligible when this plan was created. */
+  public int eligibleCount() {
+<span class="nc" id="L76">    return candidates.size();</span>
+  }
+
+  /** Number of published rows that were not selected into this bounded plan. */
+  public long ineligibleOrDeferredCount() {
+<span class="nc" id="L81">    return scannedCount - candidates.size();</span>
+  }
+
+  /** Eligibility-reason counts included in operational dry-run output. */
+  public Map&lt;WorkflowOutboxRetentionReason, Long&gt; reasonCounts() {
+<span class="fc" id="L86">    return Arrays.stream(WorkflowOutboxRetentionReason.values())</span>
+<span class="fc" id="L87">        .map(</span>
+            reason -&gt;
+<span class="fc" id="L89">                Map.entry(</span>
+                    reason,
+<span class="pc bpc" id="L91" title="1 of 2 branches missed.">                    candidates.stream().filter(candidate -&gt; candidate.reason() == reason).count()))</span>
+<span class="pc bpc" id="L92" title="1 of 2 branches missed.">        .filter(entry -&gt; entry.getValue() &gt; 0)</span>
+<span class="fc" id="L93">        .collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, Map.Entry::getValue));</span>
+  }
+
+  /** Oldest candidate publication time, when the plan is non-empty. */
+  public Optional&lt;Instant&gt; oldestPublishedAt() {
+<span class="nc bnc" id="L98" title="All 2 branches missed.">    return candidates.isEmpty()</span>
+<span class="nc" id="L99">        ? Optional.empty()</span>
+<span class="nc" id="L100">        : Optional.of(candidates.getFirst().publishedAt());</span>
+  }
+
+  /** Newest candidate publication time, when the plan is non-empty. */
+  public Optional&lt;Instant&gt; newestPublishedAt() {
+<span class="nc bnc" id="L105" title="All 2 branches missed.">    return candidates.isEmpty()</span>
+<span class="nc" id="L106">        ? Optional.empty()</span>
+<span class="nc" id="L107">        : Optional.of(candidates.getLast().publishedAt());</span>
+  }
+
+  /** Stable candidate identifiers in deletion order. */
+  public List&lt;String&gt; candidateEventIds() {
+<span class="fc" id="L112">    return candidates.stream().map(WorkflowOutboxRetentionCandidate::eventId).toList();</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>RecordingPreflight.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio</a> &gt; <span class="el_source">RecordingPreflight.java</span></div><h1>RecordingPreflight.java</h1><pre class="source lang-java linenums">package org.hammer.audio;
+
+import java.io.IOException;
+import java.nio.file.Path;
+import java.time.Instant;
+import java.util.Objects;
+import org.hammer.audio.core.AudioFormatDescriptor;
+import org.hammer.audio.recording.runtime.FileStoreRecordingStorageProbe;
+import org.hammer.audio.recording.runtime.RecordingStorageLevel;
+import org.hammer.audio.recording.runtime.RecordingStorageProbe;
+import org.hammer.audio.recording.runtime.RecordingStorageStatus;
+
+/** Evaluates recording storage readiness before a target or partial file is created. */
+public final class RecordingPreflight {
+
+  private RecordingPreflight() {
+    // utility class
+  }
+
+  /**
+   * Inspect the selected destination using the configured source format and production filesystem
+   * probe.
+   *
+   * @param service configured audio source
+   * @param destination requested final recording path
+   * @return immutable preflight capacity snapshot
+   * @throws IOException if the source format or destination filesystem cannot be inspected
+   */
+  public static RecordingStorageStatus inspect(AudioCaptureService service, Path destination)
+      throws IOException {
+<span class="nc" id="L31">    return inspect(service, destination, new FileStoreRecordingStorageProbe(), Instant.now());</span>
+  }
+
+  static RecordingStorageProbe productionProbe() {
+<span class="nc" id="L35">    return new FileStoreRecordingStorageProbe();</span>
+  }
+
+  static RecordingStorageStatus inspect(
+      AudioCaptureService service,
+      Path destination,
+      RecordingStorageProbe storageProbe,
+      Instant checkedAt)
+      throws IOException {
+<span class="fc" id="L44">    Objects.requireNonNull(service, &quot;service&quot;);</span>
+<span class="fc" id="L45">    Objects.requireNonNull(destination, &quot;destination&quot;);</span>
+<span class="fc" id="L46">    Objects.requireNonNull(storageProbe, &quot;storageProbe&quot;);</span>
+<span class="fc" id="L47">    Objects.requireNonNull(checkedAt, &quot;checkedAt&quot;);</span>
+<span class="fc" id="L48">    AudioFormatDescriptor descriptor = service.getDescriptor();</span>
+<span class="fc bfc" id="L49" title="All 2 branches covered.">    if (descriptor == null) {</span>
+<span class="fc" id="L50">      throw new IOException(&quot;Audio source has no format descriptor; start/configure it first.&quot;);</span>
+    }
+<span class="fc" id="L52">    return storageProbe.probe(destination, 0L, 0.0, expectedBytesPerSecond(descriptor), checkedAt);</span>
+  }
+
+  static void requireReady(RecordingStorageStatus preflight) throws IOException {
+<span class="fc" id="L56">    Objects.requireNonNull(preflight, &quot;preflight&quot;);</span>
+<span class="fc bfc" id="L57" title="All 2 branches covered.">    if (!preflight.writable()) {</span>
+<span class="fc" id="L58">      throw new IOException(&quot;Recording destination is not writable: &quot; + preflight.destination());</span>
+    }
+<span class="pc bpc" id="L60" title="1 of 2 branches missed.">    if (preflight.level() == RecordingStorageLevel.CRITICAL) {</span>
+<span class="nc" id="L61">      throw new IOException(</span>
+          &quot;Recording destination has insufficient safe capacity: &quot;
+<span class="nc" id="L63">              + preflight.usableBytes()</span>
+              + &quot; usable bytes&quot;);
+    }
+<span class="fc" id="L66">  }</span>
+
+  private static double expectedBytesPerSecond(AudioFormatDescriptor descriptor) {
+<span class="fc" id="L69">    double samplePayload = descriptor.sampleRate() * descriptor.channels() * Float.BYTES;</span>
+<span class="fc" id="L70">    return samplePayload * 1.02;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

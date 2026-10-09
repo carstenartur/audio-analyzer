@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ClassificationAccuracyMetric.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.benchmark</a> &gt; <span class="el_source">ClassificationAccuracyMetric.java</span></div><h1>ClassificationAccuracyMetric.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.benchmark;
+
+/**
+ * Summary metric for benchmark comparisons of classification outputs against scenario truth.
+ *
+ * @param accuracy ratio of correct classifications among evaluated samples
+ * @param correctCount number of correct classifications
+ * @param sampleCount total classification sample count
+ * @param evaluatedCount number of evaluated classification samples
+ * @param skippedCount number of skipped classification samples
+ * @param unavailableTruthCount number of samples without comparable truth labels
+ */
+public record ClassificationAccuracyMetric(
+    Double accuracy,
+    int correctCount,
+    int sampleCount,
+    int evaluatedCount,
+    int skippedCount,
+    int unavailableTruthCount) {
+
+<span class="fc" id="L21">  public ClassificationAccuracyMetric {</span>
+<span class="fc" id="L22">    validateCounts(sampleCount, evaluatedCount, skippedCount, unavailableTruthCount);</span>
+<span class="pc bpc" id="L23" title="2 of 4 branches missed.">    if (correctCount &lt; 0 || correctCount &gt; evaluatedCount) {</span>
+<span class="nc" id="L24">      throw new IllegalArgumentException(&quot;correctCount must be in [0, evaluatedCount]&quot;);</span>
+    }
+<span class="fc bfc" id="L26" title="All 2 branches covered.">    if (evaluatedCount == 0) {</span>
+<span class="pc bpc" id="L27" title="1 of 2 branches missed.">      if (accuracy != null) {</span>
+<span class="nc" id="L28">        throw new IllegalArgumentException(&quot;accuracy must be null when evaluatedCount is 0&quot;);</span>
+      }
+<span class="pc bpc" id="L30" title="4 of 8 branches missed.">    } else if (accuracy == null || !Double.isFinite(accuracy) || accuracy &lt; 0.0 || accuracy &gt; 1.0) {</span>
+<span class="nc" id="L31">      throw new IllegalArgumentException(&quot;accuracy must be finite and in [0,1]&quot;);</span>
+    }
+<span class="fc" id="L33">  }</span>
+
+  /** Build a metric from the number of correct and compared classifications. */
+  public static ClassificationAccuracyMetric ofCounts(
+      int correctCount, int evaluatedCount, int skippedCount, int unavailableTruthCount) {
+<span class="fc" id="L38">    return new ClassificationAccuracyMetric(</span>
+<span class="fc bfc" id="L39" title="All 2 branches covered.">        evaluatedCount == 0 ? null : correctCount / (double) evaluatedCount,</span>
+        correctCount,
+        evaluatedCount + skippedCount + unavailableTruthCount,
+        evaluatedCount,
+        skippedCount,
+        unavailableTruthCount);
+  }
+
+  private static void validateCounts(
+      int sampleCount, int evaluatedCount, int skippedCount, int unavailableTruthCount) {
+<span class="pc bpc" id="L49" title="4 of 8 branches missed.">    if (sampleCount &lt; 0 || evaluatedCount &lt; 0 || skippedCount &lt; 0 || unavailableTruthCount &lt; 0) {</span>
+<span class="nc" id="L50">      throw new IllegalArgumentException(&quot;metric counts must be &gt;= 0&quot;);</span>
+    }
+<span class="pc bpc" id="L52" title="1 of 2 branches missed.">    if (sampleCount != evaluatedCount + skippedCount + unavailableTruthCount) {</span>
+<span class="nc" id="L53">      throw new IllegalArgumentException(</span>
+          &quot;sampleCount must equal evaluatedCount + skippedCount + unavailableTruthCount&quot;);
+    }
+<span class="fc" id="L56">  }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>FeatureScorer.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.feature.ranking</a> &gt; <span class="el_source">FeatureScorer.java</span></div><h1>FeatureScorer.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.feature.ranking;
+
+import org.hammer.audio.experimental.acoustic.feature.evaluation.FeatureEvaluationEntry;
+
+/**
+ * Contract for feature-scoring strategies that estimate how useful a feature is for classification.
+ *
+ * &lt;p&gt;Implementations must be stateless and deterministic so that rankings are reproducible.
+ * Register implementations with {@link FeatureRankingService} to include them in the ranking.
+ */
+@FunctionalInterface
+public interface FeatureScorer {
+
+  /**
+   * Compute a non-negative discriminability score for the given feature evaluation entry.
+   *
+   * &lt;p&gt;Higher scores indicate that the feature is estimated to be more useful for classification.
+   * Scores from different scorers are not necessarily on the same scale; they are used for
+   * within-scorer comparisons only.
+   *
+   * @param entry the feature evaluation entry; must not be {@code null}
+   * @return non-negative score; must be finite and {@code &gt;= 0}
+   */
+  double score(FeatureEvaluationEntry entry);
+
+  /**
+   * Human-readable scorer name used as a map key in {@link FeatureRankingEntry#scores()}.
+   *
+   * &lt;p&gt;Defaults to the simple class name; override when the default would produce an ambiguous key.
+   *
+   * @return scorer name; never blank
+   */
+  default String name() {
+<span class="fc" id="L34">    return getClass().getSimpleName();</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

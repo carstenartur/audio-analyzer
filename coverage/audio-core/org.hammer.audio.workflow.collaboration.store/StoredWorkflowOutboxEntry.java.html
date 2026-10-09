@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>StoredWorkflowOutboxEntry.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Core</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.collaboration.store</a> &gt; <span class="el_source">StoredWorkflowOutboxEntry.java</span></div><h1>StoredWorkflowOutboxEntry.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.collaboration.store;
+
+import java.time.Instant;
+import java.util.Objects;
+
+/**
+ * Immutable durable collaboration outbox entry.
+ *
+ * @param eventId stable idempotency identifier for the event
+ * @param sessionId owning collaboration-session identifier
+ * @param sequence durable session event sequence
+ * @param revision semantic revision associated with the event
+ * @param eventType stable collaboration event type
+ * @param occurredAt event occurrence timestamp
+ * @param payload deterministic serialized event payload
+ * @param attemptCount number of completed publication attempts
+ * @param nextAttemptAt earliest timestamp for the next publication attempt
+ * @param publishedAt successful publication timestamp, or {@code null} while pending
+ */
+public record StoredWorkflowOutboxEntry(
+    String eventId,
+    String sessionId,
+    long sequence,
+    long revision,
+    String eventType,
+    Instant occurredAt,
+    String payload,
+    int attemptCount,
+    Instant nextAttemptAt,
+    Instant publishedAt) {
+
+<span class="fc" id="L32">  public StoredWorkflowOutboxEntry {</span>
+<span class="fc" id="L33">    eventId = requireNotBlank(eventId, &quot;eventId&quot;);</span>
+<span class="fc" id="L34">    sessionId = requireNotBlank(sessionId, &quot;sessionId&quot;);</span>
+<span class="fc" id="L35">    requirePositive(sequence, &quot;sequence&quot;);</span>
+<span class="fc" id="L36">    requirePositive(revision, &quot;revision&quot;);</span>
+<span class="fc" id="L37">    eventType = requireNotBlank(eventType, &quot;eventType&quot;);</span>
+<span class="fc" id="L38">    Objects.requireNonNull(occurredAt, &quot;occurredAt&quot;);</span>
+<span class="fc" id="L39">    payload = requireNotBlank(payload, &quot;payload&quot;);</span>
+<span class="fc bfc" id="L40" title="All 2 branches covered.">    if (attemptCount &lt; 0) {</span>
+<span class="fc" id="L41">      throw new IllegalArgumentException(&quot;attemptCount must be &gt;= 0&quot;);</span>
+    }
+<span class="fc" id="L43">    Objects.requireNonNull(nextAttemptAt, &quot;nextAttemptAt&quot;);</span>
+<span class="fc" id="L44">  }</span>
+
+  /** Returns whether the event still awaits successful publication. */
+  public boolean pending() {
+<span class="fc bfc" id="L48" title="All 2 branches covered.">    return publishedAt == null;</span>
+  }
+
+  private static String requireNotBlank(String value, String name) {
+<span class="fc" id="L52">    Objects.requireNonNull(value, name);</span>
+<span class="pc bpc" id="L53" title="1 of 2 branches missed.">    if (value.isBlank()) {</span>
+<span class="nc" id="L54">      throw new IllegalArgumentException(name + &quot; must not be blank&quot;);</span>
+    }
+<span class="fc" id="L56">    return value;</span>
+  }
+
+  private static void requirePositive(long value, String name) {
+<span class="pc bpc" id="L60" title="1 of 2 branches missed.">    if (value &lt;= 0) {</span>
+<span class="nc" id="L61">      throw new IllegalArgumentException(name + &quot; must be &gt; 0&quot;);</span>
+    }
+<span class="fc" id="L63">  }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

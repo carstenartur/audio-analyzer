@@ -1,0 +1,379 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>AudioBlockRecordingReader.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer DSP and Analysis</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.recording</a> &gt; <span class="el_source">AudioBlockRecordingReader.java</span></div><h1>AudioBlockRecordingReader.java</h1><pre class="source lang-java linenums">package org.hammer.audio.recording;
+
+import java.io.BufferedInputStream;
+import java.io.Closeable;
+import java.io.DataInputStream;
+import java.io.EOFException;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.security.DigestInputStream;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+import org.hammer.audio.core.AudioBlock;
+import org.hammer.audio.core.AudioFormatDescriptor;
+
+/**
+ * Streaming reader for legacy version-1 and integrity-protected version-2 recordings.
+ *
+ * &lt;p&gt;Strict readers reject missing or invalid version-2 footers. Inspection/recovery readers retain
+ * all complete frame records and classify the source instead of presenting it as complete.
+ */
+public final class AudioBlockRecordingReader implements Closeable {
+
+  private final DigestInputStream digestStream;
+  private final DataInputStream in;
+  private final AudioFormatDescriptor format;
+  private final int formatVersion;
+  private final boolean legacy;
+  private final boolean allowIncomplete;
+
+  private long blockCount;
+  private long totalFrames;
+<span class="fc" id="L40">  private long firstFrameIndex = Long.MIN_VALUE;</span>
+<span class="fc" id="L41">  private long lastFrameIndex = Long.MIN_VALUE;</span>
+<span class="fc" id="L42">  private long firstTimestampNanos = Long.MIN_VALUE;</span>
+<span class="fc" id="L43">  private long lastTimestampNanos = Long.MIN_VALUE;</span>
+<span class="fc" id="L44">  private long expectedNextFrameIndex = Long.MIN_VALUE;</span>
+  private long continuityGapCount;
+  private long payloadBytes;
+  private RecordingInspection inspection;
+  private boolean closed;
+  private boolean ended;
+
+  /** Open a strict reader for a recording file. */
+  public static AudioBlockRecordingReader open(Path file) throws IOException {
+<span class="fc" id="L53">    return open(file, false);</span>
+  }
+
+  private static AudioBlockRecordingReader open(Path file, boolean allowIncomplete)
+      throws IOException {
+<span class="fc" id="L58">    Objects.requireNonNull(file, &quot;file&quot;);</span>
+<span class="fc" id="L59">    return new AudioBlockRecordingReader(Files.newInputStream(file), allowIncomplete);</span>
+  }
+
+  /** Read the entire recording and require a valid footer for version 2. */
+  public static List&lt;AudioBlock&gt; readAll(Path file) throws IOException {
+<span class="fc" id="L64">    try (AudioBlockRecordingReader reader = open(file)) {</span>
+<span class="fc" id="L65">      List&lt;AudioBlock&gt; blocks = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L66">      Optional&lt;AudioBlock&gt; next = reader.next();</span>
+<span class="fc bfc" id="L67" title="All 2 branches covered.">      while (next.isPresent()) {</span>
+<span class="fc" id="L68">        blocks.add(next.get());</span>
+<span class="fc" id="L69">        next = reader.next();</span>
+      }
+<span class="fc" id="L71">      return Collections.unmodifiableList(blocks);</span>
+    }
+  }
+
+  /** Inspect a recording without allocating one list containing all samples. */
+  public static RecordingInspection inspect(Path file) throws IOException {
+<span class="fc" id="L77">    try (AudioBlockRecordingReader reader = open(file, true)) {</span>
+<span class="fc" id="L78">      Optional&lt;AudioBlock&gt; next = reader.next();</span>
+<span class="fc bfc" id="L79" title="All 2 branches covered.">      while (next.isPresent()) {</span>
+<span class="fc" id="L80">        next = reader.next();</span>
+      }
+<span class="fc" id="L82">      return reader</span>
+<span class="fc" id="L83">          .inspection()</span>
+<span class="pc" id="L84">          .orElseThrow(() -&gt; new IOException(&quot;Recording inspection incomplete&quot;));</span>
+    }
+  }
+
+  /**
+   * Recover every complete readable block into a new finalized version-2 recording. The source is
+   * never modified.
+   */
+  public static RecordingInspection recover(Path source, Path target) throws IOException {
+<span class="fc" id="L93">    Objects.requireNonNull(source, &quot;source&quot;);</span>
+<span class="fc" id="L94">    Objects.requireNonNull(target, &quot;target&quot;);</span>
+<span class="fc" id="L95">    try (AudioBlockRecordingReader reader = open(source, true);</span>
+<span class="fc" id="L96">        AudioBlockRecordingWriter writer = AudioBlockRecordingWriter.open(target)) {</span>
+<span class="fc" id="L97">      Optional&lt;AudioBlock&gt; next = reader.next();</span>
+<span class="fc bfc" id="L98" title="All 2 branches covered.">      while (next.isPresent()) {</span>
+<span class="fc" id="L99">        writer.write(next.get());</span>
+<span class="fc" id="L100">        next = reader.next();</span>
+      }
+<span class="fc" id="L102">      RecordingInspection sourceInspection =</span>
+<span class="pc" id="L103">          reader.inspection().orElseThrow(() -&gt; new IOException(&quot;Source inspection incomplete&quot;));</span>
+<span class="pc bpc" id="L104" title="1 of 2 branches missed.">      if (sourceInspection.blockCount() == 0L) {</span>
+<span class="nc" id="L105">        writer.abort();</span>
+<span class="nc" id="L106">        Path partialFile = writer.partialFile();</span>
+<span class="nc bnc" id="L107" title="All 2 branches missed.">        if (partialFile != null) {</span>
+<span class="nc" id="L108">          Files.deleteIfExists(partialFile);</span>
+        }
+<span class="nc" id="L110">        throw new IOException(&quot;No complete audio blocks can be recovered from &quot; + source);</span>
+      }
+    }
+<span class="fc" id="L113">    return inspect(target);</span>
+  }
+
+  /** Wrap an existing stream using strict version-2 validation. */
+  public AudioBlockRecordingReader(InputStream stream) throws IOException {
+<span class="nc" id="L118">    this(stream, false);</span>
+<span class="nc" id="L119">  }</span>
+
+  private AudioBlockRecordingReader(InputStream stream, boolean allowIncomplete)
+<span class="fc" id="L122">      throws IOException {</span>
+<span class="fc" id="L123">    MessageDigest digest = newSha256();</span>
+<span class="fc" id="L124">    this.digestStream =</span>
+        new DigestInputStream(
+<span class="fc" id="L126">            new BufferedInputStream(Objects.requireNonNull(stream, &quot;stream&quot;)), digest);</span>
+<span class="fc" id="L127">    this.in = new DataInputStream(digestStream);</span>
+<span class="fc" id="L128">    this.allowIncomplete = allowIncomplete;</span>
+<span class="fc" id="L129">    Header header = readHeader();</span>
+<span class="fc" id="L130">    this.format = header.format();</span>
+<span class="fc" id="L131">    this.formatVersion = header.version();</span>
+<span class="fc" id="L132">    this.legacy = header.legacy();</span>
+<span class="fc" id="L133">  }</span>
+
+  /** Returns the normalized recording format. */
+  public AudioFormatDescriptor format() {
+<span class="nc" id="L137">    return format;</span>
+  }
+
+  /** Returns the parsed format version. */
+  public int formatVersion() {
+<span class="nc" id="L142">    return formatVersion;</span>
+  }
+
+  /** Returns the final inspection after EOF/footer was processed. */
+  public Optional&lt;RecordingInspection&gt; inspection() {
+<span class="fc" id="L147">    return Optional.ofNullable(inspection);</span>
+  }
+
+  /** Read the next block or an empty value after the footer/end of input. */
+  public Optional&lt;AudioBlock&gt; next() throws IOException {
+<span class="pc bpc" id="L152" title="2 of 4 branches missed.">    if (closed || ended) {</span>
+<span class="nc" id="L153">      return Optional.empty();</span>
+    }
+    int frames;
+    try {
+<span class="fc" id="L157">      frames = in.readInt();</span>
+<span class="fc" id="L158">    } catch (EOFException exception) {</span>
+<span class="fc bfc" id="L159" title="All 2 branches covered.">      if (legacy) {</span>
+<span class="fc" id="L160">        inspection =</span>
+<span class="fc" id="L161">            createInspection(</span>
+                RecordingIntegrity.LEGACY_UNVERIFIED,
+                &quot;&quot;,
+                &quot;Legacy recording reached a clean end of file without a completion footer.&quot;);
+<span class="fc" id="L165">        ended = true;</span>
+<span class="fc" id="L166">        return Optional.empty();</span>
+      }
+<span class="fc" id="L168">      return handleUnexpectedEnd(&quot;end of file reached before version-2 footer&quot;, exception);</span>
+<span class="fc" id="L169">    }</span>
+<span class="fc bfc" id="L170" title="All 4 branches covered.">    if (!legacy &amp;&amp; frames == AudioBlockRecordingFormat.FOOTER_MARKER) {</span>
+<span class="fc" id="L171">      return readAndValidateFooter();</span>
+    }
+<span class="pc bpc" id="L173" title="1 of 4 branches missed.">    if (frames &lt; 0 || frames &gt; AudioBlockRecordingFormat.MAX_FRAMES_PER_BLOCK) {</span>
+<span class="fc" id="L174">      return handleCorruption(&quot;invalid frame count: &quot; + frames, null);</span>
+    }
+<span class="fc" id="L176">    long sampleValues = (long) frames * format.channels();</span>
+<span class="pc bpc" id="L177" title="1 of 2 branches missed.">    if (sampleValues &gt; AudioBlockRecordingFormat.MAX_SAMPLE_VALUES_PER_BLOCK) {</span>
+<span class="nc" id="L178">      return handleCorruption(&quot;recording block is too large: &quot; + sampleValues + &quot; samples&quot;, null);</span>
+    }
+
+    try {
+<span class="fc" id="L182">      long frameIndex = in.readLong();</span>
+<span class="fc" id="L183">      long timestampNanos = in.readLong();</span>
+<span class="fc" id="L184">      float[][] samples = new float[format.channels()][frames];</span>
+<span class="fc bfc" id="L185" title="All 2 branches covered.">      for (int channel = 0; channel &lt; format.channels(); channel++) {</span>
+<span class="fc bfc" id="L186" title="All 2 branches covered.">        for (int frame = 0; frame &lt; frames; frame++) {</span>
+<span class="fc" id="L187">          samples[channel][frame] = in.readFloat();</span>
+        }
+      }
+<span class="fc" id="L190">      acceptRecord(frames, frameIndex, timestampNanos);</span>
+<span class="fc" id="L191">      return Optional.of(new AudioBlock(format, samples, frameIndex, timestampNanos));</span>
+<span class="fc" id="L192">    } catch (EOFException exception) {</span>
+<span class="fc" id="L193">      return handleTruncation(&quot;recording ended inside an audio block&quot;, exception);</span>
+    }
+  }
+
+  private Header readHeader() throws IOException {
+<span class="fc" id="L198">    int magic = in.readInt();</span>
+<span class="fc" id="L199">    int version = in.readUnsignedShort();</span>
+<span class="pc bpc" id="L200" title="1 of 4 branches missed.">    boolean legacyHeader =</span>
+        magic == AudioBlockRecordingFormat.LEGACY_MAGIC
+            &amp;&amp; version == AudioBlockRecordingFormat.LEGACY_VERSION;
+<span class="pc bpc" id="L203" title="1 of 4 branches missed.">    boolean currentHeader =</span>
+        magic == AudioBlockRecordingFormat.MAGIC &amp;&amp; version == AudioBlockRecordingFormat.VERSION;
+<span class="fc bfc" id="L205" title="All 4 branches covered.">    if (!legacyHeader &amp;&amp; !currentHeader) {</span>
+<span class="fc" id="L206">      throw new IOException(</span>
+<span class="fc" id="L207">          String.format(</span>
+<span class="fc" id="L208">              &quot;unsupported audio recording header magic=0x%08x version=%d&quot;, magic, version));</span>
+    }
+<span class="fc" id="L210">    int channels = in.readUnsignedShort();</span>
+<span class="fc" id="L211">    float sampleRate = in.readFloat();</span>
+<span class="fc" id="L212">    int sourceBits = in.readUnsignedShort();</span>
+<span class="fc" id="L213">    in.readUnsignedShort();</span>
+<span class="pc bpc" id="L214" title="4 of 8 branches missed.">    if (channels &lt; 1 || sourceBits &lt; 1 || !(sampleRate &gt; 0f) || !Float.isFinite(sampleRate)) {</span>
+<span class="nc" id="L215">      throw new IOException(</span>
+          &quot;invalid header values: channels=&quot;
+              + channels
+              + &quot; sampleRate=&quot;
+              + sampleRate
+              + &quot; sourceBits=&quot;
+              + sourceBits);
+    }
+<span class="fc" id="L223">    return new Header(</span>
+        version, new AudioFormatDescriptor(sampleRate, channels, sourceBits), legacyHeader);
+  }
+
+  private void acceptRecord(int frames, long frameIndex, long timestampNanos) {
+<span class="fc bfc" id="L228" title="All 2 branches covered.">    if (blockCount == 0L) {</span>
+<span class="fc" id="L229">      firstFrameIndex = frameIndex;</span>
+<span class="fc" id="L230">      firstTimestampNanos = timestampNanos;</span>
+<span class="pc bpc" id="L231" title="1 of 2 branches missed.">    } else if (frameIndex != expectedNextFrameIndex) {</span>
+<span class="nc" id="L232">      continuityGapCount++;</span>
+    }
+<span class="fc" id="L234">    blockCount++;</span>
+<span class="fc" id="L235">    totalFrames = Math.addExact(totalFrames, frames);</span>
+<span class="fc" id="L236">    lastFrameIndex = frameIndex;</span>
+<span class="fc" id="L237">    lastTimestampNanos = timestampNanos;</span>
+<span class="fc" id="L238">    expectedNextFrameIndex = Math.addExact(frameIndex, frames);</span>
+<span class="fc" id="L239">    payloadBytes = Math.addExact(payloadBytes, 20L + 4L * format.channels() * frames);</span>
+<span class="fc" id="L240">  }</span>
+
+  private Optional&lt;AudioBlock&gt; readAndValidateFooter() throws IOException {
+<span class="fc" id="L243">    digestStream.on(false);</span>
+<span class="fc" id="L244">    byte[] calculatedChecksum = digestStream.getMessageDigest().digest();</span>
+    try {
+<span class="fc" id="L246">      int footerMagic = in.readInt();</span>
+<span class="fc" id="L247">      long declaredBlocks = in.readLong();</span>
+<span class="fc" id="L248">      long declaredFrames = in.readLong();</span>
+<span class="fc" id="L249">      long declaredFirstFrame = in.readLong();</span>
+<span class="fc" id="L250">      long declaredLastFrame = in.readLong();</span>
+<span class="fc" id="L251">      long declaredFirstTimestamp = in.readLong();</span>
+<span class="fc" id="L252">      long declaredLastTimestamp = in.readLong();</span>
+<span class="fc" id="L253">      long declaredGaps = in.readLong();</span>
+<span class="fc" id="L254">      long declaredPayloadBytes = in.readLong();</span>
+<span class="fc" id="L255">      int checksumLength = in.readInt();</span>
+<span class="pc bpc" id="L256" title="2 of 4 branches missed.">      if (footerMagic != AudioBlockRecordingFormat.FOOTER_MAGIC</span>
+          || checksumLength != AudioBlockRecordingFormat.SHA_256_BYTES) {
+<span class="nc" id="L258">        return handleCorruption(&quot;invalid version-2 completion footer&quot;, null);</span>
+      }
+<span class="fc" id="L260">      byte[] declaredChecksum = in.readNBytes(checksumLength);</span>
+<span class="fc bfc" id="L261" title="All 2 branches covered.">      if (declaredChecksum.length != checksumLength) {</span>
+<span class="fc" id="L262">        return handleTruncation(&quot;recording ended inside completion footer&quot;, null);</span>
+      }
+<span class="pc bpc" id="L264" title="8 of 16 branches missed.">      boolean countersMatch =</span>
+          declaredBlocks == blockCount
+              &amp;&amp; declaredFrames == totalFrames
+              &amp;&amp; declaredFirstFrame == firstFrameIndex
+              &amp;&amp; declaredLastFrame == lastFrameIndex
+              &amp;&amp; declaredFirstTimestamp == firstTimestampNanos
+              &amp;&amp; declaredLastTimestamp == lastTimestampNanos
+              &amp;&amp; declaredGaps == continuityGapCount
+              &amp;&amp; declaredPayloadBytes == payloadBytes;
+<span class="pc bpc" id="L273" title="1 of 4 branches missed.">      if (!countersMatch || !Arrays.equals(declaredChecksum, calculatedChecksum)) {</span>
+<span class="fc" id="L274">        return handleCorruption(&quot;completion footer counters or SHA-256 digest do not match&quot;, null);</span>
+      }
+<span class="fc" id="L276">      inspection =</span>
+<span class="fc" id="L277">          createInspection(</span>
+              RecordingIntegrity.COMPLETE,
+<span class="fc" id="L279">              toHex(calculatedChecksum),</span>
+<span class="pc bpc" id="L280" title="1 of 2 branches missed.">              continuityGapCount == 0L</span>
+<span class="fc" id="L281">                  ? &quot;Recording finalized cleanly.&quot;</span>
+<span class="nc" id="L282">                  : &quot;Recording finalized with source-frame discontinuities.&quot;);</span>
+<span class="fc" id="L283">      ended = true;</span>
+<span class="fc" id="L284">      return Optional.empty();</span>
+<span class="fc" id="L285">    } catch (EOFException exception) {</span>
+<span class="nc" id="L286">      return handleTruncation(&quot;recording ended inside completion footer&quot;, exception);</span>
+    }
+  }
+
+  private Optional&lt;AudioBlock&gt; handleTruncation(String detail, Exception cause) throws IOException {
+<span class="fc bfc" id="L291" title="All 2 branches covered.">    if (allowIncomplete) {</span>
+<span class="fc" id="L292">      inspection = createInspection(RecordingIntegrity.TRUNCATED, &quot;&quot;, detail);</span>
+<span class="fc" id="L293">      ended = true;</span>
+<span class="fc" id="L294">      return Optional.empty();</span>
+    }
+<span class="fc" id="L296">    EOFException exception = new EOFException(detail);</span>
+<span class="fc bfc" id="L297" title="All 2 branches covered.">    if (cause != null) {</span>
+<span class="fc" id="L298">      exception.initCause(cause);</span>
+    }
+<span class="fc" id="L300">    throw exception;</span>
+  }
+
+  private Optional&lt;AudioBlock&gt; handleUnexpectedEnd(String detail, Exception cause)
+      throws IOException {
+<span class="fc bfc" id="L305" title="All 2 branches covered.">    if (allowIncomplete) {</span>
+<span class="fc" id="L306">      inspection = createInspection(RecordingIntegrity.RECOVERABLE_INCOMPLETE, &quot;&quot;, detail);</span>
+<span class="fc" id="L307">      ended = true;</span>
+<span class="fc" id="L308">      return Optional.empty();</span>
+    }
+<span class="fc" id="L310">    EOFException exception = new EOFException(detail);</span>
+<span class="pc bpc" id="L311" title="1 of 2 branches missed.">    if (cause != null) {</span>
+<span class="fc" id="L312">      exception.initCause(cause);</span>
+    }
+<span class="fc" id="L314">    throw exception;</span>
+  }
+
+  private Optional&lt;AudioBlock&gt; handleCorruption(String detail, Exception cause) throws IOException {
+<span class="fc bfc" id="L318" title="All 2 branches covered.">    if (allowIncomplete) {</span>
+<span class="fc" id="L319">      inspection = createInspection(RecordingIntegrity.CORRUPT, &quot;&quot;, detail);</span>
+<span class="fc" id="L320">      ended = true;</span>
+<span class="fc" id="L321">      return Optional.empty();</span>
+    }
+<span class="fc" id="L323">    IOException exception = new IOException(detail);</span>
+<span class="pc bpc" id="L324" title="1 of 2 branches missed.">    if (cause != null) {</span>
+<span class="nc" id="L325">      exception.initCause(cause);</span>
+    }
+<span class="fc" id="L327">    throw exception;</span>
+  }
+
+  private RecordingInspection createInspection(
+      RecordingIntegrity integrity, String checksum, String detail) {
+<span class="fc" id="L332">    return new RecordingInspection(</span>
+        formatVersion,
+        format,
+        integrity,
+        blockCount,
+        totalFrames,
+        firstFrameIndex,
+        lastFrameIndex,
+        firstTimestampNanos,
+        lastTimestampNanos,
+        continuityGapCount,
+        payloadBytes,
+        checksum,
+        detail);
+  }
+
+  @Override
+  public void close() throws IOException {
+<span class="pc bpc" id="L350" title="1 of 2 branches missed.">    if (closed) {</span>
+<span class="nc" id="L351">      return;</span>
+    }
+<span class="fc" id="L353">    closed = true;</span>
+<span class="fc" id="L354">    in.close();</span>
+<span class="fc" id="L355">  }</span>
+
+  private static MessageDigest newSha256() {
+    try {
+<span class="fc" id="L359">      return MessageDigest.getInstance(&quot;SHA-256&quot;);</span>
+<span class="nc" id="L360">    } catch (NoSuchAlgorithmException exception) {</span>
+<span class="nc" id="L361">      throw new IllegalStateException(&quot;SHA-256 is required by the Java platform&quot;, exception);</span>
+    }
+  }
+
+  private static String toHex(byte[] bytes) {
+<span class="fc" id="L366">    StringBuilder result = new StringBuilder(bytes.length * 2);</span>
+<span class="fc bfc" id="L367" title="All 2 branches covered.">    for (byte value : bytes) {</span>
+<span class="fc" id="L368">      result</span>
+<span class="fc" id="L369">          .append(Character.forDigit((value &gt;&gt;&gt; 4) &amp; 0x0f, 16))</span>
+<span class="fc" id="L370">          .append(Character.forDigit(value &amp; 0x0f, 16));</span>
+    }
+<span class="fc" id="L372">    return result.toString();</span>
+  }
+
+<span class="fc" id="L375">  private record Header(int version, AudioFormatDescriptor format, boolean legacy) {</span>
+    // immutable parsed header
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

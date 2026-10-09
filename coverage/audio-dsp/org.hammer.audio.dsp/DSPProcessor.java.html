@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>DSPProcessor.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer DSP and Analysis</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.dsp</a> &gt; <span class="el_source">DSPProcessor.java</span></div><h1>DSPProcessor.java</h1><pre class="source lang-java linenums">package org.hammer.audio.dsp;
+
+import org.hammer.audio.core.AudioBlock;
+
+/**
+ * A single stage of the DSP processing pipeline.
+ *
+ * &lt;p&gt;A {@code DSPProcessor} consumes an {@link AudioBlock} and produces another {@link AudioBlock}.
+ * Implementations may:
+ *
+ * &lt;ul&gt;
+ *   &lt;li&gt;pass the block through unchanged ({@link #identity()})
+ *   &lt;li&gt;transform the samples (e.g. high-pass filter, gain, normalization, downmix)
+ *   &lt;li&gt;change the format (e.g. sample-rate conversion, mono mixdown) — the returned block's {@code
+ *       format()} must reflect the post-processing format
+ * &lt;/ul&gt;
+ *
+ * &lt;p&gt;Processors should treat their input as immutable (see {@link AudioBlock#channelView(int)}) and
+ * return a new {@link AudioBlock} for any modified output. Processors must be stateless or
+ * internally synchronized — a single processor instance may be invoked from one DSP thread, but
+ * pipelines composed of processors are reusable across threads if all stages are themselves
+ * thread-safe.
+ *
+ * @author refactoring
+ */
+@FunctionalInterface
+public interface DSPProcessor {
+
+  /**
+   * Process a single audio block.
+   *
+   * @param block the input block (treat as immutable); never {@code null}
+   * @return the processed block; never {@code null}. May be the same instance as {@code block} for
+   *     pass-through stages.
+   */
+  AudioBlock process(AudioBlock block);
+
+  /**
+   * @return a no-op processor that returns its input unchanged
+   */
+  static DSPProcessor identity() {
+<span class="fc" id="L42">    return block -&gt; block;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

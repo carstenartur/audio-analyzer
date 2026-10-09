@@ -1,0 +1,442 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WorkbenchRunExporter.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.workbench</a> &gt; <span class="el_source">WorkbenchRunExporter.java</span></div><h1>WorkbenchRunExporter.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.workbench;
+
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
+import org.hammer.audio.experimental.acoustic.benchmark.BenchmarkReport;
+import org.hammer.audio.experimental.acoustic.tracking.FrequencyCluster;
+import org.hammer.audio.experimental.acoustic.tracking.TrackedSource;
+import org.hammer.audio.experimental.acoustic.tracking.TrackingSnapshot;
+
+/**
+ * Exports a {@link WorkbenchRunResult} to Markdown, CSV or JSON text.
+ *
+ * &lt;p&gt;All methods are pure functions that return a {@link String}; no I/O is performed here. The
+ * caller is responsible for writing the result to disk or a UI component.
+ */
+public final class WorkbenchRunExporter {
+
+  private static final String FMT_4F = &quot;%.4f&quot;;
+  private static final String FMT_6F = &quot;%.6f&quot;;
+  private static final String FMT_MICROSECONDS_2F = &quot;%.2f µs&quot;;
+  private static final String MARKDOWN_PIPE_SEPARATOR = &quot; | &quot;;
+  private static final String PARAM_RESULT = &quot;result&quot;;
+  private static final String NA = &quot;n/a&quot;;
+
+  private WorkbenchRunExporter() {
+    // utility class
+  }
+
+  /**
+   * Produce a Markdown benchmark summary for the run result.
+   *
+   * &lt;p&gt;The summary is derived from the {@link BenchmarkReport} that was computed by comparing the
+   * estimated tracking output against the scenario ground truth. If no benchmark report is
+   * available (e.g. the run produced no snapshots or benchmark computation failed), a short
+   * placeholder message is returned. Localization and frequency metric values that could not be
+   * computed (evaluatedCount == 0) are rendered as {@code n/a}.
+   *
+   * @param result the run result to format
+   * @return a Markdown-formatted benchmark summary string
+   */
+  public static String toBenchmarkMarkdown(WorkbenchRunResult result) {
+<span class="fc" id="L47">    Objects.requireNonNull(result, PARAM_RESULT);</span>
+<span class="fc" id="L48">    BenchmarkReport report = result.benchmarkReport();</span>
+<span class="fc bfc" id="L49" title="All 2 branches covered.">    if (report == null) {</span>
+<span class="fc" id="L50">      return &quot;# Benchmark Report\n\n&quot;</span>
+          + &quot;*Not available — run produced no snapshots or benchmark computation failed.*\n&quot;;
+    }
+<span class="fc" id="L53">    StringBuilder sb = new StringBuilder(512);</span>
+<span class="fc" id="L54">    sb.append(&quot;# Benchmark Report — &quot;)</span>
+<span class="fc" id="L55">        .append(result.scenario().name())</span>
+<span class="fc" id="L56">        .append(</span>
+            &quot;\n\n&gt; Comparison of estimated tracking output against scenario ground truth.\n&quot;
+                + &quot;&gt; All metrics are experimental.\n\n&quot;)
+<span class="fc" id="L59">        .append(report.toMarkdownSummary())</span>
+<span class="fc" id="L60">        .append(&quot;\n\n## Localization Details\n\n| Metric | Value |\n|---|---|\n&quot;);</span>
+<span class="fc" id="L61">    appendRow(</span>
+        sb,
+        &quot;Mean position error (m)&quot;,
+<span class="fc" id="L64">        formatMetric(FMT_4F, report.localization().meanDistanceErrorMeters()));</span>
+<span class="fc" id="L65">    appendRow(</span>
+        sb,
+        &quot;Median position error (m)&quot;,
+<span class="fc" id="L68">        formatMetric(FMT_4F, report.localization().medianDistanceErrorMeters()));</span>
+<span class="fc" id="L69">    appendRow(</span>
+        sb,
+        &quot;Mean angular error (°)&quot;,
+<span class="fc" id="L72">        formatMetric(FMT_4F, report.localization().meanAngularErrorDegrees()));</span>
+<span class="fc" id="L73">    appendRow(sb, &quot;Evaluated samples&quot;, report.localization().evaluatedCount());</span>
+<span class="fc" id="L74">    appendRow(sb, &quot;Skipped samples&quot;, report.localization().skippedCount());</span>
+<span class="fc" id="L75">    sb.append(&quot;\n## Frequency Details\n\n| Metric | Value |\n|---|---|\n&quot;);</span>
+<span class="fc" id="L76">    appendRow(</span>
+        sb,
+        &quot;Mean absolute error (Hz)&quot;,
+<span class="fc" id="L79">        formatMetric(FMT_4F, report.frequency().meanAbsoluteErrorHz()));</span>
+<span class="fc" id="L80">    appendRow(</span>
+        sb,
+        &quot;Median absolute error (Hz)&quot;,
+<span class="fc" id="L83">        formatMetric(FMT_4F, report.frequency().medianAbsoluteErrorHz()));</span>
+<span class="fc" id="L84">    appendRow(</span>
+<span class="fc" id="L85">        sb, &quot;Mean relative error&quot;, formatMetric(FMT_6F, report.frequency().meanRelativeError()));</span>
+<span class="fc" id="L86">    appendRow(sb, &quot;Evaluated samples&quot;, report.frequency().evaluatedCount());</span>
+<span class="fc" id="L87">    sb.append(&quot;\n## Tracking Quality\n\n| Metric | Value |\n|---|---|\n&quot;);</span>
+<span class="fc" id="L88">    appendRow(sb, &quot;Expected sources&quot;, report.expectedSourceCount());</span>
+<span class="fc" id="L89">    appendRow(sb, &quot;Snapshot count&quot;, report.snapshotCount());</span>
+<span class="fc" id="L90">    appendRow(sb, &quot;Track continuity&quot;, formatMetric(FMT_4F, report.trackContinuity()));</span>
+<span class="fc" id="L91">    appendRow(sb, &quot;ID stability&quot;, formatMetric(FMT_4F, report.idStability()));</span>
+<span class="fc" id="L92">    appendRow(sb, &quot;False-positive rate&quot;, formatMetric(FMT_4F, report.falsePositiveRate()));</span>
+<span class="fc" id="L93">    appendRow(sb, &quot;False-negative rate&quot;, formatMetric(FMT_4F, report.falseNegativeRate()));</span>
+<span class="fc" id="L94">    appendRow(sb, &quot;Mean processing (ns)&quot;, report.meanProcessingNanos());</span>
+<span class="fc" id="L95">    return sb.toString();</span>
+  }
+
+  /**
+   * Produce a Markdown summary of the run result.
+   *
+   * &lt;p&gt;The summary includes: scenario metadata, parameter overview, overall statistics and a
+   * per-block table of frame index, cluster count, track count and processing time.
+   *
+   * @param result the run result to format
+   * @return a Markdown-formatted summary string
+   */
+  public static String toMarkdown(WorkbenchRunResult result) {
+<span class="fc" id="L108">    Objects.requireNonNull(result, PARAM_RESULT);</span>
+<span class="fc" id="L109">    StringBuilder sb = new StringBuilder(2048);</span>
+<span class="fc" id="L110">    sb.append(</span>
+            &quot;# Acoustic Localization Workbench — Run Summary\n\n&quot;
+                + &quot;&gt; **Experimental research output.** &quot;
+                + &quot;This is not a production localization result.\n\n&quot;
+                + &quot;## Scenario\n\n&quot;
+                + &quot;- **Name:** &quot;)
+<span class="fc" id="L116">        .append(result.scenario().name())</span>
+<span class="fc" id="L117">        .append(&quot;\n- **Room:** &quot;)</span>
+<span class="fc" id="L118">        .append(</span>
+<span class="fc" id="L119">            String.format(</span>
+                Locale.ROOT,
+                &quot;%.1f × %.1f m&quot;,
+<span class="fc" id="L122">                result.scenario().room().widthMeters(),</span>
+<span class="fc" id="L123">                result.scenario().room().heightMeters()))</span>
+<span class="fc" id="L124">        .append(&quot;\n- **Emitters:** &quot;)</span>
+<span class="fc" id="L125">        .append(result.scenario().emitters().size())</span>
+<span class="fc" id="L126">        .append(&quot;\n- **Sample rate:** &quot;)</span>
+<span class="fc" id="L127">        .append(String.format(Locale.ROOT, &quot;%.0f Hz&quot;, (double) result.scenario().sampleRate()))</span>
+<span class="fc" id="L128">        .append(&quot;\n- **Duration:** &quot;)</span>
+<span class="fc" id="L129">        .append(String.format(Locale.ROOT, &quot;%.2f s&quot;, result.scenario().durationSeconds()))</span>
+<span class="fc" id="L130">        .append(&quot;\n\n## Parameters\n\n| Parameter | Value |\n|---|---|\n&quot;);</span>
+
+<span class="fc" id="L132">    WorkbenchParameters p = result.parameters();</span>
+<span class="fc" id="L133">    appendRow(sb, &quot;Block size&quot;, p.blockSize());</span>
+<span class="fc" id="L134">    appendRow(sb, &quot;FFT size&quot;, p.fftSize());</span>
+<span class="fc" id="L135">    appendRow(sb, &quot;Max peaks&quot;, p.maxPeaks());</span>
+<span class="fc" id="L136">    appendRow(sb, &quot;Min SNR&quot;, String.format(Locale.ROOT, &quot;%.1f&quot;, p.minSnr()));</span>
+<span class="fc" id="L137">    appendRow(</span>
+<span class="fc" id="L138">        sb, &quot;Band&quot;, String.format(Locale.ROOT, &quot;%.0f – %.0f Hz&quot;, p.bandMinHz(), p.bandMaxHz()));</span>
+<span class="fc" id="L139">    appendRow(</span>
+        sb,
+        &quot;Clustering tolerance&quot;,
+<span class="fc" id="L142">        String.format(Locale.ROOT, &quot;%.0f Hz&quot;, p.clusteringToleranceHz()));</span>
+<span class="fc" id="L143">    appendRow(sb, &quot;Grid steps&quot;, p.candidateGridSteps());</span>
+<span class="fc" id="L144">    appendRow(sb, &quot;TDOA estimator&quot;, p.tdoaEstimatorType());</span>
+<span class="fc" id="L145">    appendRow(</span>
+        sb,
+        &quot;Tracker freq. match&quot;,
+<span class="fc" id="L148">        String.format(Locale.ROOT, &quot;%.0f Hz&quot;, p.trackerFrequencyMatchHz()));</span>
+
+<span class="fc" id="L150">    sb.append(&quot;\n## Statistics\n\n| Metric | Value |\n|---|---|\n&quot;);</span>
+<span class="fc" id="L151">    appendRow(sb, &quot;Blocks processed&quot;, result.blockCount());</span>
+<span class="fc" id="L152">    appendRow(sb, &quot;Any tracked&quot;, result.anyTracked());</span>
+<span class="fc" id="L153">    appendRow(sb, &quot;Max tracks in a frame&quot;, result.maxTracksInAnyFrame());</span>
+<span class="fc" id="L154">    appendRow(sb, &quot;Distinct track IDs&quot;, result.distinctTrackCount());</span>
+<span class="fc" id="L155">    appendRow(sb, &quot;Synchronization modes&quot;, formatSynchronizationModes(result));</span>
+<span class="fc" id="L156">    appendRow(sb, &quot;Worst synchronization&quot;, result.worstSynchronizationStatus());</span>
+<span class="fc" id="L157">    appendRow(</span>
+        sb,
+        &quot;Mean TDOA consistency&quot;,
+<span class="fc" id="L160">        String.format(Locale.ROOT, FMT_4F, result.meanTdoaConsistencyScore()));</span>
+<span class="fc" id="L161">    appendRow(</span>
+        sb,
+        &quot;Maximum TDOA cycle residual&quot;,
+<span class="fc" id="L164">        String.format(</span>
+            Locale.ROOT,
+            FMT_MICROSECONDS_2F,
+<span class="fc" id="L167">            result.maximumTdoaCycleResidualSeconds() * 1_000_000.0));</span>
+<span class="fc" id="L168">    appendRow(sb, &quot;Physical TDOA violations&quot;, result.physicalTdoaViolationCount());</span>
+<span class="fc" id="L169">    appendRow(sb, &quot;Unreliable TDOA frames&quot;, result.unreliableTdoaFrameCount());</span>
+<span class="fc" id="L170">    appendRow(</span>
+        sb,
+        &quot;Avg processing / block&quot;,
+<span class="fc" id="L173">        String.format(</span>
+<span class="fc" id="L174">            Locale.ROOT, FMT_MICROSECONDS_2F, result.averageProcessingNanosPerBlock() / 1_000.0));</span>
+<span class="fc" id="L175">    appendRow(</span>
+        sb,
+        &quot;Max processing / block&quot;,
+<span class="fc" id="L178">        String.format(</span>
+<span class="fc" id="L179">            Locale.ROOT, FMT_MICROSECONDS_2F, result.maxProcessingNanosPerBlock() / 1_000.0));</span>
+<span class="fc bfc" id="L180" title="All 2 branches covered.">    if (result.frameSchedule() != null) {</span>
+<span class="fc" id="L181">      appendRow(</span>
+          sb,
+          &quot;Budget per block&quot;,
+<span class="fc" id="L184">          String.format(</span>
+              Locale.ROOT,
+              FMT_MICROSECONDS_2F,
+<span class="fc" id="L187">              result.frameSchedule().maxProcessingNanos() / 1_000.0));</span>
+<span class="fc" id="L188">      appendRow(sb, &quot;Over-budget frames&quot;, result.overBudgetFrameCount());</span>
+    }
+
+<span class="fc" id="L191">    sb.append(</span>
+        &quot;\n&quot;
+            + &quot;## Frame-by-frame summary\n\n&quot;
+            + &quot;| Frame | Time (ms) | Clusters | Tracks | Proc. (µs) | Sync | Error (samples) |&quot;
+            + &quot; TDOA score | Cycle residual (µs) | Physical | Budget |\n&quot;
+            + &quot;|---|---|---|---|---|---|---|---|---|---|---|\n&quot;);
+<span class="fc bfc" id="L197" title="All 2 branches covered.">    for (TrackingSnapshot snap : result.snapshots()) {</span>
+<span class="fc" id="L198">      sb.append(&quot;| &quot;)</span>
+<span class="fc" id="L199">          .append(snap.sourceFrameIndex())</span>
+<span class="fc" id="L200">          .append(MARKDOWN_PIPE_SEPARATOR)</span>
+<span class="fc" id="L201">          .append(String.format(Locale.ROOT, &quot;%.1f&quot;, snap.sourceTimestampNanos() / 1_000_000.0))</span>
+<span class="fc" id="L202">          .append(MARKDOWN_PIPE_SEPARATOR)</span>
+<span class="fc" id="L203">          .append(snap.clusters().size())</span>
+<span class="fc" id="L204">          .append(MARKDOWN_PIPE_SEPARATOR)</span>
+<span class="fc" id="L205">          .append(snap.tracks().size())</span>
+<span class="fc" id="L206">          .append(MARKDOWN_PIPE_SEPARATOR)</span>
+<span class="fc" id="L207">          .append(String.format(Locale.ROOT, &quot;%.1f&quot;, snap.processingNanos() / 1_000.0))</span>
+<span class="fc" id="L208">          .append(MARKDOWN_PIPE_SEPARATOR)</span>
+<span class="fc" id="L209">          .append(snap.synchronization().status())</span>
+<span class="fc" id="L210">          .append(MARKDOWN_PIPE_SEPARATOR)</span>
+<span class="fc" id="L211">          .append(</span>
+<span class="fc" id="L212">              String.format(Locale.ROOT, FMT_4F, snap.synchronization().estimatedErrorSamples()))</span>
+<span class="fc" id="L213">          .append(MARKDOWN_PIPE_SEPARATOR)</span>
+<span class="fc" id="L214">          .append(String.format(Locale.ROOT, FMT_4F, snap.tdoaConsistency().consistencyScore()))</span>
+<span class="fc" id="L215">          .append(MARKDOWN_PIPE_SEPARATOR)</span>
+<span class="fc" id="L216">          .append(</span>
+<span class="fc" id="L217">              String.format(</span>
+                  Locale.ROOT,
+                  &quot;%.2f&quot;,
+<span class="fc" id="L220">                  snap.tdoaConsistency().maximumAbsoluteCycleResidualSeconds() * 1_000_000.0))</span>
+<span class="fc" id="L221">          .append(MARKDOWN_PIPE_SEPARATOR)</span>
+<span class="fc" id="L222">          .append(snap.tdoaConsistency().physicalViolationCount())</span>
+<span class="fc" id="L223">          .append(MARKDOWN_PIPE_SEPARATOR)</span>
+<span class="fc" id="L224">          .append(formatBudgetStatus(result, snap))</span>
+<span class="fc" id="L225">          .append(&quot; |\n&quot;);</span>
+<span class="fc" id="L226">    }</span>
+<span class="fc" id="L227">    return sb.toString();</span>
+  }
+
+  /**
+   * Produce a CSV export of every tracked source observation across all frames.
+   *
+   * &lt;p&gt;Each row represents one {@link TrackedSource} in one frame. The CSV uses {@code ,} as
+   * separator and includes a header row.
+   *
+   * @param result the run result to format
+   * @return a CSV-formatted string
+   */
+  public static String toCsv(WorkbenchRunResult result) {
+<span class="fc" id="L240">    Objects.requireNonNull(result, PARAM_RESULT);</span>
+<span class="fc" id="L241">    StringBuilder sb = new StringBuilder(1024);</span>
+<span class="fc" id="L242">    sb.append(</span>
+        &quot;frameIndex,timestampNs,trackId,frequencyHz,observedFrequencyHz,&quot;
+            + &quot;posX,posY,velX,velY,confidence,observations,processingNs,&quot;
+            + &quot;synchronizationMode,synchronizationStatus,synchronizationErrorSamples,&quot;
+            + &quot;calibrationCurrent,tdoaConsistencyScore,&quot;
+            + &quot;tdoaMaximumCycleResidualSeconds,tdoaPhysicalViolationCount,&quot;
+            + &quot;budgetExceeded\n&quot;);
+<span class="fc bfc" id="L249" title="All 2 branches covered.">    for (TrackingSnapshot snap : result.snapshots()) {</span>
+<span class="fc bfc" id="L250" title="All 2 branches covered.">      for (TrackedSource track : snap.tracks()) {</span>
+<span class="fc" id="L251">        sb.append(snap.sourceFrameIndex())</span>
+<span class="fc" id="L252">            .append(',')</span>
+<span class="fc" id="L253">            .append(snap.sourceTimestampNanos())</span>
+<span class="fc" id="L254">            .append(',')</span>
+<span class="fc" id="L255">            .append(track.id())</span>
+<span class="fc" id="L256">            .append(',')</span>
+<span class="fc" id="L257">            .append(String.format(Locale.ROOT, &quot;%.3f&quot;, track.frequencyHz()))</span>
+<span class="fc" id="L258">            .append(',')</span>
+<span class="fc" id="L259">            .append(String.format(Locale.ROOT, &quot;%.3f&quot;, track.observedFrequencyHz()))</span>
+<span class="fc" id="L260">            .append(',')</span>
+<span class="fc" id="L261">            .append(String.format(Locale.ROOT, FMT_4F, track.positionMeters().x()))</span>
+<span class="fc" id="L262">            .append(',')</span>
+<span class="fc" id="L263">            .append(String.format(Locale.ROOT, FMT_4F, track.positionMeters().y()))</span>
+<span class="fc" id="L264">            .append(',')</span>
+<span class="fc" id="L265">            .append(String.format(Locale.ROOT, FMT_4F, track.velocityMetersPerSecond().x()))</span>
+<span class="fc" id="L266">            .append(',')</span>
+<span class="fc" id="L267">            .append(String.format(Locale.ROOT, FMT_4F, track.velocityMetersPerSecond().y()))</span>
+<span class="fc" id="L268">            .append(',')</span>
+<span class="fc" id="L269">            .append(String.format(Locale.ROOT, FMT_4F, track.confidence()))</span>
+<span class="fc" id="L270">            .append(',')</span>
+<span class="fc" id="L271">            .append(track.observationCount())</span>
+<span class="fc" id="L272">            .append(',')</span>
+<span class="fc" id="L273">            .append(snap.processingNanos())</span>
+<span class="fc" id="L274">            .append(',')</span>
+<span class="fc" id="L275">            .append(snap.synchronization().mode())</span>
+<span class="fc" id="L276">            .append(',')</span>
+<span class="fc" id="L277">            .append(snap.synchronization().status())</span>
+<span class="fc" id="L278">            .append(',')</span>
+<span class="fc" id="L279">            .append(</span>
+<span class="fc" id="L280">                String.format(Locale.ROOT, FMT_6F, snap.synchronization().estimatedErrorSamples()))</span>
+<span class="fc" id="L281">            .append(',')</span>
+<span class="fc" id="L282">            .append(snap.synchronization().calibrationCurrent())</span>
+<span class="fc" id="L283">            .append(',')</span>
+<span class="fc" id="L284">            .append(String.format(Locale.ROOT, FMT_6F, snap.tdoaConsistency().consistencyScore()))</span>
+<span class="fc" id="L285">            .append(',')</span>
+<span class="fc" id="L286">            .append(</span>
+<span class="fc" id="L287">                String.format(</span>
+                    Locale.ROOT,
+                    &quot;%.9f&quot;,
+<span class="fc" id="L290">                    snap.tdoaConsistency().maximumAbsoluteCycleResidualSeconds()))</span>
+<span class="fc" id="L291">            .append(',')</span>
+<span class="fc" id="L292">            .append(snap.tdoaConsistency().physicalViolationCount())</span>
+<span class="fc" id="L293">            .append(',')</span>
+<span class="fc" id="L294">            .append(formatBudgetExceededCsv(result, snap))</span>
+<span class="fc" id="L295">            .append('\n');</span>
+<span class="fc" id="L296">      }</span>
+<span class="fc" id="L297">    }</span>
+<span class="fc" id="L298">    return sb.toString();</span>
+  }
+
+  /**
+   * Produce a JSON-lines export of all snapshots (one JSON object per line).
+   *
+   * &lt;p&gt;Each line is a self-contained JSON object describing one frame: its index, timestamp,
+   * detected clusters and tracked sources. No external JSON library is required; the output is
+   * hand-formatted.
+   *
+   * @param result the run result to format
+   * @return a JSON-lines formatted string
+   */
+  public static String toJsonLines(WorkbenchRunResult result) {
+<span class="fc" id="L312">    Objects.requireNonNull(result, PARAM_RESULT);</span>
+<span class="fc" id="L313">    StringBuilder sb = new StringBuilder(512);</span>
+<span class="fc bfc" id="L314" title="All 2 branches covered.">    for (TrackingSnapshot snap : result.snapshots()) {</span>
+<span class="fc" id="L315">      sb.append(&quot;{\&quot;frameIndex\&quot;:&quot;)</span>
+<span class="fc" id="L316">          .append(snap.sourceFrameIndex())</span>
+<span class="fc" id="L317">          .append(&quot;,\&quot;timestampNs\&quot;:&quot;)</span>
+<span class="fc" id="L318">          .append(snap.sourceTimestampNanos())</span>
+<span class="fc" id="L319">          .append(&quot;,\&quot;processingNs\&quot;:&quot;)</span>
+<span class="fc" id="L320">          .append(snap.processingNanos())</span>
+<span class="fc" id="L321">          .append(&quot;,\&quot;synchronization\&quot;:{\&quot;mode\&quot;:\&quot;&quot;)</span>
+<span class="fc" id="L322">          .append(snap.synchronization().mode())</span>
+<span class="fc" id="L323">          .append(&quot;\&quot;,\&quot;status\&quot;:\&quot;&quot;)</span>
+<span class="fc" id="L324">          .append(snap.synchronization().status())</span>
+<span class="fc" id="L325">          .append(&quot;\&quot;,\&quot;estimatedErrorSamples\&quot;:&quot;)</span>
+<span class="fc" id="L326">          .append(</span>
+<span class="fc" id="L327">              String.format(Locale.ROOT, FMT_6F, snap.synchronization().estimatedErrorSamples()))</span>
+<span class="fc" id="L328">          .append(&quot;,\&quot;calibrationCurrent\&quot;:&quot;)</span>
+<span class="fc" id="L329">          .append(snap.synchronization().calibrationCurrent())</span>
+<span class="fc" id="L330">          .append(&quot;},\&quot;tdoaConsistency\&quot;:{\&quot;score\&quot;:&quot;)</span>
+<span class="fc" id="L331">          .append(String.format(Locale.ROOT, FMT_6F, snap.tdoaConsistency().consistencyScore()))</span>
+<span class="fc" id="L332">          .append(&quot;,\&quot;evaluatedCycles\&quot;:&quot;)</span>
+<span class="fc" id="L333">          .append(snap.tdoaConsistency().evaluatedCycles())</span>
+<span class="fc" id="L334">          .append(&quot;,\&quot;maximumCycleResidualSeconds\&quot;:&quot;)</span>
+<span class="fc" id="L335">          .append(</span>
+<span class="fc" id="L336">              String.format(</span>
+                  Locale.ROOT,
+                  &quot;%.9f&quot;,
+<span class="fc" id="L339">                  snap.tdoaConsistency().maximumAbsoluteCycleResidualSeconds()))</span>
+<span class="fc" id="L340">          .append(&quot;,\&quot;physicalViolationCount\&quot;:&quot;)</span>
+<span class="fc" id="L341">          .append(snap.tdoaConsistency().physicalViolationCount())</span>
+<span class="fc" id="L342">          .append(&quot;},\&quot;budgetExceeded\&quot;:&quot;)</span>
+<span class="fc" id="L343">          .append(formatBudgetExceededJson(result, snap))</span>
+<span class="fc" id="L344">          .append(&quot;,\&quot;clusters\&quot;:[&quot;);</span>
+<span class="fc" id="L345">      appendClustersJson(sb, snap.clusters());</span>
+<span class="fc" id="L346">      sb.append(&quot;],\&quot;tracks\&quot;:[&quot;);</span>
+<span class="fc" id="L347">      appendTracksJson(sb, snap.tracks());</span>
+<span class="fc" id="L348">      sb.append(&quot;]}\n&quot;);</span>
+<span class="fc" id="L349">    }</span>
+<span class="fc" id="L350">    return sb.toString();</span>
+  }
+
+  private static void appendClustersJson(StringBuilder sb, List&lt;FrequencyCluster&gt; clusters) {
+<span class="fc bfc" id="L354" title="All 2 branches covered.">    for (int i = 0; i &lt; clusters.size(); i++) {</span>
+<span class="fc bfc" id="L355" title="All 2 branches covered.">      if (i &gt; 0) {</span>
+<span class="fc" id="L356">        sb.append(',');</span>
+      }
+<span class="fc" id="L358">      FrequencyCluster c = clusters.get(i);</span>
+<span class="fc" id="L359">      sb.append(</span>
+<span class="fc" id="L360">          String.format(</span>
+              Locale.ROOT,
+              &quot;{\&quot;freqHz\&quot;:%.3f,\&quot;magnitude\&quot;:%.4f,\&quot;channels\&quot;:%d}&quot;,
+<span class="fc" id="L363">              c.centerFrequencyHz(),</span>
+<span class="fc" id="L364">              c.totalMagnitude(),</span>
+<span class="fc" id="L365">              c.channelCount()));</span>
+    }
+<span class="fc" id="L367">  }</span>
+
+  private static void appendTracksJson(StringBuilder sb, List&lt;TrackedSource&gt; tracks) {
+<span class="fc bfc" id="L370" title="All 2 branches covered.">    for (int i = 0; i &lt; tracks.size(); i++) {</span>
+<span class="fc bfc" id="L371" title="All 2 branches covered.">      if (i &gt; 0) {</span>
+<span class="fc" id="L372">        sb.append(',');</span>
+      }
+<span class="fc" id="L374">      TrackedSource t = tracks.get(i);</span>
+<span class="fc" id="L375">      sb.append(</span>
+<span class="fc" id="L376">          String.format(</span>
+              Locale.ROOT,
+              &quot;{\&quot;id\&quot;:%d,\&quot;freqHz\&quot;:%.3f,\&quot;x\&quot;:%.4f,\&quot;y\&quot;:%.4f,&quot;
+                  + &quot;\&quot;confidence\&quot;:%.4f,\&quot;observations\&quot;:%d}&quot;,
+<span class="fc" id="L380">              t.id(),</span>
+<span class="fc" id="L381">              t.frequencyHz(),</span>
+<span class="fc" id="L382">              t.positionMeters().x(),</span>
+<span class="fc" id="L383">              t.positionMeters().y(),</span>
+<span class="fc" id="L384">              t.confidence(),</span>
+<span class="fc" id="L385">              t.observationCount()));</span>
+    }
+<span class="fc" id="L387">  }</span>
+
+  /**
+   * Collect the distinct track IDs across all snapshots in order of first appearance.
+   *
+   * @param result the run result
+   * @return list of track IDs in first-seen order
+   */
+  public static List&lt;Integer&gt; observedTrackIds(WorkbenchRunResult result) {
+<span class="fc" id="L396">    Objects.requireNonNull(result, PARAM_RESULT);</span>
+<span class="fc" id="L397">    Set&lt;Integer&gt; seen = new LinkedHashSet&lt;&gt;();</span>
+<span class="fc bfc" id="L398" title="All 2 branches covered.">    for (TrackingSnapshot snap : result.snapshots()) {</span>
+<span class="fc bfc" id="L399" title="All 2 branches covered.">      for (TrackedSource track : snap.tracks()) {</span>
+<span class="fc" id="L400">        seen.add(track.id());</span>
+<span class="fc" id="L401">      }</span>
+<span class="fc" id="L402">    }</span>
+<span class="fc" id="L403">    return new ArrayList&lt;&gt;(seen);</span>
+  }
+
+  private static String formatSynchronizationModes(WorkbenchRunResult result) {
+<span class="fc" id="L407">    return result.synchronizationModes().stream()</span>
+<span class="fc" id="L408">        .sorted()</span>
+<span class="fc" id="L409">        .map(Enum::name)</span>
+<span class="fc" id="L410">        .collect(Collectors.joining(&quot;, &quot;));</span>
+  }
+
+  private static String formatBudgetStatus(WorkbenchRunResult result, TrackingSnapshot snap) {
+<span class="fc bfc" id="L414" title="All 2 branches covered.">    if (result.frameSchedule() == null) {</span>
+<span class="fc" id="L415">      return &quot;N/A&quot;;</span>
+    }
+<span class="fc bfc" id="L417" title="All 2 branches covered.">    return result.isFrameOverBudget(snap) ? &quot;⚠ OVER&quot; : &quot;OK&quot;;</span>
+  }
+
+  private static String formatBudgetExceededCsv(WorkbenchRunResult result, TrackingSnapshot snap) {
+<span class="fc bfc" id="L421" title="All 2 branches covered.">    if (result.frameSchedule() == null) {</span>
+<span class="fc" id="L422">      return &quot;&quot;;</span>
+    }
+<span class="fc" id="L424">    return Boolean.toString(result.isFrameOverBudget(snap));</span>
+  }
+
+  private static String formatBudgetExceededJson(WorkbenchRunResult result, TrackingSnapshot snap) {
+<span class="fc bfc" id="L428" title="All 2 branches covered.">    if (result.frameSchedule() == null) {</span>
+<span class="fc" id="L429">      return &quot;null&quot;;</span>
+    }
+<span class="fc" id="L431">    return Boolean.toString(result.isFrameOverBudget(snap));</span>
+  }
+
+  private static String formatMetric(String fmt, Double value) {
+<span class="fc bfc" id="L435" title="All 2 branches covered.">    return value == null ? NA : String.format(Locale.ROOT, fmt, value);</span>
+  }
+
+  private static void appendRow(StringBuilder sb, String label, Object value) {
+<span class="fc" id="L439">    sb.append(&quot;| &quot;).append(label).append(MARKDOWN_PIPE_SEPARATOR).append(value).append(&quot; |\n&quot;);</span>
+<span class="fc" id="L440">  }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

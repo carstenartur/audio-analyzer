@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>StoredWorkflowOperation.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Core</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.collaboration.store</a> &gt; <span class="el_source">StoredWorkflowOperation.java</span></div><h1>StoredWorkflowOperation.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.collaboration.store;
+
+import java.time.Instant;
+import java.util.Objects;
+import java.util.Optional;
+import org.hammer.audio.workflow.WorkflowOperation;
+
+/**
+ * Immutable accepted operation read back from durable collaboration history.
+ *
+ * @param sessionId owning collaboration-session identifier
+ * @param operationId stable idempotency identifier for the semantic operation
+ * @param actorId actor that authored the operation
+ * @param operationType stable semantic operation type
+ * @param occurredAt operation occurrence timestamp
+ * @param sequence durable session event sequence
+ * @param revision semantic revision produced by the operation
+ * @param payload deterministic serialized identity payload
+ * @param bodyVersion version of the reconstructible operation body, or zero for a legacy row
+ * @param operationBody complete operation body, or {@code null} for a legacy row
+ * @param command durable normal/undo/redo command relation
+ */
+public record StoredWorkflowOperation(
+    String sessionId,
+    String operationId,
+    String actorId,
+    String operationType,
+    Instant occurredAt,
+    long sequence,
+    long revision,
+    String payload,
+    int bodyVersion,
+    String operationBody,
+    WorkflowOperationCommandMetadata command) {
+
+<span class="fc" id="L36">  public StoredWorkflowOperation {</span>
+<span class="fc" id="L37">    sessionId = requireNotBlank(sessionId, &quot;sessionId&quot;);</span>
+<span class="fc" id="L38">    operationId = requireNotBlank(operationId, &quot;operationId&quot;);</span>
+<span class="fc" id="L39">    actorId = requireNotBlank(actorId, &quot;actorId&quot;);</span>
+<span class="fc" id="L40">    operationType = requireNotBlank(operationType, &quot;operationType&quot;);</span>
+<span class="fc" id="L41">    Objects.requireNonNull(occurredAt, &quot;occurredAt&quot;);</span>
+<span class="fc" id="L42">    requirePositive(sequence, &quot;sequence&quot;);</span>
+<span class="fc" id="L43">    requirePositive(revision, &quot;revision&quot;);</span>
+<span class="fc" id="L44">    payload = requireNotBlank(payload, &quot;payload&quot;);</span>
+<span class="pc bpc" id="L45" title="1 of 2 branches missed.">    if (bodyVersion &lt; 0) {</span>
+<span class="nc" id="L46">      throw new IllegalArgumentException(&quot;bodyVersion must be &gt;= 0&quot;);</span>
+    }
+<span class="pc bpc" id="L48" title="1 of 2 branches missed.">    if (bodyVersion == 0) {</span>
+<span class="pc bpc" id="L49" title="3 of 4 branches missed.">      if (operationBody != null &amp;&amp; !operationBody.isBlank()) {</span>
+<span class="nc" id="L50">        throw new IllegalArgumentException(&quot;legacy operation body must be absent&quot;);</span>
+      }
+<span class="fc" id="L52">      operationBody = null;</span>
+    } else {
+<span class="nc" id="L54">      operationBody = requireNotBlank(operationBody, &quot;operationBody&quot;);</span>
+    }
+<span class="fc" id="L56">    command = Objects.requireNonNull(command, &quot;command&quot;);</span>
+<span class="fc" id="L57">  }</span>
+
+  /** Returns whether this operation can be reconstructed for semantic undo/redo. */
+  public boolean hasOperationBody() {
+<span class="nc bnc" id="L61" title="All 2 branches missed.">    return bodyVersion &gt; 0;</span>
+  }
+
+  /** Reconstructs the operation when a versioned body is available. */
+  public Optional&lt;WorkflowOperation&gt; operation() {
+<span class="nc bnc" id="L66" title="All 2 branches missed.">    return hasOperationBody()</span>
+<span class="nc" id="L67">        ? Optional.of(WorkflowOperationBodyCodec.decode(bodyVersion, operationBody))</span>
+<span class="nc" id="L68">        : Optional.empty();</span>
+  }
+
+  private static String requireNotBlank(String value, String name) {
+<span class="fc" id="L72">    Objects.requireNonNull(value, name);</span>
+<span class="pc bpc" id="L73" title="1 of 2 branches missed.">    if (value.isBlank()) {</span>
+<span class="nc" id="L74">      throw new IllegalArgumentException(name + &quot; must not be blank&quot;);</span>
+    }
+<span class="fc" id="L76">    return value;</span>
+  }
+
+  private static void requirePositive(long value, String name) {
+<span class="fc bfc" id="L80" title="All 2 branches covered.">    if (value &lt;= 0) {</span>
+<span class="fc" id="L81">      throw new IllegalArgumentException(name + &quot; must be &gt; 0&quot;);</span>
+    }
+<span class="fc" id="L83">  }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

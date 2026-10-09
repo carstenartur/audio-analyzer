@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>AudioCaptureService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio</a> &gt; <span class="el_source">AudioCaptureService.java</span></div><h1>AudioCaptureService.java</h1><pre class="source lang-java linenums">package org.hammer.audio;
+
+import javax.sound.sampled.AudioFormat;
+import org.hammer.audio.buffer.AudioRingBuffer;
+import org.hammer.audio.core.AudioBlock;
+import org.hammer.audio.core.AudioFormatDescriptor;
+
+/**
+ * Service interface for audio capture and waveform data management.
+ *
+ * &lt;p&gt;This interface defines the contract for starting/stopping audio capture, retrieving the latest
+ * waveform model snapshots, subscribing to the complete block stream and adjusting capture
+ * parameters.
+ *
+ * &lt;p&gt;Thread-safety: Implementations must ensure thread-safe access to all methods. Model snapshots
+ * returned by {@link #getLatestModel()} should be immutable or defensive copies to prevent
+ * concurrent modification issues.
+ *
+ * @author refactoring
+ */
+public interface AudioCaptureService {
+
+  /**
+   * Start audio capture.
+   *
+   * &lt;p&gt;Initializes audio input device and begins capturing audio data in a background thread.
+   *
+   * @throws IllegalStateException if the service is already started or if the audio device cannot
+   *     be initialized
+   */
+  void start();
+
+  /**
+   * Stop audio capture.
+   *
+   * &lt;p&gt;Gracefully stops the capture thread and releases audio device resources. This method should
+   * be idempotent - calling it multiple times should be safe.
+   */
+  void stop();
+
+  /** Check if audio capture is currently running. */
+  boolean isRunning();
+
+  /**
+   * Get the latest waveform model snapshot.
+   *
+   * &lt;p&gt;Returns an immutable snapshot of the current waveform data. This method must be thread-safe
+   * and return defensive copies to prevent concurrent modification.
+   */
+  WaveformModel getLatestModel();
+
+  /** Get the JavaSound format used for capture, or {@code null} if not initialized. */
+  AudioFormat getFormat();
+
+  /**
+   * Set the divisor for buffer size calculation.
+   *
+   * @param divisor the divisor value (must be &gt;= 1)
+   */
+  void setDivisor(int divisor);
+
+  /** Get the current divisor value. */
+  int getDivisor();
+
+  /** Recompute layout/coordinates based on current panel dimensions. */
+  void recomputeLayout(int width, int height);
+
+  /**
+   * @return the audio-domain format descriptor, or {@code null} if the service has not been started
+   *     yet. Unlike {@link #getFormat()}, this is platform-internal and free of JavaSound types.
+   */
+  default AudioFormatDescriptor getDescriptor() {
+<span class="nc" id="L73">    return null;</span>
+  }
+
+  /**
+   * @return the most recently captured {@link AudioBlock}, or {@code null} if no audio has been
+   *     captured yet. The returned block is immutable and safe to share.
+   */
+  default AudioBlock getLatestBlock() {
+<span class="nc" id="L81">    return null;</span>
+  }
+
+  /**
+   * Subscribe to every block published after registration.
+   *
+   * &lt;p&gt;Listeners run on the source producer thread and must return promptly. A recorder therefore
+   * only enqueues in the callback and performs serialization on its own worker.
+   *
+   * @throws UnsupportedOperationException if an implementation does not expose a complete stream
+   */
+  default AudioBlockSubscription subscribe(AudioBlockListener listener) {
+<span class="nc" id="L93">    throw new UnsupportedOperationException(</span>
+<span class="nc" id="L94">        getClass().getName() + &quot; does not support complete audio-block subscriptions&quot;);</span>
+  }
+
+  /**
+   * @return the producer/consumer ring buffer fed by the capture thread, or {@code null} if the
+   *     service has not been started yet. Downstream DSP and analysis modules consume blocks from
+   *     this buffer.
+   */
+  default AudioRingBuffer&lt;AudioBlock&gt; getRingBuffer() {
+<span class="nc" id="L103">    return null;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

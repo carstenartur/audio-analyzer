@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>FileSystemJGitVersionedWorkflowStore.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.infrastructure.workflow.store</a> &gt; <span class="el_source">FileSystemJGitVersionedWorkflowStore.java</span></div><h1>FileSystemJGitVersionedWorkflowStore.java</h1><pre class="source lang-java linenums">package org.hammer.audio.infrastructure.workflow.store;
+
+import java.io.Closeable;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
+import java.util.Objects;
+import org.eclipse.jgit.lib.Repository;
+import org.eclipse.jgit.storage.file.FileRepositoryBuilder;
+import org.hammer.audio.workflow.store.CommitId;
+import org.hammer.audio.workflow.store.CommitInfo;
+import org.hammer.audio.workflow.store.CommitMetadata;
+import org.hammer.audio.workflow.store.RefUpdateResult;
+import org.hammer.audio.workflow.store.VersionedWorkflowStore;
+import org.hammer.audio.workflow.store.WorkflowSnapshot;
+
+/**
+ * Explicitly filesystem-backed JGit workflow store for tests and local demonstrations.
+ *
+ * &lt;p&gt;This class is not wired into the production workbench. Durable production persistence is
+ * provided by {@link HibernateJGitVersionedWorkflowStore}.
+ */
+public final class FileSystemJGitVersionedWorkflowStore
+    implements VersionedWorkflowStore, Closeable {
+
+  private final Repository repository;
+  private final JGitRepositoryVersionedWorkflowStore delegate;
+
+  /** Opens or creates a bare filesystem repository. */
+<span class="fc" id="L31">  public FileSystemJGitVersionedWorkflowStore(Path gitDirectory) {</span>
+<span class="fc" id="L32">    this.repository = openOrCreateRepository(gitDirectory);</span>
+<span class="fc" id="L33">    this.delegate = new JGitRepositoryVersionedWorkflowStore(repository);</span>
+<span class="fc" id="L34">  }</span>
+
+  @Override
+  public CommitId commit(String branch, WorkflowSnapshot snapshot, CommitMetadata metadata) {
+<span class="fc" id="L38">    return delegate.commit(branch, snapshot, metadata);</span>
+  }
+
+  @Override
+  public CommitId commitIfHead(
+      String branch, CommitId expectedHead, WorkflowSnapshot snapshot, CommitMetadata metadata) {
+<span class="fc" id="L44">    return delegate.commitIfHead(branch, expectedHead, snapshot, metadata);</span>
+  }
+
+  @Override
+  public WorkflowSnapshot loadAtCommit(CommitId commitId) {
+<span class="fc" id="L49">    return delegate.loadAtCommit(commitId);</span>
+  }
+
+  @Override
+  public WorkflowSnapshot loadHead(String branch) {
+<span class="fc" id="L54">    return delegate.loadHead(branch);</span>
+  }
+
+  @Override
+  public RefUpdateResult updateRef(String refName, CommitId expectedOldCommit, CommitId newCommit) {
+<span class="fc" id="L59">    return delegate.updateRef(refName, expectedOldCommit, newCommit);</span>
+  }
+
+  @Override
+  public List&lt;CommitInfo&gt; history(String refName, int limit) {
+<span class="fc" id="L64">    return delegate.history(refName, limit);</span>
+  }
+
+  @Override
+  public void close() throws IOException {
+<span class="fc" id="L69">    repository.close();</span>
+<span class="fc" id="L70">  }</span>
+
+  private static Repository openOrCreateRepository(Path gitDirectory) {
+<span class="fc" id="L73">    Objects.requireNonNull(gitDirectory, &quot;gitDirectory&quot;);</span>
+    try {
+<span class="fc" id="L75">      Files.createDirectories(gitDirectory);</span>
+<span class="fc" id="L76">      Repository repository =</span>
+<span class="fc" id="L77">          new FileRepositoryBuilder().setGitDir(gitDirectory.toFile()).setBare().build();</span>
+<span class="fc bfc" id="L78" title="All 2 branches covered.">      if (!repository.getObjectDatabase().exists()) {</span>
+<span class="fc" id="L79">        repository.create(true);</span>
+      }
+<span class="fc" id="L81">      return repository;</span>
+<span class="nc" id="L82">    } catch (IOException exception) {</span>
+<span class="nc" id="L83">      throw new IllegalStateException(</span>
+          &quot;Failed to initialize filesystem repository at &quot; + gitDirectory, exception);
+    }
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

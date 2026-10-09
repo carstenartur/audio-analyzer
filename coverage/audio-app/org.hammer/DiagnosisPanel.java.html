@@ -1,0 +1,153 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>DiagnosisPanel.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer</a> &gt; <span class="el_source">DiagnosisPanel.java</span></div><h1>DiagnosisPanel.java</h1><pre class="source lang-java linenums">package org.hammer;
+
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Dimension;
+import java.awt.FlowLayout;
+import java.awt.Font;
+import java.util.List;
+import javax.swing.BorderFactory;
+import javax.swing.Box;
+import javax.swing.BoxLayout;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
+import javax.swing.SwingConstants;
+import javax.swing.border.EmptyBorder;
+import org.hammer.audio.diagnosis.DiagnosisFinding;
+import org.hammer.audio.diagnosis.DiagnosisSeverity;
+import org.hammer.audio.diagnosis.DiagnosisSnapshot;
+
+/**
+ * Compact dashboard panel that renders the current top {@link DiagnosisFinding}s with severity
+ * styling.
+ *
+ * &lt;p&gt;Caps the number of displayed findings to keep the UI compact; remaining findings can be
+ * inspected in the exported evidence bundle.
+ */
+public final class DiagnosisPanel extends JPanel {
+
+  private static final long serialVersionUID = 1L;
+  private static final int MAX_DISPLAYED_FINDINGS = 4;
+
+<span class="nc" id="L33">  private static final Color INFO_FOREGROUND = new Color(180, 210, 255);</span>
+<span class="nc" id="L34">  private static final Color WARNING_FOREGROUND = new Color(255, 198, 102);</span>
+<span class="nc" id="L35">  private static final Color CRITICAL_FOREGROUND = new Color(255, 120, 120);</span>
+<span class="nc" id="L36">  private static final Color FROZEN_BADGE = new Color(170, 140, 60);</span>
+
+  private final JPanel findingsList;
+  private final JLabel statusLabel;
+  private boolean frozen;
+<span class="nc" id="L41">  private transient DiagnosisSnapshot currentSnapshot = DiagnosisSnapshot.empty();</span>
+
+  /** Create an empty diagnosis panel. */
+  public DiagnosisPanel() {
+<span class="nc" id="L45">    super(new BorderLayout(4, 4));</span>
+<span class="nc" id="L46">    setBorder(new EmptyBorder(4, 4, 4, 4));</span>
+<span class="nc" id="L47">    setPreferredSize(new Dimension(380, 160));</span>
+<span class="nc" id="L48">    setMinimumSize(new Dimension(280, 120));</span>
+
+<span class="nc" id="L50">    JPanel header = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));</span>
+<span class="nc" id="L51">    JLabel title = new JLabel(&quot;Diagnosis&quot;);</span>
+<span class="nc" id="L52">    title.setFont(title.getFont().deriveFont(Font.BOLD));</span>
+<span class="nc" id="L53">    header.add(title);</span>
+<span class="nc" id="L54">    statusLabel = new JLabel(&quot;&quot;);</span>
+<span class="nc" id="L55">    statusLabel.setForeground(FROZEN_BADGE);</span>
+<span class="nc" id="L56">    header.add(statusLabel);</span>
+<span class="nc" id="L57">    add(header, BorderLayout.NORTH);</span>
+
+<span class="nc" id="L59">    findingsList = new JPanel();</span>
+<span class="nc" id="L60">    findingsList.setLayout(new BoxLayout(findingsList, BoxLayout.Y_AXIS));</span>
+<span class="nc" id="L61">    add(findingsList, BorderLayout.CENTER);</span>
+<span class="nc" id="L62">    setFindings(DiagnosisSnapshot.empty());</span>
+<span class="nc" id="L63">  }</span>
+
+  /**
+   * Update the displayed findings. Must be called on the EDT.
+   *
+   * @param snapshot latest diagnosis snapshot, never {@code null}
+   */
+  public void setFindings(DiagnosisSnapshot snapshot) {
+<span class="nc bnc" id="L71" title="All 2 branches missed.">    DiagnosisSnapshot effective = snapshot == null ? DiagnosisSnapshot.empty() : snapshot;</span>
+<span class="nc" id="L72">    this.currentSnapshot = effective;</span>
+<span class="nc" id="L73">    rebuild();</span>
+<span class="nc" id="L74">  }</span>
+
+  /**
+   * @return latest diagnosis snapshot displayed
+   */
+  public DiagnosisSnapshot currentSnapshot() {
+<span class="nc" id="L80">    return currentSnapshot;</span>
+  }
+
+  /**
+   * Update the frozen state shown in the header.
+   *
+   * @param frozen true if the diagnosis is frozen alongside the rest of the dashboard
+   */
+  public void setFrozen(boolean frozen) {
+<span class="nc" id="L89">    this.frozen = frozen;</span>
+<span class="nc" id="L90">    rebuild();</span>
+<span class="nc" id="L91">  }</span>
+
+  private void rebuild() {
+<span class="nc" id="L94">    findingsList.removeAll();</span>
+<span class="nc bnc" id="L95" title="All 2 branches missed.">    statusLabel.setText(frozen ? &quot;(frozen)&quot; : &quot;&quot;);</span>
+
+<span class="nc" id="L97">    List&lt;DiagnosisFinding&gt; findings = currentSnapshot.findings();</span>
+<span class="nc bnc" id="L98" title="All 2 branches missed.">    if (findings.isEmpty()) {</span>
+<span class="nc" id="L99">      JLabel empty = new JLabel(&quot;No findings.&quot;);</span>
+<span class="nc" id="L100">      empty.setForeground(INFO_FOREGROUND);</span>
+<span class="nc" id="L101">      findingsList.add(empty);</span>
+<span class="nc" id="L102">    } else {</span>
+<span class="nc" id="L103">      int shown = 0;</span>
+<span class="nc bnc" id="L104" title="All 2 branches missed.">      for (DiagnosisFinding finding : findings) {</span>
+<span class="nc bnc" id="L105" title="All 2 branches missed.">        if (shown &gt;= MAX_DISPLAYED_FINDINGS) {</span>
+<span class="nc" id="L106">          break;</span>
+        }
+<span class="nc" id="L108">        findingsList.add(createFindingRow(finding));</span>
+<span class="nc" id="L109">        shown++;</span>
+<span class="nc" id="L110">      }</span>
+<span class="nc bnc" id="L111" title="All 2 branches missed.">      if (findings.size() &gt; MAX_DISPLAYED_FINDINGS) {</span>
+<span class="nc" id="L112">        JLabel more = new JLabel(&quot;+ &quot; + (findings.size() - MAX_DISPLAYED_FINDINGS) + &quot; more&quot;);</span>
+<span class="nc" id="L113">        more.setForeground(INFO_FOREGROUND);</span>
+<span class="nc" id="L114">        findingsList.add(more);</span>
+      }
+    }
+<span class="nc" id="L117">    findingsList.add(Box.createVerticalGlue());</span>
+<span class="nc" id="L118">    findingsList.revalidate();</span>
+<span class="nc" id="L119">    findingsList.repaint();</span>
+<span class="nc" id="L120">  }</span>
+
+  private static Component createFindingRow(DiagnosisFinding finding) {
+<span class="nc" id="L123">    JPanel row = new JPanel(new BorderLayout(8, 0));</span>
+<span class="nc" id="L124">    JLabel severityLabel = new JLabel(badgeText(finding.severity()), SwingConstants.LEFT);</span>
+<span class="nc" id="L125">    severityLabel.setForeground(severityForeground(finding.severity()));</span>
+<span class="nc" id="L126">    severityLabel.setFont(severityLabel.getFont().deriveFont(Font.BOLD));</span>
+<span class="nc" id="L127">    severityLabel.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 6));</span>
+<span class="nc" id="L128">    row.add(severityLabel, BorderLayout.WEST);</span>
+
+<span class="nc" id="L130">    JLabel message =</span>
+<span class="nc" id="L131">        new JLabel(String.format(&quot;%s (conf %.2f)&quot;, finding.message(), finding.confidence()));</span>
+<span class="nc" id="L132">    message.setForeground(severityForeground(finding.severity()));</span>
+<span class="nc" id="L133">    row.add(message, BorderLayout.CENTER);</span>
+<span class="nc" id="L134">    return row;</span>
+  }
+
+  private static String badgeText(DiagnosisSeverity severity) {
+<span class="nc bnc" id="L138" title="All 3 branches missed.">    return switch (severity) {</span>
+<span class="nc" id="L139">      case CRITICAL -&gt; &quot;CRITICAL&quot;;</span>
+<span class="nc" id="L140">      case WARNING -&gt; &quot;WARN&quot;;</span>
+<span class="nc" id="L141">      case INFO -&gt; &quot;INFO&quot;;</span>
+    };
+  }
+
+  private static Color severityForeground(DiagnosisSeverity severity) {
+<span class="nc bnc" id="L146" title="All 3 branches missed.">    return switch (severity) {</span>
+<span class="nc" id="L147">      case CRITICAL -&gt; CRITICAL_FOREGROUND;</span>
+<span class="nc" id="L148">      case WARNING -&gt; WARNING_FOREGROUND;</span>
+<span class="nc" id="L149">      case INFO -&gt; INFO_FOREGROUND;</span>
+    };
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

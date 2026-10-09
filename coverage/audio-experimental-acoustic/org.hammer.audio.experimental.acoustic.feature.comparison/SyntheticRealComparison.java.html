@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>SyntheticRealComparison.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.feature.comparison</a> &gt; <span class="el_source">SyntheticRealComparison.java</span></div><h1>SyntheticRealComparison.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.feature.comparison;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.function.ToDoubleFunction;
+import org.hammer.audio.experimental.acoustic.wingbeat.WingbeatFeatureVector;
+
+/**
+ * Compares feature distributions between a synthetic and a real corpus of {@link
+ * WingbeatFeatureVector}s.
+ *
+ * &lt;p&gt;For every scalar feature the service computes the per-corpus mean and standard deviation and
+ * derives absolute difference, relative difference and a z-score. Features covering dominant
+ * frequency, harmonics, duration, SNR and modulation are compared directly from the available
+ * {@link WingbeatFeatureVector} fields.
+ *
+ * &lt;p&gt;This service is stateless and may be called concurrently.
+ */
+<span class="fc" id="L21">public final class SyntheticRealComparison {</span>
+
+<span class="fc" id="L23">  private static final List&lt;Map.Entry&lt;String, ToDoubleFunction&lt;WingbeatFeatureVector&gt;&gt;&gt; EXTRACTORS =</span>
+<span class="fc" id="L24">      buildExtractors();</span>
+
+  private static List&lt;Map.Entry&lt;String, ToDoubleFunction&lt;WingbeatFeatureVector&gt;&gt;&gt;
+      buildExtractors() {
+<span class="fc" id="L28">    List&lt;Map.Entry&lt;String, ToDoubleFunction&lt;WingbeatFeatureVector&gt;&gt;&gt; list = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L29">    list.add(Map.entry(&quot;fundamentalFrequencyHz&quot;, WingbeatFeatureVector::fundamentalFrequencyHz));</span>
+<span class="fc" id="L30">    list.add(</span>
+<span class="fc" id="L31">        Map.entry(</span>
+            &quot;harmonicAmplitude1&quot;,
+<span class="fc bfc" id="L33" title="All 2 branches covered.">            v -&gt; v.harmonicAmplitudes().isEmpty() ? 0.0 : v.harmonicAmplitudes().get(0)));</span>
+<span class="fc" id="L34">    list.add(</span>
+<span class="fc" id="L35">        Map.entry(</span>
+<span class="fc bfc" id="L36" title="All 2 branches covered.">            &quot;harmonicRatio1&quot;, v -&gt; v.harmonicRatios().isEmpty() ? 0.0 : v.harmonicRatios().get(0)));</span>
+<span class="fc" id="L37">    list.add(Map.entry(&quot;trackDurationSeconds&quot;, WingbeatFeatureVector::trackDurationSeconds));</span>
+<span class="fc" id="L38">    list.add(Map.entry(&quot;signalToNoiseRatio&quot;, WingbeatFeatureVector::signalToNoiseRatio));</span>
+<span class="fc" id="L39">    list.add(Map.entry(&quot;amplitudeModulation&quot;, WingbeatFeatureVector::amplitudeModulation));</span>
+<span class="fc" id="L40">    list.add(Map.entry(&quot;spectralCentroidHz&quot;, WingbeatFeatureVector::spectralCentroidHz));</span>
+<span class="fc" id="L41">    list.add(Map.entry(&quot;spectralBandwidthHz&quot;, WingbeatFeatureVector::spectralBandwidthHz));</span>
+<span class="fc" id="L42">    return List.copyOf(list);</span>
+  }
+
+  /**
+   * Compare synthetic and real corpora using the {@link
+   * SyntheticRealComparisonReport#DEFAULT_WEAKNESS_THRESHOLD default weakness threshold}.
+   *
+   * @param synthetic synthetic corpus; must not be {@code null} or empty
+   * @param real real corpus; must not be {@code null} or empty
+   * @return comparison report; never {@code null}
+   */
+  public SyntheticRealComparisonReport compare(
+      List&lt;WingbeatFeatureVector&gt; synthetic, List&lt;WingbeatFeatureVector&gt; real) {
+<span class="fc" id="L55">    return compare(synthetic, real, SyntheticRealComparisonReport.DEFAULT_WEAKNESS_THRESHOLD);</span>
+  }
+
+  /**
+   * Compare synthetic and real corpora with a configurable weakness threshold.
+   *
+   * @param synthetic synthetic corpus; must not be {@code null} or empty
+   * @param real real corpus; must not be {@code null} or empty
+   * @param weaknessThreshold relative-difference threshold for flagging weaknesses; must be {@code
+   *     &gt; 0}
+   * @return comparison report; never {@code null}
+   */
+  public SyntheticRealComparisonReport compare(
+      List&lt;WingbeatFeatureVector&gt; synthetic,
+      List&lt;WingbeatFeatureVector&gt; real,
+      double weaknessThreshold) {
+<span class="fc" id="L71">    Objects.requireNonNull(synthetic, &quot;synthetic&quot;);</span>
+<span class="fc" id="L72">    Objects.requireNonNull(real, &quot;real&quot;);</span>
+<span class="pc bpc" id="L73" title="1 of 2 branches missed.">    if (synthetic.isEmpty()) {</span>
+<span class="nc" id="L74">      throw new IllegalArgumentException(&quot;synthetic corpus must not be empty&quot;);</span>
+    }
+<span class="pc bpc" id="L76" title="1 of 2 branches missed.">    if (real.isEmpty()) {</span>
+<span class="nc" id="L77">      throw new IllegalArgumentException(&quot;real corpus must not be empty&quot;);</span>
+    }
+
+<span class="fc" id="L80">    List&lt;FeatureDifference&gt; differences = new ArrayList&lt;&gt;(EXTRACTORS.size());</span>
+<span class="fc bfc" id="L81" title="All 2 branches covered.">    for (Map.Entry&lt;String, ToDoubleFunction&lt;WingbeatFeatureVector&gt;&gt; fe : EXTRACTORS) {</span>
+<span class="fc" id="L82">      double[] synthValues = extract(synthetic, fe.getValue());</span>
+<span class="fc" id="L83">      double[] realValues = extract(real, fe.getValue());</span>
+<span class="fc" id="L84">      differences.add(computeDifference(fe.getKey(), synthValues, realValues));</span>
+<span class="fc" id="L85">    }</span>
+<span class="fc" id="L86">    return new SyntheticRealComparisonReport(differences, weaknessThreshold);</span>
+  }
+
+  private static double[] extract(
+      List&lt;WingbeatFeatureVector&gt; vectors, ToDoubleFunction&lt;WingbeatFeatureVector&gt; extractor) {
+<span class="fc" id="L91">    double[] values = new double[vectors.size()];</span>
+<span class="fc bfc" id="L92" title="All 2 branches covered.">    for (int i = 0; i &lt; vectors.size(); i++) {</span>
+<span class="fc" id="L93">      values[i] = extractor.applyAsDouble(vectors.get(i));</span>
+    }
+<span class="fc" id="L95">    return values;</span>
+  }
+
+  private static FeatureDifference computeDifference(
+      String name, double[] synthValues, double[] realValues) {
+<span class="fc" id="L100">    double synthMean = mean(synthValues);</span>
+<span class="fc" id="L101">    double realMean = mean(realValues);</span>
+<span class="fc" id="L102">    double synthStd = stdDev(synthValues, synthMean);</span>
+
+<span class="fc" id="L104">    double absDiff = Math.abs(realMean - synthMean);</span>
+<span class="fc bfc" id="L105" title="All 2 branches covered.">    double relDiff = synthMean == 0.0 ? 0.0 : absDiff / Math.abs(synthMean);</span>
+<span class="fc bfc" id="L106" title="All 2 branches covered.">    double zScore = synthStd == 0.0 ? 0.0 : (realMean - synthMean) / synthStd;</span>
+
+<span class="fc" id="L108">    return new FeatureDifference(name, synthMean, realMean, absDiff, relDiff, zScore);</span>
+  }
+
+  private static double mean(double[] values) {
+<span class="fc" id="L112">    double sum = 0.0;</span>
+<span class="fc bfc" id="L113" title="All 2 branches covered.">    for (double v : values) {</span>
+<span class="fc" id="L114">      sum += v;</span>
+    }
+<span class="fc" id="L116">    return sum / values.length;</span>
+  }
+
+  private static double stdDev(double[] values, double mean) {
+<span class="fc" id="L120">    double variance = 0.0;</span>
+<span class="fc bfc" id="L121" title="All 2 branches covered.">    for (double v : values) {</span>
+<span class="fc" id="L122">      double diff = v - mean;</span>
+<span class="fc" id="L123">      variance += diff * diff;</span>
+    }
+<span class="fc" id="L125">    return Math.sqrt(variance / values.length);</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>RmsPeakSnapshot.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer DSP and Analysis</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.analysis</a> &gt; <span class="el_source">RmsPeakSnapshot.java</span></div><h1>RmsPeakSnapshot.java</h1><pre class="source lang-java linenums">package org.hammer.audio.analysis;
+
+import java.util.Arrays;
+
+/**
+ * Immutable per-channel RMS/peak measurement snapshot produced by {@link RmsPeakAnalyzer}.
+ *
+ * &lt;p&gt;RMS and peak are reported in normalized linear units (the same units as {@link
+ * org.hammer.audio.core.AudioBlock} samples, i.e. nominally {@code [0.0, 1.0]} for the peak
+ * magnitude and {@code [0.0, 1.0]} for RMS of a unit-amplitude signal).
+ *
+ * @author refactoring
+ */
+public final class RmsPeakSnapshot implements AnalysisSnapshot {
+
+  private final long sourceFrameIndex;
+  private final long sourceTimestampNanos;
+  private final float[] rms;
+  private final float[] peak;
+
+  /**
+   * Create a new immutable snapshot. Arrays are defensively copied.
+   *
+   * @param sourceFrameIndex frame index from the analyzed block
+   * @param sourceTimestampNanos timestamp from the analyzed block
+   * @param rms per-channel RMS values
+   * @param peak per-channel peak (max absolute value)
+   */
+  public RmsPeakSnapshot(
+<span class="fc" id="L30">      long sourceFrameIndex, long sourceTimestampNanos, float[] rms, float[] peak) {</span>
+<span class="pc bpc" id="L31" title="1 of 2 branches missed.">    if (rms.length != peak.length) {</span>
+<span class="nc" id="L32">      throw new IllegalArgumentException(&quot;rms and peak length must match&quot;);</span>
+    }
+<span class="fc" id="L34">    this.sourceFrameIndex = sourceFrameIndex;</span>
+<span class="fc" id="L35">    this.sourceTimestampNanos = sourceTimestampNanos;</span>
+<span class="fc" id="L36">    this.rms = rms.clone();</span>
+<span class="fc" id="L37">    this.peak = peak.clone();</span>
+<span class="fc" id="L38">  }</span>
+
+  @Override
+  public long sourceFrameIndex() {
+<span class="nc" id="L42">    return sourceFrameIndex;</span>
+  }
+
+  @Override
+  public long sourceTimestampNanos() {
+<span class="nc" id="L47">    return sourceTimestampNanos;</span>
+  }
+
+  /**
+   * @return number of channels in this snapshot
+   */
+  public int channels() {
+<span class="fc" id="L54">    return rms.length;</span>
+  }
+
+  /**
+   * @return defensive copy of the per-channel RMS values
+   */
+  public float[] rms() {
+<span class="fc" id="L61">    return rms.clone();</span>
+  }
+
+  /**
+   * @return defensive copy of the per-channel peak values
+   */
+  public float[] peak() {
+<span class="nc" id="L68">    return peak.clone();</span>
+  }
+
+  /**
+   * @param channel channel index
+   * @return RMS of the given channel
+   */
+  public float rms(int channel) {
+<span class="fc" id="L76">    return rms[channel];</span>
+  }
+
+  /**
+   * @param channel channel index
+   * @return peak of the given channel
+   */
+  public float peak(int channel) {
+<span class="fc" id="L84">    return peak[channel];</span>
+  }
+
+  @Override
+  public String toString() {
+<span class="nc" id="L89">    return &quot;RmsPeakSnapshot[frame=&quot;</span>
+        + sourceFrameIndex
+        + &quot;, rms=&quot;
+<span class="nc" id="L92">        + Arrays.toString(rms)</span>
+        + &quot;, peak=&quot;
+<span class="nc" id="L94">        + Arrays.toString(peak)</span>
+        + &quot;]&quot;;
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

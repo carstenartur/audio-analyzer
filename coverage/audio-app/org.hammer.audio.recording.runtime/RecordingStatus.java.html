@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>RecordingStatus.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.recording.runtime</a> &gt; <span class="el_source">RecordingStatus.java</span></div><h1>RecordingStatus.java</h1><pre class="source lang-java linenums">package org.hammer.audio.recording.runtime;
+
+import java.nio.file.Path;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Objects;
+
+/**
+ * Complete immutable runtime snapshot for an experiment recording.
+ *
+ * @param state current recording lifecycle state
+ * @param destination normalized target recording path
+ * @param startedAt recording start instant
+ * @param updatedAt snapshot observation instant
+ * @param receivedBlocks blocks offered by the source subscription
+ * @param writtenBlocks blocks successfully serialized
+ * @param receivedFrames frames offered by the source subscription
+ * @param writtenFrames frames successfully serialized
+ * @param droppedBlocks blocks rejected because the recorder queue was full
+ * @param droppedFrames frames contained in dropped blocks
+ * @param continuityGapCount source frame-index discontinuities detected by the writer
+ * @param queueDepth current recorder queue occupancy
+ * @param queueCapacity bounded recorder queue capacity
+ * @param maximumQueueDepth highest observed queue occupancy
+ * @param bytesWritten current serialized bytes including container overhead
+ * @param measuredBytesPerSecond observed write throughput
+ * @param storage current backing-store capacity snapshot
+ * @param stopReason user- or system-visible terminal/degradation reason
+ * @param errorMessage terminal error detail, otherwise empty
+ */
+public record RecordingStatus(
+    RecordingState state,
+    Path destination,
+    Instant startedAt,
+    Instant updatedAt,
+    long receivedBlocks,
+    long writtenBlocks,
+    long receivedFrames,
+    long writtenFrames,
+    long droppedBlocks,
+    long droppedFrames,
+    long continuityGapCount,
+    int queueDepth,
+    int queueCapacity,
+    int maximumQueueDepth,
+    long bytesWritten,
+    double measuredBytesPerSecond,
+    RecordingStorageStatus storage,
+    String stopReason,
+    String errorMessage) {
+
+  // Validate required fields and normalize optional text.
+<span class="fc" id="L53">  public RecordingStatus {</span>
+<span class="fc" id="L54">    Objects.requireNonNull(state, &quot;state&quot;);</span>
+<span class="fc" id="L55">    Objects.requireNonNull(destination, &quot;destination&quot;);</span>
+<span class="fc" id="L56">    Objects.requireNonNull(startedAt, &quot;startedAt&quot;);</span>
+<span class="fc" id="L57">    Objects.requireNonNull(updatedAt, &quot;updatedAt&quot;);</span>
+<span class="fc" id="L58">    Objects.requireNonNull(storage, &quot;storage&quot;);</span>
+<span class="pc bpc" id="L59" title="1 of 2 branches missed.">    stopReason = stopReason == null ? &quot;&quot; : stopReason;</span>
+<span class="pc bpc" id="L60" title="1 of 2 branches missed.">    errorMessage = errorMessage == null ? &quot;&quot; : errorMessage;</span>
+<span class="fc" id="L61">  }</span>
+
+  /** Elapsed wall-clock recording time. */
+  public Duration elapsed() {
+<span class="nc" id="L65">    Duration elapsed = Duration.between(startedAt, updatedAt);</span>
+<span class="nc bnc" id="L66" title="All 2 branches missed.">    return elapsed.isNegative() ? Duration.ZERO : elapsed;</span>
+  }
+
+  /** Returns whether all received blocks were written without a continuity gap. */
+  public boolean completeSoFar() {
+<span class="nc bnc" id="L71" title="All 6 branches missed.">    return droppedBlocks == 0L &amp;&amp; continuityGapCount == 0L &amp;&amp; state != RecordingState.FAILED;</span>
+  }
+
+  /** Returns whether this is a terminal status. */
+  public boolean terminal() {
+<span class="pc bpc" id="L76" title="2 of 6 branches missed.">    return state == RecordingState.COMPLETED</span>
+        || state == RecordingState.INCOMPLETE
+        || state == RecordingState.FAILED;
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

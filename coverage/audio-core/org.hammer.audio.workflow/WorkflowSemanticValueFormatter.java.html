@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WorkflowSemanticValueFormatter.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Core</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow</a> &gt; <span class="el_source">WorkflowSemanticValueFormatter.java</span></div><h1>WorkflowSemanticValueFormatter.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow;
+
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
+import java.util.StringJoiner;
+import java.util.TreeMap;
+
+/** Canonical textual evidence for semantic workflow comparison and merge conflicts. */
+public final class WorkflowSemanticValueFormatter {
+
+<span class="nc" id="L12">  private WorkflowSemanticValueFormatter() {</span>
+<span class="nc" id="L13">    throw new UnsupportedOperationException(&quot;Utility class&quot;);</span>
+  }
+
+  /** Returns a canonical value for one complete node snapshot. */
+  public static String node(Node node) {
+<span class="fc" id="L18">    return &quot;node{id=&quot;</span>
+<span class="fc" id="L19">        + quote(node.id())</span>
+        + &quot;,type=&quot;
+<span class="fc" id="L21">        + quote(node.type())</span>
+        + &quot;,label=&quot;
+<span class="fc" id="L23">        + quote(node.label())</span>
+        + &quot;,inputPorts=&quot;
+<span class="fc" id="L25">        + ports(node.inputPorts())</span>
+        + &quot;,outputPorts=&quot;
+<span class="fc" id="L27">        + ports(node.outputPorts())</span>
+        + &quot;,metadata=&quot;
+<span class="fc" id="L29">        + metadata(node.metadata())</span>
+        + &quot;}&quot;;
+  }
+
+  /** Returns a canonical value for one complete edge snapshot. */
+  public static String edge(Edge edge) {
+<span class="fc" id="L35">    return &quot;edge{id=&quot;</span>
+<span class="fc" id="L36">        + quote(edge.id())</span>
+        + &quot;,source=&quot;
+<span class="fc" id="L38">        + endpoint(edge.sourceNodeId(), edge.sourcePortId())</span>
+        + &quot;,target=&quot;
+<span class="fc" id="L40">        + endpoint(edge.targetNodeId(), edge.targetPortId())</span>
+        + &quot;,metadata=&quot;
+<span class="fc" id="L42">        + metadata(edge.metadata())</span>
+        + &quot;}&quot;;
+  }
+
+  /** Returns a canonical node snapshot together with all incident edges. */
+  public static String neighborhood(Node node, List&lt;Edge&gt; connectedEdges) {
+<span class="fc bfc" id="L48" title="All 2 branches covered.">    if (node == null) {</span>
+<span class="fc" id="L49">      return null;</span>
+    }
+<span class="fc" id="L51">    StringJoiner edges = new StringJoiner(&quot;,&quot;, &quot;[&quot;, &quot;]&quot;);</span>
+<span class="fc" id="L52">    connectedEdges.stream()</span>
+<span class="fc" id="L53">        .sorted(Comparator.comparing(Edge::id))</span>
+<span class="fc" id="L54">        .map(WorkflowSemanticValueFormatter::edge)</span>
+<span class="fc" id="L55">        .forEach(edges::add);</span>
+<span class="fc" id="L56">    return &quot;neighborhood{node=&quot; + node(node) + &quot;,edges=&quot; + edges + &quot;}&quot;;</span>
+  }
+
+  /** Returns canonical source and target endpoints for one edge. */
+  public static String endpoints(Edge edge) {
+<span class="fc" id="L61">    return endpoint(edge.sourceNodeId(), edge.sourcePortId())</span>
+        + &quot;-&gt;&quot;
+<span class="fc" id="L63">        + endpoint(edge.targetNodeId(), edge.targetPortId());</span>
+  }
+
+  /** Returns canonical declared-order port evidence. */
+  public static String ports(List&lt;Port&gt; ports) {
+<span class="fc" id="L68">    StringJoiner values = new StringJoiner(&quot;,&quot;, &quot;[&quot;, &quot;]&quot;);</span>
+<span class="fc bfc" id="L69" title="All 2 branches covered.">    for (Port port : ports) {</span>
+<span class="fc" id="L70">      values.add(port(port));</span>
+<span class="fc" id="L71">    }</span>
+<span class="fc" id="L72">    return values.toString();</span>
+  }
+
+  /** Returns canonical key-ordered metadata evidence. */
+  public static String metadata(Metadata metadata) {
+<span class="fc" id="L77">    return metadata(metadata.entries());</span>
+  }
+
+  /** Returns canonical key-ordered metadata-map evidence. */
+  public static String metadata(Map&lt;String, String&gt; entries) {
+<span class="fc" id="L82">    StringJoiner values = new StringJoiner(&quot;,&quot;, &quot;{&quot;, &quot;}&quot;);</span>
+<span class="pc bpc" id="L83" title="1 of 2 branches missed.">    for (Map.Entry&lt;String, String&gt; entry : new TreeMap&lt;&gt;(entries).entrySet()) {</span>
+<span class="nc" id="L84">      values.add(quote(entry.getKey()) + &quot;:&quot; + quote(entry.getValue()));</span>
+<span class="nc" id="L85">    }</span>
+<span class="fc" id="L86">    return values.toString();</span>
+  }
+
+  private static String port(Port port) {
+<span class="fc" id="L90">    return &quot;port{id=&quot;</span>
+<span class="fc" id="L91">        + quote(port.id())</span>
+        + &quot;,name=&quot;
+<span class="fc" id="L93">        + quote(port.name())</span>
+        + &quot;,direction=&quot;
+<span class="fc" id="L95">        + port.direction().name()</span>
+        + &quot;,dataType=&quot;
+<span class="fc" id="L97">        + quote(port.dataType().id())</span>
+        + &quot;,required=&quot;
+<span class="fc" id="L99">        + port.required()</span>
+        + &quot;,multiplicity=&quot;
+<span class="fc" id="L101">        + port.multiplicity().name()</span>
+        + &quot;,metadata=&quot;
+<span class="fc" id="L103">        + metadata(port.metadata())</span>
+        + &quot;}&quot;;
+  }
+
+  private static String endpoint(String nodeId, String portId) {
+<span class="fc" id="L108">    return quote(nodeId) + &quot;:&quot; + quote(portId);</span>
+  }
+
+  private static String quote(String value) {
+<span class="fc" id="L112">    return &quot;\&quot;&quot; + escape(value) + &quot;\&quot;&quot;;</span>
+  }
+
+  private static String escape(String value) {
+<span class="fc" id="L116">    return value</span>
+<span class="fc" id="L117">        .replace(&quot;\\&quot;, &quot;\\\\&quot;)</span>
+<span class="fc" id="L118">        .replace(&quot;\&quot;&quot;, &quot;\\\&quot;&quot;)</span>
+<span class="fc" id="L119">        .replace(&quot;\n&quot;, &quot;\\n&quot;)</span>
+<span class="fc" id="L120">        .replace(&quot;\r&quot;, &quot;\\r&quot;);</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

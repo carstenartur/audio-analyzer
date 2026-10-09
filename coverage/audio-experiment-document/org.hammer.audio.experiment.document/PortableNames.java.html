@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>PortableNames.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experiment Document</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experiment.document</a> &gt; <span class="el_source">PortableNames.java</span></div><h1>PortableNames.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experiment.document;
+
+/** Strict validators for portable asset references and output basenames. */
+@SuppressWarnings(&quot;PMD.LiteralsFirstInComparisons&quot;)
+public final class PortableNames {
+
+  private PortableNames() {
+    // utility class
+  }
+
+  /** Require a normalized relative path without traversal or platform-specific separators. */
+  public static String requireRelativePath(String value) {
+<span class="fc" id="L13">    String checked = ExperimentDocument.requireNonBlank(value, &quot;relativePath&quot;);</span>
+<span class="pc bpc" id="L14" title="1 of 2 branches missed.">    if (checked.length() &gt; 1024) {</span>
+<span class="nc" id="L15">      throw new IllegalArgumentException(&quot;relativePath exceeds 1024 characters&quot;);</span>
+    }
+<span class="fc bfc" id="L17" title="All 2 branches covered.">    for (String component : checked.split(&quot;/&quot;, -1)) {</span>
+<span class="fc" id="L18">      requireBaseName(component);</span>
+    }
+<span class="fc" id="L20">    return checked;</span>
+  }
+
+  /** Require a single portable filename component without path separators or traversal. */
+  public static String requireBaseName(String value) {
+<span class="fc" id="L25">    String checked = ExperimentDocument.requireNonBlank(value, &quot;baseName&quot;);</span>
+<span class="fc bfc" id="L26" title="All 2 branches covered.">    if (checked.equals(&quot;.&quot;)</span>
+<span class="fc bfc" id="L27" title="All 2 branches covered.">        || checked.equals(&quot;..&quot;)</span>
+<span class="pc bpc" id="L28" title="1 of 2 branches missed.">        || checked.length() &gt; 255</span>
+<span class="fc bfc" id="L29" title="All 2 branches covered.">        || checked.endsWith(&quot;.&quot;)</span>
+<span class="fc bfc" id="L30" title="All 2 branches covered.">        || checked.endsWith(&quot; &quot;)</span>
+        || checked
+<span class="fc" id="L32">            .chars()</span>
+<span class="fc bfc" id="L33" title="All 2 branches covered.">            .anyMatch(</span>
+                valueChar -&gt;
+<span class="pc bpc" id="L35" title="1 of 6 branches missed.">                    valueChar &lt; 32 || valueChar == 127 || &quot;/\\:*?\&quot;&lt;&gt;|&quot;.indexOf(valueChar) &gt;= 0)</span>
+<span class="fc bfc" id="L36" title="All 2 branches covered.">        || checked.matches(&quot;(?i)(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\\..*)?&quot;)) {</span>
+<span class="fc" id="L37">      throw new IllegalArgumentException(&quot;baseName must be one portable filename component&quot;);</span>
+    }
+<span class="fc" id="L39">    return checked;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

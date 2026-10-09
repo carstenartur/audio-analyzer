@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>FrameSchedule.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.tracking</a> &gt; <span class="el_source">FrameSchedule.java</span></div><h1>FrameSchedule.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.tracking;
+
+/**
+ * Bounded per-frame timing budget for a real-time tracking pipeline.
+ *
+ * &lt;p&gt;{@code FrameSchedule} captures the contract that the tracking pipeline imposes on its host:
+ * the host must deliver one {@link org.hammer.audio.core.AudioBlock} of {@code blockFrames} every
+ * {@code blockFrames / sampleRate} seconds, and the pipeline must complete its processing within a
+ * fraction ({@code maxLoadFraction}) of that period to stay real-time.
+ *
+ * &lt;p&gt;This record is informational; it does not schedule anything itself. It exists so callers have
+ * a single, validated source of truth for the timing budget that documentation, monitoring and
+ * {@link ProcessingBudget} can rely on.
+ *
+ * @param sampleRate sample rate in Hz, &amp;gt; 0
+ * @param blockFrames frames per processed block, &amp;gt; 0
+ * @param maxLoadFraction maximum fraction of one block period that pipeline processing may consume
+ *     (between 0 exclusive and 1 inclusive); typical values are 0.5 for a comfortable budget and
+ *     0.8 for an aggressive one
+ */
+public record FrameSchedule(double sampleRate, int blockFrames, double maxLoadFraction) {
+
+  /** Validate sample rate, block size and load fraction. */
+<span class="fc" id="L24">  public FrameSchedule {</span>
+<span class="pc bpc" id="L25" title="1 of 4 branches missed.">    if (!(sampleRate &gt; 0.0) || !Double.isFinite(sampleRate)) {</span>
+<span class="fc" id="L26">      throw new IllegalArgumentException(&quot;sampleRate must be finite and &gt; 0&quot;);</span>
+    }
+<span class="fc bfc" id="L28" title="All 2 branches covered.">    if (blockFrames &lt;= 0) {</span>
+<span class="fc" id="L29">      throw new IllegalArgumentException(&quot;blockFrames must be &gt; 0&quot;);</span>
+    }
+<span class="pc bpc" id="L31" title="1 of 6 branches missed.">    if (!(maxLoadFraction &gt; 0.0) || maxLoadFraction &gt; 1.0 || !Double.isFinite(maxLoadFraction)) {</span>
+<span class="fc" id="L32">      throw new IllegalArgumentException(&quot;maxLoadFraction must be in (0,1]&quot;);</span>
+    }
+<span class="fc" id="L34">  }</span>
+
+  /** Duration of one block in seconds. */
+  public double blockDurationSeconds() {
+<span class="fc" id="L38">    return blockFrames / sampleRate;</span>
+  }
+
+  /** Maximum allowed processing time per block in nanoseconds. */
+  public long maxProcessingNanos() {
+<span class="fc" id="L43">    return Math.round(blockDurationSeconds() * 1.0e9 * maxLoadFraction);</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

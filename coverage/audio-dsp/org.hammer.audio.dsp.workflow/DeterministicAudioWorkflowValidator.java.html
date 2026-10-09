@@ -1,0 +1,187 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>DeterministicAudioWorkflowValidator.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer DSP and Analysis</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.dsp.workflow</a> &gt; <span class="el_source">DeterministicAudioWorkflowValidator.java</span></div><h1>DeterministicAudioWorkflowValidator.java</h1><pre class="source lang-java linenums">package org.hammer.audio.dsp.workflow;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.stream.Collectors;
+import org.hammer.audio.workflow.Edge;
+import org.hammer.audio.workflow.Node;
+import org.hammer.audio.workflow.catalog.ExperimentNodeProtocol;
+import org.hammer.audio.workflow.execution.WorkflowRunModels.Input;
+import org.hammer.audio.workflow.execution.WorkflowRunModels.Violation;
+
+/** Performs deterministic-backend capability, parameter and linear-topology preflight. */
+final class DeterministicAudioWorkflowValidator {
+
+  private final DeterministicAudioNodeExecutorRegistry executorRegistry;
+
+<span class="fc" id="L21">  DeterministicAudioWorkflowValidator(DeterministicAudioNodeExecutorRegistry executorRegistry) {</span>
+<span class="fc" id="L22">    this.executorRegistry = Objects.requireNonNull(executorRegistry, &quot;executorRegistry&quot;);</span>
+<span class="fc" id="L23">  }</span>
+
+  List&lt;Violation&gt; validate(Input input) {
+<span class="fc" id="L26">    Objects.requireNonNull(input, &quot;input&quot;);</span>
+<span class="fc" id="L27">    List&lt;Violation&gt; violations = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L28">    Map&lt;String, Node&gt; nodes = indexNodes(input);</span>
+<span class="fc" id="L29">    Map&lt;String, List&lt;Edge&gt;&gt; incoming = groupEdges(input, false);</span>
+<span class="fc" id="L30">    Map&lt;String, List&lt;Edge&gt;&gt; outgoing = groupEdges(input, true);</span>
+<span class="fc" id="L31">    int generatorCount = 0;</span>
+<span class="fc" id="L32">    int gainCount = 0;</span>
+<span class="fc bfc" id="L33" title="All 2 branches covered.">    for (Node node : input.snapshot().nodes()) {</span>
+<span class="fc bfc" id="L34" title="All 2 branches covered.">      if (ExperimentNodeProtocol.TYPE_SYNTHETIC_SIGNAL_GENERATOR.equals(node.type())) {</span>
+<span class="fc" id="L35">        generatorCount++;</span>
+      }
+<span class="fc bfc" id="L37" title="All 2 branches covered.">      if (ExperimentNodeProtocol.TYPE_GAIN.equals(node.type())) {</span>
+<span class="fc" id="L38">        gainCount++;</span>
+      }
+<span class="fc" id="L40">      executorRegistry</span>
+<span class="fc" id="L41">          .find(node.type())</span>
+<span class="fc" id="L42">          .ifPresentOrElse(</span>
+              executor -&gt;
+<span class="fc" id="L44">                  violations.addAll(</span>
+<span class="fc" id="L45">                      executor.validate(node, incoming.getOrDefault(node.id(), List.of()))),</span>
+<span class="fc" id="L46">              () -&gt; addUnsupportedNode(node, violations));</span>
+<span class="fc" id="L47">    }</span>
+<span class="fc" id="L48">    validateNodeCounts(generatorCount, gainCount, violations);</span>
+<span class="fc" id="L49">    validateLinearEdgeCount(input, violations);</span>
+<span class="fc" id="L50">    validateEdges(input.snapshot().edges(), nodes, violations);</span>
+<span class="fc" id="L51">    validateTerminalNode(nodes, outgoing, violations);</span>
+<span class="fc" id="L52">    return List.copyOf(violations);</span>
+  }
+
+  static String format(List&lt;Violation&gt; violations) {
+<span class="nc" id="L56">    return violations.stream()</span>
+<span class="nc" id="L57">        .map(violation -&gt; violation.code() + &quot;: &quot; + violation.message())</span>
+<span class="nc" id="L58">        .collect(Collectors.joining(&quot;; &quot;));</span>
+  }
+
+  private static void addUnsupportedNode(Node node, List&lt;Violation&gt; violations) {
+<span class="fc" id="L62">    violations.add(</span>
+        new Violation(
+            DeterministicAudioDiagnostics.UNSUPPORTED_NODE,
+<span class="fc" id="L65">            &quot;No deterministic audio executor is registered for node type '&quot; + node.type() + &quot;'&quot;,</span>
+<span class="fc" id="L66">            node.id()));</span>
+<span class="fc" id="L67">  }</span>
+
+  private static void validateNodeCounts(
+      int generatorCount, int gainCount, List&lt;Violation&gt; violations) {
+<span class="fc bfc" id="L71" title="All 2 branches covered.">    if (generatorCount != 1) {</span>
+<span class="fc" id="L72">      violations.add(</span>
+          new Violation(
+              DeterministicAudioDiagnostics.INVALID_TOPOLOGY,
+              &quot;Deterministic audio workflows require exactly one synthetic signal generator, found &quot;
+                  + generatorCount,
+              null));
+    }
+<span class="fc bfc" id="L79" title="All 2 branches covered.">    if (gainCount &lt; 1) {</span>
+<span class="fc" id="L80">      violations.add(</span>
+          new Violation(
+              DeterministicAudioDiagnostics.INVALID_TOPOLOGY,
+              &quot;Deterministic audio workflows require at least one gain node&quot;,
+              null));
+    }
+<span class="fc" id="L86">  }</span>
+
+  private static void validateLinearEdgeCount(Input input, List&lt;Violation&gt; violations) {
+<span class="fc" id="L89">    int expectedEdges = Math.max(0, input.snapshot().nodes().size() - 1);</span>
+<span class="pc bpc" id="L90" title="1 of 2 branches missed.">    if (input.snapshot().edges().size() != expectedEdges) {</span>
+<span class="nc" id="L91">      violations.add(</span>
+          new Violation(
+              DeterministicAudioDiagnostics.INVALID_TOPOLOGY,
+              &quot;Deterministic audio workflows must form one linear chain with &quot;
+                  + expectedEdges
+                  + &quot; edge(s), found &quot;
+<span class="nc" id="L97">                  + input.snapshot().edges().size(),</span>
+              null));
+    }
+<span class="fc" id="L100">  }</span>
+
+  private static void validateEdges(
+      List&lt;Edge&gt; edges, Map&lt;String, Node&gt; nodes, List&lt;Violation&gt; violations) {
+<span class="fc bfc" id="L104" title="All 2 branches covered.">    for (Edge edge : edges) {</span>
+<span class="fc" id="L105">      Node source = nodes.get(edge.sourceNodeId());</span>
+<span class="fc" id="L106">      Node target = nodes.get(edge.targetNodeId());</span>
+<span class="pc bpc" id="L107" title="2 of 4 branches missed.">      if (source == null || target == null) {</span>
+<span class="nc" id="L108">        violations.add(</span>
+            new Violation(
+                DeterministicAudioDiagnostics.INVALID_TOPOLOGY,
+<span class="nc" id="L111">                &quot;Edge '&quot; + edge.id() + &quot;' references an unknown node&quot;,</span>
+                null));
+<span class="nc" id="L113">        continue;</span>
+      }
+<span class="fc" id="L115">      validateSourcePort(edge, source, violations);</span>
+<span class="fc" id="L116">      validateTargetPort(edge, target, violations);</span>
+<span class="fc" id="L117">    }</span>
+<span class="fc" id="L118">  }</span>
+
+  private static void validateSourcePort(Edge edge, Node source, List&lt;Violation&gt; violations) {
+    String expectedSourcePort =
+<span class="fc bfc" id="L122" title="All 2 branches covered.">        ExperimentNodeProtocol.TYPE_SYNTHETIC_SIGNAL_GENERATOR.equals(source.type())</span>
+<span class="fc" id="L123">            ? ExperimentNodeProtocol.SIGNAL_OUTPUT_PORT</span>
+<span class="fc" id="L124">            : ExperimentNodeProtocol.AUDIO_OUTPUT_PORT;</span>
+<span class="pc bpc" id="L125" title="1 of 2 branches missed.">    if (!expectedSourcePort.equals(edge.sourcePortId())) {</span>
+<span class="nc" id="L126">      violations.add(</span>
+          new Violation(
+              DeterministicAudioDiagnostics.INVALID_TOPOLOGY,
+<span class="nc" id="L129">              &quot;Edge '&quot; + edge.id() + &quot;' must use source port '&quot; + expectedSourcePort + &quot;'&quot;,</span>
+<span class="nc" id="L130">              source.id()));</span>
+    }
+<span class="fc" id="L132">  }</span>
+
+  private static void validateTargetPort(Edge edge, Node target, List&lt;Violation&gt; violations) {
+<span class="pc bpc" id="L135" title="1 of 2 branches missed.">    if (!ExperimentNodeProtocol.TYPE_GAIN.equals(target.type())</span>
+<span class="pc bpc" id="L136" title="1 of 2 branches missed.">        || !ExperimentNodeProtocol.AUDIO_INPUT_PORT.equals(edge.targetPortId())) {</span>
+<span class="nc" id="L137">      violations.add(</span>
+          new Violation(
+              DeterministicAudioDiagnostics.INVALID_TOPOLOGY,
+<span class="nc" id="L140">              &quot;Edge '&quot; + edge.id() + &quot;' must target a gain node's audio input&quot;,</span>
+<span class="nc" id="L141">              target.id()));</span>
+    }
+<span class="fc" id="L143">  }</span>
+
+  private static void validateTerminalNode(
+      Map&lt;String, Node&gt; nodes, Map&lt;String, List&lt;Edge&gt;&gt; outgoing, List&lt;Violation&gt; violations) {
+<span class="fc" id="L147">    List&lt;Node&gt; terminalNodes =</span>
+<span class="fc" id="L148">        nodes.values().stream()</span>
+<span class="fc" id="L149">            .filter(node -&gt; outgoing.getOrDefault(node.id(), List.of()).isEmpty())</span>
+<span class="fc" id="L150">            .toList();</span>
+<span class="pc bpc" id="L151" title="1 of 2 branches missed.">    if (terminalNodes.size() != 1) {</span>
+<span class="nc" id="L152">      violations.add(</span>
+          new Violation(
+              DeterministicAudioDiagnostics.INVALID_TOPOLOGY,
+              &quot;Deterministic audio workflows require exactly one terminal node, found &quot;
+<span class="nc" id="L156">                  + terminalNodes.size(),</span>
+              null));
+<span class="nc" id="L158">      return;</span>
+    }
+<span class="fc" id="L160">    Node terminal = terminalNodes.getFirst();</span>
+<span class="fc bfc" id="L161" title="All 2 branches covered.">    if (!ExperimentNodeProtocol.TYPE_GAIN.equals(terminal.type())) {</span>
+<span class="fc" id="L162">      violations.add(</span>
+          new Violation(
+              DeterministicAudioDiagnostics.INVALID_TOPOLOGY,
+              &quot;The terminal deterministic audio node must be a gain node&quot;,
+<span class="fc" id="L166">              terminal.id()));</span>
+    }
+<span class="fc" id="L168">  }</span>
+
+  private static Map&lt;String, Node&gt; indexNodes(Input input) {
+<span class="fc" id="L171">    Map&lt;String, Node&gt; nodes = new ConcurrentHashMap&lt;&gt;();</span>
+<span class="fc bfc" id="L172" title="All 2 branches covered.">    for (Node node : input.snapshot().nodes()) {</span>
+<span class="fc" id="L173">      nodes.put(node.id(), node);</span>
+<span class="fc" id="L174">    }</span>
+<span class="fc" id="L175">    return Map.copyOf(nodes);</span>
+  }
+
+  private static Map&lt;String, List&lt;Edge&gt;&gt; groupEdges(Input input, boolean bySource) {
+<span class="fc" id="L179">    Map&lt;String, List&lt;Edge&gt;&gt; grouped = new ConcurrentHashMap&lt;&gt;();</span>
+<span class="fc bfc" id="L180" title="All 2 branches covered.">    for (Edge edge : input.snapshot().edges()) {</span>
+<span class="fc bfc" id="L181" title="All 2 branches covered.">      String key = bySource ? edge.sourceNodeId() : edge.targetNodeId();</span>
+<span class="fc" id="L182">      grouped.computeIfAbsent(key, ignored -&gt; new CopyOnWriteArrayList&lt;&gt;()).add(edge);</span>
+<span class="fc" id="L183">    }</span>
+<span class="fc" id="L184">    return Map.copyOf(grouped);</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

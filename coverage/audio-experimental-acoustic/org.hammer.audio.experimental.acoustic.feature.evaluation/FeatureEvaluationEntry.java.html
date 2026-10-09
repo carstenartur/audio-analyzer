@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>FeatureEvaluationEntry.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.feature.evaluation</a> &gt; <span class="el_source">FeatureEvaluationEntry.java</span></div><h1>FeatureEvaluationEntry.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.feature.evaluation;
+
+import java.util.Objects;
+
+/**
+ * Evaluation summary for a single feature column in a labelled dataset.
+ *
+ * @param featureName human-readable feature name; must not be blank
+ * @param statistics descriptive statistics over all samples; must not be {@code null}
+ * @param separation class-separation analysis; must not be {@code null}
+ * @param labelCorrelation maximum absolute point-biserial correlation between the feature values
+ *     and the binary class-indicator for any class label; in {@code [0,1]}
+ */
+public record FeatureEvaluationEntry(
+    String featureName,
+    FeatureStatistics statistics,
+    ClassSeparationScore separation,
+    double labelCorrelation) {
+
+  /** Validate fields. */
+<span class="fc" id="L21">  public FeatureEvaluationEntry {</span>
+<span class="fc" id="L22">    Objects.requireNonNull(featureName, &quot;featureName&quot;);</span>
+<span class="fc" id="L23">    Objects.requireNonNull(statistics, &quot;statistics&quot;);</span>
+<span class="fc" id="L24">    Objects.requireNonNull(separation, &quot;separation&quot;);</span>
+<span class="pc bpc" id="L25" title="1 of 2 branches missed.">    if (featureName.isBlank()) {</span>
+<span class="nc" id="L26">      throw new IllegalArgumentException(&quot;featureName must not be blank&quot;);</span>
+    }
+<span class="pc bpc" id="L28" title="1 of 2 branches missed.">    if (!featureName.equals(statistics.featureName())) {</span>
+<span class="nc" id="L29">      throw new IllegalArgumentException(&quot;statistics.featureName must equal featureName&quot;);</span>
+    }
+<span class="pc bpc" id="L31" title="1 of 2 branches missed.">    if (!featureName.equals(separation.featureName())) {</span>
+<span class="nc" id="L32">      throw new IllegalArgumentException(&quot;separation.featureName must equal featureName&quot;);</span>
+    }
+<span class="pc bpc" id="L34" title="3 of 6 branches missed.">    if (!Double.isFinite(labelCorrelation) || labelCorrelation &lt; 0.0 || labelCorrelation &gt; 1.0) {</span>
+<span class="nc" id="L35">      throw new IllegalArgumentException(&quot;labelCorrelation must be finite and in [0,1]&quot;);</span>
+    }
+<span class="fc" id="L37">  }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

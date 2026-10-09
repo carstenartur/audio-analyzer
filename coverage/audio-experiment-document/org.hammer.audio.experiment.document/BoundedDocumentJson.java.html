@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>BoundedDocumentJson.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experiment Document</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experiment.document</a> &gt; <span class="el_source">BoundedDocumentJson.java</span></div><h1>BoundedDocumentJson.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experiment.document;
+
+import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonToken;
+import com.fasterxml.jackson.core.StreamReadConstraints;
+import com.fasterxml.jackson.core.StreamReadFeature;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.StandardCharsets;
+
+/** Bounds every JSON token before allocating a tree and retains exact decimal values. */
+final class BoundedDocumentJson {
+
+  private final ObjectMapper mapper;
+
+<span class="fc" id="L21">  BoundedDocumentJson() {</span>
+    JsonFactory factory =
+<span class="fc" id="L23">        JsonFactory.builder()</span>
+<span class="fc" id="L24">            .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION)</span>
+<span class="fc" id="L25">            .streamReadConstraints(</span>
+<span class="fc" id="L26">                StreamReadConstraints.builder()</span>
+<span class="fc" id="L27">                    .maxNestingDepth(ExperimentDocumentFormat.MAX_NESTING_DEPTH)</span>
+<span class="fc" id="L28">                    .maxStringLength(ExperimentDocumentFormat.MAX_STRING_LENGTH)</span>
+<span class="fc" id="L29">                    .maxNameLength(ExperimentDocumentFormat.MAX_STRING_LENGTH)</span>
+<span class="fc" id="L30">                    .maxNumberLength(128)</span>
+<span class="fc" id="L31">                    .build())</span>
+<span class="fc" id="L32">            .build();</span>
+<span class="fc" id="L33">    mapper =</span>
+        new ObjectMapper(factory)
+<span class="fc" id="L35">            .enable(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS)</span>
+<span class="fc" id="L36">            .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS);</span>
+<span class="fc" id="L37">  }</span>
+
+  JsonNode read(byte[] bytes) throws IOException {
+    String text;
+    try {
+<span class="fc" id="L42">      text = StandardCharsets.UTF_8.newDecoder().decode(ByteBuffer.wrap(bytes)).toString();</span>
+<span class="fc" id="L43">    } catch (CharacterCodingException exception) {</span>
+<span class="fc" id="L44">      throw new ExperimentDocumentException(&quot;/&quot;, &quot;invalid-utf8&quot;, &quot;Expected UTF-8 JSON&quot;, exception);</span>
+<span class="fc" id="L45">    }</span>
+    // Check collection limits during streaming, before readTree allocates their members.
+<span class="fc" id="L47">    try (JsonParser parser = mapper.createParser(text)) {</span>
+<span class="fc" id="L48">      int[] sizes = new int[ExperimentDocumentFormat.MAX_NESTING_DEPTH + 1];</span>
+<span class="fc" id="L49">      boolean[] arrays = new boolean[sizes.length];</span>
+<span class="fc" id="L50">      int depth = 0;</span>
+<span class="fc" id="L51">      boolean started = false;</span>
+<span class="fc bfc" id="L52" title="All 2 branches covered.">      for (JsonToken token = parser.nextToken(); token != null; token = parser.nextToken()) {</span>
+<span class="fc bfc" id="L53" title="All 4 branches covered.">        if (started &amp;&amp; depth == 0) {</span>
+<span class="fc" id="L54">          throw new ExperimentDocumentException(&quot;/&quot;, &quot;invalid-json&quot;, &quot;Trailing JSON content&quot;);</span>
+        }
+<span class="fc" id="L56">        started = true;</span>
+<span class="fc bfc" id="L57" title="All 8 branches covered.">        if (token == JsonToken.FIELD_NAME || (depth &gt; 0 &amp;&amp; arrays[depth] &amp;&amp; !token.isStructEnd())) {</span>
+<span class="fc" id="L58">          sizes[depth]++;</span>
+        }
+<span class="fc bfc" id="L60" title="All 2 branches covered.">        if (sizes[depth] &gt; ExperimentDocumentFormat.MAX_COLLECTION_SIZE) {</span>
+<span class="fc" id="L61">          throw new ExperimentDocumentException(&quot;/&quot;, &quot;max-collection&quot;, &quot;Collection limit exceeded&quot;);</span>
+        }
+<span class="fc bfc" id="L63" title="All 4 branches covered.">        if ((token == JsonToken.FIELD_NAME || token == JsonToken.VALUE_STRING)</span>
+<span class="fc bfc" id="L64" title="All 2 branches covered.">            &amp;&amp; parser.getTextLength() &gt; ExperimentDocumentFormat.MAX_STRING_LENGTH) {</span>
+<span class="fc" id="L65">          throw new ExperimentDocumentException(&quot;/&quot;, &quot;max-string&quot;, &quot;String limit exceeded&quot;);</span>
+        }
+<span class="fc bfc" id="L67" title="All 2 branches covered.">        if (token.isStructStart()) {</span>
+<span class="fc" id="L68">          depth++;</span>
+<span class="fc" id="L69">          sizes[depth] = 0;</span>
+<span class="fc bfc" id="L70" title="All 2 branches covered.">          arrays[depth] = token == JsonToken.START_ARRAY;</span>
+<span class="fc bfc" id="L71" title="All 2 branches covered.">        } else if (token.isStructEnd()) {</span>
+<span class="fc" id="L72">          depth--;</span>
+        }
+      }
+    }
+<span class="fc" id="L76">    return mapper.readTree(text);</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

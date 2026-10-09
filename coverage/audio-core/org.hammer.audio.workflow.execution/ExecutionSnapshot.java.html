@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ExecutionSnapshot.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Core</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.execution</a> &gt; <span class="el_source">ExecutionSnapshot.java</span></div><h1>ExecutionSnapshot.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.execution;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.Objects;
+import org.hammer.audio.workflow.Edge;
+import org.hammer.audio.workflow.Metadata;
+import org.hammer.audio.workflow.Node;
+import org.hammer.audio.workflow.Workflow;
+
+/**
+ * Immutable point-in-time snapshot of a {@link Workflow} taken before execution starts.
+ *
+ * &lt;p&gt;The originating workflow may continue to evolve after the snapshot is taken; executions always
+ * operate on this frozen copy. Multiple independent executions may reference the same snapshot.
+ *
+ * @param snapshotId stable identifier for this snapshot
+ * @param workflowId identifier of the originating workflow
+ * @param nodes immutable copy of workflow nodes at snapshot time
+ * @param edges immutable copy of workflow edges at snapshot time
+ * @param metadata workflow-level metadata captured at snapshot time
+ * @param createdAt instant at which the snapshot was taken
+ */
+public record ExecutionSnapshot(
+    String snapshotId,
+    String workflowId,
+    List&lt;Node&gt; nodes,
+    List&lt;Edge&gt; edges,
+    Metadata metadata,
+    Instant createdAt) {
+
+<span class="fc" id="L32">  public ExecutionSnapshot {</span>
+<span class="fc" id="L33">    StableExecutionIds.requireStable(snapshotId, &quot;snapshotId&quot;);</span>
+<span class="fc" id="L34">    StableExecutionIds.requireStable(workflowId, &quot;workflowId&quot;);</span>
+<span class="fc" id="L35">    Objects.requireNonNull(nodes, &quot;nodes&quot;);</span>
+<span class="fc" id="L36">    Objects.requireNonNull(edges, &quot;edges&quot;);</span>
+<span class="fc" id="L37">    Objects.requireNonNull(createdAt, &quot;createdAt&quot;);</span>
+<span class="fc" id="L38">    nodes = List.copyOf(nodes);</span>
+<span class="fc" id="L39">    edges = List.copyOf(edges);</span>
+<span class="fc bfc" id="L40" title="All 2 branches covered.">    metadata = metadata == null ? Metadata.empty() : metadata;</span>
+<span class="fc" id="L41">  }</span>
+
+  /**
+   * Creates an execution snapshot from the given workflow.
+   *
+   * @param snapshotId stable identifier for this snapshot
+   * @param workflow workflow to snapshot
+   * @param createdAt instant at which the snapshot is taken
+   * @return new immutable snapshot of the workflow
+   */
+  public static ExecutionSnapshot of(String snapshotId, Workflow workflow, Instant createdAt) {
+<span class="fc" id="L52">    Objects.requireNonNull(snapshotId, &quot;snapshotId&quot;);</span>
+<span class="fc" id="L53">    Objects.requireNonNull(workflow, &quot;workflow&quot;);</span>
+<span class="fc" id="L54">    Objects.requireNonNull(createdAt, &quot;createdAt&quot;);</span>
+<span class="fc" id="L55">    return new ExecutionSnapshot(</span>
+        snapshotId,
+<span class="fc" id="L57">        workflow.id(),</span>
+<span class="fc" id="L58">        workflow.nodes(),</span>
+<span class="fc" id="L59">        workflow.edges(),</span>
+<span class="fc" id="L60">        workflow.metadata(),</span>
+        createdAt);
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

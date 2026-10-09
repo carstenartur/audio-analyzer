@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WaveformRenderer.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.ui</a> &gt; <span class="el_source">WaveformRenderer.java</span></div><h1>WaveformRenderer.java</h1><pre class="source lang-java linenums">package org.hammer.audio.ui;
+
+import org.hammer.audio.snapshot.WaveformSnapshot;
+
+/**
+ * Pure-function pixel scaling for waveform rendering.
+ *
+ * &lt;p&gt;This is the only place in the platform that knows about panel dimensions and pixel
+ * coordinates. Audio capture, ring buffering, DSP and analysis all stay in normalized {@code float}
+ * space; renderers in this package convert immutable {@link WaveformSnapshot}s into the {@code (x,
+ * y)} integer arrays a Swing or JavaFX canvas can {@code drawPolyline}.
+ *
+ * &lt;p&gt;Renderers are stateless: the same instance can be invoked from any thread and reused across
+ * snapshots. They allocate a fresh result on every call to keep the data immutable from the
+ * caller's perspective; for high-rate rendering paths a future variant can accept caller-owned
+ * scratch arrays.
+ *
+ * @author refactoring
+ */
+public final class WaveformRenderer {
+
+  private WaveformRenderer() {
+    // Utility class
+  }
+
+  /**
+   * Compute X-coordinates that span {@code [0, panelWidth - 1]} for {@code points} samples.
+   *
+   * @param points number of samples on the X axis; must be {@code &gt;= 0}
+   * @param panelWidth target panel width in pixels
+   * @return integer array of length {@code points}; values are monotonically non-decreasing
+   */
+  public static int[] computeXPoints(int points, int panelWidth) {
+<span class="fc" id="L34">    int[] xs = new int[Math.max(0, points)];</span>
+<span class="fc bfc" id="L35" title="All 2 branches covered.">    if (xs.length == 0) {</span>
+<span class="fc" id="L36">      return xs;</span>
+    }
+<span class="fc bfc" id="L38" title="All 2 branches covered.">    if (xs.length == 1) {</span>
+<span class="fc" id="L39">      xs[0] = 0;</span>
+<span class="fc" id="L40">      return xs;</span>
+    }
+<span class="fc" id="L42">    final int panelW = panelWidth - 1;</span>
+<span class="fc" id="L43">    final int pointsM1 = xs.length - 1;</span>
+<span class="fc bfc" id="L44" title="All 2 branches covered.">    for (int i = 0; i &lt; xs.length; i++) {</span>
+<span class="fc" id="L45">      xs[i] = (int) ((long) panelW * i / pointsM1);</span>
+    }
+<span class="fc" id="L47">    return xs;</span>
+  }
+
+  /**
+   * Convert one channel of a {@link WaveformSnapshot} into pixel-space Y-coordinates.
+   *
+   * &lt;p&gt;Samples in the snapshot are normalized to {@code [-1, 1]} (the audio domain). This method
+   * maps {@code +1.0f → 0} (top) and {@code -1.0f → panelHeight} (bottom), so the centre of the
+   * panel corresponds to silence.
+   *
+   * &lt;p&gt;If the snapshot legitimately has zero frames an empty array is returned. Contract violations
+   * on the inputs throw eagerly so that misconfigured rendering code surfaces as a clear failure
+   * rather than silently drawing nothing.
+   *
+   * @param snapshot waveform snapshot; never {@code null}
+   * @param channel channel index, in {@code [0, snapshot.channels())}
+   * @param panelHeight target panel height in pixels; must be {@code &gt; 0}
+   * @return integer Y-coordinates of length {@code snapshot.frames()}
+   * @throws IllegalArgumentException if {@code panelHeight &lt;= 0}
+   * @throws IndexOutOfBoundsException if {@code channel} is outside {@code [0,
+   *     snapshot.channels())}
+   */
+  public static int[] computeYPoints(WaveformSnapshot snapshot, int channel, int panelHeight) {
+<span class="fc bfc" id="L70" title="All 2 branches covered.">    if (panelHeight &lt;= 0) {</span>
+<span class="fc" id="L71">      throw new IllegalArgumentException(&quot;panelHeight must be &gt; 0, was &quot; + panelHeight);</span>
+    }
+<span class="fc bfc" id="L73" title="All 4 branches covered.">    if (channel &lt; 0 || channel &gt;= snapshot.channels()) {</span>
+<span class="fc" id="L74">      throw new IndexOutOfBoundsException(</span>
+<span class="fc" id="L75">          &quot;channel &quot; + channel + &quot; out of range [0, &quot; + snapshot.channels() + &quot;)&quot;);</span>
+    }
+<span class="fc" id="L77">    float[] samples = snapshot.channelView(channel);</span>
+<span class="fc" id="L78">    int[] ys = new int[samples.length];</span>
+<span class="fc" id="L79">    final float halfH = panelHeight / 2f;</span>
+<span class="fc bfc" id="L80" title="All 2 branches covered.">    for (int i = 0; i &lt; samples.length; i++) {</span>
+<span class="fc" id="L81">      float n = samples[i];</span>
+<span class="fc bfc" id="L82" title="All 2 branches covered.">      if (n &gt; 1f) {</span>
+<span class="fc" id="L83">        n = 1f;</span>
+<span class="fc bfc" id="L84" title="All 2 branches covered.">      } else if (n &lt; -1f) {</span>
+<span class="fc" id="L85">        n = -1f;</span>
+      }
+<span class="fc" id="L87">      ys[i] = Math.round(halfH - n * halfH);</span>
+    }
+<span class="fc" id="L89">    return ys;</span>
+  }
+
+  /**
+   * Convert all channels at once.
+   *
+   * &lt;p&gt;Returns an empty outer array when the snapshot has zero channels (e.g. {@link
+   * WaveformSnapshot#EMPTY}); otherwise delegates to {@link #computeYPoints} per channel and
+   * propagates any contract violation it raises.
+   *
+   * @param snapshot waveform snapshot
+   * @param panelHeight target panel height in pixels; must be {@code &gt; 0}
+   * @return integer Y-coordinate arrays, one per channel
+   * @throws IllegalArgumentException if {@code panelHeight &lt;= 0} and the snapshot has at least one
+   *     channel
+   */
+  public static int[][] computeYPointsAllChannels(WaveformSnapshot snapshot, int panelHeight) {
+<span class="fc" id="L106">    int[][] result = new int[snapshot.channels()][];</span>
+<span class="fc bfc" id="L107" title="All 2 branches covered.">    for (int c = 0; c &lt; snapshot.channels(); c++) {</span>
+<span class="fc" id="L108">      result[c] = computeYPoints(snapshot, c, panelHeight);</span>
+    }
+<span class="fc" id="L110">    return result;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

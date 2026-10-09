@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>LocalizationExperiment.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Acquisition</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.acquisition</a> &gt; <span class="el_source">LocalizationExperiment.java</span></div><h1>LocalizationExperiment.java</h1><pre class="source lang-java linenums">package org.hammer.audio.acquisition;
+
+import java.time.Instant;
+import java.util.Collections;
+import java.util.Map;
+import java.util.Objects;
+import java.util.TreeMap;
+import java.util.concurrent.ConcurrentHashMap;
+
+/**
+ * Reproducible experiment identity shared by simulation, replay and live localization.
+ *
+ * @param experimentId stable experiment identity
+ * @param displayName human-readable experiment name
+ * @param profile complete array, hardware and calibration profile
+ * @param inputMode selected sample origin
+ * @param sourceReference deterministic source, recording or live-session reference
+ * @param createdAt experiment creation time
+ * @param stage current lifecycle stage
+ * @param metadata ordered additional experiment metadata
+ */
+public record LocalizationExperiment(
+    String experimentId,
+    String displayName,
+    MicrophoneArrayProfile profile,
+    LocalizationInputMode inputMode,
+    String sourceReference,
+    Instant createdAt,
+    LocalizationExperimentStage stage,
+    Map&lt;String, String&gt; metadata) {
+
+  // Validate and defensively copy one experiment.
+<span class="fc" id="L33">  public LocalizationExperiment {</span>
+<span class="fc" id="L34">    requireText(experimentId, &quot;experimentId&quot;);</span>
+<span class="fc" id="L35">    requireText(displayName, &quot;displayName&quot;);</span>
+<span class="fc" id="L36">    Objects.requireNonNull(profile, &quot;profile&quot;);</span>
+<span class="fc" id="L37">    Objects.requireNonNull(inputMode, &quot;inputMode&quot;);</span>
+<span class="fc" id="L38">    requireText(sourceReference, &quot;sourceReference&quot;);</span>
+<span class="fc" id="L39">    Objects.requireNonNull(createdAt, &quot;createdAt&quot;);</span>
+<span class="fc" id="L40">    Objects.requireNonNull(stage, &quot;stage&quot;);</span>
+<span class="pc bpc" id="L41" title="1 of 2 branches missed.">    if (!profile.supports(inputMode)) {</span>
+<span class="nc" id="L42">      throw new IllegalArgumentException(&quot;profile does not support experiment input mode&quot;);</span>
+    }
+<span class="fc" id="L44">    Map&lt;String, String&gt; requiredMetadata = Objects.requireNonNull(metadata, &quot;metadata&quot;);</span>
+<span class="fc" id="L45">    Map&lt;String, String&gt; validated = new ConcurrentHashMap&lt;&gt;();</span>
+<span class="fc bfc" id="L46" title="All 2 branches covered.">    for (Map.Entry&lt;String, String&gt; entry : requiredMetadata.entrySet()) {</span>
+<span class="fc" id="L47">      requireText(entry.getKey(), &quot;metadata key&quot;);</span>
+<span class="fc" id="L48">      Objects.requireNonNull(entry.getValue(), &quot;metadata value&quot;);</span>
+<span class="fc" id="L49">      validated.put(entry.getKey(), entry.getValue());</span>
+<span class="fc" id="L50">    }</span>
+<span class="fc" id="L51">    metadata = Collections.unmodifiableMap(new TreeMap&lt;&gt;(validated));</span>
+<span class="fc" id="L52">  }</span>
+
+  /** Create a newly defined experiment. */
+  public static LocalizationExperiment defined(
+      String experimentId,
+      String displayName,
+      MicrophoneArrayProfile profile,
+      LocalizationInputMode inputMode,
+      String sourceReference,
+      Instant createdAt) {
+<span class="fc" id="L62">    return new LocalizationExperiment(</span>
+        experimentId,
+        displayName,
+        profile,
+        inputMode,
+        sourceReference,
+        createdAt,
+        LocalizationExperimentStage.DEFINED,
+<span class="fc" id="L70">        Map.of());</span>
+  }
+
+  /** Advance exactly one lifecycle stage. */
+  public LocalizationExperiment advance() {
+<span class="nc" id="L75">    LocalizationExperimentStage[] stages = LocalizationExperimentStage.values();</span>
+<span class="nc bnc" id="L76" title="All 2 branches missed.">    if (stage.ordinal() + 1 &gt;= stages.length) {</span>
+<span class="nc" id="L77">      return this;</span>
+    }
+<span class="nc" id="L79">    return withStage(stages[stage.ordinal() + 1]);</span>
+  }
+
+  /** Advance to the next expected lifecycle stage. */
+  public LocalizationExperiment advanceTo(LocalizationExperimentStage nextStage) {
+<span class="fc" id="L84">    Objects.requireNonNull(nextStage, &quot;nextStage&quot;);</span>
+<span class="pc bpc" id="L85" title="1 of 2 branches missed.">    if (nextStage.ordinal() != stage.ordinal() + 1) {</span>
+<span class="nc" id="L86">      throw new IllegalArgumentException(</span>
+          &quot;experiment stage must advance exactly once from &quot; + stage + &quot; to &quot; + nextStage);
+    }
+<span class="fc" id="L89">    return withStage(nextStage);</span>
+  }
+
+  /** Return a copy with one deterministic metadata entry. */
+  public LocalizationExperiment withMetadata(String key, String value) {
+<span class="fc" id="L94">    requireText(key, &quot;key&quot;);</span>
+<span class="fc" id="L95">    Objects.requireNonNull(value, &quot;value&quot;);</span>
+<span class="fc" id="L96">    Map&lt;String, String&gt; changed = new ConcurrentHashMap&lt;&gt;(metadata);</span>
+<span class="fc" id="L97">    changed.put(key, value);</span>
+<span class="fc" id="L98">    return new LocalizationExperiment(</span>
+        experimentId, displayName, profile, inputMode, sourceReference, createdAt, stage, changed);
+  }
+
+  private LocalizationExperiment withStage(LocalizationExperimentStage nextStage) {
+<span class="fc" id="L103">    return new LocalizationExperiment(</span>
+        experimentId,
+        displayName,
+        profile,
+        inputMode,
+        sourceReference,
+        createdAt,
+        nextStage,
+        metadata);
+  }
+
+  private static void requireText(String value, String name) {
+<span class="pc bpc" id="L115" title="2 of 4 branches missed.">    if (value == null || value.isBlank()) {</span>
+<span class="nc" id="L116">      throw new IllegalArgumentException(name + &quot; must not be blank&quot;);</span>
+    }
+<span class="fc" id="L118">  }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

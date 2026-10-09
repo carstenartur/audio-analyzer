@@ -1,0 +1,14 @@
+GROUP,PACKAGE,CLASS,INSTRUCTION_MISSED,INSTRUCTION_COVERED,BRANCH_MISSED,BRANCH_COVERED,LINE_MISSED,LINE_COVERED,COMPLEXITY_MISSED,COMPLEXITY_COVERED,METHOD_MISSED,METHOD_COVERED
+Audio Analyzer Plugin API,org.hammer.audio.plugin.document,DocumentValue.NumberValue,18,0,2,0,4,0,2,0,1,0
+Audio Analyzer Plugin API,org.hammer.audio.plugin.document,DocumentValue.ArrayValue,37,0,2,0,8,0,2,0,1,0
+Audio Analyzer Plugin API,org.hammer.audio.plugin.document,DocumentValue.StringValue,10,0,0,0,3,0,1,0,1,0
+Audio Analyzer Plugin API,org.hammer.audio.plugin.document,DocumentDiagnostic,51,0,6,0,10,0,5,0,2,0
+Audio Analyzer Plugin API,org.hammer.audio.plugin.document,DocumentValidationResult,39,0,2,0,7,0,5,0,4,0
+Audio Analyzer Plugin API,org.hammer.audio.plugin.document,ExperimentDocumentContribution,4,0,0,0,2,0,2,0,2,0
+Audio Analyzer Plugin API,org.hammer.audio.plugin.document,DocumentDiagnostic.Severity,21,0,0,0,4,0,1,0,1,0
+Audio Analyzer Plugin API,org.hammer.audio.plugin.document,DocumentValue.NullValue,9,0,0,0,2,0,1,0,1,0
+Audio Analyzer Plugin API,org.hammer.audio.plugin.document,DocumentValue,41,0,0,0,8,0,6,0,6,0
+Audio Analyzer Plugin API,org.hammer.audio.plugin.document,DocumentValue.BooleanValue,6,0,0,0,1,0,1,0,1,0
+Audio Analyzer Plugin API,org.hammer.audio.plugin.document,DocumentValue.ObjectValue,42,0,2,0,11,0,3,0,2,0
+Audio Analyzer Plugin API,org.hammer.audio.plugin,AudioAnalyzerPlugin,2,24,0,0,1,12,1,12,1,12
+Audio Analyzer Plugin API,org.hammer.audio.plugin,PluginDescriptor,0,69,0,8,0,14,0,5,0,1

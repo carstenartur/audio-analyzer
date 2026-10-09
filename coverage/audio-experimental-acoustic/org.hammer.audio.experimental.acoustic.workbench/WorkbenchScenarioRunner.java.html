@@ -1,0 +1,221 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WorkbenchScenarioRunner.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.workbench</a> &gt; <span class="el_source">WorkbenchScenarioRunner.java</span></div><h1>WorkbenchScenarioRunner.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.workbench;
+
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import org.hammer.audio.acquisition.LocalizationExperiment;
+import org.hammer.audio.acquisition.LocalizationExperimentStage;
+import org.hammer.audio.acquisition.LocalizationInputMode;
+import org.hammer.audio.acquisition.MicrophoneArray;
+import org.hammer.audio.acquisition.MicrophoneArrayLayout;
+import org.hammer.audio.acquisition.MicrophoneArrayProfile;
+import org.hammer.audio.core.AudioBlock;
+import org.hammer.audio.experimental.acoustic.CrossCorrelationTdoaEstimator;
+import org.hammer.audio.experimental.acoustic.DelayAndSumBeamformer;
+import org.hammer.audio.experimental.acoustic.FrequencyBand;
+import org.hammer.audio.experimental.acoustic.GccPhatTdoaEstimator;
+import org.hammer.audio.experimental.acoustic.SubSampleGccPhatTdoaEstimator;
+import org.hammer.audio.experimental.acoustic.TdoaEstimator;
+import org.hammer.audio.experimental.acoustic.benchmark.BenchmarkMeasurements;
+import org.hammer.audio.experimental.acoustic.benchmark.BenchmarkReport;
+import org.hammer.audio.experimental.acoustic.benchmark.TrackingBenchmarkComparator;
+import org.hammer.audio.experimental.acoustic.scenario.Scenario;
+import org.hammer.audio.experimental.acoustic.simulation.SimulatedMicrophoneArraySource;
+import org.hammer.audio.experimental.acoustic.simulation.SimulationScenarios.SimulationScenario;
+import org.hammer.audio.experimental.acoustic.tracking.FrameSchedule;
+import org.hammer.audio.experimental.acoustic.tracking.FrequencyClusterer;
+import org.hammer.audio.experimental.acoustic.tracking.MultiPeakDetector;
+import org.hammer.audio.experimental.acoustic.tracking.SourceTracker;
+import org.hammer.audio.experimental.acoustic.tracking.TrackingPipeline;
+import org.hammer.audio.experimental.acoustic.tracking.TrackingSnapshot;
+import org.hammer.audio.geometry.Vector2;
+
+/**
+ * Headless runner for acoustic localization workbench scenarios.
+ *
+ * &lt;p&gt;Runs a {@link SimulationScenario} block-by-block through a {@link TrackingPipeline} configured
+ * from {@link WorkbenchParameters}, collects all {@link TrackingSnapshot}s and returns a {@link
+ * WorkbenchRunResult}. This class contains no Swing or UI code and is safe to use in headless
+ * tests.
+ *
+ * &lt;p&gt;An optional {@link ProgressCallback} receives each snapshot as it is produced, which lets
+ * Swing panels update incrementally on a background thread without holding a reference to this
+ * class.
+ */
+public final class WorkbenchScenarioRunner {
+
+<span class="fc" id="L52">  private static final Logger LOGGER = Logger.getLogger(WorkbenchScenarioRunner.class.getName());</span>
+
+  /**
+   * Maximum fraction of one block period that the pipeline may consume ({@value}). This value is
+   * used to configure the {@link FrameSchedule} and is intentionally shared with the UI so both log
+   * annotations and the result's budget compliance checks use the same threshold.
+   */
+  static final double PIPELINE_MAX_LOAD_FRACTION = 0.8;
+
+  /** Called after each audio block is processed during an incremental run. */
+  @FunctionalInterface
+  public interface ProgressCallback {
+    /**
+     * Invoked after processing one block.
+     *
+     * @param snapshot the snapshot produced for the block just processed
+     * @param blockIndex 0-based index of the block just processed
+     */
+    void onBlock(TrackingSnapshot snapshot, int blockIndex);
+  }
+
+  private WorkbenchScenarioRunner() {
+    // utility class
+  }
+
+  /** Run {@code scenario} with {@code parameters} and return the full result. */
+  public static WorkbenchRunResult run(
+      SimulationScenario scenario, WorkbenchParameters parameters) {
+<span class="fc" id="L80">    return run(scenario, parameters, null);</span>
+  }
+
+  /** Run {@code scenario}, notifying {@code callback} after each block. */
+  public static WorkbenchRunResult run(
+      SimulationScenario scenario, WorkbenchParameters parameters, ProgressCallback callback) {
+<span class="fc" id="L86">    Objects.requireNonNull(scenario, &quot;scenario&quot;);</span>
+<span class="fc" id="L87">    Objects.requireNonNull(parameters, &quot;parameters&quot;);</span>
+
+<span class="fc" id="L89">    try (SimulatedMicrophoneArraySource source = scenario.newSource()) {</span>
+<span class="fc" id="L90">      MicrophoneArray array = source.microphoneArray();</span>
+<span class="fc" id="L91">      TrackingPipeline pipeline = buildPipeline(scenario, parameters);</span>
+
+<span class="fc" id="L93">      List&lt;TrackingSnapshot&gt; snapshots = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L94">      long totalProcessingNanos = 0L;</span>
+<span class="fc" id="L95">      int blockIndex = 0;</span>
+
+      while (true) {
+<span class="pc bpc" id="L98" title="1 of 2 branches missed.">        if (Thread.currentThread().isInterrupted()) {</span>
+<span class="nc" id="L99">          break;</span>
+        }
+<span class="fc" id="L101">        AudioBlock block = source.readBlock(parameters.blockSize()).orElse(null);</span>
+<span class="pc bpc" id="L102" title="1 of 4 branches missed.">        if (block == null || block.frames() &lt; parameters.blockSize()) {</span>
+<span class="fc" id="L103">          break;</span>
+        }
+<span class="fc" id="L105">        TrackingSnapshot snapshot = pipeline.process(block, array);</span>
+<span class="fc" id="L106">        snapshots.add(snapshot);</span>
+<span class="fc" id="L107">        totalProcessingNanos += snapshot.processingNanos();</span>
+<span class="fc bfc" id="L108" title="All 2 branches covered.">        if (callback != null) {</span>
+<span class="fc" id="L109">          callback.onBlock(snapshot, blockIndex);</span>
+        }
+<span class="fc" id="L111">        blockIndex++;</span>
+<span class="fc" id="L112">      }</span>
+
+<span class="fc" id="L114">      return new WorkbenchRunResult(</span>
+          scenario,
+          parameters,
+          snapshots,
+          totalProcessingNanos,
+<span class="fc" id="L119">          computeBenchmarkReport(scenario, snapshots),</span>
+<span class="fc" id="L120">          pipeline.schedule(),</span>
+<span class="fc" id="L121">          simulationExperiment(scenario, parameters));</span>
+<span class="nc" id="L122">    } catch (java.io.IOException exception) {</span>
+<span class="nc" id="L123">      throw new IllegalStateException(&quot;Unexpected close failure on simulation source&quot;, exception);</span>
+    }
+  }
+
+  private static LocalizationExperiment simulationExperiment(
+      SimulationScenario scenario, WorkbenchParameters parameters) {
+<span class="fc" id="L129">    MicrophoneArrayProfile profile =</span>
+        new MicrophoneArrayProfile(
+<span class="fc" id="L131">            &quot;simulation.&quot; + scenario.name(),</span>
+<span class="fc" id="L132">            &quot;Simulation array for &quot; + scenario.name(),</span>
+            MicrophoneArrayLayout.CUSTOM,
+<span class="fc" id="L134">            scenario.array(),</span>
+<span class="fc" id="L135">            Set.of(LocalizationInputMode.SIMULATION),</span>
+            null,
+            null);
+<span class="fc" id="L138">    return new LocalizationExperiment(</span>
+<span class="fc" id="L139">        &quot;simulation.&quot; + scenario.name() + '.' + scenario.randomSeed(),</span>
+<span class="fc" id="L140">        &quot;Simulation: &quot; + scenario.name(),</span>
+        profile,
+        LocalizationInputMode.SIMULATION,
+<span class="fc" id="L143">        &quot;scenario:&quot; + scenario.name(),</span>
+        Instant.EPOCH,
+        LocalizationExperimentStage.LOCALIZED,
+<span class="fc" id="L146">        Map.of(</span>
+<span class="fc" id="L147">            &quot;blockSize&quot;, Integer.toString(parameters.blockSize()),</span>
+<span class="fc" id="L148">            &quot;randomSeed&quot;, Long.toString(scenario.randomSeed()),</span>
+<span class="fc" id="L149">            &quot;sampleRate&quot;, Float.toString(scenario.sampleRate())));</span>
+  }
+
+  /** Compute a benchmark report, or {@code null} when comparison is unavailable. */
+  private static BenchmarkReport computeBenchmarkReport(
+      SimulationScenario scenario, List&lt;TrackingSnapshot&gt; snapshots) {
+<span class="pc bpc" id="L155" title="1 of 2 branches missed.">    if (snapshots.isEmpty()) {</span>
+<span class="nc" id="L156">      return null;</span>
+    }
+    try {
+<span class="fc" id="L159">      Scenario truth = scenario.groundTruth();</span>
+<span class="fc" id="L160">      BenchmarkMeasurements measurements = BenchmarkMeasurements.of(scenario.array(), snapshots);</span>
+<span class="fc" id="L161">      return new TrackingBenchmarkComparator().compare(truth, measurements);</span>
+<span class="nc" id="L162">    } catch (RuntimeException exception) {</span>
+<span class="nc" id="L163">      LOGGER.log(Level.WARNING, &quot;Benchmark report computation failed&quot;, exception);</span>
+<span class="nc" id="L164">      return null;</span>
+    }
+  }
+
+  /** Construct a {@link TrackingPipeline} from the given scenario and workbench parameters. */
+  static TrackingPipeline buildPipeline(SimulationScenario scenario, WorkbenchParameters params) {
+<span class="fc" id="L170">    FrequencyBand band = new FrequencyBand(params.bandMinHz(), params.bandMaxHz());</span>
+<span class="fc" id="L171">    MultiPeakDetector detector =</span>
+<span class="fc" id="L172">        new MultiPeakDetector(params.fftSize(), band, params.maxPeaks(), params.minSnr());</span>
+<span class="fc" id="L173">    FrequencyClusterer clusterer =</span>
+<span class="fc" id="L174">        new FrequencyClusterer(params.clusteringToleranceHz(), 0.0, 2, 4);</span>
+<span class="fc" id="L175">    TdoaEstimator tdoaEstimator = buildTdoaEstimator(params);</span>
+<span class="fc" id="L176">    DelayAndSumBeamformer beamformer =</span>
+        new DelayAndSumBeamformer(
+            SimulatedMicrophoneArraySource.DEFAULT_SPEED_OF_SOUND_METERS_PER_SECOND);
+<span class="fc" id="L179">    SourceTracker tracker =</span>
+        new SourceTracker(
+<span class="fc" id="L181">            params.trackerFrequencyMatchHz(),</span>
+<span class="fc" id="L182">            params.trackerMissingFramesToDrop(),</span>
+            0.5,
+            0.04,
+            1.0,
+            1.0,
+<span class="fc" id="L187">            params.trackerConfidenceDecay(),</span>
+<span class="fc" id="L188">            params.trackerConfidenceGain());</span>
+<span class="fc" id="L189">    List&lt;Vector2&gt; grid = buildCandidateGrid(scenario, params.candidateGridSteps());</span>
+<span class="fc" id="L190">    FrameSchedule schedule =</span>
+<span class="fc" id="L191">        new FrameSchedule(scenario.sampleRate(), params.blockSize(), PIPELINE_MAX_LOAD_FRACTION);</span>
+<span class="fc" id="L192">    return new TrackingPipeline(</span>
+        detector, clusterer, tdoaEstimator, beamformer, tracker, grid, schedule);
+  }
+
+  /** Creates the configured interchangeable TDOA stage. Visible for tests. */
+  static TdoaEstimator buildTdoaEstimator(WorkbenchParameters params) {
+<span class="fc" id="L198">    double speedOfSound = SimulatedMicrophoneArraySource.DEFAULT_SPEED_OF_SOUND_METERS_PER_SECOND;</span>
+<span class="fc bfc" id="L199" title="All 3 branches covered.">    return switch (params.tdoaEstimatorType()) {</span>
+<span class="fc" id="L200">      case CROSS_CORRELATION -&gt; new CrossCorrelationTdoaEstimator(speedOfSound);</span>
+<span class="fc" id="L201">      case GCC_PHAT -&gt; new GccPhatTdoaEstimator(speedOfSound);</span>
+<span class="fc" id="L202">      case SUB_SAMPLE_GCC_PHAT -&gt; new SubSampleGccPhatTdoaEstimator(speedOfSound);</span>
+    };
+  }
+
+  private static List&lt;Vector2&gt; buildCandidateGrid(SimulationScenario scenario, int steps) {
+<span class="pc bpc" id="L207" title="1 of 2 branches missed.">    if (steps &lt;= 0) {</span>
+<span class="nc" id="L208">      throw new IllegalArgumentException(&quot;candidateGridSteps must be positive, got &quot; + steps);</span>
+    }
+<span class="fc" id="L210">    List&lt;Vector2&gt; grid = new ArrayList&lt;&gt;((steps + 1) * (steps + 1));</span>
+<span class="fc" id="L211">    double width = scenario.room().widthMeters();</span>
+<span class="fc" id="L212">    double height = scenario.room().heightMeters();</span>
+<span class="fc bfc" id="L213" title="All 2 branches covered.">    for (int xIndex = 0; xIndex &lt;= steps; xIndex++) {</span>
+<span class="fc bfc" id="L214" title="All 2 branches covered.">      for (int yIndex = 0; yIndex &lt;= steps; yIndex++) {</span>
+<span class="fc" id="L215">        grid.add(new Vector2(width * xIndex / steps, height * yIndex / steps));</span>
+      }
+    }
+<span class="fc" id="L218">    return grid;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

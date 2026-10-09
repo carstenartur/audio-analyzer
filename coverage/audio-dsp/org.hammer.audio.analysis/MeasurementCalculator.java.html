@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>MeasurementCalculator.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer DSP and Analysis</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.analysis</a> &gt; <span class="el_source">MeasurementCalculator.java</span></div><h1>MeasurementCalculator.java</h1><pre class="source lang-java linenums">package org.hammer.audio.analysis;
+
+import org.hammer.audio.core.AudioBlock;
+
+/** Computes robust aggregate UI measurements for the latest block/spectrum. */
+<span class="fc" id="L6">public final class MeasurementCalculator {</span>
+
+  private static final double CLIPPING_THRESHOLD = 0.999;
+  private static final double EPSILON = 1e-12;
+
+  /**
+   * Calculate current measurements.
+   *
+   * @param block latest audio block (may be {@code null})
+   * @param spectrum latest spectrum (may be {@code null})
+   * @return immutable measurement snapshot
+   */
+  public MeasurementSnapshot calculate(AudioBlock block, SpectrumSnapshot spectrum) {
+<span class="fc" id="L19">    double dominantFrequency = dominantFrequencyHz(spectrum);</span>
+<span class="pc bpc" id="L20" title="2 of 6 branches missed.">    if (block == null || block.channels() &lt;= 0 || block.frames() &lt;= 0) {</span>
+<span class="fc" id="L21">      return new MeasurementSnapshot(0.0, 0.0, dominantFrequency, Double.NaN, false, false);</span>
+    }
+
+<span class="fc" id="L24">    double sumSquares = 0.0;</span>
+<span class="fc" id="L25">    double peak = 0.0;</span>
+<span class="fc" id="L26">    long sampleCount = 0L;</span>
+<span class="fc" id="L27">    boolean clipping = false;</span>
+
+<span class="fc bfc" id="L29" title="All 2 branches covered.">    for (int channel = 0; channel &lt; block.channels(); channel++) {</span>
+<span class="fc" id="L30">      float[] samples = block.channelView(channel);</span>
+<span class="fc bfc" id="L31" title="All 2 branches covered.">      for (int i = 0; i &lt; block.frames(); i++) {</span>
+<span class="fc" id="L32">        double sample = samples[i];</span>
+<span class="fc" id="L33">        double absSample = Math.abs(sample);</span>
+<span class="fc" id="L34">        sumSquares += sample * sample;</span>
+<span class="fc" id="L35">        peak = Math.max(peak, absSample);</span>
+<span class="fc bfc" id="L36" title="All 2 branches covered.">        clipping |= absSample &gt;= CLIPPING_THRESHOLD;</span>
+<span class="fc" id="L37">        sampleCount++;</span>
+      }
+    }
+
+<span class="pc bpc" id="L41" title="1 of 2 branches missed.">    double rms = sampleCount == 0 ? 0.0 : Math.sqrt(sumSquares / sampleCount);</span>
+<span class="fc" id="L42">    double stereoCorrelation = stereoCorrelation(block);</span>
+<span class="fc bfc" id="L43" title="All 2 branches covered.">    boolean stereoCorrelationAvailable = !Double.isNaN(stereoCorrelation);</span>
+<span class="fc" id="L44">    return new MeasurementSnapshot(</span>
+        rms, peak, dominantFrequency, stereoCorrelation, stereoCorrelationAvailable, clipping);
+  }
+
+  private static double dominantFrequencyHz(SpectrumSnapshot spectrum) {
+<span class="pc bpc" id="L49" title="1 of 4 branches missed.">    if (spectrum == null || spectrum.binCount() &lt;= 1) {</span>
+<span class="fc" id="L50">      return Double.NaN;</span>
+    }
+<span class="fc" id="L52">    int peakBin = -1;</span>
+<span class="fc" id="L53">    float peakMagnitude = 0f;</span>
+<span class="fc bfc" id="L54" title="All 2 branches covered.">    for (int bin = 1; bin &lt; spectrum.binCount(); bin++) {</span>
+<span class="fc" id="L55">      float magnitude = spectrum.magnitude(bin);</span>
+<span class="fc bfc" id="L56" title="All 2 branches covered.">      if (magnitude &gt; peakMagnitude) {</span>
+<span class="fc" id="L57">        peakMagnitude = magnitude;</span>
+<span class="fc" id="L58">        peakBin = bin;</span>
+      }
+    }
+<span class="pc bpc" id="L61" title="1 of 2 branches missed.">    return peakBin &lt; 0 ? Double.NaN : spectrum.frequencyOfBin(peakBin);</span>
+  }
+
+  private static double stereoCorrelation(AudioBlock block) {
+<span class="pc bpc" id="L65" title="1 of 4 branches missed.">    if (block.channels() &lt; 2 || block.frames() &lt;= 0) {</span>
+<span class="fc" id="L66">      return Double.NaN;</span>
+    }
+<span class="fc" id="L68">    float[] left = block.channelView(0);</span>
+<span class="fc" id="L69">    float[] right = block.channelView(1);</span>
+<span class="fc" id="L70">    int frames = block.frames();</span>
+
+<span class="fc" id="L72">    double meanLeft = 0.0;</span>
+<span class="fc" id="L73">    double meanRight = 0.0;</span>
+<span class="fc bfc" id="L74" title="All 2 branches covered.">    for (int i = 0; i &lt; frames; i++) {</span>
+<span class="fc" id="L75">      meanLeft += left[i];</span>
+<span class="fc" id="L76">      meanRight += right[i];</span>
+    }
+<span class="fc" id="L78">    meanLeft /= frames;</span>
+<span class="fc" id="L79">    meanRight /= frames;</span>
+
+<span class="fc" id="L81">    double covariance = 0.0;</span>
+<span class="fc" id="L82">    double varianceLeft = 0.0;</span>
+<span class="fc" id="L83">    double varianceRight = 0.0;</span>
+<span class="fc bfc" id="L84" title="All 2 branches covered.">    for (int i = 0; i &lt; frames; i++) {</span>
+<span class="fc" id="L85">      double leftCentered = left[i] - meanLeft;</span>
+<span class="fc" id="L86">      double rightCentered = right[i] - meanRight;</span>
+<span class="fc" id="L87">      covariance += leftCentered * rightCentered;</span>
+<span class="fc" id="L88">      varianceLeft += leftCentered * leftCentered;</span>
+<span class="fc" id="L89">      varianceRight += rightCentered * rightCentered;</span>
+    }
+
+<span class="fc" id="L92">    double denominator = Math.sqrt(varianceLeft * varianceRight);</span>
+<span class="pc bpc" id="L93" title="1 of 2 branches missed.">    if (denominator &lt;= EPSILON) {</span>
+<span class="nc" id="L94">      return Double.NaN;</span>
+    }
+<span class="fc" id="L96">    double correlation = covariance / denominator;</span>
+<span class="pc bpc" id="L97" title="1 of 2 branches missed.">    if (correlation &gt; 1.0) {</span>
+<span class="nc" id="L98">      return 1.0;</span>
+    }
+<span class="pc bpc" id="L100" title="1 of 2 branches missed.">    if (correlation &lt; -1.0) {</span>
+<span class="nc" id="L101">      return -1.0;</span>
+    }
+<span class="fc" id="L103">    return correlation;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

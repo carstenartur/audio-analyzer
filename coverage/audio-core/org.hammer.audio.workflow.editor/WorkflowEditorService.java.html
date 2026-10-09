@@ -1,0 +1,317 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WorkflowEditorService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Core</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.editor</a> &gt; <span class="el_source">WorkflowEditorService.java</span></div><h1>WorkflowEditorService.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.editor;
+
+import java.util.List;
+import java.util.Objects;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Supplier;
+import org.hammer.audio.workflow.Workflow;
+import org.hammer.audio.workflow.WorkflowOperation;
+import org.hammer.audio.workflow.WorkflowOperationLog;
+import org.hammer.audio.workflow.WorkflowValidator;
+import org.hammer.audio.workflow.dsl.WorkflowDslParser;
+import org.hammer.audio.workflow.dsl.WorkflowDslSerializer;
+import org.hammer.audio.workflow.store.CommitId;
+import org.hammer.audio.workflow.store.CommitInfo;
+import org.hammer.audio.workflow.store.CommitMetadata;
+import org.hammer.audio.workflow.store.VersionedWorkflowStore;
+import org.hammer.audio.workflow.store.WorkflowSnapshot;
+
+/**
+ * Application-service boundary for the single-user React Flow workbench MVP (issue #210).
+ *
+ * &lt;p&gt;This service is the single server-authoritative entry point for graph editing, validation,
+ * save/reload/history and execution handoff. Browser adapters call this service through a thin HTTP
+ * layer; they must not access DSL, JGit, storage internals or mutable UI state as canonical
+ * workflow state.
+ *
+ * &lt;p&gt;&lt;b&gt;Thread safety&lt;/b&gt;: public state access is serialised on a private reentrant lock.
+ * Validation, dirty-state checks and graph replacement therefore form one atomic editor transition.
+ *
+ * &lt;p&gt;&lt;b&gt;Dependency rules&lt;/b&gt;: this class must not depend on Swing, JGit, React, Yjs, Selenium,
+ * Playwright, Testcontainers or any web framework. It is a pure Java application service.
+ */
+public final class WorkflowEditorService {
+
+<span class="fc" id="L36">  private final Lock stateLock = new ReentrantLock();</span>
+  private final WorkflowOperationLog operationLog;
+  private final WorkflowValidator validator;
+  private final VersionedWorkflowStore workflowStore;
+  private final WorkflowDslSerializer serializer;
+  private final WorkflowDslParser parser;
+  private boolean dirty;
+
+  /**
+   * Creates a service backed by the given operation log and validator.
+   *
+   * @param operationLog operation log holding the current workflow state
+   * @param validator structural workflow validator
+   */
+  public WorkflowEditorService(WorkflowOperationLog operationLog, WorkflowValidator validator) {
+<span class="fc" id="L51">    this(operationLog, validator, null);</span>
+<span class="fc" id="L52">  }</span>
+
+  /**
+   * Creates a service backed by the given operation log, validator and checkpoint store.
+   *
+   * @param operationLog operation log holding the current workflow state
+   * @param validator structural workflow validator
+   * @param workflowStore workflow checkpoint store; may be {@code null} for non-persistent usage
+   */
+  public WorkflowEditorService(
+      WorkflowOperationLog operationLog,
+      WorkflowValidator validator,
+<span class="fc" id="L64">      VersionedWorkflowStore workflowStore) {</span>
+<span class="fc" id="L65">    this.operationLog = Objects.requireNonNull(operationLog, &quot;operationLog&quot;);</span>
+<span class="fc" id="L66">    this.validator = Objects.requireNonNull(validator, &quot;validator&quot;);</span>
+<span class="fc" id="L67">    this.workflowStore = workflowStore;</span>
+<span class="fc" id="L68">    this.serializer = new WorkflowDslSerializer();</span>
+<span class="fc" id="L69">    this.parser = new WorkflowDslParser();</span>
+<span class="fc" id="L70">  }</span>
+
+  /**
+   * Applies a workflow operation if it produces a valid workflow, or rejects it otherwise.
+   *
+   * &lt;p&gt;The operation is first applied to a candidate copy of the current workflow (no side
+   * effects). If the candidate passes validation the operation is recorded in the log and the
+   * updated projection is returned. If validation fails the log is left unchanged and {@link
+   * WorkflowOperationRejectedException} is thrown.
+   *
+   * @param operation operation to apply
+   * @return updated projection reflecting the new workflow state
+   * @throws WorkflowOperationRejectedException if the resulting workflow violates structural rules
+   * @throws IllegalArgumentException if the operation references nodes or ports that do not exist
+   */
+  public WorkflowProjection applyOperation(WorkflowOperation operation) {
+<span class="fc" id="L86">    return withStateLock(</span>
+        () -&gt; {
+<span class="fc" id="L88">          Objects.requireNonNull(operation, &quot;operation&quot;);</span>
+<span class="fc" id="L89">          Workflow candidate = operation.apply(operationLog.currentWorkflow());</span>
+<span class="fc" id="L90">          List&lt;String&gt; violations = validator.validate(candidate);</span>
+<span class="fc bfc" id="L91" title="All 2 branches covered.">          if (!violations.isEmpty()) {</span>
+<span class="fc" id="L92">            throw new WorkflowOperationRejectedException(violations);</span>
+          }
+<span class="fc" id="L94">          operationLog.apply(operation);</span>
+<span class="fc" id="L95">          dirty = true;</span>
+<span class="fc" id="L96">          return WorkflowProjection.fromWorkflow(operationLog.currentWorkflow());</span>
+        });
+  }
+
+  /** Returns whether the editable workflow differs from its last clean load/checkpoint state. */
+  public boolean isDirty() {
+<span class="fc" id="L102">    return withStateLock(() -&gt; dirty);</span>
+  }
+
+  /**
+   * Returns the projection of the current workflow state without applying any operation.
+   *
+   * @return current projection
+   */
+  public WorkflowProjection currentProjection() {
+<span class="fc" id="L111">    return withStateLock(() -&gt; WorkflowProjection.fromWorkflow(operationLog.currentWorkflow()));</span>
+  }
+
+  /**
+   * Loads the given workflow into the editor as a clean canonical state.
+   *
+   * @param workflow workflow to load
+   * @return projection of the loaded workflow
+   * @throws WorkflowOperationRejectedException if the workflow is structurally invalid
+   */
+  public WorkflowProjection loadGraph(Workflow workflow) {
+<span class="nc" id="L122">    return withStateLock(() -&gt; replaceGraph(workflow, false));</span>
+  }
+
+  /**
+   * Replaces the editable workflow with an already confirmed imported setup and marks it unsaved.
+   *
+   * @param workflow already previewed workflow to import
+   * @return projection of the imported workflow
+   * @throws WorkflowOperationRejectedException if the workflow is structurally invalid
+   */
+  public WorkflowProjection importGraph(Workflow workflow) {
+<span class="fc" id="L133">    return withStateLock(() -&gt; replaceGraph(workflow, true));</span>
+  }
+
+  /**
+   * Atomically imports a workflow, rejecting unsaved current state unless discard was confirmed.
+   *
+   * @param workflow already previewed workflow to import
+   * @param discardDirty whether the caller explicitly confirmed discarding unsaved state
+   * @return projection of the imported workflow
+   * @throws DirtyWorkflowException when current state is dirty and discard was not confirmed
+   * @throws WorkflowOperationRejectedException if the workflow is structurally invalid
+   */
+  public WorkflowProjection importGraph(Workflow workflow, boolean discardDirty) {
+<span class="nc" id="L146">    return withStateLock(</span>
+        () -&gt; {
+<span class="nc bnc" id="L148" title="All 4 branches missed.">          if (dirty &amp;&amp; !discardDirty) {</span>
+<span class="nc" id="L149">            throw new DirtyWorkflowException();</span>
+          }
+<span class="nc" id="L151">          return replaceGraph(workflow, true);</span>
+        });
+  }
+
+  /**
+   * Loads the graph from the current HEAD of a branch in the configured store.
+   *
+   * @param branch branch to load
+   * @return projection of the loaded workflow
+   * @throws IllegalArgumentException if branch is blank or snapshot and DSL workflow IDs diverge
+   */
+  public WorkflowProjection loadGraph(String branch) {
+<span class="fc" id="L163">    return withStateLock(</span>
+        () -&gt; {
+<span class="fc" id="L165">          Objects.requireNonNull(branch, &quot;branch&quot;);</span>
+<span class="fc bfc" id="L166" title="All 2 branches covered.">          if (branch.isBlank()) {</span>
+<span class="fc" id="L167">            throw new IllegalArgumentException(&quot;branch must not be blank&quot;);</span>
+          }
+<span class="fc" id="L169">          VersionedWorkflowStore store = requireStore();</span>
+<span class="fc" id="L170">          WorkflowSnapshot snapshot = store.loadHead(branch);</span>
+<span class="fc" id="L171">          Workflow workflow = parser.parse(snapshot.dslText());</span>
+<span class="fc" id="L172">          assertSnapshotIdMatchesDsl(snapshot.workflowId(), workflow.id());</span>
+<span class="fc" id="L173">          return replaceGraph(workflow, false);</span>
+        });
+  }
+
+  /**
+   * Loads the graph at a specific commit in the configured store.
+   *
+   * @param commitId commit identifier to load
+   * @return projection of the loaded workflow
+   * @throws IllegalArgumentException if snapshot and DSL workflow IDs diverge
+   */
+  public WorkflowProjection loadGraph(CommitId commitId) {
+<span class="fc" id="L185">    return withStateLock(</span>
+        () -&gt; {
+<span class="fc" id="L187">          Objects.requireNonNull(commitId, &quot;commitId&quot;);</span>
+<span class="fc" id="L188">          VersionedWorkflowStore store = requireStore();</span>
+<span class="fc" id="L189">          WorkflowSnapshot snapshot = store.loadAtCommit(commitId);</span>
+<span class="fc" id="L190">          Workflow workflow = parser.parse(snapshot.dslText());</span>
+<span class="fc" id="L191">          assertSnapshotIdMatchesDsl(snapshot.workflowId(), workflow.id());</span>
+<span class="fc" id="L192">          return replaceGraph(workflow, false);</span>
+        });
+  }
+
+  /**
+   * Validates the current graph state.
+   *
+   * @return list of structural validation violations; empty when valid
+   */
+  public List&lt;String&gt; validate() {
+<span class="nc" id="L202">    return withStateLock(() -&gt; validator.validate(operationLog.currentWorkflow()));</span>
+  }
+
+  /**
+   * Persists a checkpoint of the current graph state in the configured store.
+   *
+   * &lt;p&gt;The current workflow is validated before persisting; if it is structurally invalid the
+   * checkpoint is rejected and no commit is created.
+   *
+   * @param branch branch to commit to
+   * @param metadata commit metadata (author/message/timestamp)
+   * @return commit id of the created checkpoint
+   * @throws IllegalArgumentException if branch is blank
+   * @throws WorkflowOperationRejectedException if the current workflow is structurally invalid
+   */
+  public CommitId checkpoint(String branch, CommitMetadata metadata) {
+<span class="fc" id="L218">    return withStateLock(</span>
+        () -&gt; {
+<span class="fc" id="L220">          Objects.requireNonNull(branch, &quot;branch&quot;);</span>
+<span class="fc bfc" id="L221" title="All 2 branches covered.">          if (branch.isBlank()) {</span>
+<span class="fc" id="L222">            throw new IllegalArgumentException(&quot;branch must not be blank&quot;);</span>
+          }
+<span class="fc" id="L224">          Objects.requireNonNull(metadata, &quot;metadata&quot;);</span>
+<span class="fc" id="L225">          Workflow workflow = operationLog.currentWorkflow();</span>
+<span class="fc" id="L226">          List&lt;String&gt; violations = validator.validate(workflow);</span>
+<span class="pc bpc" id="L227" title="1 of 2 branches missed.">          if (!violations.isEmpty()) {</span>
+<span class="nc" id="L228">            throw new WorkflowOperationRejectedException(violations);</span>
+          }
+<span class="fc" id="L230">          VersionedWorkflowStore store = requireStore();</span>
+<span class="fc" id="L231">          WorkflowSnapshot snapshot =</span>
+<span class="fc" id="L232">              new WorkflowSnapshot(workflow.id(), serializer.serialize(workflow));</span>
+<span class="fc" id="L233">          CommitId commitId = store.commit(branch, snapshot, metadata);</span>
+<span class="fc" id="L234">          dirty = false;</span>
+<span class="fc" id="L235">          return commitId;</span>
+        });
+  }
+
+  /**
+   * Lists recent checkpoint commits for a branch/reference.
+   *
+   * @param refName branch or ref
+   * @param limit max entries to return; must be &amp;ge; 0
+   * @return reverse-chronological commit summaries
+   * @throws IllegalArgumentException if refName is blank or limit is negative
+   */
+  public List&lt;CommitInfo&gt; history(String refName, int limit) {
+<span class="fc" id="L248">    return withStateLock(</span>
+        () -&gt; {
+<span class="fc" id="L250">          Objects.requireNonNull(refName, &quot;refName&quot;);</span>
+<span class="fc bfc" id="L251" title="All 2 branches covered.">          if (refName.isBlank()) {</span>
+<span class="fc" id="L252">            throw new IllegalArgumentException(&quot;refName must not be blank&quot;);</span>
+          }
+<span class="fc bfc" id="L254" title="All 2 branches covered.">          if (limit &lt; 0) {</span>
+<span class="fc" id="L255">            throw new IllegalArgumentException(&quot;limit must be &gt;= 0&quot;);</span>
+          }
+<span class="fc" id="L257">          VersionedWorkflowStore store = requireStore();</span>
+<span class="fc" id="L258">          return store.history(refName, limit);</span>
+        });
+  }
+
+  /**
+   * Produces a deterministic DSL snapshot of the current graph state for execution handoff.
+   *
+   * &lt;p&gt;This is not yet a full execution plan. It is the stable workflow snapshot consumed by the
+   * future execution-integration layer from issue #211.
+   *
+   * @return immutable workflow snapshot
+   */
+  public WorkflowSnapshot executeSnapshot() {
+<span class="fc" id="L271">    return withStateLock(</span>
+        () -&gt; {
+<span class="fc" id="L273">          Workflow workflow = operationLog.currentWorkflow();</span>
+<span class="fc" id="L274">          return new WorkflowSnapshot(workflow.id(), serializer.serialize(workflow));</span>
+        });
+  }
+
+  private &lt;T&gt; T withStateLock(Supplier&lt;T&gt; action) {
+<span class="fc" id="L279">    Objects.requireNonNull(action, &quot;action&quot;);</span>
+<span class="fc" id="L280">    stateLock.lock();</span>
+    try {
+<span class="fc" id="L282">      return action.get();</span>
+    } finally {
+<span class="fc" id="L284">      stateLock.unlock();</span>
+    }
+  }
+
+  private WorkflowProjection replaceGraph(Workflow workflow, boolean imported) {
+<span class="fc" id="L289">    Objects.requireNonNull(workflow, &quot;workflow&quot;);</span>
+<span class="fc" id="L290">    List&lt;String&gt; violations = validator.validate(workflow);</span>
+<span class="fc bfc" id="L291" title="All 2 branches covered.">    if (!violations.isEmpty()) {</span>
+<span class="fc" id="L292">      throw new WorkflowOperationRejectedException(violations);</span>
+    }
+<span class="fc" id="L294">    operationLog.reset(workflow);</span>
+<span class="fc" id="L295">    dirty = imported;</span>
+<span class="fc" id="L296">    return WorkflowProjection.fromWorkflow(workflow);</span>
+  }
+
+  private VersionedWorkflowStore requireStore() {
+<span class="fc bfc" id="L300" title="All 2 branches covered.">    if (workflowStore == null) {</span>
+<span class="fc" id="L301">      throw new IllegalStateException(&quot;workflowStore is not configured&quot;);</span>
+    }
+<span class="fc" id="L303">    return workflowStore;</span>
+  }
+
+  private static void assertSnapshotIdMatchesDsl(String snapshotId, String dslId) {
+<span class="pc bpc" id="L307" title="1 of 2 branches missed.">    if (!snapshotId.equals(dslId)) {</span>
+<span class="nc" id="L308">      throw new IllegalArgumentException(</span>
+          &quot;snapshot workflowId '&quot;
+              + snapshotId
+              + &quot;' does not match DSL workflow id '&quot;
+              + dslId
+              + &quot;'&quot;);
+    }
+<span class="fc" id="L315">  }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

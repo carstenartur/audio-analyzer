@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>Room2D.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.simulation</a> &gt; <span class="el_source">Room2D.java</span></div><h1>Room2D.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.simulation;
+
+import org.hammer.audio.geometry.Vector2;
+
+/** Rectangular 2D virtual room for deterministic localization experiments. */
+public record Room2D(
+    double widthMeters, double heightMeters, double reflectionGain, double noiseAmplitude) {
+
+  /** Create room parameters. */
+<span class="fc" id="L10">  public Room2D {</span>
+<span class="pc bpc" id="L11" title="2 of 4 branches missed.">    if (!(widthMeters &gt; 0.0)</span>
+        || !(heightMeters &gt; 0.0)
+<span class="pc bpc" id="L13" title="1 of 2 branches missed.">        || !Double.isFinite(widthMeters)</span>
+<span class="pc bpc" id="L14" title="1 of 2 branches missed.">        || !Double.isFinite(heightMeters)) {</span>
+<span class="nc" id="L15">      throw new IllegalArgumentException(&quot;room dimensions must be finite and &gt; 0&quot;);</span>
+    }
+<span class="pc bpc" id="L17" title="3 of 6 branches missed.">    if (reflectionGain &lt; 0.0 || reflectionGain &gt; 1.0 || !Double.isFinite(reflectionGain)) {</span>
+<span class="nc" id="L18">      throw new IllegalArgumentException(&quot;reflectionGain must be finite and in [0,1]&quot;);</span>
+    }
+<span class="pc bpc" id="L20" title="3 of 6 branches missed.">    if (noiseAmplitude &lt; 0.0 || noiseAmplitude &gt; 1.0 || !Double.isFinite(noiseAmplitude)) {</span>
+<span class="nc" id="L21">      throw new IllegalArgumentException(&quot;noiseAmplitude must be finite and in [0,1]&quot;);</span>
+    }
+<span class="fc" id="L23">  }</span>
+
+  /** Return whether a point is inside the room. */
+  public boolean contains(Vector2 position) {
+<span class="nc bnc" id="L27" title="All 2 branches missed.">    return position.x() &gt;= 0.0</span>
+<span class="nc bnc" id="L28" title="All 2 branches missed.">        &amp;&amp; position.x() &lt;= widthMeters</span>
+<span class="nc bnc" id="L29" title="All 2 branches missed.">        &amp;&amp; position.y() &gt;= 0.0</span>
+<span class="nc bnc" id="L30" title="All 2 branches missed.">        &amp;&amp; position.y() &lt;= heightMeters;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

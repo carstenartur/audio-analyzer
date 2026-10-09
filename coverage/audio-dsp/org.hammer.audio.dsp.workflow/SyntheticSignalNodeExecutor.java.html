@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>SyntheticSignalNodeExecutor.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer DSP and Analysis</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.dsp.workflow</a> &gt; <span class="el_source">SyntheticSignalNodeExecutor.java</span></div><h1>SyntheticSignalNodeExecutor.java</h1><pre class="source lang-java linenums">package org.hammer.audio.dsp.workflow;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+import org.hammer.audio.core.AudioBlock;
+import org.hammer.audio.core.AudioFormatDescriptor;
+import org.hammer.audio.dsp.workflow.DeterministicAudioParameters.SyntheticSignal;
+import org.hammer.audio.signal.SineGenerator;
+import org.hammer.audio.workflow.Edge;
+import org.hammer.audio.workflow.Node;
+import org.hammer.audio.workflow.catalog.ExperimentNodeProtocol;
+import org.hammer.audio.workflow.execution.WorkflowRunModels.Control;
+import org.hammer.audio.workflow.execution.WorkflowRunModels.Violation;
+
+/** Executes one deterministic synthetic sine-wave source in bounded chunks. */
+<span class="fc" id="L17">final class SyntheticSignalNodeExecutor implements DeterministicAudioNodeExecutor {</span>
+
+  private static final int SOURCE_SAMPLE_SIZE_BITS = 32;
+  private static final int CHUNK_FRAMES = 4_096;
+
+  @Override
+  public String nodeType() {
+<span class="fc" id="L24">    return ExperimentNodeProtocol.TYPE_SYNTHETIC_SIGNAL_GENERATOR;</span>
+  }
+
+  @Override
+  public List&lt;Violation&gt; validate(Node node, List&lt;Edge&gt; incomingEdges) {
+<span class="fc" id="L29">    Objects.requireNonNull(node, &quot;node&quot;);</span>
+<span class="fc" id="L30">    Objects.requireNonNull(incomingEdges, &quot;incomingEdges&quot;);</span>
+<span class="fc" id="L31">    List&lt;Violation&gt; violations = new ArrayList&lt;&gt;();</span>
+<span class="pc bpc" id="L32" title="1 of 2 branches missed.">    if (!incomingEdges.isEmpty()) {</span>
+<span class="nc" id="L33">      violations.add(</span>
+          new Violation(
+              DeterministicAudioDiagnostics.INVALID_TOPOLOGY,
+              &quot;Synthetic signal generators must not have incoming edges&quot;,
+<span class="nc" id="L37">              node.id()));</span>
+    }
+    try {
+<span class="fc" id="L40">      DeterministicAudioParameters.parseSyntheticSignal(node);</span>
+<span class="fc" id="L41">    } catch (IllegalArgumentException exception) {</span>
+<span class="fc" id="L42">      violations.add(</span>
+          new Violation(
+<span class="fc" id="L44">              DeterministicAudioDiagnostics.INVALID_PARAMETER, exception.getMessage(), node.id()));</span>
+<span class="fc" id="L45">    }</span>
+<span class="fc" id="L46">    return List.copyOf(violations);</span>
+  }
+
+  @Override
+  public AudioBlock execute(Node node, AudioBlock input, Control control) {
+<span class="fc" id="L51">    Objects.requireNonNull(node, &quot;node&quot;);</span>
+<span class="fc" id="L52">    Objects.requireNonNull(control, &quot;control&quot;);</span>
+<span class="pc bpc" id="L53" title="1 of 2 branches missed.">    if (input != null) {</span>
+<span class="nc" id="L54">      throw new IllegalArgumentException(&quot;Synthetic signal sources must not receive audio input&quot;);</span>
+    }
+<span class="fc" id="L56">    SyntheticSignal parameters = DeterministicAudioParameters.parseSyntheticSignal(node);</span>
+<span class="fc" id="L57">    AudioFormatDescriptor format =</span>
+        new AudioFormatDescriptor(
+<span class="fc" id="L59">            parameters.sampleRateHz(), parameters.channels(), SOURCE_SAMPLE_SIZE_BITS);</span>
+<span class="fc" id="L60">    SineGenerator generator =</span>
+        new SineGenerator(
+<span class="fc" id="L62">            format, parameters.frequencyHz(), parameters.amplitude(), parameters.phaseRadians());</span>
+<span class="fc" id="L63">    float[][] samples = new float[parameters.channels()][parameters.frameCount()];</span>
+<span class="fc" id="L64">    int offset = 0;</span>
+<span class="fc bfc" id="L65" title="All 2 branches covered.">    while (offset &lt; parameters.frameCount()) {</span>
+<span class="fc" id="L66">      requireNotCancelled(control);</span>
+<span class="fc" id="L67">      int frames = Math.min(CHUNK_FRAMES, parameters.frameCount() - offset);</span>
+<span class="fc" id="L68">      AudioBlock chunk = generator.nextBlock(frames);</span>
+<span class="fc" id="L69">      copyInto(chunk, samples, offset);</span>
+<span class="fc" id="L70">      offset += frames;</span>
+<span class="fc" id="L71">    }</span>
+<span class="fc" id="L72">    requireNotCancelled(control);</span>
+<span class="fc" id="L73">    return AudioBlock.wrap(format, samples, 0L, 0L);</span>
+  }
+
+  private static void copyInto(AudioBlock source, float[][] target, int offset) {
+<span class="fc bfc" id="L77" title="All 2 branches covered.">    for (int channel = 0; channel &lt; source.channels(); channel++) {</span>
+<span class="fc" id="L78">      System.arraycopy(source.channelView(channel), 0, target[channel], offset, source.frames());</span>
+    }
+<span class="fc" id="L80">  }</span>
+
+  private static void requireNotCancelled(Control control) {
+<span class="fc bfc" id="L83" title="All 2 branches covered.">    if (control.cancellationRequested()) {</span>
+<span class="fc" id="L84">      throw new DeterministicAudioCancellationException();</span>
+    }
+<span class="fc" id="L86">  }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ExperimentDocumentContribution.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Plugin API</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.plugin.document</a> &gt; <span class="el_source">ExperimentDocumentContribution.java</span></div><h1>ExperimentDocumentContribution.java</h1><pre class="source lang-java linenums">package org.hammer.audio.plugin.document;
+
+import java.util.List;
+import java.util.Set;
+
+/**
+ * Stable plugin contract for one namespaced section of a portable experiment document.
+ *
+ * &lt;p&gt;The host performs bounded JSON parsing, schema parsing, migration orchestration, canonical
+ * serialization and hashing. Implementations validate only the already bounded section value and
+ * must not open devices, read files, fetch URLs or execute an experiment.
+ */
+public interface ExperimentDocumentContribution {
+
+  /** Stable section id unique within the declaring plugin. */
+  String sectionId();
+
+  /** Current positive schema version. */
+  int schemaVersion();
+
+  /** Algorithm-behaviour compatibility identifier, independent of plugin package version. */
+  String algorithmVersion();
+
+  /** Human-readable section name. */
+  String name();
+
+  /** Human-readable section description. */
+  String description();
+
+  /** Whether missing or incompatible data blocks experiment execution. */
+  boolean requiredForExecution();
+
+  /** Stable local schema identifier; it is never dereferenced as an arbitrary network URL. */
+  String schemaId();
+
+  /** Bundled JSON Schema text for the section's {@code data} value. */
+  String schemaJson();
+
+  /** Lower-case SHA-256 of the canonical bundled schema. */
+  String schemaSha256();
+
+  /** Explicit migrations. Each migration must advance exactly one supported version step. */
+  default List&lt;ExperimentSectionMigration&gt; migrations() {
+<span class="nc" id="L44">    return List.of();</span>
+  }
+
+  /** Source modes for which this section is meaningful; empty means unrestricted. */
+  default Set&lt;String&gt; supportedSourceModes() {
+<span class="nc" id="L49">    return Set.of();</span>
+  }
+
+  /** Perform side-effect-free semantic validation and deterministic normalization. */
+  DocumentValidationResult validateAndNormalize(DocumentValue value);
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

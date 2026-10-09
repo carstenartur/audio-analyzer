@@ -1,0 +1,253 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WingbeatFeatureExtractor.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.wingbeat</a> &gt; <span class="el_source">WingbeatFeatureExtractor.java</span></div><h1>WingbeatFeatureExtractor.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.wingbeat;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Objects;
+import org.hammer.audio.analysis.Fft;
+import org.hammer.audio.core.AudioBlock;
+import org.hammer.audio.experimental.acoustic.FrequencyBand;
+import org.hammer.audio.experimental.acoustic.tracking.TrackedSource;
+
+/**
+ * Extracts a {@link WingbeatFeatureVector} from a tracked acoustic source.
+ *
+ * &lt;p&gt;Two extraction modes are supported:
+ *
+ * &lt;ul&gt;
+ *   &lt;li&gt;&lt;em&gt;Metadata-only extraction&lt;/em&gt; uses the fields carried in a {@link TrackedSource}
+ *       (frequency, variance, confidence, observation count). This is the minimal path when no
+ *       audio block is available. Harmonic amplitudes, spectral centroid, bandwidth and SNR default
+ *       to zero or empty lists.
+ *   &lt;li&gt;&lt;em&gt;Audio-enhanced extraction&lt;/em&gt; additionally analyses the FFT spectrum of a live {@link
+ *       AudioBlock} to compute harmonic amplitudes, spectral centroid, spectral bandwidth and
+ *       signal-to-noise ratio.
+ * &lt;/ul&gt;
+ *
+ * &lt;p&gt;This extractor is stateless. Frequency drift and amplitude-modulation estimates default to
+ * {@code 0}. Callers that need those features must accumulate sequential {@link
+ * WingbeatFeatureVector} instances and compute drift/modulation externally.
+ */
+public final class WingbeatFeatureExtractor {
+
+  private static final int DEFAULT_HARMONIC_COUNT = 4;
+
+  private final int fftSize;
+  private final FrequencyBand searchBand;
+  private final Fft fft;
+  private final int harmonicCount;
+
+  /**
+   * Create an extractor with a custom harmonic count.
+   *
+   * @param fftSize FFT window size in samples; must be a power of two and {@code &gt;= 256}
+   * @param searchBand frequency band to analyse; must not be {@code null}
+   * @param harmonicCount number of harmonics to extract ({@code &gt;= 1})
+   */
+<span class="fc" id="L47">  public WingbeatFeatureExtractor(int fftSize, FrequencyBand searchBand, int harmonicCount) {</span>
+<span class="fc bfc" id="L48" title="All 4 branches covered.">    if (fftSize &lt; 256 || Integer.bitCount(fftSize) != 1) {</span>
+<span class="fc" id="L49">      throw new IllegalArgumentException(&quot;fftSize must be a power of two &gt;= 256&quot;);</span>
+    }
+<span class="fc bfc" id="L51" title="All 2 branches covered.">    if (harmonicCount &lt; 1) {</span>
+<span class="fc" id="L52">      throw new IllegalArgumentException(&quot;harmonicCount must be &gt;= 1&quot;);</span>
+    }
+<span class="fc" id="L54">    this.fftSize = fftSize;</span>
+<span class="fc" id="L55">    this.searchBand = Objects.requireNonNull(searchBand, &quot;searchBand&quot;);</span>
+<span class="fc" id="L56">    this.fft = new Fft(fftSize);</span>
+<span class="fc" id="L57">    this.harmonicCount = harmonicCount;</span>
+<span class="fc" id="L58">  }</span>
+
+  /**
+   * Create an extractor with the default harmonic count of {@value #DEFAULT_HARMONIC_COUNT}.
+   *
+   * @param fftSize FFT window size in samples; must be a power of two and {@code &gt;= 256}
+   * @param searchBand frequency band to analyse; must not be {@code null}
+   */
+  public WingbeatFeatureExtractor(int fftSize, FrequencyBand searchBand) {
+<span class="fc" id="L67">    this(fftSize, searchBand, DEFAULT_HARMONIC_COUNT);</span>
+<span class="fc" id="L68">  }</span>
+
+  /**
+   * Extract features using only tracking metadata; no audio block is required.
+   *
+   * &lt;p&gt;The resulting vector has empty harmonic lists; spectral centroid defaults to the tracked
+   * frequency; spectral bandwidth is approximated from the frequency jitter. Drift and amplitude
+   * modulation default to {@code 0}.
+   *
+   * @param source the tracked source; must not be {@code null}
+   * @param trackDurationSeconds time since the source was first observed, in seconds; must be
+   *     finite and {@code &gt;= 0}
+   * @return extracted feature vector
+   */
+  public WingbeatFeatureVector extract(TrackedSource source, double trackDurationSeconds) {
+<span class="fc" id="L83">    Objects.requireNonNull(source, &quot;source&quot;);</span>
+<span class="fc" id="L84">    validateDuration(trackDurationSeconds);</span>
+<span class="fc" id="L85">    double jitter = Math.sqrt(source.frequencyVarianceHzSquared());</span>
+<span class="fc" id="L86">    return new WingbeatFeatureVector(</span>
+<span class="fc" id="L87">        source.frequencyHz(),</span>
+<span class="fc" id="L88">        List.of(),</span>
+<span class="fc" id="L89">        List.of(),</span>
+<span class="fc" id="L90">        source.frequencyHz(),</span>
+        jitter,
+        0.0,
+        jitter,
+        0.0,
+        0.0,
+        trackDurationSeconds,
+<span class="fc" id="L97">        source.confidence());</span>
+  }
+
+  /**
+   * Extract features using a live audio block for full spectral analysis.
+   *
+   * &lt;p&gt;This mode computes harmonic amplitudes and ratios, spectral centroid, spectral bandwidth and
+   * signal-to-noise ratio in addition to the metadata-derived features.
+   *
+   * @param source the tracked source; must not be {@code null}
+   * @param block the audio block to analyse; must not be {@code null}
+   * @param channel index of the channel to analyse; must be a valid channel for {@code block}
+   * @param trackDurationSeconds time since the source was first observed, in seconds; must be
+   *     finite and {@code &gt;= 0}
+   * @return extracted feature vector
+   */
+  public WingbeatFeatureVector extract(
+      TrackedSource source, AudioBlock block, int channel, double trackDurationSeconds) {
+<span class="fc" id="L115">    Objects.requireNonNull(source, &quot;source&quot;);</span>
+<span class="fc" id="L116">    Objects.requireNonNull(block, &quot;block&quot;);</span>
+<span class="pc bpc" id="L117" title="1 of 4 branches missed.">    if (channel &lt; 0 || channel &gt;= block.channels()) {</span>
+<span class="fc" id="L118">      throw new IllegalArgumentException(</span>
+<span class="fc" id="L119">          &quot;channel &quot; + channel + &quot; out of range for block with &quot; + block.channels() + &quot; channels&quot;);</span>
+    }
+<span class="fc" id="L121">    validateDuration(trackDurationSeconds);</span>
+
+<span class="fc" id="L123">    float[] magnitudes = computeMagnitudes(block, channel);</span>
+<span class="fc" id="L124">    double sampleRate = block.format().sampleRate();</span>
+
+<span class="fc" id="L126">    double centroid = spectralCentroid(magnitudes, sampleRate);</span>
+<span class="fc" id="L127">    double bandwidth = spectralBandwidth(magnitudes, sampleRate, centroid);</span>
+<span class="fc" id="L128">    double snr = signalToNoiseRatio(magnitudes, sampleRate, source.frequencyHz());</span>
+<span class="fc" id="L129">    List&lt;Double&gt; amplitudes = harmonicAmplitudes(magnitudes, sampleRate, source.frequencyHz());</span>
+<span class="fc" id="L130">    List&lt;Double&gt; ratios = harmonicRatios(amplitudes);</span>
+<span class="fc" id="L131">    double jitter = Math.sqrt(source.frequencyVarianceHzSquared());</span>
+
+<span class="fc" id="L133">    return new WingbeatFeatureVector(</span>
+<span class="fc" id="L134">        source.frequencyHz(),</span>
+        amplitudes,
+        ratios,
+        centroid,
+        bandwidth,
+        0.0,
+        jitter,
+        0.0,
+        snr,
+        trackDurationSeconds,
+<span class="fc" id="L144">        source.confidence());</span>
+  }
+
+  private float[] computeMagnitudes(AudioBlock block, int channel) {
+<span class="fc" id="L148">    float[] samples = block.channelView(channel);</span>
+<span class="fc" id="L149">    float[] re = new float[fftSize];</span>
+<span class="fc" id="L150">    float[] im = new float[fftSize];</span>
+<span class="fc" id="L151">    int copied = Math.min(samples.length, fftSize);</span>
+<span class="fc" id="L152">    System.arraycopy(samples, 0, re, 0, copied);</span>
+<span class="fc" id="L153">    applyHannWindow(re, copied);</span>
+<span class="fc" id="L154">    fft.forward(re, im);</span>
+<span class="fc" id="L155">    float[] magnitudes = new float[fftSize / 2 + 1];</span>
+<span class="fc" id="L156">    fft.magnitudesOneSided(re, im, magnitudes);</span>
+<span class="fc" id="L157">    return magnitudes;</span>
+  }
+
+  private double spectralCentroid(float[] magnitudes, double sampleRate) {
+<span class="fc" id="L161">    int lowBin = frequencyToBin(searchBand.lowHz(), sampleRate);</span>
+<span class="fc" id="L162">    int highBin = Math.min(magnitudes.length - 1, frequencyToBin(searchBand.highHz(), sampleRate));</span>
+<span class="fc" id="L163">    double weightedFreq = 0.0;</span>
+<span class="fc" id="L164">    double totalWeight = 0.0;</span>
+<span class="fc bfc" id="L165" title="All 2 branches covered.">    for (int bin = lowBin; bin &lt;= highBin; bin++) {</span>
+<span class="fc" id="L166">      double freq = binToFrequency(bin, sampleRate);</span>
+<span class="fc" id="L167">      double mag = magnitudes[bin];</span>
+<span class="fc" id="L168">      weightedFreq += freq * mag;</span>
+<span class="fc" id="L169">      totalWeight += mag;</span>
+    }
+<span class="pc bpc" id="L171" title="1 of 2 branches missed.">    return totalWeight &gt; 0.0 ? weightedFreq / totalWeight : searchBand.lowHz();</span>
+  }
+
+  private double spectralBandwidth(float[] magnitudes, double sampleRate, double centroidHz) {
+<span class="fc" id="L175">    int lowBin = frequencyToBin(searchBand.lowHz(), sampleRate);</span>
+<span class="fc" id="L176">    int highBin = Math.min(magnitudes.length - 1, frequencyToBin(searchBand.highHz(), sampleRate));</span>
+<span class="fc" id="L177">    double weightedVariance = 0.0;</span>
+<span class="fc" id="L178">    double totalWeight = 0.0;</span>
+<span class="fc bfc" id="L179" title="All 2 branches covered.">    for (int bin = lowBin; bin &lt;= highBin; bin++) {</span>
+<span class="fc" id="L180">      double freq = binToFrequency(bin, sampleRate);</span>
+<span class="fc" id="L181">      double mag = magnitudes[bin];</span>
+<span class="fc" id="L182">      double deviation = freq - centroidHz;</span>
+<span class="fc" id="L183">      weightedVariance += deviation * deviation * mag;</span>
+<span class="fc" id="L184">      totalWeight += mag;</span>
+    }
+<span class="pc bpc" id="L186" title="1 of 2 branches missed.">    return totalWeight &gt; 0.0 ? Math.sqrt(weightedVariance / totalWeight) : 0.0;</span>
+  }
+
+  private double signalToNoiseRatio(float[] magnitudes, double sampleRate, double fundamentalHz) {
+<span class="fc" id="L190">    int lowBin = frequencyToBin(searchBand.lowHz(), sampleRate);</span>
+<span class="fc" id="L191">    int highBin = Math.min(magnitudes.length - 1, frequencyToBin(searchBand.highHz(), sampleRate));</span>
+<span class="pc bpc" id="L192" title="1 of 2 branches missed.">    if (lowBin &gt;= highBin) {</span>
+<span class="nc" id="L193">      return 0.0;</span>
+    }
+<span class="fc" id="L195">    int peakBin = Math.min(highBin, Math.max(lowBin, frequencyToBin(fundamentalHz, sampleRate)));</span>
+<span class="fc" id="L196">    double peakMagnitude = magnitudes[peakBin];</span>
+<span class="fc" id="L197">    int count = highBin - lowBin + 1;</span>
+<span class="fc" id="L198">    float[] band = Arrays.copyOfRange(magnitudes, lowBin, lowBin + count);</span>
+<span class="fc" id="L199">    Arrays.sort(band);</span>
+<span class="fc" id="L200">    double noise = band[count / 2];</span>
+<span class="pc bpc" id="L201" title="1 of 2 branches missed.">    return noise &gt; 0.0 ? peakMagnitude / noise : 0.0;</span>
+  }
+
+  private List&lt;Double&gt; harmonicAmplitudes(
+      float[] magnitudes, double sampleRate, double fundamentalHz) {
+<span class="fc" id="L206">    List&lt;Double&gt; amplitudes = new ArrayList&lt;&gt;(harmonicCount);</span>
+<span class="fc bfc" id="L207" title="All 2 branches covered.">    for (int h = 1; h &lt;= harmonicCount; h++) {</span>
+<span class="fc" id="L208">      int bin = frequencyToBin(fundamentalHz * h, sampleRate);</span>
+<span class="pc bpc" id="L209" title="2 of 4 branches missed.">      if (bin &lt; 0 || bin &gt;= magnitudes.length) {</span>
+<span class="nc" id="L210">        amplitudes.add(0.0);</span>
+      } else {
+<span class="fc" id="L212">        amplitudes.add((double) magnitudes[bin]);</span>
+      }
+    }
+<span class="fc" id="L215">    return amplitudes;</span>
+  }
+
+  private static List&lt;Double&gt; harmonicRatios(List&lt;Double&gt; amplitudes) {
+<span class="pc bpc" id="L219" title="2 of 4 branches missed.">    if (amplitudes.size() &lt; 2 || amplitudes.get(0) &lt;= 0.0) {</span>
+<span class="nc" id="L220">      return List.of();</span>
+    }
+<span class="fc" id="L222">    List&lt;Double&gt; ratios = new ArrayList&lt;&gt;(amplitudes.size() - 1);</span>
+<span class="fc" id="L223">    double fundamental = amplitudes.get(0);</span>
+<span class="fc bfc" id="L224" title="All 2 branches covered.">    for (int i = 1; i &lt; amplitudes.size(); i++) {</span>
+<span class="fc" id="L225">      ratios.add(amplitudes.get(i) / fundamental);</span>
+    }
+<span class="fc" id="L227">    return ratios;</span>
+  }
+
+  private int frequencyToBin(double frequencyHz, double sampleRate) {
+<span class="fc" id="L231">    return (int) Math.round(frequencyHz * fftSize / sampleRate);</span>
+  }
+
+  private double binToFrequency(int bin, double sampleRate) {
+<span class="fc" id="L235">    return bin * sampleRate / fftSize;</span>
+  }
+
+  private static void applyHannWindow(float[] samples, int frames) {
+<span class="pc bpc" id="L239" title="1 of 2 branches missed.">    if (frames &lt;= 1) {</span>
+<span class="nc" id="L240">      return;</span>
+    }
+<span class="fc bfc" id="L242" title="All 2 branches covered.">    for (int i = 0; i &lt; frames; i++) {</span>
+<span class="fc" id="L243">      samples[i] *= (float) (0.5 - 0.5 * Math.cos(2.0 * Math.PI * i / (frames - 1)));</span>
+    }
+<span class="fc" id="L245">  }</span>
+
+  private static void validateDuration(double trackDurationSeconds) {
+<span class="pc bpc" id="L248" title="1 of 4 branches missed.">    if (!Double.isFinite(trackDurationSeconds) || trackDurationSeconds &lt; 0.0) {</span>
+<span class="fc" id="L249">      throw new IllegalArgumentException(&quot;trackDurationSeconds must be finite and &gt;= 0&quot;);</span>
+    }
+<span class="fc" id="L251">  }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

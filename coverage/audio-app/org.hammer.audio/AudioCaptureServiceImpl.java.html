@@ -1,0 +1,364 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>AudioCaptureServiceImpl.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio</a> &gt; <span class="el_source">AudioCaptureServiceImpl.java</span></div><h1>AudioCaptureServiceImpl.java</h1><pre class="source lang-java linenums">package org.hammer.audio;
+
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import javax.sound.sampled.AudioFormat;
+import javax.sound.sampled.Mixer;
+import javax.sound.sampled.TargetDataLine;
+import org.hammer.audio.buffer.AudioRingBuffer;
+import org.hammer.audio.capture.SampleDecoder;
+import org.hammer.audio.core.AudioBlock;
+import org.hammer.audio.core.AudioFormatDescriptor;
+import org.hammer.audio.snapshot.WaveformSnapshot;
+import org.hammer.audio.ui.WaveformRenderer;
+
+/**
+ * Audio capture service implementation: the bridge between the JavaSound input device and the
+ * platform's audio-domain pipeline.
+ *
+ * &lt;p&gt;&lt;strong&gt;Architecture (post-refactor)&lt;/strong&gt;:
+ *
+ * &lt;pre&gt;{@code
+ * TargetDataLine
+ *   -&gt; raw bytes
+ *   -&gt; SampleDecoder (-&gt; normalized float[][])
+ *   -&gt; AudioBlock (immutable, with frame index + timestamp)
+ *   -&gt; AudioRingBuffer&lt;AudioBlock&gt;  (lock-free SPSC; downstream DSP/analysis polls asynchronously)
+ *   -&gt; AudioBlockListener fan-out   (complete stream; callbacks only enqueue)
+ *   -&gt; latestBlock (volatile, for &quot;give me the latest&quot; UI consumers)
+ *   -&gt; WaveformModel (legacy compatibility view, built via WaveformRenderer)
+ * }&lt;/pre&gt;
+ *
+ * &lt;p&gt;The capture loop knows nothing about pixels, panel coordinates or Swing — pixel scaling has
+ * moved into {@link WaveformRenderer}. The legacy {@link WaveformModel} is still produced for
+ * existing UI consumers and tests; it is now derived from the same {@link AudioBlock} the rest of
+ * the platform sees.
+ *
+ * &lt;p&gt;Thread-safety: all public methods are thread-safe. The capture worker thread is the sole
+ * producer for the ring buffer; downstream DSP/analysis threads are the consumers.
+ *
+ * @author refactoring
+ */
+public class AudioCaptureServiceImpl implements AudioCaptureService {
+
+<span class="fc" id="L48">  private static final Logger LOGGER = Logger.getLogger(AudioCaptureServiceImpl.class.getName());</span>
+
+  /** Tick distance in seconds (1 ms). */
+  private static final float TICK_SECONDS = 1f / 1000f;
+
+  /** Minimum buffer size in bytes to prevent overly small allocations. */
+  private static final int MIN_BUFFER_SIZE = 256;
+
+  /** Default ring-buffer capacity (in {@link AudioBlock}s). */
+  private static final int RING_BUFFER_CAPACITY = 64;
+
+<span class="fc" id="L59">  private final AtomicBoolean running = new AtomicBoolean(false);</span>
+
+  private volatile WaveformModel latestModel;
+  private volatile AudioBlock latestBlock;
+
+  private final float sampleRate;
+  private final int sampleSizeInBits;
+  private final int channels;
+  private final boolean signed;
+  private final boolean bigEndian;
+  private final AudioFormatDescriptor descriptor;
+  private final SampleDecoder decoder;
+  private final AudioRingBuffer&lt;AudioBlock&gt; ringBuffer;
+<span class="fc" id="L72">  private final AudioBlockBroadcaster broadcaster = new AudioBlockBroadcaster();</span>
+
+  private volatile int divisor;
+  private volatile int panelWidth;
+  private volatile int panelHeight;
+
+  private TargetDataLine line;
+  private AudioFormat format;
+  private ExecutorService workerExecutor;
+
+  private volatile byte[] datas;
+  private volatile int datasize;
+  private volatile int numberOfPoints;
+  private final int tickEveryNSample;
+
+  private final AudioLineProvider lineProvider;
+
+  /** Create a new AudioCaptureServiceImpl with specified audio parameters. */
+  public AudioCaptureServiceImpl(
+      float sampleRate,
+      int sampleSizeInBits,
+      int channels,
+      boolean signed,
+      boolean bigEndian,
+      int divisor) {
+<span class="fc" id="L97">    this(</span>
+        sampleRate,
+        sampleSizeInBits,
+        channels,
+        signed,
+        bigEndian,
+        divisor,
+        new DefaultAudioLineProvider());
+<span class="fc" id="L105">  }</span>
+
+  /** Create a new AudioCaptureServiceImpl using a selected JavaSound input mixer. */
+  public AudioCaptureServiceImpl(
+      float sampleRate,
+      int sampleSizeInBits,
+      int channels,
+      boolean signed,
+      boolean bigEndian,
+      int divisor,
+      Mixer.Info mixerInfo) {
+<span class="nc" id="L116">    this(</span>
+        sampleRate,
+        sampleSizeInBits,
+        channels,
+        signed,
+        bigEndian,
+        divisor,
+        new DefaultAudioLineProvider(mixerInfo));
+<span class="nc" id="L124">  }</span>
+
+  /** Package-private constructor for testing with custom AudioLineProvider. */
+  AudioCaptureServiceImpl(
+      float sampleRate,
+      int sampleSizeInBits,
+      int channels,
+      boolean signed,
+      boolean bigEndian,
+      int divisor,
+<span class="fc" id="L134">      AudioLineProvider lineProvider) {</span>
+<span class="fc" id="L135">    this.sampleRate = sampleRate;</span>
+<span class="fc" id="L136">    this.sampleSizeInBits = sampleSizeInBits;</span>
+<span class="fc" id="L137">    this.channels = Math.max(1, channels);</span>
+<span class="fc" id="L138">    this.signed = signed;</span>
+<span class="fc" id="L139">    this.bigEndian = bigEndian;</span>
+<span class="fc" id="L140">    this.divisor = Math.max(1, divisor);</span>
+<span class="fc" id="L141">    this.tickEveryNSample = (int) (TICK_SECONDS * sampleRate);</span>
+<span class="fc" id="L142">    this.panelWidth = 640;</span>
+<span class="fc" id="L143">    this.panelHeight = 200;</span>
+<span class="fc" id="L144">    this.lineProvider = lineProvider;</span>
+<span class="fc" id="L145">    this.descriptor = new AudioFormatDescriptor(sampleRate, this.channels, sampleSizeInBits);</span>
+<span class="fc" id="L146">    this.decoder = new SampleDecoder(descriptor, signed, bigEndian);</span>
+<span class="fc" id="L147">    this.ringBuffer = new AudioRingBuffer&lt;&gt;(RING_BUFFER_CAPACITY);</span>
+<span class="fc" id="L148">  }</span>
+
+  @Override
+  public void start() {
+<span class="pc bpc" id="L152" title="1 of 2 branches missed.">    if (running.get()) {</span>
+<span class="nc" id="L153">      LOGGER.warning(&quot;AudioCaptureService is already running&quot;);</span>
+<span class="nc" id="L154">      return;</span>
+    }
+    try {
+<span class="fc" id="L157">      initializeAudioLine();</span>
+<span class="fc" id="L158">      computeDataSize();</span>
+<span class="fc" id="L159">      running.set(true);</span>
+<span class="fc" id="L160">      workerExecutor =</span>
+<span class="fc" id="L161">          Executors.newSingleThreadExecutor(</span>
+              runnable -&gt; {
+<span class="fc" id="L163">                Thread thread = new Thread(runnable, &quot;AudioCaptureWorker&quot;);</span>
+<span class="fc" id="L164">                thread.setDaemon(true);</span>
+<span class="fc" id="L165">                return thread;</span>
+              });
+<span class="fc" id="L167">      workerExecutor.submit(this::captureLoop);</span>
+<span class="fc" id="L168">      ActiveAudioCaptureRegistry.activate(this);</span>
+<span class="fc" id="L169">      LOGGER.info(&quot;AudioCaptureService started successfully&quot;);</span>
+<span class="nc" id="L170">    } catch (Exception exception) {</span>
+<span class="nc" id="L171">      running.set(false);</span>
+<span class="nc" id="L172">      ActiveAudioCaptureRegistry.deactivate(this);</span>
+<span class="nc" id="L173">      LOGGER.log(Level.SEVERE, &quot;Failed to start AudioCaptureService&quot;, exception);</span>
+<span class="nc" id="L174">      throw new IllegalStateException(&quot;Failed to start audio capture&quot;, exception);</span>
+<span class="fc" id="L175">    }</span>
+<span class="fc" id="L176">  }</span>
+
+  @Override
+  public void stop() {
+<span class="fc bfc" id="L180" title="All 2 branches covered.">    if (!running.getAndSet(false)) {</span>
+<span class="fc" id="L181">      return;</span>
+    }
+<span class="fc" id="L183">    ActiveAudioCaptureRegistry.deactivate(this);</span>
+<span class="pc bpc" id="L184" title="1 of 2 branches missed.">    if (workerExecutor != null) {</span>
+<span class="fc" id="L185">      workerExecutor.shutdownNow();</span>
+      try {
+<span class="pc bpc" id="L187" title="1 of 2 branches missed.">        if (!workerExecutor.awaitTermination(1, TimeUnit.SECONDS)) {</span>
+<span class="nc" id="L188">          workerExecutor.shutdownNow();</span>
+        }
+<span class="nc" id="L190">      } catch (InterruptedException interruptedException) {</span>
+<span class="nc" id="L191">        Thread.currentThread().interrupt();</span>
+<span class="fc" id="L192">      }</span>
+<span class="fc" id="L193">      workerExecutor = null;</span>
+    }
+<span class="pc bpc" id="L195" title="1 of 2 branches missed.">    if (line != null) {</span>
+      try {
+<span class="fc" id="L197">        line.stop();</span>
+<span class="fc" id="L198">        line.flush();</span>
+<span class="fc" id="L199">        line.close();</span>
+<span class="nc" id="L200">      } catch (Exception exception) {</span>
+<span class="nc" id="L201">        LOGGER.log(Level.WARNING, &quot;Error closing TargetDataLine&quot;, exception);</span>
+<span class="fc" id="L202">      }</span>
+<span class="fc" id="L203">      line = null;</span>
+    }
+<span class="fc" id="L205">    LOGGER.info(&quot;AudioCaptureService stopped&quot;);</span>
+<span class="fc" id="L206">  }</span>
+
+  @Override
+  public boolean isRunning() {
+<span class="fc" id="L210">    return running.get();</span>
+  }
+
+  @Override
+  public WaveformModel getLatestModel() {
+<span class="fc" id="L215">    WaveformModel cached = latestModel;</span>
+<span class="fc bfc" id="L216" title="All 2 branches covered.">    return cached != null ? cached : WaveformModel.EMPTY;</span>
+  }
+
+  @Override
+  public AudioFormat getFormat() {
+<span class="fc" id="L221">    return format;</span>
+  }
+
+  @Override
+  public AudioFormatDescriptor getDescriptor() {
+<span class="nc" id="L226">    return descriptor;</span>
+  }
+
+  @Override
+  public AudioBlock getLatestBlock() {
+<span class="nc" id="L231">    return latestBlock;</span>
+  }
+
+  @Override
+  public AudioBlockSubscription subscribe(AudioBlockListener listener) {
+<span class="nc" id="L236">    return broadcaster.subscribe(listener);</span>
+  }
+
+  @Override
+  public AudioRingBuffer&lt;AudioBlock&gt; getRingBuffer() {
+<span class="nc" id="L241">    return ringBuffer;</span>
+  }
+
+  @Override
+  public void setDivisor(int divisor) {
+<span class="fc bfc" id="L246" title="All 2 branches covered.">    if (divisor &lt; 1) {</span>
+<span class="fc" id="L247">      throw new IllegalArgumentException(&quot;Divisor must be &gt;= 1&quot;);</span>
+    }
+<span class="fc" id="L249">    this.divisor = divisor;</span>
+<span class="fc bfc" id="L250" title="All 2 branches covered.">    if (line != null) {</span>
+<span class="fc" id="L251">      computeDataSize();</span>
+    }
+<span class="fc" id="L253">  }</span>
+
+  @Override
+  public int getDivisor() {
+<span class="fc" id="L257">    return divisor;</span>
+  }
+
+  @Override
+  public void recomputeLayout(int width, int height) {
+<span class="fc" id="L262">    this.panelWidth = width;</span>
+<span class="fc" id="L263">    this.panelHeight = height;</span>
+<span class="fc" id="L264">    AudioBlock cached = latestBlock;</span>
+<span class="fc bfc" id="L265" title="All 2 branches covered.">    if (cached != null) {</span>
+<span class="fc" id="L266">      latestModel = buildLegacyModel(cached);</span>
+    }
+<span class="fc" id="L268">  }</span>
+
+  private void initializeAudioLine() {
+<span class="fc" id="L271">    format = new AudioFormat(sampleRate, sampleSizeInBits, channels, signed, bigEndian);</span>
+<span class="fc" id="L272">    line = lineProvider.acquireLine(format);</span>
+<span class="fc" id="L273">    LOGGER.info(&quot;Opened audio line with format: &quot; + format);</span>
+<span class="fc" id="L274">  }</span>
+
+  private void computeDataSize() {
+<span class="pc bpc" id="L277" title="1 of 2 branches missed.">    if (line == null) {</span>
+<span class="nc" id="L278">      throw new IllegalStateException(&quot;Line must be opened before computing buffer sizes.&quot;);</span>
+    }
+<span class="fc" id="L280">    datasize = Math.max(MIN_BUFFER_SIZE, line.getBufferSize() / Math.max(1, divisor));</span>
+<span class="fc" id="L281">    int frameSize = decoder.frameSize();</span>
+<span class="fc" id="L282">    int points = datasize / Math.max(1, frameSize);</span>
+<span class="pc bpc" id="L283" title="1 of 2 branches missed.">    if (points &lt;= 0) {</span>
+<span class="nc" id="L284">      points = 1;</span>
+    }
+<span class="fc" id="L286">    numberOfPoints = points;</span>
+<span class="fc" id="L287">    datas = new byte[datasize];</span>
+<span class="fc" id="L288">    LOGGER.fine(String.format(&quot;Computed data size: %d, points: %d&quot;, datasize, points));</span>
+<span class="fc" id="L289">  }</span>
+
+  private void captureLoop() {
+<span class="pc bpc" id="L292" title="1 of 2 branches missed.">    if (line == null) {</span>
+<span class="nc" id="L293">      LOGGER.warning(&quot;TargetDataLine is null, aborting capture loop.&quot;);</span>
+<span class="nc" id="L294">      return;</span>
+    }
+<span class="fc" id="L296">    line.start();</span>
+
+<span class="fc" id="L298">    long frameIndex = 0L;</span>
+<span class="fc" id="L299">    int allocatedFrames = numberOfPoints;</span>
+<span class="fc" id="L300">    float[][] decodeBuffer = new float[channels][allocatedFrames];</span>
+
+<span class="pc bpc" id="L302" title="1 of 4 branches missed.">    while (running.get() &amp;&amp; !Thread.currentThread().isInterrupted()) {</span>
+      try {
+<span class="fc" id="L304">        byte[] localData = datas;</span>
+<span class="fc" id="L305">        int numBytesRead = line.read(localData, 0, localData.length);</span>
+<span class="pc bpc" id="L306" title="1 of 2 branches missed.">        if (numBytesRead &lt;= 0) {</span>
+<span class="nc" id="L307">          continue;</span>
+        }
+<span class="fc" id="L309">        int currentPoints = numberOfPoints;</span>
+<span class="pc bpc" id="L310" title="1 of 2 branches missed.">        if (allocatedFrames &lt; currentPoints) {</span>
+<span class="nc" id="L311">          allocatedFrames = currentPoints;</span>
+<span class="nc" id="L312">          decodeBuffer = new float[channels][allocatedFrames];</span>
+        }
+
+<span class="fc" id="L315">        int decodedFrames = Math.min(currentPoints, decoder.framesIn(numBytesRead));</span>
+<span class="pc bpc" id="L316" title="1 of 2 branches missed.">        if (decodedFrames &lt;= 0) {</span>
+<span class="nc" id="L317">          continue;</span>
+        }
+<span class="fc" id="L319">        decoder.decode(localData, decodedFrames * decoder.frameSize(), decodeBuffer);</span>
+<span class="fc bfc" id="L320" title="All 2 branches covered.">        for (int channel = 0; channel &lt; channels; channel++) {</span>
+<span class="fc bfc" id="L321" title="All 2 branches covered.">          for (int frame = decodedFrames; frame &lt; currentPoints; frame++) {</span>
+<span class="fc" id="L322">            decodeBuffer[channel][frame] = 0f;</span>
+          }
+        }
+
+<span class="fc" id="L326">        float[][] blockSamples = new float[channels][currentPoints];</span>
+<span class="fc bfc" id="L327" title="All 2 branches covered.">        for (int channel = 0; channel &lt; channels; channel++) {</span>
+<span class="fc" id="L328">          System.arraycopy(decodeBuffer[channel], 0, blockSamples[channel], 0, currentPoints);</span>
+        }
+<span class="fc" id="L330">        AudioBlock block = AudioBlock.wrap(descriptor, blockSamples, frameIndex, System.nanoTime());</span>
+<span class="fc" id="L331">        frameIndex += currentPoints;</span>
+
+<span class="fc" id="L333">        ringBuffer.offer(block);</span>
+<span class="fc" id="L334">        broadcaster.publish(block);</span>
+<span class="fc" id="L335">        latestBlock = block;</span>
+<span class="fc" id="L336">        latestModel = buildLegacyModel(block);</span>
+<span class="nc" id="L337">      } catch (Exception exception) {</span>
+<span class="nc bnc" id="L338" title="All 2 branches missed.">        if (running.get()) {</span>
+<span class="nc" id="L339">          LOGGER.log(Level.SEVERE, &quot;Error during audio capture loop&quot;, exception);</span>
+        }
+<span class="pc" id="L341">      }</span>
+    }
+<span class="fc" id="L343">    LOGGER.fine(&quot;Capture loop ended&quot;);</span>
+<span class="fc" id="L344">  }</span>
+
+  private WaveformModel buildLegacyModel(AudioBlock block) {
+<span class="fc" id="L347">    WaveformSnapshot snapshot =</span>
+<span class="fc" id="L348">        WaveformSnapshot.wrap(</span>
+<span class="fc" id="L349">            block.samples(),</span>
+<span class="fc" id="L350">            block.format().sampleRate(),</span>
+<span class="fc" id="L351">            block.frameIndex(),</span>
+<span class="fc" id="L352">            block.timestampNanos());</span>
+<span class="fc" id="L353">    int[] xPoints = WaveformRenderer.computeXPoints(snapshot.frames(), panelWidth);</span>
+<span class="fc" id="L354">    int height = panelHeight;</span>
+    int[][] yPoints;
+<span class="pc bpc" id="L356" title="1 of 2 branches missed.">    if (height &lt;= 0) {</span>
+<span class="nc" id="L357">      yPoints = new int[snapshot.channels()][0];</span>
+    } else {
+<span class="fc" id="L359">      yPoints = WaveformRenderer.computeYPointsAllChannels(snapshot, height);</span>
+    }
+<span class="fc" id="L361">    return new WaveformModel(xPoints, yPoints, tickEveryNSample, datasize);</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

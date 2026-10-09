@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ExperimentDocumentSwingActions.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer</a> &gt; <span class="el_source">ExperimentDocumentSwingActions.java</span></div><h1>ExperimentDocumentSwingActions.java</h1><pre class="source lang-java linenums">package org.hammer;
+
+import java.awt.Cursor;
+import java.nio.file.Path;
+import java.util.Objects;
+import javax.swing.JFrame;
+import javax.swing.JMenu;
+import javax.swing.JMenuBar;
+import javax.swing.JMenuItem;
+import javax.swing.JOptionPane;
+import javax.swing.SwingWorker;
+import org.hammer.audio.experiment.document.ExperimentDocumentPreview;
+import org.hammer.audio.experiment.document.ExperimentDocumentService;
+
+/** Installs safe, non-mutating portable experiment-document actions into the Swing workbench. */
+final class ExperimentDocumentSwingActions {
+
+  private static final String FILE_MENU = &quot;File&quot;;
+  private static final String DIALOG_TITLE = &quot;Portable experiment document&quot;;
+
+  private final JFrame owner;
+  private final ExperimentDocumentService documentService;
+
+<span class="nc" id="L24">  ExperimentDocumentSwingActions(JFrame owner, ExperimentDocumentService documentService) {</span>
+<span class="nc" id="L25">    this.owner = Objects.requireNonNull(owner, &quot;owner&quot;);</span>
+<span class="nc" id="L26">    this.documentService = Objects.requireNonNull(documentService, &quot;documentService&quot;);</span>
+<span class="nc" id="L27">  }</span>
+
+  /** Add one keyboard-accessible inspect/normalize action to the existing File menu. */
+  void install() {
+<span class="nc" id="L31">    JMenu fileMenu = findMenu(owner.getJMenuBar(), FILE_MENU);</span>
+<span class="nc bnc" id="L32" title="All 2 branches missed.">    if (fileMenu == null) {</span>
+<span class="nc" id="L33">      throw new IllegalStateException(&quot;Desktop File menu is unavailable&quot;);</span>
+    }
+<span class="nc" id="L35">    JMenuItem inspect = new JMenuItem(&quot;Inspect experiment document...&quot;);</span>
+<span class="nc" id="L36">    inspect.setToolTipText(</span>
+        &quot;Validate and preview a .audioexp setup without applying or executing it.&quot;);
+<span class="nc" id="L38">    inspect.addActionListener(event -&gt; chooseDocument());</span>
+<span class="nc" id="L39">    fileMenu.insert(inspect, Math.min(fileMenu.getItemCount(), 1));</span>
+<span class="nc" id="L40">  }</span>
+
+  /** Validate and preview one explicitly selected document without applying or executing it. */
+  void inspect(Path source) {
+<span class="nc" id="L44">    Objects.requireNonNull(source, &quot;source&quot;);</span>
+<span class="nc" id="L45">    owner.setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));</span>
+<span class="nc" id="L46">    new SwingWorker&lt;ExperimentDocumentPreview, Void&gt;() {</span>
+      @Override
+      protected ExperimentDocumentPreview doInBackground() throws Exception {
+<span class="nc" id="L49">        return documentService.preview(source);</span>
+      }
+
+      @Override
+      protected void done() {
+<span class="nc" id="L54">        owner.setCursor(Cursor.getDefaultCursor());</span>
+        try {
+<span class="nc" id="L56">          new ExperimentDocumentPreviewDialog(owner, documentService).show(source, get());</span>
+<span class="nc" id="L57">        } catch (InterruptedException exception) {</span>
+<span class="nc" id="L58">          Thread.currentThread().interrupt();</span>
+<span class="nc" id="L59">          showFailure(&quot;Preview was interrupted.&quot;, exception);</span>
+<span class="nc" id="L60">        } catch (java.util.concurrent.ExecutionException exception) {</span>
+<span class="nc" id="L61">          showFailure(&quot;Experiment document preview failed.&quot;, exception.getCause());</span>
+<span class="nc" id="L62">        }</span>
+<span class="nc" id="L63">      }</span>
+<span class="nc" id="L64">    }.execute();</span>
+<span class="nc" id="L65">  }</span>
+
+  private void chooseDocument() {
+<span class="nc" id="L68">    Path source = ExperimentDocumentFileChooser.chooseOpen(owner);</span>
+<span class="nc bnc" id="L69" title="All 2 branches missed.">    if (source != null) {</span>
+<span class="nc" id="L70">      inspect(source);</span>
+    }
+<span class="nc" id="L72">  }</span>
+
+  private static JMenu findMenu(JMenuBar menuBar, String title) {
+<span class="nc bnc" id="L75" title="All 2 branches missed.">    if (menuBar == null) {</span>
+<span class="nc" id="L76">      return null;</span>
+    }
+<span class="nc bnc" id="L78" title="All 2 branches missed.">    for (int index = 0; index &lt; menuBar.getMenuCount(); index++) {</span>
+<span class="nc" id="L79">      JMenu menu = menuBar.getMenu(index);</span>
+<span class="nc bnc" id="L80" title="All 4 branches missed.">      if (menu != null &amp;&amp; title.equals(menu.getText())) {</span>
+<span class="nc" id="L81">        return menu;</span>
+      }
+    }
+<span class="nc" id="L84">    return null;</span>
+  }
+
+  private void showFailure(String message, Throwable failure) {
+<span class="nc bnc" id="L88" title="All 4 branches missed.">    String detail = failure == null || failure.getMessage() == null ? &quot;&quot; : failure.getMessage();</span>
+<span class="nc" id="L89">    JOptionPane.showMessageDialog(</span>
+        owner,
+<span class="nc bnc" id="L91" title="All 2 branches missed.">        detail.isBlank() ? message : message + &quot;\n&quot; + detail,</span>
+        DIALOG_TITLE,
+        JOptionPane.ERROR_MESSAGE);
+<span class="nc" id="L94">  }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

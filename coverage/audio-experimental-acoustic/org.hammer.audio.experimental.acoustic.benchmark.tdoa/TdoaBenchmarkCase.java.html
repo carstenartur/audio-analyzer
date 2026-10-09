@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>TdoaBenchmarkCase.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.benchmark.tdoa</a> &gt; <span class="el_source">TdoaBenchmarkCase.java</span></div><h1>TdoaBenchmarkCase.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.benchmark.tdoa;
+
+import java.util.Objects;
+import org.hammer.audio.acquisition.MicrophoneArray;
+import org.hammer.audio.core.AudioBlock;
+
+/**
+ * One deterministic known-delay input shared by every registered TDOA estimator.
+ *
+ * @param caseId stable benchmark-case identity
+ * @param block immutable multichannel audio block
+ * @param array microphone geometry matching the block
+ * @param firstChannel first estimator channel
+ * @param secondChannel second estimator channel
+ * @param expectedDelaySamples known second-minus-first delay in samples
+ */
+public record TdoaBenchmarkCase(
+    String caseId,
+    AudioBlock block,
+    MicrophoneArray array,
+    int firstChannel,
+    int secondChannel,
+    double expectedDelaySamples) {
+
+  // Validate one benchmark case.
+<span class="fc" id="L26">  public TdoaBenchmarkCase {</span>
+<span class="pc bpc" id="L27" title="2 of 4 branches missed.">    if (caseId == null || caseId.isBlank()) {</span>
+<span class="nc" id="L28">      throw new IllegalArgumentException(&quot;caseId must not be blank&quot;);</span>
+    }
+<span class="fc" id="L30">    Objects.requireNonNull(block, &quot;block&quot;);</span>
+<span class="fc" id="L31">    Objects.requireNonNull(array, &quot;array&quot;);</span>
+<span class="pc bpc" id="L32" title="1 of 2 branches missed.">    if (block.channels() != array.channels()) {</span>
+<span class="nc" id="L33">      throw new IllegalArgumentException(&quot;block channel count must match microphone array&quot;);</span>
+    }
+<span class="pc bpc" id="L35" title="2 of 4 branches missed.">    if (firstChannel &lt; 0</span>
+        || secondChannel &lt; 0
+<span class="pc bpc" id="L37" title="1 of 2 branches missed.">        || firstChannel &gt;= array.channels()</span>
+<span class="pc bpc" id="L38" title="2 of 4 branches missed.">        || secondChannel &gt;= array.channels()</span>
+        || firstChannel == secondChannel) {
+<span class="nc" id="L40">      throw new IllegalArgumentException(</span>
+          &quot;benchmark channels must be distinct valid array channels&quot;);
+    }
+<span class="pc bpc" id="L43" title="1 of 2 branches missed.">    if (!Double.isFinite(expectedDelaySamples)) {</span>
+<span class="nc" id="L44">      throw new IllegalArgumentException(&quot;expectedDelaySamples must be finite&quot;);</span>
+    }
+<span class="fc" id="L46">  }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

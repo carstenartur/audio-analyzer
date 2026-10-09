@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WorkflowOperationPersistenceData.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Core</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.collaboration.store</a> &gt; <span class="el_source">WorkflowOperationPersistenceData.java</span></div><h1>WorkflowOperationPersistenceData.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.collaboration.store;
+
+import java.time.Instant;
+import java.util.Objects;
+
+/**
+ * Canonically serialized semantic operation supplied to the durable session store.
+ *
+ * @param operationId stable idempotency identifier for the operation
+ * @param actorId actor that authored the operation
+ * @param operationType stable semantic operation type
+ * @param occurredAt operation occurrence timestamp
+ * @param payload deterministic serialized identity payload
+ * @param bodyVersion version of the reconstructible operation body, or zero for legacy data
+ * @param operationBody complete deterministic operation body, or {@code null} for legacy data
+ * @param command durable normal/undo/redo command relation
+ */
+public record WorkflowOperationPersistenceData(
+    String operationId,
+    String actorId,
+    String operationType,
+    Instant occurredAt,
+    String payload,
+    int bodyVersion,
+    String operationBody,
+    WorkflowOperationCommandMetadata command) {
+
+<span class="fc" id="L28">  public WorkflowOperationPersistenceData {</span>
+<span class="fc" id="L29">    operationId = requireNotBlank(operationId, &quot;operationId&quot;);</span>
+<span class="fc" id="L30">    actorId = requireNotBlank(actorId, &quot;actorId&quot;);</span>
+<span class="fc" id="L31">    operationType = requireNotBlank(operationType, &quot;operationType&quot;);</span>
+<span class="fc" id="L32">    Objects.requireNonNull(occurredAt, &quot;occurredAt&quot;);</span>
+<span class="fc" id="L33">    payload = requireNotBlank(payload, &quot;payload&quot;);</span>
+<span class="pc bpc" id="L34" title="1 of 2 branches missed.">    if (bodyVersion &lt; 0) {</span>
+<span class="nc" id="L35">      throw new IllegalArgumentException(&quot;bodyVersion must be &gt;= 0&quot;);</span>
+    }
+<span class="fc bfc" id="L37" title="All 2 branches covered.">    if (bodyVersion == 0) {</span>
+<span class="pc bpc" id="L38" title="3 of 4 branches missed.">      if (operationBody != null &amp;&amp; !operationBody.isBlank()) {</span>
+<span class="nc" id="L39">        throw new IllegalArgumentException(&quot;legacy operation body must be absent&quot;);</span>
+      }
+<span class="fc" id="L41">      operationBody = null;</span>
+    } else {
+<span class="fc" id="L43">      operationBody = requireNotBlank(operationBody, &quot;operationBody&quot;);</span>
+    }
+<span class="fc" id="L45">    command = Objects.requireNonNull(command, &quot;command&quot;);</span>
+<span class="fc" id="L46">  }</span>
+
+  /** Creates legacy identity-only persistence data for an ordinary operation. */
+  public WorkflowOperationPersistenceData(
+      String operationId,
+      String actorId,
+      String operationType,
+      Instant occurredAt,
+      String payload) {
+<span class="fc" id="L55">    this(</span>
+        operationId,
+        actorId,
+        operationType,
+        occurredAt,
+        payload,
+        0,
+        null,
+<span class="fc" id="L63">        WorkflowOperationCommandMetadata.normal(operationId));</span>
+<span class="fc" id="L64">  }</span>
+
+  /** Returns whether this persistence value contains a reconstructible body. */
+  public boolean hasOperationBody() {
+<span class="nc bnc" id="L68" title="All 2 branches missed.">    return bodyVersion &gt; 0;</span>
+  }
+
+  private static String requireNotBlank(String value, String name) {
+<span class="fc" id="L72">    Objects.requireNonNull(value, name);</span>
+<span class="fc bfc" id="L73" title="All 2 branches covered.">    if (value.isBlank()) {</span>
+<span class="fc" id="L74">      throw new IllegalArgumentException(name + &quot; must not be blank&quot;);</span>
+    }
+<span class="fc" id="L76">    return value;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

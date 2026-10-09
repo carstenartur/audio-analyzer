@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>SyntheticParameterEstimator.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.simulation.calibration</a> &gt; <span class="el_source">SyntheticParameterEstimator.java</span></div><h1>SyntheticParameterEstimator.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.simulation.calibration;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+import java.util.function.ToDoubleFunction;
+import org.hammer.audio.experimental.acoustic.simulation.WingbeatSignalParameters;
+import org.hammer.audio.experimental.acoustic.wingbeat.WingbeatFeatureVector;
+
+/**
+ * Estimates {@link WingbeatSignalParameters} from statistical properties of real recordings.
+ *
+ * &lt;p&gt;Each generator parameter is inferred from the corresponding feature statistic:
+ *
+ * &lt;ul&gt;
+ *   &lt;li&gt;{@code fundamentalFrequencyHz} ← mean fundamental frequency across real vectors
+ *   &lt;li&gt;{@code jitterHz} ← mean frequency-jitter (std dev) scaled by √3 to convert to the
+ *       generator's uniform max-deviation semantics; see {@link
+ *       WingbeatSignalParameters#jitterHz()}
+ *   &lt;li&gt;{@code modulationDepth} ← mean amplitude modulation, clamped to {@code [0, 1]}
+ *   &lt;li&gt;{@code noiseAmplitude} ← approximated from mean SNR as {@code 1 / (snr + 1)}, clamped to
+ *       {@code [0, 1]}; falls back to {@value #DEFAULT_NOISE_AMPLITUDE} when SNR is zero
+ *   &lt;li&gt;{@code harmonicAmplitudes} ← per-slot mean across real vectors, normalised so the maximum
+ *       element equals {@code 1.0}; defaults to a single-harmonic {@code null} profile when fewer
+ *       than two harmonic amplitude values are available
+ *   &lt;li&gt;{@code harmonicCount} ← derived from the estimated harmonic amplitude list
+ *   &lt;li&gt;{@code driftHzPerSecond} ← mean frequency drift across real vectors
+ *   &lt;li&gt;{@code modulationHz} ← cannot be estimated from {@link WingbeatFeatureVector}; fixed at
+ *       {@code 0}
+ * &lt;/ul&gt;
+ *
+ * &lt;p&gt;This estimator is stateless and may be called concurrently.
+ */
+<span class="fc" id="L34">public final class SyntheticParameterEstimator {</span>
+
+  /** Fallback noise amplitude used when the real data reports zero SNR. */
+  static final double DEFAULT_NOISE_AMPLITUDE = 0.02;
+
+  /** Minimum fundamental frequency returned by the estimator. */
+  private static final double MIN_FREQ_HZ = 1.0;
+
+  /**
+   * Estimate {@link WingbeatSignalParameters} from a non-empty list of real feature vectors.
+   *
+   * @param real real recording feature vectors; must not be {@code null} or empty
+   * @return estimated generator parameters; never {@code null}
+   */
+  public WingbeatSignalParameters estimate(List&lt;WingbeatFeatureVector&gt; real) {
+<span class="fc" id="L49">    Objects.requireNonNull(real, &quot;real&quot;);</span>
+<span class="fc bfc" id="L50" title="All 2 branches covered.">    if (real.isEmpty()) {</span>
+<span class="fc" id="L51">      throw new IllegalArgumentException(&quot;real corpus must not be empty&quot;);</span>
+    }
+
+<span class="fc" id="L54">    double meanFreq = mean(real, WingbeatFeatureVector::fundamentalFrequencyHz);</span>
+<span class="fc" id="L55">    double meanJitter = mean(real, WingbeatFeatureVector::frequencyJitterHz);</span>
+<span class="fc" id="L56">    double meanModulation = mean(real, WingbeatFeatureVector::amplitudeModulation);</span>
+<span class="fc" id="L57">    double meanSnr = mean(real, WingbeatFeatureVector::signalToNoiseRatio);</span>
+<span class="fc" id="L58">    double meanDrift = mean(real, WingbeatFeatureVector::frequencyDriftHzPerSecond);</span>
+
+<span class="fc" id="L60">    double fundamentalFreq = Math.max(MIN_FREQ_HZ, meanFreq);</span>
+<span class="fc" id="L61">    double jitterHz = Math.max(0.0, meanJitter * Math.sqrt(3.0));</span>
+<span class="fc" id="L62">    double modulationDepth = Math.max(0.0, Math.min(1.0, meanModulation));</span>
+<span class="fc" id="L63">    double noiseAmplitude = estimateNoiseAmplitude(meanSnr);</span>
+
+<span class="fc" id="L65">    List&lt;Double&gt; harmonicAmplitudes = estimateHarmonicAmplitudes(real);</span>
+<span class="fc" id="L66">    int harmonicCount = harmonicAmplitudes.size();</span>
+
+    // Use null to signal uniform amplitude (all 1.0) when no harmonic data is available
+<span class="fc bfc" id="L69" title="All 2 branches covered.">    List&lt;Double&gt; ampParam = harmonicCount &gt; 1 ? harmonicAmplitudes : null;</span>
+
+<span class="fc" id="L71">    return new WingbeatSignalParameters(</span>
+        fundamentalFreq,
+<span class="fc" id="L73">        Math.max(1, harmonicCount),</span>
+        ampParam,
+        0.0,
+        modulationDepth,
+        meanDrift,
+        jitterHz,
+        noiseAmplitude);
+  }
+
+  private static List&lt;Double&gt; estimateHarmonicAmplitudes(List&lt;WingbeatFeatureVector&gt; vectors) {
+<span class="fc" id="L83">    int maxHarmonics = 0;</span>
+<span class="fc bfc" id="L84" title="All 2 branches covered.">    for (WingbeatFeatureVector v : vectors) {</span>
+<span class="fc" id="L85">      maxHarmonics = Math.max(maxHarmonics, v.harmonicAmplitudes().size());</span>
+<span class="fc" id="L86">    }</span>
+<span class="fc bfc" id="L87" title="All 2 branches covered.">    if (maxHarmonics &lt; 2) {</span>
+      // Insufficient harmonic data — return single-element list so caller uses null profile
+<span class="fc" id="L89">      return List.of(1.0);</span>
+    }
+<span class="fc" id="L91">    double[] sums = new double[maxHarmonics];</span>
+<span class="fc" id="L92">    int[] counts = new int[maxHarmonics];</span>
+<span class="fc bfc" id="L93" title="All 2 branches covered.">    for (WingbeatFeatureVector v : vectors) {</span>
+<span class="fc" id="L94">      List&lt;Double&gt; amps = v.harmonicAmplitudes();</span>
+<span class="fc bfc" id="L95" title="All 2 branches covered.">      for (int i = 0; i &lt; amps.size(); i++) {</span>
+<span class="fc" id="L96">        sums[i] += amps.get(i);</span>
+<span class="fc" id="L97">        counts[i]++;</span>
+      }
+<span class="fc" id="L99">    }</span>
+<span class="fc" id="L100">    double maxAmp = 0.0;</span>
+<span class="fc" id="L101">    double[] means = new double[maxHarmonics];</span>
+<span class="fc bfc" id="L102" title="All 2 branches covered.">    for (int i = 0; i &lt; maxHarmonics; i++) {</span>
+<span class="pc bpc" id="L103" title="1 of 2 branches missed.">      means[i] = counts[i] &gt; 0 ? sums[i] / counts[i] : 0.0;</span>
+<span class="fc bfc" id="L104" title="All 2 branches covered.">      if (means[i] &gt; maxAmp) {</span>
+<span class="fc" id="L105">        maxAmp = means[i];</span>
+      }
+    }
+<span class="pc bpc" id="L108" title="1 of 2 branches missed.">    if (maxAmp &lt;= 0.0) {</span>
+<span class="nc" id="L109">      return List.of(1.0);</span>
+    }
+<span class="fc" id="L111">    List&lt;Double&gt; result = new ArrayList&lt;&gt;(maxHarmonics);</span>
+<span class="fc bfc" id="L112" title="All 2 branches covered.">    for (double m : means) {</span>
+<span class="fc" id="L113">      result.add(m / maxAmp);</span>
+    }
+<span class="fc" id="L115">    return List.copyOf(result);</span>
+  }
+
+  /**
+   * Approximate noise amplitude from the measured SNR.
+   *
+   * &lt;p&gt;Uses {@code noiseAmplitude ≈ 1 / (snr + 1)} so that higher SNR produces lower noise. Falls
+   * back to {@link #DEFAULT_NOISE_AMPLITUDE} when SNR is zero or negative.
+   */
+  static double estimateNoiseAmplitude(double meanSnr) {
+<span class="fc bfc" id="L125" title="All 2 branches covered.">    if (meanSnr &lt;= 0.0) {</span>
+<span class="fc" id="L126">      return DEFAULT_NOISE_AMPLITUDE;</span>
+    }
+<span class="fc" id="L128">    return Math.max(0.0, Math.min(1.0, 1.0 / (meanSnr + 1.0)));</span>
+  }
+
+  private static double mean(
+      List&lt;WingbeatFeatureVector&gt; vectors, ToDoubleFunction&lt;WingbeatFeatureVector&gt; extractor) {
+<span class="fc" id="L133">    double sum = 0.0;</span>
+<span class="fc bfc" id="L134" title="All 2 branches covered.">    for (WingbeatFeatureVector v : vectors) {</span>
+<span class="fc" id="L135">      sum += extractor.applyAsDouble(v);</span>
+<span class="fc" id="L136">    }</span>
+<span class="fc" id="L137">    return sum / vectors.size();</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

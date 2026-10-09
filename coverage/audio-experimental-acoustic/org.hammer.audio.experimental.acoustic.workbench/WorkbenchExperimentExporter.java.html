@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WorkbenchExperimentExporter.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.workbench</a> &gt; <span class="el_source">WorkbenchExperimentExporter.java</span></div><h1>WorkbenchExperimentExporter.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.workbench;
+
+import java.util.Map;
+import java.util.Objects;
+import org.hammer.audio.acquisition.LocalizationExperiment;
+import org.hammer.audio.acquisition.LocalizationExperimentCodec;
+
+/** Exports the reproducibility and hardware context associated with a workbench result. */
+public final class WorkbenchExperimentExporter {
+
+  private WorkbenchExperimentExporter() {
+    // utility class
+  }
+
+  /** Return the deterministic machine-readable experiment manifest. */
+  public static String toManifest(WorkbenchRunResult result) {
+<span class="fc" id="L17">    return new LocalizationExperimentCodec().encode(experiment(result));</span>
+  }
+
+  /** Return a compact human-readable experiment and hardware summary. */
+  public static String toMarkdown(WorkbenchRunResult result) {
+<span class="fc" id="L22">    LocalizationExperiment experiment = experiment(result);</span>
+<span class="fc" id="L23">    StringBuilder output =</span>
+        new StringBuilder(&quot;# Localization Experiment\n\n| Field | Value |\n|---|---|\n&quot;);
+<span class="fc" id="L25">    appendRow(output, &quot;Experiment&quot;, experiment.experimentId());</span>
+<span class="fc" id="L26">    appendRow(output, &quot;Stage&quot;, experiment.stage());</span>
+<span class="fc" id="L27">    appendRow(output, &quot;Input mode&quot;, experiment.inputMode());</span>
+<span class="fc" id="L28">    appendRow(output, &quot;Source&quot;, experiment.sourceReference());</span>
+<span class="fc" id="L29">    appendRow(output, &quot;Profile&quot;, experiment.profile().profileId());</span>
+<span class="fc" id="L30">    appendRow(output, &quot;Layout&quot;, experiment.profile().layout());</span>
+<span class="fc" id="L31">    appendRow(output, &quot;Microphones&quot;, experiment.profile().array().channels());</span>
+<span class="fc" id="L32">    experiment</span>
+<span class="fc" id="L33">        .profile()</span>
+<span class="fc" id="L34">        .liveCaptureConfiguration()</span>
+<span class="fc" id="L35">        .ifPresent(</span>
+            configuration -&gt;
+<span class="nc" id="L37">                appendRow(output, &quot;Capture device&quot;, configuration.device().deviceId()));</span>
+<span class="fc" id="L38">    experiment</span>
+<span class="fc" id="L39">        .profile()</span>
+<span class="fc" id="L40">        .calibrationProfile()</span>
+<span class="pc" id="L41">        .ifPresent(calibration -&gt; appendRow(output, &quot;Calibration&quot;, calibration.profileId()));</span>
+<span class="fc bfc" id="L42" title="All 2 branches covered.">    for (Map.Entry&lt;String, String&gt; entry : experiment.metadata().entrySet()) {</span>
+<span class="fc" id="L43">      appendRow(output, &quot;Metadata: &quot; + entry.getKey(), entry.getValue());</span>
+<span class="fc" id="L44">    }</span>
+<span class="fc" id="L45">    return output.toString();</span>
+  }
+
+  private static LocalizationExperiment experiment(WorkbenchRunResult result) {
+<span class="fc" id="L49">    Objects.requireNonNull(result, &quot;result&quot;);</span>
+<span class="fc" id="L50">    return result</span>
+<span class="fc" id="L51">        .experimentMetadata()</span>
+<span class="fc" id="L52">        .orElseThrow(</span>
+<span class="nc" id="L53">            () -&gt; new IllegalArgumentException(&quot;workbench result has no experiment metadata&quot;));</span>
+  }
+
+  private static void appendRow(StringBuilder output, String field, Object value) {
+<span class="fc" id="L57">    output.append(&quot;| &quot;).append(field).append(&quot; | &quot;).append(value).append(&quot; |\n&quot;);</span>
+<span class="fc" id="L58">  }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WorkbenchConfiguration.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.app</a> &gt; <span class="el_source">WorkbenchConfiguration.java</span></div><h1>WorkbenchConfiguration.java</h1><pre class="source lang-java linenums">package org.hammer.audio.app;
+
+import java.util.List;
+import org.hammer.audio.experiment.document.ExperimentDocumentService;
+import org.hammer.audio.experiment.document.workspace.ExperimentDocumentWorkspaceService;
+import org.hammer.audio.pluginhost.PluginManager;
+import org.hammer.audio.pluginhost.PluginRegistry;
+import org.hammer.audio.workflow.Edge;
+import org.hammer.audio.workflow.Node;
+import org.hammer.audio.workflow.Workflow;
+import org.hammer.audio.workflow.WorkflowOperationLog;
+import org.hammer.audio.workflow.WorkflowValidator;
+import org.hammer.audio.workflow.catalog.ExperimentNodeCatalog;
+import org.hammer.audio.workflow.collaboration.WorkflowSessionEventHub;
+import org.hammer.audio.workflow.collaboration.WorkflowSessionRegistry;
+import org.hammer.audio.workflow.collaboration.store.WorkflowSessionStateStore;
+import org.hammer.audio.workflow.editor.WorkflowEditorService;
+import org.hammer.audio.workflow.store.VersionedWorkflowStore;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+
+/**
+ * Spring configuration for the workflow workbench.
+ *
+ * &lt;p&gt;Provides workflow editing and collaboration application services and consumes the optional
+ * {@link VersionedWorkflowStore} selected by {@link WorkflowPersistenceConfiguration}. Also
+ * registers a filesystem resource handler when {@code workbench.static.dir} is configured;
+ * otherwise the built-in classpath UI at {@code /workbench-ui/} is served.
+ */
+@Configuration
+<span class="fc" id="L35">public class WorkbenchConfiguration implements WebMvcConfigurer {</span>
+
+  @Value(&quot;${workbench.static.dir:}&quot;)
+  private String staticDir;
+
+  /** Creates the single-user workflow editor service and injects the optional store. */
+  @Bean
+  public WorkflowEditorService workflowEditorService(
+      ObjectProvider&lt;VersionedWorkflowStore&gt; storeProvider) {
+<span class="nc" id="L44">    WorkflowOperationLog log = new WorkflowOperationLog(seedWorkflow());</span>
+<span class="nc" id="L45">    WorkflowValidator validator = new WorkflowValidator();</span>
+<span class="nc" id="L46">    return new WorkflowEditorService(log, validator, storeProvider.getIfAvailable());</span>
+  }
+
+  /** Discovers the installed trusted plugins exactly once for the workbench application. */
+  @Bean
+  public PluginRegistry pluginRegistry() {
+<span class="nc" id="L52">    return new PluginManager().loadPlugins();</span>
+  }
+
+  /** Creates the shared safe experiment-document service from the installed plugin registry. */
+  @Bean
+  public ExperimentDocumentService experimentDocumentService(PluginRegistry pluginRegistry) {
+<span class="nc" id="L58">    return new ExperimentDocumentService(pluginRegistry.plugins());</span>
+  }
+
+  /** Coordinates confirmed document application with editor and collaboration state. */
+  @Bean
+  public ExperimentDocumentWorkspaceService experimentDocumentWorkspaceService(
+      ExperimentDocumentService documentService,
+      WorkflowEditorService editorService,
+      WorkflowSessionRegistry sessionRegistry) {
+<span class="nc" id="L67">    return new ExperimentDocumentWorkspaceService(documentService, editorService, sessionRegistry);</span>
+  }
+
+  /** Creates the bounded transport-neutral collaboration event hub. */
+  @Bean
+  public WorkflowSessionEventHub workflowSessionEventHub() {
+<span class="nc" id="L73">    return new WorkflowSessionEventHub();</span>
+  }
+
+  /**
+   * Creates the collaboration-session application service and hydrates durable sessions when the
+   * Hibernate persistence mode contributes a state store.
+   */
+  @Bean
+  public WorkflowSessionRegistry workflowSessionRegistry(
+      WorkflowSessionEventHub eventHub,
+      ObjectProvider&lt;WorkflowSessionStateStore&gt; stateStoreProvider) {
+<span class="fc" id="L84">    return new WorkflowSessionRegistry(eventHub, stateStoreProvider.getIfAvailable());</span>
+  }
+
+  /** Registers a filesystem resource handler when configured. */
+  @Override
+  public void addResourceHandlers(ResourceHandlerRegistry registry) {
+<span class="nc bnc" id="L90" title="All 4 branches missed.">    if (staticDir != null &amp;&amp; !staticDir.isBlank()) {</span>
+<span class="nc bnc" id="L91" title="All 2 branches missed.">      String location = staticDir.endsWith(&quot;/&quot;) ? &quot;file:&quot; + staticDir : &quot;file:&quot; + staticDir + &quot;/&quot;;</span>
+<span class="nc" id="L92">      registry.addResourceHandler(&quot;/**&quot;).addResourceLocations(location);</span>
+    }
+<span class="nc" id="L94">  }</span>
+
+  /** Returns the deterministic seed workflow for the workbench. */
+  static Workflow seedWorkflow() {
+<span class="nc" id="L98">    Node inputNode = ExperimentNodeCatalog.syntheticSignalGenerator(&quot;seed.input&quot;);</span>
+<span class="nc" id="L99">    Node gainNode = ExperimentNodeCatalog.gain(&quot;seed.gain&quot;);</span>
+<span class="nc" id="L100">    Node outputNode = ExperimentNodeCatalog.localization(&quot;seed.output&quot;);</span>
+<span class="nc" id="L101">    Edge inputToGain =</span>
+        new Edge(&quot;seed.edge.in-to-gain&quot;, &quot;seed.input&quot;, &quot;signal-out&quot;, &quot;seed.gain&quot;, &quot;audio-in&quot;);
+<span class="nc" id="L103">    Edge gainToOutput =</span>
+        new Edge(&quot;seed.edge.gain-to-out&quot;, &quot;seed.gain&quot;, &quot;audio-out&quot;, &quot;seed.output&quot;, &quot;audio-in&quot;);
+<span class="nc" id="L105">    return new Workflow(</span>
+        &quot;seed.workflow&quot;,
+        &quot;Input -&gt; Gain -&gt; Output&quot;,
+<span class="nc" id="L108">        List.of(inputNode, gainNode, outputNode),</span>
+<span class="nc" id="L109">        List.of(inputToGain, gainToOutput));</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

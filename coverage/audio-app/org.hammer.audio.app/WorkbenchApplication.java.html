@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WorkbenchApplication.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.app</a> &gt; <span class="el_source">WorkbenchApplication.java</span></div><h1>WorkbenchApplication.java</h1><pre class="source lang-java linenums">package org.hammer.audio.app;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+/**
+ * Spring Boot 4.1 entry point for the workflow workbench.
+ *
+ * &lt;p&gt;Starts the embedded servlet container with the workflow editor and collaboration-session REST
+ * APIs. Configuration is driven by {@code application.properties} and command-line overrides:
+ *
+ * &lt;ul&gt;
+ *   &lt;li&gt;{@code server.port} — TCP port (default: 8080)
+ *   &lt;li&gt;{@code workbench.persistence.mode} — memory, hibernate or filesystem
+ *   &lt;li&gt;{@code workbench.static.dir} — filesystem path for static web content; omit to serve from
+ *       the built-in classpath UI ({@code /workbench-ui/})
+ * &lt;/ul&gt;
+ *
+ * &lt;p&gt;Example — in-memory mode:
+ *
+ * &lt;pre&gt;{@code
+ * java -jar audio-app-0.0.4-SNAPSHOT-workbench.jar
+ * }&lt;/pre&gt;
+ *
+ * &lt;p&gt;Persistent startup examples are documented in {@code docs/workbench-hibernate-persistence.md}.
+ */
+@SpringBootApplication(
+    scanBasePackages = {
+      &quot;org.hammer.audio.app&quot;,
+      &quot;org.hammer.audio.experiment.document.http&quot;,
+      &quot;org.hammer.audio.workflow.editor.http&quot;
+    })
+<span class="nc" id="L33">public class WorkbenchApplication {</span>
+
+  /** Starts the Spring Boot workbench application. */
+  public static void main(String[] args) {
+<span class="nc" id="L37">    SpringApplication.run(WorkbenchApplication.class, args);</span>
+<span class="nc" id="L38">  }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

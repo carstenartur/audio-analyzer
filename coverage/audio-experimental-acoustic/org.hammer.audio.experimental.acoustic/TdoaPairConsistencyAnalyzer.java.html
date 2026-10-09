@@ -1,0 +1,227 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>TdoaPairConsistencyAnalyzer.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic</a> &gt; <span class="el_source">TdoaPairConsistencyAnalyzer.java</span></div><h1>TdoaPairConsistencyAnalyzer.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic;
+
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Objects;
+import java.util.Set;
+import org.hammer.audio.acquisition.Microphone;
+import org.hammer.audio.acquisition.MicrophoneArray;
+
+/** Detects physically impossible and triangle-inconsistent pairwise TDOA estimates. */
+public final class TdoaPairConsistencyAnalyzer {
+
+  private final double speedOfSoundMetersPerSecond;
+  private final double cycleToleranceSamples;
+  private final double physicalToleranceSamples;
+
+  /** Creates an analyzer with tolerances expressed in samples of the analysed stream. */
+  public TdoaPairConsistencyAnalyzer(
+      double speedOfSoundMetersPerSecond,
+      double cycleToleranceSamples,
+<span class="fc" id="L22">      double physicalToleranceSamples) {</span>
+<span class="fc" id="L23">    this.speedOfSoundMetersPerSecond =</span>
+<span class="fc" id="L24">        requirePositiveFinite(speedOfSoundMetersPerSecond, &quot;speedOfSoundMetersPerSecond&quot;);</span>
+<span class="fc" id="L25">    this.cycleToleranceSamples =</span>
+<span class="fc" id="L26">        requirePositiveFinite(cycleToleranceSamples, &quot;cycleToleranceSamples&quot;);</span>
+<span class="fc" id="L27">    this.physicalToleranceSamples =</span>
+<span class="fc" id="L28">        requireNonNegativeFinite(physicalToleranceSamples, &quot;physicalToleranceSamples&quot;);</span>
+<span class="fc" id="L29">  }</span>
+
+  /** Analyzes one ordered set of pair estimates at the supplied sample rate. */
+  public TdoaConsistencyReport analyze(
+      MicrophoneArray array, List&lt;TdoaEstimate&gt; estimates, float sampleRate) {
+<span class="fc" id="L34">    Objects.requireNonNull(array, &quot;array&quot;);</span>
+<span class="fc" id="L35">    List&lt;TdoaEstimate&gt; requiredEstimates =</span>
+<span class="fc" id="L36">        List.copyOf(Objects.requireNonNull(estimates, &quot;estimates&quot;));</span>
+<span class="fc" id="L37">    requirePositiveFinite(sampleRate, &quot;sampleRate&quot;);</span>
+<span class="fc" id="L38">    double cycleToleranceSeconds = cycleToleranceSamples / sampleRate;</span>
+<span class="fc" id="L39">    double physicalToleranceSeconds = physicalToleranceSamples / sampleRate;</span>
+
+<span class="fc" id="L41">    PairAnalysis pairAnalysis =</span>
+<span class="fc" id="L42">        analyzePairs(array, requiredEstimates, sampleRate, physicalToleranceSeconds);</span>
+<span class="fc" id="L43">    CycleAnalysis cycleAnalysis =</span>
+<span class="fc" id="L44">        analyzeCycles(array.microphones(), pairAnalysis.delays(), cycleToleranceSeconds);</span>
+<span class="fc" id="L45">    List&lt;TdoaConsistencyFinding&gt; findings = new ArrayList&lt;&gt;(pairAnalysis.findings());</span>
+<span class="fc" id="L46">    findings.addAll(cycleAnalysis.findings());</span>
+
+    double meanResidual =
+<span class="pc bpc" id="L49" title="1 of 2 branches missed.">        cycleAnalysis.evaluatedCycles() &gt; 0</span>
+<span class="fc" id="L50">            ? cycleAnalysis.residualTotal() / cycleAnalysis.evaluatedCycles()</span>
+<span class="pc" id="L51">            : 0.0;</span>
+    double consistencyScore =
+<span class="pc bpc" id="L53" title="1 of 2 branches missed.">        cycleAnalysis.evaluatedCycles() &gt; 0 ? Math.exp(-meanResidual / cycleToleranceSeconds) : 1.0;</span>
+<span class="fc bfc" id="L54" title="All 2 branches covered.">    if (pairAnalysis.physicalViolationCount() &gt; 0) {</span>
+<span class="fc" id="L55">      consistencyScore = 0.0;</span>
+    }
+<span class="fc" id="L57">    return new TdoaConsistencyReport(</span>
+        findings,
+<span class="fc" id="L59">        cycleAnalysis.evaluatedCycles(),</span>
+        meanResidual,
+<span class="fc" id="L61">        cycleAnalysis.maximumResidual(),</span>
+<span class="fc" id="L62">        pairAnalysis.physicalViolationCount(),</span>
+        consistencyScore);
+  }
+
+  private PairAnalysis analyzePairs(
+      MicrophoneArray array,
+      List&lt;TdoaEstimate&gt; estimates,
+      float sampleRate,
+      double physicalToleranceSeconds) {
+<span class="fc" id="L71">    List&lt;OrientedDelay&gt; delays = new ArrayList&lt;&gt;(estimates.size() * 2);</span>
+<span class="fc" id="L72">    Set&lt;UnorderedPair&gt; seenPairs = new HashSet&lt;&gt;();</span>
+<span class="fc" id="L73">    List&lt;TdoaConsistencyFinding&gt; findings = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L74" title="All 2 branches covered.">    for (TdoaEstimate estimate : estimates) {</span>
+<span class="fc" id="L75">      Microphone first = microphone(array, estimate.firstMicrophoneId());</span>
+<span class="fc" id="L76">      Microphone second = microphone(array, estimate.secondMicrophoneId());</span>
+<span class="fc" id="L77">      UnorderedPair pair = UnorderedPair.of(first.id(), second.id());</span>
+<span class="pc bpc" id="L78" title="1 of 2 branches missed.">      if (seenPairs.add(pair)) {</span>
+<span class="fc" id="L79">        delays.add(new OrientedDelay(first.id(), second.id(), estimate.delaySeconds()));</span>
+<span class="fc" id="L80">        delays.add(new OrientedDelay(second.id(), first.id(), -estimate.delaySeconds()));</span>
+      } else {
+<span class="nc" id="L82">        throw new IllegalArgumentException(&quot;duplicate TDOA estimate for pair &quot; + pair);</span>
+      }
+<span class="fc" id="L84">      TdoaConsistencyFinding finding =</span>
+<span class="fc" id="L85">          physicalFinding(first, second, estimate, sampleRate, physicalToleranceSeconds);</span>
+<span class="fc bfc" id="L86" title="All 2 branches covered.">      if (finding != null) {</span>
+<span class="fc" id="L87">        findings.add(finding);</span>
+      }
+<span class="fc" id="L89">    }</span>
+<span class="fc" id="L90">    return new PairAnalysis(List.copyOf(delays), findings, findings.size());</span>
+  }
+
+  private TdoaConsistencyFinding physicalFinding(
+      Microphone first,
+      Microphone second,
+      TdoaEstimate estimate,
+      float sampleRate,
+      double physicalToleranceSeconds) {
+<span class="fc" id="L99">    double physicalLimit =</span>
+<span class="fc" id="L100">        first.positionMeters().distanceTo(second.positionMeters()) / speedOfSoundMetersPerSecond</span>
+            + physicalToleranceSeconds;
+<span class="fc" id="L102">    double excess = Math.abs(estimate.delaySeconds()) - physicalLimit;</span>
+<span class="fc bfc" id="L103" title="All 2 branches covered.">    if (excess &lt;= 0.0) {</span>
+<span class="fc" id="L104">      return null;</span>
+    }
+<span class="pc bpc" id="L106" title="1 of 2 branches missed.">    double tolerance = physicalToleranceSeconds &gt; 0.0 ? physicalToleranceSeconds : 1.0 / sampleRate;</span>
+<span class="fc" id="L107">    return new TdoaConsistencyFinding(</span>
+        TdoaConsistencyFinding.Kind.PHYSICAL_LIMIT,
+<span class="fc" id="L109">        List.of(first.id(), second.id()),</span>
+<span class="fc" id="L110">        Math.copySign(excess, estimate.delaySeconds()),</span>
+        tolerance);
+  }
+
+  private static CycleAnalysis analyzeCycles(
+      List&lt;Microphone&gt; microphones, List&lt;OrientedDelay&gt; delays, double cycleToleranceSeconds) {
+<span class="fc" id="L116">    List&lt;TdoaConsistencyFinding&gt; findings = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L117">    int evaluatedCycles = 0;</span>
+<span class="fc" id="L118">    double residualTotal = 0.0;</span>
+<span class="fc" id="L119">    double maximumResidual = 0.0;</span>
+<span class="fc bfc" id="L120" title="All 2 branches covered.">    for (int firstIndex = 0; firstIndex &lt; microphones.size(); firstIndex++) {</span>
+<span class="fc bfc" id="L121" title="All 2 branches covered.">      for (int secondIndex = firstIndex + 1; secondIndex &lt; microphones.size(); secondIndex++) {</span>
+<span class="fc bfc" id="L122" title="All 2 branches covered.">        for (int thirdIndex = secondIndex + 1; thirdIndex &lt; microphones.size(); thirdIndex++) {</span>
+<span class="fc" id="L123">          String firstId = microphones.get(firstIndex).id();</span>
+<span class="fc" id="L124">          String secondId = microphones.get(secondIndex).id();</span>
+<span class="fc" id="L125">          String thirdId = microphones.get(thirdIndex).id();</span>
+<span class="fc" id="L126">          Double firstSecond = delay(delays, firstId, secondId);</span>
+<span class="fc" id="L127">          Double secondThird = delay(delays, secondId, thirdId);</span>
+<span class="fc" id="L128">          Double firstThird = delay(delays, firstId, thirdId);</span>
+<span class="pc bpc" id="L129" title="3 of 6 branches missed.">          if (firstSecond == null || secondThird == null || firstThird == null) {</span>
+<span class="nc" id="L130">            continue;</span>
+          }
+<span class="fc" id="L132">          double residual = firstSecond + secondThird - firstThird;</span>
+<span class="fc" id="L133">          double absoluteResidual = Math.abs(residual);</span>
+<span class="fc" id="L134">          evaluatedCycles++;</span>
+<span class="fc" id="L135">          residualTotal += absoluteResidual;</span>
+<span class="fc" id="L136">          maximumResidual = Math.max(maximumResidual, absoluteResidual);</span>
+<span class="fc bfc" id="L137" title="All 2 branches covered.">          if (absoluteResidual &gt; cycleToleranceSeconds) {</span>
+<span class="fc" id="L138">            findings.add(</span>
+                new TdoaConsistencyFinding(
+                    TdoaConsistencyFinding.Kind.CYCLE_RESIDUAL,
+<span class="fc" id="L141">                    List.of(firstId, secondId, thirdId),</span>
+                    residual,
+                    cycleToleranceSeconds));
+          }
+        }
+      }
+    }
+<span class="fc" id="L148">    return new CycleAnalysis(findings, evaluatedCycles, residualTotal, maximumResidual);</span>
+  }
+
+  private static Double delay(List&lt;OrientedDelay&gt; delays, String firstId, String secondId) {
+<span class="pc bpc" id="L152" title="1 of 2 branches missed.">    for (OrientedDelay delay : delays) {</span>
+<span class="fc bfc" id="L153" title="All 4 branches covered.">      if (delay.firstId().equals(firstId) &amp;&amp; delay.secondId().equals(secondId)) {</span>
+<span class="fc" id="L154">        return delay.delaySeconds();</span>
+      }
+<span class="fc" id="L156">    }</span>
+<span class="nc" id="L157">    return null;</span>
+  }
+
+  private static Microphone microphone(MicrophoneArray array, String id) {
+<span class="fc" id="L161">    return array.microphones().stream()</span>
+<span class="fc" id="L162">        .filter(microphone -&gt; microphone.id().equals(id))</span>
+<span class="fc" id="L163">        .findFirst()</span>
+<span class="pc" id="L164">        .orElseThrow(() -&gt; new IllegalArgumentException(&quot;unknown microphone id: &quot; + id));</span>
+  }
+
+  private static double requirePositiveFinite(double value, String name) {
+<span class="pc bpc" id="L168" title="2 of 4 branches missed.">    if (Double.isFinite(value) &amp;&amp; value &gt; 0.0) {</span>
+<span class="fc" id="L169">      return value;</span>
+    }
+<span class="nc" id="L171">    throw new IllegalArgumentException(name + &quot; must be finite and &gt; 0&quot;);</span>
+  }
+
+  private static double requireNonNegativeFinite(double value, String name) {
+<span class="pc bpc" id="L175" title="2 of 4 branches missed.">    if (Double.isFinite(value) &amp;&amp; value &gt;= 0.0) {</span>
+<span class="fc" id="L176">      return value;</span>
+    }
+<span class="nc" id="L178">    throw new IllegalArgumentException(name + &quot; must be finite and &gt;= 0&quot;);</span>
+  }
+
+<span class="fc" id="L181">  private record PairAnalysis(</span>
+      List&lt;OrientedDelay&gt; delays,
+      List&lt;TdoaConsistencyFinding&gt; findings,
+      int physicalViolationCount) {
+    // immutable analysis tuple
+  }
+
+<span class="fc" id="L188">  private record CycleAnalysis(</span>
+      List&lt;TdoaConsistencyFinding&gt; findings,
+      int evaluatedCycles,
+      double residualTotal,
+      double maximumResidual) {
+    // immutable analysis tuple
+  }
+
+  private record OrientedDelay(String firstId, String secondId, double delaySeconds) {
+<span class="fc" id="L197">    private OrientedDelay {</span>
+<span class="pc bpc" id="L198" title="4 of 8 branches missed.">      if (firstId == null || firstId.isBlank() || secondId == null || secondId.isBlank()) {</span>
+<span class="nc" id="L199">        throw new IllegalArgumentException(&quot;delay ids must not be blank&quot;);</span>
+      }
+<span class="pc bpc" id="L201" title="1 of 2 branches missed.">      if (firstId.equals(secondId)) {</span>
+<span class="nc" id="L202">        throw new IllegalArgumentException(&quot;delay ids must be distinct&quot;);</span>
+      }
+<span class="pc bpc" id="L204" title="1 of 2 branches missed.">      if (!Double.isFinite(delaySeconds)) {</span>
+<span class="nc" id="L205">        throw new IllegalArgumentException(&quot;delaySeconds must be finite&quot;);</span>
+      }
+<span class="fc" id="L207">    }</span>
+  }
+
+  private record UnorderedPair(String firstId, String secondId) {
+<span class="fc" id="L211">    private UnorderedPair {</span>
+<span class="pc bpc" id="L212" title="4 of 8 branches missed.">      if (firstId == null || firstId.isBlank() || secondId == null || secondId.isBlank()) {</span>
+<span class="nc" id="L213">        throw new IllegalArgumentException(&quot;pair ids must not be blank&quot;);</span>
+      }
+<span class="pc bpc" id="L215" title="1 of 2 branches missed.">      if (firstId.equals(secondId)) {</span>
+<span class="nc" id="L216">        throw new IllegalArgumentException(&quot;pair ids must be distinct&quot;);</span>
+      }
+<span class="fc" id="L218">    }</span>
+
+    private static UnorderedPair of(String firstId, String secondId) {
+<span class="pc bpc" id="L221" title="1 of 2 branches missed.">      return firstId.compareTo(secondId) &lt;= 0</span>
+<span class="fc" id="L222">          ? new UnorderedPair(firstId, secondId)</span>
+<span class="nc" id="L223">          : new UnorderedPair(secondId, firstId);</span>
+    }
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

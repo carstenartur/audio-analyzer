@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>CommitMetadata.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Core</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.store</a> &gt; <span class="el_source">CommitMetadata.java</span></div><h1>CommitMetadata.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.store;
+
+import java.time.Instant;
+import java.util.Objects;
+
+/**
+ * Immutable metadata attached to a workflow commit.
+ *
+ * &lt;p&gt;Owned by the persistence facade layer.
+ *
+ * @param author commit author identifier (non-blank)
+ * @param message human-readable commit message (non-blank)
+ * @param timestamp commit instant
+ */
+public record CommitMetadata(String author, String message, Instant timestamp) {
+
+<span class="fc" id="L17">  public CommitMetadata {</span>
+<span class="pc bpc" id="L18" title="2 of 4 branches missed.">    if (author == null || author.isBlank()) {</span>
+<span class="nc" id="L19">      throw new IllegalArgumentException(&quot;author must not be blank&quot;);</span>
+    }
+<span class="pc bpc" id="L21" title="2 of 4 branches missed.">    if (message == null || message.isBlank()) {</span>
+<span class="nc" id="L22">      throw new IllegalArgumentException(&quot;message must not be blank&quot;);</span>
+    }
+<span class="fc" id="L24">    Objects.requireNonNull(timestamp, &quot;timestamp&quot;);</span>
+<span class="fc" id="L25">  }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

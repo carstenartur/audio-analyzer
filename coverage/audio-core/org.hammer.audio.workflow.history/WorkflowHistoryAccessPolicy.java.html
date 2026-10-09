@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WorkflowHistoryAccessPolicy.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Core</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.history</a> &gt; <span class="el_source">WorkflowHistoryAccessPolicy.java</span></div><h1>WorkflowHistoryAccessPolicy.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.history;
+
+/** Application policy invoked before explicit workflow-history commands access or mutate state. */
+@FunctionalInterface
+public interface WorkflowHistoryAccessPolicy {
+
+  /**
+   * Rejects a restore when current application/session state makes it unsafe.
+   *
+   * @param branch branch targeted by the restore
+   * @param workflowId workflow restored by the command
+   */
+  void assertRestoreAllowed(String branch, String workflowId);
+
+  /**
+   * Allows read-only comparisons by default.
+   *
+   * @param branch branch used as reachability boundary
+   * @param workflowId workflow compared by the command
+   */
+  default void assertCompareAllowed(String branch, String workflowId) {
+    // Read-only comparison does not mutate editor, branch or session state.
+<span class="fc" id="L23">  }</span>
+
+  /**
+   * Applies the existing mutation safety policy to a resolved merge commit by default.
+   *
+   * @param targetBranch branch receiving the merge checkpoint
+   * @param workflowId workflow merged by the command
+   */
+  default void assertMergeAllowed(String targetBranch, String workflowId) {
+<span class="fc" id="L32">    assertRestoreAllowed(targetBranch, workflowId);</span>
+<span class="fc" id="L33">  }</span>
+
+  /**
+   * Returns a policy suitable for non-collaborative and isolated tests.
+   *
+   * @return policy that permits every compare, restore and merge command
+   */
+  static WorkflowHistoryAccessPolicy allowAll() {
+<span class="fc" id="L41">    return (branch, workflowId) -&gt; {</span>
+      // Intentionally unrestricted.
+<span class="fc" id="L43">    };</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

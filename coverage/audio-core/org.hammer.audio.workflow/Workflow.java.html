@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>Workflow.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Core</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow</a> &gt; <span class="el_source">Workflow.java</span></div><h1>Workflow.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow;
+
+import java.util.List;
+import java.util.Objects;
+
+/**
+ * Pure workflow aggregate root independent of UI, execution and persistence.
+ *
+ * @param id stable workflow identifier
+ * @param name human-readable workflow name
+ * @param nodes workflow nodes
+ * @param edges workflow edges
+ * @param metadata extensible metadata for adapters outside the core domain
+ */
+public record Workflow(
+    String id, String name, List&lt;Node&gt; nodes, List&lt;Edge&gt; edges, Metadata metadata) {
+
+<span class="fc" id="L18">  public Workflow {</span>
+<span class="fc" id="L19">    StableIds.requireStable(id, &quot;id&quot;);</span>
+<span class="pc bpc" id="L20" title="2 of 4 branches missed.">    if (name == null || name.isBlank()) {</span>
+<span class="nc" id="L21">      throw new IllegalArgumentException(&quot;name must not be blank&quot;);</span>
+    }
+<span class="fc" id="L23">    Objects.requireNonNull(nodes, &quot;nodes&quot;);</span>
+<span class="fc" id="L24">    Objects.requireNonNull(edges, &quot;edges&quot;);</span>
+<span class="fc" id="L25">    nodes = List.copyOf(nodes);</span>
+<span class="fc" id="L26">    edges = List.copyOf(edges);</span>
+<span class="pc bpc" id="L27" title="1 of 2 branches missed.">    metadata = metadata == null ? Metadata.empty() : metadata;</span>
+<span class="fc" id="L28">  }</span>
+
+  public Workflow(String id, String name, List&lt;Node&gt; nodes, List&lt;Edge&gt; edges) {
+<span class="fc" id="L31">    this(id, name, nodes, edges, Metadata.empty());</span>
+<span class="fc" id="L32">  }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

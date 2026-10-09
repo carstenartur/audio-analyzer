@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>MicrophoneArrayProfile.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Acquisition</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.acquisition</a> &gt; <span class="el_source">MicrophoneArrayProfile.java</span></div><h1>MicrophoneArrayProfile.java</h1><pre class="source lang-java linenums">package org.hammer.audio.acquisition;
+
+import java.util.Collections;
+import java.util.EnumSet;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+
+/**
+ * Persistable hardware and geometry profile shared by simulation, replay and live localization.
+ *
+ * @param profileId stable profile identity
+ * @param displayName human-readable profile name
+ * @param layout geometry family used for presentation and validation
+ * @param array microphone geometry and channel mapping
+ * @param supportedModes localization input modes supported by the profile
+ * @param liveCapture capture configuration required for live mode, otherwise {@code null}
+ * @param calibration current calibration for this exact geometry and channel mapping, otherwise
+ *     {@code null}
+ */
+public record MicrophoneArrayProfile(
+    String profileId,
+    String displayName,
+    MicrophoneArrayLayout layout,
+    MicrophoneArray array,
+    Set&lt;LocalizationInputMode&gt; supportedModes,
+    CaptureDeviceConfiguration liveCapture,
+    MicrophoneArrayCalibration calibration) {
+
+  // Validate one reusable profile and defensively copy its supported modes.
+<span class="fc" id="L31">  public MicrophoneArrayProfile {</span>
+<span class="fc" id="L32">    requireText(profileId, &quot;profileId&quot;);</span>
+<span class="fc" id="L33">    requireText(displayName, &quot;displayName&quot;);</span>
+<span class="fc" id="L34">    Objects.requireNonNull(layout, &quot;layout&quot;);</span>
+<span class="fc" id="L35">    Objects.requireNonNull(array, &quot;array&quot;);</span>
+<span class="fc" id="L36">    Objects.requireNonNull(supportedModes, &quot;supportedModes&quot;);</span>
+<span class="pc bpc" id="L37" title="1 of 2 branches missed.">    if (supportedModes.isEmpty()) {</span>
+<span class="nc" id="L38">      throw new IllegalArgumentException(&quot;supportedModes must not be empty&quot;);</span>
+    }
+<span class="fc" id="L40">    Set&lt;LocalizationInputMode&gt; modes = EnumSet.copyOf(supportedModes);</span>
+<span class="fc" id="L41">    supportedModes = Collections.unmodifiableSet(modes);</span>
+<span class="pc bpc" id="L42" title="1 of 4 branches missed.">    if (modes.contains(LocalizationInputMode.LIVE) &amp;&amp; liveCapture == null) {</span>
+<span class="nc" id="L43">      throw new IllegalArgumentException(&quot;liveCapture is required when LIVE mode is supported&quot;);</span>
+    }
+<span class="pc bpc" id="L45" title="1 of 4 branches missed.">    if (liveCapture != null &amp;&amp; liveCapture.format().channels() != array.channels()) {</span>
+<span class="nc" id="L46">      throw new IllegalArgumentException(</span>
+          &quot;capture channel count must match microphone-array channel count&quot;);
+    }
+<span class="pc bpc" id="L49" title="1 of 4 branches missed.">    if (calibration != null &amp;&amp; !calibration.array().microphones().equals(array.microphones())) {</span>
+<span class="nc" id="L50">      throw new IllegalArgumentException(</span>
+          &quot;calibration geometry and channel mapping must match the profile array&quot;);
+    }
+<span class="fc" id="L53">  }</span>
+
+  /** Returns whether this profile can be used with one input mode. */
+  public boolean supports(LocalizationInputMode mode) {
+<span class="fc" id="L57">    return supportedModes.contains(Objects.requireNonNull(mode, &quot;mode&quot;));</span>
+  }
+
+  /** Optional live capture configuration. */
+  public Optional&lt;CaptureDeviceConfiguration&gt; liveCaptureConfiguration() {
+<span class="fc" id="L62">    return Optional.ofNullable(liveCapture);</span>
+  }
+
+  /** Optional timing and level calibration. */
+  public Optional&lt;MicrophoneArrayCalibration&gt; calibrationProfile() {
+<span class="nc" id="L67">    return Optional.ofNullable(calibration);</span>
+  }
+
+  private static void requireText(String value, String name) {
+<span class="pc bpc" id="L71" title="2 of 4 branches missed.">    if (value == null || value.isBlank()) {</span>
+<span class="nc" id="L72">      throw new IllegalArgumentException(name + &quot; must not be blank&quot;);</span>
+    }
+<span class="fc" id="L74">  }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

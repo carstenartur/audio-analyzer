@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>CollaborationPersistenceConfiguration.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.app</a> &gt; <span class="el_source">CollaborationPersistenceConfiguration.java</span></div><h1>CollaborationPersistenceConfiguration.java</h1><pre class="source lang-java linenums">package org.hammer.audio.app;
+
+import java.util.Objects;
+import org.hammer.audio.infrastructure.workflow.collaboration.store.CollaborationPersistenceEntities;
+import org.hammer.audio.infrastructure.workflow.collaboration.store.HibernateWorkflowOutboxRetentionStore;
+import org.hammer.audio.infrastructure.workflow.collaboration.store.HibernateWorkflowOutboxStore;
+import org.hammer.audio.infrastructure.workflow.collaboration.store.HibernateWorkflowSessionStateStore;
+import org.hammer.audio.workflow.collaboration.retention.WorkflowOutboxRetentionStore;
+import org.hammer.audio.workflow.collaboration.store.WorkflowOutboxStore;
+import org.hammer.audio.workflow.collaboration.store.WorkflowSessionStateStore;
+import org.hibernate.SessionFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+/** Wires Audio Analyzer collaboration entities into the shared Hibernate persistence context. */
+@Configuration
+@ConditionalOnProperty(name = &quot;workbench.persistence.mode&quot;, havingValue = &quot;hibernate&quot;)
+<span class="fc" id="L20">public class CollaborationPersistenceConfiguration {</span>
+
+  /** Registers application-owned collaboration mappings alongside shared JGit mappings. */
+  @Bean
+  public WorkflowPersistenceEntityContributor collaborationPersistenceEntities() {
+<span class="fc" id="L25">    return CollaborationPersistenceEntities::annotatedClasses;</span>
+  }
+
+  /** Creates the durable collaboration state store over the shared application SessionFactory. */
+  @Bean
+  public WorkflowSessionStateStore workflowSessionStateStore(
+      @Qualifier(&quot;workflowPersistenceSessionFactory&quot;) SessionFactory sessionFactory) {
+<span class="nc" id="L32">    return new HibernateWorkflowSessionStateStore(</span>
+<span class="nc" id="L33">        Objects.requireNonNull(sessionFactory, &quot;sessionFactory&quot;));</span>
+  }
+
+  /** Creates leased outbox persistence over the same shared application SessionFactory. */
+  @Bean
+  public WorkflowOutboxStore workflowOutboxStore(
+      @Qualifier(&quot;workflowPersistenceSessionFactory&quot;) SessionFactory sessionFactory) {
+<span class="nc" id="L40">    return new HibernateWorkflowOutboxStore(</span>
+<span class="nc" id="L41">        Objects.requireNonNull(sessionFactory, &quot;sessionFactory&quot;));</span>
+  }
+
+  /** Creates conservative published-outbox retention over the shared SessionFactory. */
+  @Bean
+  public WorkflowOutboxRetentionStore workflowOutboxRetentionStore(
+      @Qualifier(&quot;workflowPersistenceSessionFactory&quot;) SessionFactory sessionFactory) {
+<span class="nc" id="L48">    return new HibernateWorkflowOutboxRetentionStore(</span>
+<span class="nc" id="L49">        Objects.requireNonNull(sessionFactory, &quot;sessionFactory&quot;));</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

@@ -1,0 +1,603 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>AcousticLocalizationPlugin.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.plugin</a> &gt; <span class="el_source">AcousticLocalizationPlugin.java</span></div><h1>AcousticLocalizationPlugin.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.plugin;
+
+import java.awt.BorderLayout;
+import java.util.List;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
+import javax.swing.JScrollPane;
+import javax.swing.JTextArea;
+import org.hammer.audio.experimental.acoustic.workbench.AcousticLocalizationWorkbenchPanel;
+import org.hammer.audio.experimental.acoustic.workbench.ImportedRecordingWorkbenchPanel;
+import org.hammer.audio.plugin.AnalysisContribution;
+import org.hammer.audio.plugin.AudioAnalyzerPlugin;
+import org.hammer.audio.plugin.BenchmarkContribution;
+import org.hammer.audio.plugin.CalibrationContribution;
+import org.hammer.audio.plugin.DemoSignalContribution;
+import org.hammer.audio.plugin.ExperimentContribution;
+import org.hammer.audio.plugin.ExportFormatContribution;
+import org.hammer.audio.plugin.MenuContribution;
+import org.hammer.audio.plugin.PipelineContribution;
+import org.hammer.audio.plugin.PluginDescriptor;
+import org.hammer.audio.plugin.SignalSourceContribution;
+import org.hammer.audio.plugin.SnapshotStreamContribution;
+import org.hammer.audio.plugin.ViewContribution;
+import org.hammer.audio.plugin.VisualizationContribution;
+
+/**
+ * Reference plugin that exposes the experimental acoustic-localization research code (wingbeat
+ * frequency tracking, TDOA estimators, delay-and-sum beamforming and the 2D room simulator) to the
+ * host application as a set of contributions.
+ *
+ * &lt;p&gt;This class deliberately only describes contributions through the stable plugin API. The
+ * concrete DSP types remain in the {@code org.hammer.audio.experimental.acoustic} packages so the
+ * stable plugin API does not need to depend on any audio-domain module.
+ *
+ * &lt;p&gt;The plugin implements all workbench contribution types defined by the generic plugin API,
+ * making the acoustic-localization workflow the first reference implementation of the reusable
+ * signal-processing workbench platform.
+ */
+<span class="fc" id="L39">public final class AcousticLocalizationPlugin implements AudioAnalyzerPlugin {</span>
+
+  private static final String CATEGORY_LOCALIZATION = &quot;localization&quot;;
+
+<span class="fc" id="L43">  private static final PluginDescriptor DESCRIPTOR =</span>
+      new PluginDescriptor(
+          &quot;acoustic-localization&quot;,
+          &quot;Experimental Acoustic Localization&quot;,
+          &quot;0.1.0&quot;,
+          &quot;Experimental localization of weak, intermittent or insect-like acoustic sources.&quot;,
+          &quot;docs/plugins/acoustic-localization.md&quot;,
+          true);
+
+  @Override
+  public PluginDescriptor descriptor() {
+<span class="fc" id="L54">    return DESCRIPTOR;</span>
+  }
+
+  @Override
+  public List&lt;AnalysisContribution&gt; analysisContributions() {
+<span class="fc" id="L59">    return List.of(</span>
+<span class="fc" id="L60">        contribution(</span>
+            &quot;wingbeat-frequency-tracker&quot;,
+            &quot;Tracks the dominant wingbeat frequency inside a configurable band.&quot;),
+<span class="fc" id="L63">        contribution(</span>
+            &quot;cross-correlation-tdoa&quot;,
+            &quot;Time-domain cross-correlation TDOA estimator for microphone pairs.&quot;),
+<span class="fc" id="L66">        contribution(</span>
+            &quot;gcc-phat-tdoa&quot;,
+            &quot;Frequency-domain GCC-PHAT TDOA estimator robust against narrow-band signals.&quot;),
+<span class="fc" id="L69">        contribution(</span>
+            &quot;delay-and-sum-beamformer&quot;,
+            &quot;Delay-and-sum beamformer producing a 2D heatmap over a candidate grid.&quot;),
+<span class="fc" id="L72">        contribution(</span>
+            &quot;doppler-velocity-tracking&quot;,
+            &quot;Doppler-based radial velocity estimation fused with multi-frame source tracking.&quot;),
+<span class="fc" id="L75">        contribution(</span>
+            &quot;mosquito-localization-pipeline&quot;,
+            &quot;Orchestrates frequency tracking, TDOA estimation and beamforming into a snapshot.&quot;));
+  }
+
+  @Override
+  public List&lt;DemoSignalContribution&gt; demoSignalContributions() {
+<span class="fc" id="L82">    return List.of(</span>
+<span class="fc" id="L83">        demo(</span>
+            &quot;insect-burst&quot;,
+            &quot;Insect-like high-frequency burst&quot;,
+            &quot;Short, narrow-band burst around typical mosquito wingbeat frequencies.&quot;),
+<span class="fc" id="L87">        demo(</span>
+            &quot;moving-source&quot;,
+            &quot;Moving acoustic source&quot;,
+            &quot;Synthetic source moving across a 2D array, useful for tracking experiments.&quot;));
+  }
+
+  @Override
+  public List&lt;SignalSourceContribution&gt; signalSourceContributions() {
+<span class="fc" id="L95">    return List.of(</span>
+<span class="fc" id="L96">        signalSource(</span>
+            &quot;simulated-microphone-array&quot;,
+            &quot;Simulated Microphone Array&quot;,
+            &quot;Deterministic synthetic microphone array generated from 2D room acoustics simulation.&quot;,
+            &quot;synthetic&quot;),
+<span class="fc" id="L101">        signalSource(</span>
+            &quot;humbugdb-recording&quot;,
+            &quot;HumBugDB Recording&quot;,
+            &quot;Offline recording loaded from a local HumBugDB dataset export.&quot;,
+            &quot;dataset&quot;));
+  }
+
+  @Override
+  public List&lt;ExperimentContribution&gt; experimentContributions() {
+<span class="fc" id="L110">    return List.of(</span>
+<span class="fc" id="L111">        experiment(</span>
+            &quot;single-static-source&quot;,
+            &quot;Single Static Source&quot;,
+            &quot;Localize a single stationary mosquito-like emitter in a simulated room.&quot;,
+            CATEGORY_LOCALIZATION),
+<span class="fc" id="L116">        experiment(</span>
+            &quot;moving-source&quot;,
+            &quot;Moving Source&quot;,
+            &quot;Track a single source moving linearly across the microphone array.&quot;,
+            CATEGORY_LOCALIZATION),
+<span class="fc" id="L121">        experiment(</span>
+            &quot;two-sources&quot;,
+            &quot;Two Simultaneous Sources&quot;,
+            &quot;Localize two independent emitters active at the same time.&quot;,
+            CATEGORY_LOCALIZATION),
+<span class="fc" id="L126">        experiment(</span>
+            &quot;reflections&quot;,
+            &quot;Room Reflections&quot;,
+            &quot;Test localization robustness under first-order wall reflections.&quot;,
+            CATEGORY_LOCALIZATION),
+<span class="fc" id="L131">        experiment(</span>
+            &quot;noisy-environment&quot;,
+            &quot;Noisy Environment&quot;,
+            &quot;Measure localization accuracy under additive Gaussian noise.&quot;,
+            CATEGORY_LOCALIZATION),
+<span class="fc" id="L136">        experiment(</span>
+            &quot;doppler-moving-source&quot;,
+            &quot;Doppler Moving Source&quot;,
+            &quot;Estimate Doppler radial velocity of a moving source.&quot;,
+            CATEGORY_LOCALIZATION),
+<span class="fc" id="L141">        experiment(</span>
+            &quot;humbugdb-classification&quot;,
+            &quot;HumBugDB Classification&quot;,
+            &quot;Replay feature extraction and rule-based classification on imported HumBugDB clips.&quot;,
+            &quot;classification&quot;));
+  }
+
+  @Override
+  public List&lt;PipelineContribution&gt; pipelineContributions() {
+<span class="fc" id="L150">    return List.of(</span>
+<span class="fc" id="L151">        pipeline(</span>
+            &quot;mosquito-localization&quot;,
+            &quot;Mosquito Localization Pipeline&quot;,
+            &quot;End-to-end: peak detection, frequency clustering, TDOA, beamforming, Kalman tracking.&quot;,
+            &quot;peak-detection, frequency-clustering, TDOA, delay-and-sum, Kalman-tracking&quot;),
+<span class="fc" id="L156">        pipeline(</span>
+            &quot;wingbeat-classification&quot;,
+            &quot;Wingbeat Classification Pipeline&quot;,
+            &quot;Feature extraction from a recording followed by rule-based species classification.&quot;,
+            &quot;feature-extraction, rule-based-classifier, evaluation&quot;));
+  }
+
+  @Override
+  public List&lt;SnapshotStreamContribution&gt; snapshotStreamContributions() {
+<span class="fc" id="L165">    return List.of(</span>
+<span class="fc" id="L166">        snapshotStream(</span>
+            &quot;tracking-snapshot-stream&quot;,
+            &quot;Tracking Snapshot Stream&quot;,
+            &quot;Per-frame TrackingSnapshot values produced by the localization pipeline.&quot;,
+            &quot;org.hammer.audio.experimental.acoustic.tracking.TrackingSnapshot&quot;),
+<span class="fc" id="L171">        snapshotStream(</span>
+            &quot;acoustic-localization-snapshot-stream&quot;,
+            &quot;Acoustic Localization Snapshot Stream&quot;,
+            &quot;Per-frame AcousticLocalizationSnapshot values with frequency clusters and positions.&quot;,
+            &quot;org.hammer.audio.experimental.acoustic.AcousticLocalizationSnapshot&quot;));
+  }
+
+  @Override
+  public List&lt;VisualizationContribution&gt; visualizationContributions() {
+<span class="fc" id="L180">    return List.of(</span>
+<span class="fc" id="L181">        visualization(</span>
+            &quot;room-map-2d&quot;,
+            &quot;2D Room Map&quot;,
+            &quot;Top-down 2D view of the room with microphones, ground-truth and tracked positions.&quot;,
+            &quot;2d-spatial&quot;),
+<span class="fc" id="L186">        visualization(</span>
+            &quot;frequency-cluster-timeline&quot;,
+            &quot;Frequency Cluster Timeline&quot;,
+            &quot;Time-series of detected frequency clusters per frame.&quot;,
+            &quot;time-series&quot;),
+<span class="fc" id="L191">        visualization(</span>
+            &quot;tracking-log&quot;,
+            &quot;Tracking Log&quot;,
+            &quot;Per-frame text log of track IDs, positions, confidence and Doppler estimates.&quot;,
+            &quot;table&quot;),
+<span class="fc" id="L196">        visualization(</span>
+            &quot;classification-confusion-matrix&quot;,
+            &quot;Classification Confusion Matrix&quot;,
+            &quot;Ground-truth vs predicted label grid from HumBugDB classification.&quot;,
+            &quot;table&quot;));
+  }
+
+  @Override
+  public List&lt;CalibrationContribution&gt; calibrationContributions() {
+<span class="fc" id="L205">    return List.of(</span>
+<span class="fc" id="L206">        calibration(</span>
+            &quot;generator-calibration&quot;,
+            &quot;Generator Calibration&quot;,
+            &quot;Tunes generator parameters to match real HumBugDB recording statistics.&quot;,
+            &quot;generator&quot;),
+<span class="fc" id="L211">        calibration(</span>
+            &quot;feature-normalization&quot;,
+            &quot;Feature Normalization&quot;,
+            &quot;Normalizes WingbeatFeatureVector statistics from real corpus for classification.&quot;,
+            &quot;feature-normalization&quot;));
+  }
+
+  @Override
+  public List&lt;BenchmarkContribution&gt; benchmarkContributions() {
+<span class="fc" id="L220">    return List.of(</span>
+<span class="fc" id="L221">        benchmark(</span>
+            &quot;localization-position-error&quot;,
+            &quot;Localization Position Error&quot;,
+            &quot;Mean / median / 95th-percentile Euclidean position error against ground truth.&quot;,
+            &quot;metres&quot;),
+<span class="fc" id="L226">        benchmark(</span>
+            &quot;doppler-velocity-error&quot;,
+            &quot;Doppler Velocity Error&quot;,
+            &quot;Mean absolute error between estimated and true radial velocity.&quot;,
+            &quot;metres/second&quot;),
+<span class="fc" id="L231">        benchmark(</span>
+            &quot;classification-accuracy&quot;,
+            &quot;Classification Accuracy&quot;,
+            &quot;Overall accuracy and per-label precision/recall from HumBugDB evaluation.&quot;,
+            &quot;percent&quot;),
+<span class="fc" id="L236">        benchmark(</span>
+            &quot;processing-latency&quot;,
+            &quot;Processing Latency&quot;,
+            &quot;Frame processing time relative to the real-time audio block budget.&quot;,
+            &quot;milliseconds&quot;));
+  }
+
+  @Override
+  public List&lt;ExportFormatContribution&gt; exportFormatContributions() {
+<span class="fc" id="L245">    return List.of(</span>
+<span class="fc" id="L246">        exportFormat(</span>
+            &quot;markdown-report&quot;,
+            &quot;Markdown Report&quot;,
+            &quot;md&quot;,
+            &quot;Full workbench run report with summary table, per-frame log and metrics.&quot;),
+<span class="fc" id="L251">        exportFormat(</span>
+            &quot;csv-tracks&quot;,
+            &quot;CSV Track Table&quot;,
+            &quot;csv&quot;,
+            &quot;Per-frame track positions, velocities and confidence as a flat CSV table.&quot;),
+<span class="fc" id="L256">        exportFormat(</span>
+            &quot;jsonl-snapshots&quot;,
+            &quot;JSON-lines Snapshots&quot;,
+            &quot;jsonl&quot;,
+            &quot;One JSON object per frame snapshot, suitable for offline analysis pipelines.&quot;));
+  }
+
+  @Override
+  public List&lt;MenuContribution&gt; menuContributions() {
+<span class="fc" id="L265">    return List.of(</span>
+<span class="fc" id="L266">        new MenuContribution() {</span>
+          @Override
+          public String id() {
+<span class="nc" id="L269">            return &quot;log-info&quot;;</span>
+          }
+
+          @Override
+          public String label() {
+<span class="nc" id="L274">            return &quot;Log plugin info&quot;;</span>
+          }
+
+          @Override
+          public Runnable action() {
+<span class="fc" id="L279">            return () -&gt;</span>
+<span class="fc" id="L280">                java.util.logging.Logger.getLogger(AcousticLocalizationPlugin.class.getName())</span>
+<span class="fc" id="L281">                    .info(</span>
+                        () -&gt;
+<span class="fc" id="L283">                            &quot;Acoustic Localization plugin active: see &quot;</span>
+<span class="fc" id="L284">                                + DESCRIPTOR.documentationPath());</span>
+          }
+        });
+  }
+
+  @Override
+  public List&lt;ViewContribution&gt; viewContributions() {
+<span class="fc" id="L291">    return List.of(</span>
+<span class="fc" id="L292">        new ViewContribution() {</span>
+          @Override
+          public String id() {
+<span class="fc" id="L295">            return &quot;acoustic-localization-workbench&quot;;</span>
+          }
+
+          @Override
+          public String title() {
+<span class="nc" id="L300">            return &quot;Acoustic Localization Workbench (experimental)&quot;;</span>
+          }
+
+          @Override
+          public java.util.function.Supplier&lt;javax.swing.JComponent&gt; componentFactory() {
+<span class="fc" id="L305">            return AcousticLocalizationWorkbenchPanel::new;</span>
+          }
+        },
+<span class="fc" id="L308">        new ViewContribution() {</span>
+          @Override
+          public String id() {
+<span class="fc" id="L311">            return &quot;acoustic-localization-overview&quot;;</span>
+          }
+
+          @Override
+          public String title() {
+<span class="nc" id="L316">            return &quot;Acoustic Localization (overview)&quot;;</span>
+          }
+
+          @Override
+          public java.util.function.Supplier&lt;JPanel&gt; componentFactory() {
+<span class="fc" id="L321">            return AcousticLocalizationPlugin::createOverviewPanel;</span>
+          }
+        },
+<span class="fc" id="L324">        new ViewContribution() {</span>
+          @Override
+          public String id() {
+<span class="fc" id="L327">            return &quot;imported-recording-workbench&quot;;</span>
+          }
+
+          @Override
+          public String title() {
+<span class="nc" id="L332">            return &quot;Imported Recording Workbench (experimental)&quot;;</span>
+          }
+
+          @Override
+          public java.util.function.Supplier&lt;javax.swing.JComponent&gt; componentFactory() {
+<span class="fc" id="L337">            return ImportedRecordingWorkbenchPanel::new;</span>
+          }
+        });
+  }
+
+  private static JPanel createOverviewPanel() {
+<span class="fc" id="L343">    JPanel panel = new JPanel(new BorderLayout(8, 8));</span>
+<span class="fc" id="L344">    panel.add(new JLabel(&quot;Experimental Acoustic Localization plugin&quot;), BorderLayout.NORTH);</span>
+<span class="fc" id="L345">    JTextArea text = new JTextArea();</span>
+<span class="fc" id="L346">    text.setEditable(false);</span>
+<span class="fc" id="L347">    text.setLineWrap(true);</span>
+<span class="fc" id="L348">    text.setWrapStyleWord(true);</span>
+<span class="fc" id="L349">    text.setText(</span>
+        &quot;&quot;&quot;
+        This panel is contributed by the acoustic-localization plugin.
+
+        The plugin provides experimental wingbeat frequency tracking, GCC-PHAT /
+        cross-correlation TDOA estimators, delay-and-sum beamforming and a 2D
+        room simulator. The tracking pipeline also estimates Doppler radial
+        velocity, frequency shift and a smoothed velocity vector per source.
+        A companion imported-recording workbench can load a local HumBugDB
+        export, browse imported clips and replay feature extraction /
+        classification on one selected recording.
+        See docs/plugins/acoustic-localization.md for details and limitations.
+
+        Plugin-specific views, analyzers and demo signals are loaded dynamically
+        by the host through the audio-plugin-api ServiceLoader contract; the
+        main application does not depend on this code at compile time.
+        &quot;&quot;&quot;);
+<span class="fc" id="L366">    panel.add(new JScrollPane(text), BorderLayout.CENTER);</span>
+<span class="fc" id="L367">    return panel;</span>
+  }
+
+  private static AnalysisContribution contribution(String id, String description) {
+<span class="fc" id="L371">    return new AnalysisContribution() {</span>
+      @Override
+      public String id() {
+<span class="nc" id="L374">        return id;</span>
+      }
+
+      @Override
+      public String description() {
+<span class="nc" id="L379">        return description;</span>
+      }
+    };
+  }
+
+  private static DemoSignalContribution demo(String id, String label, String description) {
+<span class="fc" id="L385">    return new DemoSignalContribution() {</span>
+      @Override
+      public String id() {
+<span class="nc" id="L388">        return id;</span>
+      }
+
+      @Override
+      public String label() {
+<span class="nc" id="L393">        return label;</span>
+      }
+
+      @Override
+      public String description() {
+<span class="nc" id="L398">        return description;</span>
+      }
+    };
+  }
+
+  private static SignalSourceContribution signalSource(
+      String id, String name, String description, String category) {
+<span class="fc" id="L405">    return new SignalSourceContribution() {</span>
+      @Override
+      public String id() {
+<span class="fc" id="L408">        return id;</span>
+      }
+
+      @Override
+      public String name() {
+<span class="nc" id="L413">        return name;</span>
+      }
+
+      @Override
+      public String description() {
+<span class="nc" id="L418">        return description;</span>
+      }
+
+      @Override
+      public String category() {
+<span class="nc" id="L423">        return category;</span>
+      }
+    };
+  }
+
+  private static ExperimentContribution experiment(
+      String id, String name, String description, String category) {
+<span class="fc" id="L430">    return new ExperimentContribution() {</span>
+      @Override
+      public String id() {
+<span class="fc" id="L433">        return id;</span>
+      }
+
+      @Override
+      public String name() {
+<span class="nc" id="L438">        return name;</span>
+      }
+
+      @Override
+      public String description() {
+<span class="nc" id="L443">        return description;</span>
+      }
+
+      @Override
+      public String category() {
+<span class="nc" id="L448">        return category;</span>
+      }
+    };
+  }
+
+  private static PipelineContribution pipeline(
+      String id, String name, String description, String stages) {
+<span class="fc" id="L455">    return new PipelineContribution() {</span>
+      @Override
+      public String id() {
+<span class="fc" id="L458">        return id;</span>
+      }
+
+      @Override
+      public String name() {
+<span class="nc" id="L463">        return name;</span>
+      }
+
+      @Override
+      public String description() {
+<span class="nc" id="L468">        return description;</span>
+      }
+
+      @Override
+      public String stages() {
+<span class="nc" id="L473">        return stages;</span>
+      }
+    };
+  }
+
+  private static SnapshotStreamContribution snapshotStream(
+      String id, String name, String description, String snapshotTypeName) {
+<span class="fc" id="L480">    return new SnapshotStreamContribution() {</span>
+      @Override
+      public String id() {
+<span class="nc" id="L483">        return id;</span>
+      }
+
+      @Override
+      public String name() {
+<span class="nc" id="L488">        return name;</span>
+      }
+
+      @Override
+      public String description() {
+<span class="nc" id="L493">        return description;</span>
+      }
+
+      @Override
+      public String snapshotTypeName() {
+<span class="nc" id="L498">        return snapshotTypeName;</span>
+      }
+    };
+  }
+
+  private static VisualizationContribution visualization(
+      String id, String name, String description, String renderKind) {
+<span class="fc" id="L505">    return new VisualizationContribution() {</span>
+      @Override
+      public String id() {
+<span class="nc" id="L508">        return id;</span>
+      }
+
+      @Override
+      public String name() {
+<span class="nc" id="L513">        return name;</span>
+      }
+
+      @Override
+      public String description() {
+<span class="nc" id="L518">        return description;</span>
+      }
+
+      @Override
+      public String renderKind() {
+<span class="fc" id="L523">        return renderKind;</span>
+      }
+    };
+  }
+
+  private static CalibrationContribution calibration(
+      String id, String name, String description, String category) {
+<span class="fc" id="L530">    return new CalibrationContribution() {</span>
+      @Override
+      public String id() {
+<span class="nc" id="L533">        return id;</span>
+      }
+
+      @Override
+      public String name() {
+<span class="nc" id="L538">        return name;</span>
+      }
+
+      @Override
+      public String description() {
+<span class="nc" id="L543">        return description;</span>
+      }
+
+      @Override
+      public String category() {
+<span class="nc" id="L548">        return category;</span>
+      }
+    };
+  }
+
+  private static BenchmarkContribution benchmark(
+      String id, String name, String description, String unit) {
+<span class="fc" id="L555">    return new BenchmarkContribution() {</span>
+      @Override
+      public String id() {
+<span class="fc" id="L558">        return id;</span>
+      }
+
+      @Override
+      public String name() {
+<span class="nc" id="L563">        return name;</span>
+      }
+
+      @Override
+      public String description() {
+<span class="nc" id="L568">        return description;</span>
+      }
+
+      @Override
+      public String unit() {
+<span class="nc" id="L573">        return unit;</span>
+      }
+    };
+  }
+
+  private static ExportFormatContribution exportFormat(
+      String id, String name, String fileExtension, String description) {
+<span class="fc" id="L580">    return new ExportFormatContribution() {</span>
+      @Override
+      public String id() {
+<span class="nc" id="L583">        return id;</span>
+      }
+
+      @Override
+      public String name() {
+<span class="nc" id="L588">        return name;</span>
+      }
+
+      @Override
+      public String fileExtension() {
+<span class="fc" id="L593">        return fileExtension;</span>
+      }
+
+      @Override
+      public String description() {
+<span class="nc" id="L598">        return description;</span>
+      }
+    };
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

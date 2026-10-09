@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>MergeConflict.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Core</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.history</a> &gt; <span class="el_source">MergeConflict.java</span></div><h1>MergeConflict.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.history;
+
+import java.util.Objects;
+
+/**
+ * Sealed hierarchy of domain-level merge conflicts.
+ *
+ * &lt;p&gt;Each variant describes a specific type of conflict that arises when two independently evolving
+ * workflow branches are reconciled. Conflicts are reported as model-level domain objects, not as
+ * text-diff hunks.
+ *
+ * &lt;p&gt;Owned by the semantic-analysis/history-projection layer. Must not contain UI, JGit or
+ * execution dependencies.
+ *
+ * @see MergeConflictReport
+ */
+public sealed interface MergeConflict
+    permits MergeConflict.DeleteVsModify, MergeConflict.ConnectVsParameterChange {
+
+  /**
+   * One branch deleted a node while the other branch modified it (e.g. renamed or updated a
+   * parameter).
+   *
+   * &lt;p&gt;This conflict cannot be auto-resolved because discarding the modification would silently
+   * lose intent; keeping the node would ignore the deletion intent.
+   *
+   * @param nodeId stable identifier of the conflicting node
+   */
+  record DeleteVsModify(String nodeId) implements MergeConflict {
+<span class="fc" id="L30">    public DeleteVsModify {</span>
+<span class="fc" id="L31">      Objects.requireNonNull(nodeId, &quot;nodeId&quot;);</span>
+<span class="fc" id="L32">    }</span>
+  }
+
+  /**
+   * One branch connected two ports (adding an edge) while the other branch changed a parameter on
+   * one of the involved nodes.
+   *
+   * &lt;p&gt;The new edge may be invalid after the parameter change, so the conflict must be reviewed by
+   * a human author.
+   *
+   * @param edgeId stable identifier of the newly added edge that may be invalid
+   * @param nodeId stable identifier of the node whose parameter was changed on the other branch
+   */
+  record ConnectVsParameterChange(String edgeId, String nodeId) implements MergeConflict {
+<span class="fc" id="L46">    public ConnectVsParameterChange {</span>
+<span class="fc" id="L47">      Objects.requireNonNull(edgeId, &quot;edgeId&quot;);</span>
+<span class="fc" id="L48">      Objects.requireNonNull(nodeId, &quot;nodeId&quot;);</span>
+<span class="fc" id="L49">    }</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

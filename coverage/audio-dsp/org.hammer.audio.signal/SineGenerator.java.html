@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>SineGenerator.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer DSP and Analysis</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.signal</a> &gt; <span class="el_source">SineGenerator.java</span></div><h1>SineGenerator.java</h1><pre class="source lang-java linenums">package org.hammer.audio.signal;
+
+import java.util.Objects;
+import org.hammer.audio.core.AudioBlock;
+import org.hammer.audio.core.AudioFormatDescriptor;
+
+/**
+ * Deterministic mono sine-wave generator.
+ *
+ * &lt;p&gt;Produces {@code amplitude * sin(2π * frequency * t + initialPhase)} samples, sampled at {@code
+ * format.sampleRate()}. Phase is tracked across calls in double precision to avoid drift over long
+ * runs.
+ *
+ * &lt;p&gt;Although mono internally, the generator can be configured with a multi-channel format; in that
+ * case the same signal is broadcast on every channel.
+ *
+ * @author refactoring
+ */
+public final class SineGenerator implements SignalGenerator {
+
+  private static final double TWO_PI = 2.0d * Math.PI;
+
+  private final AudioFormatDescriptor format;
+  private final double frequencyHz;
+  private final float amplitude;
+  private final double phaseStep;
+  private final double initialPhase;
+  private double phase;
+  private long frameIndex;
+
+  /**
+   * Create a new sine generator with zero initial phase.
+   *
+   * @param format output format descriptor
+   * @param frequencyHz oscillator frequency in Hz; must be finite and {@code &gt; 0}
+   * @param amplitude peak amplitude in normalized units
+   */
+  public SineGenerator(AudioFormatDescriptor format, double frequencyHz, float amplitude) {
+<span class="fc" id="L39">    this(format, frequencyHz, amplitude, 0.0d);</span>
+<span class="fc" id="L40">  }</span>
+
+  /**
+   * Create a new sine generator with an explicit initial phase.
+   *
+   * @param format output format descriptor
+   * @param frequencyHz oscillator frequency in Hz; must be finite and {@code &gt; 0}
+   * @param amplitude peak amplitude in normalized units
+   * @param initialPhaseRadians finite initial phase in radians
+   */
+  public SineGenerator(
+      AudioFormatDescriptor format,
+      double frequencyHz,
+      float amplitude,
+<span class="fc" id="L54">      double initialPhaseRadians) {</span>
+<span class="fc" id="L55">    this.format = Objects.requireNonNull(format, &quot;format&quot;);</span>
+<span class="fc bfc" id="L56" title="All 4 branches covered.">    if (!Double.isFinite(frequencyHz) || !(frequencyHz &gt; 0.0d)) {</span>
+<span class="fc" id="L57">      throw new IllegalArgumentException(&quot;frequencyHz must be finite and &gt; 0, was &quot; + frequencyHz);</span>
+    }
+<span class="fc bfc" id="L59" title="All 2 branches covered.">    if (!Float.isFinite(amplitude)) {</span>
+<span class="fc" id="L60">      throw new IllegalArgumentException(&quot;amplitude must be finite, was &quot; + amplitude);</span>
+    }
+<span class="fc bfc" id="L62" title="All 2 branches covered.">    if (!Double.isFinite(initialPhaseRadians)) {</span>
+<span class="fc" id="L63">      throw new IllegalArgumentException(</span>
+          &quot;initialPhaseRadians must be finite, was &quot; + initialPhaseRadians);
+    }
+<span class="fc" id="L66">    this.frequencyHz = frequencyHz;</span>
+<span class="fc" id="L67">    this.amplitude = amplitude;</span>
+<span class="fc" id="L68">    this.phaseStep = TWO_PI * frequencyHz / format.sampleRate();</span>
+<span class="fc" id="L69">    this.initialPhase = normalizePhase(initialPhaseRadians);</span>
+<span class="fc" id="L70">    this.phase = initialPhase;</span>
+<span class="fc" id="L71">    this.frameIndex = 0L;</span>
+<span class="fc" id="L72">  }</span>
+
+  @Override
+  public AudioFormatDescriptor format() {
+<span class="nc" id="L76">    return format;</span>
+  }
+
+  @Override
+  public AudioBlock nextBlock(int frames) {
+<span class="pc bpc" id="L81" title="1 of 2 branches missed.">    if (frames &lt; 1) {</span>
+<span class="nc" id="L82">      throw new IllegalArgumentException(&quot;frames must be &gt;= 1&quot;);</span>
+    }
+<span class="fc" id="L84">    int channels = format.channels();</span>
+<span class="fc" id="L85">    float[][] samples = new float[channels][frames];</span>
+<span class="fc" id="L86">    double currentPhase = phase;</span>
+<span class="fc bfc" id="L87" title="All 2 branches covered.">    for (int frame = 0; frame &lt; frames; frame++) {</span>
+<span class="fc" id="L88">      float value = (float) (Math.sin(currentPhase) * amplitude);</span>
+<span class="fc bfc" id="L89" title="All 2 branches covered.">      for (int channel = 0; channel &lt; channels; channel++) {</span>
+<span class="fc" id="L90">        samples[channel][frame] = value;</span>
+      }
+<span class="fc" id="L92">      currentPhase += phaseStep;</span>
+    }
+<span class="fc" id="L94">    long index = frameIndex;</span>
+<span class="fc" id="L95">    phase = normalizePhase(currentPhase);</span>
+<span class="fc" id="L96">    frameIndex += frames;</span>
+<span class="fc" id="L97">    return AudioBlock.wrap(format, samples, index, System.nanoTime());</span>
+  }
+
+  @Override
+  public void reset() {
+<span class="fc" id="L102">    phase = initialPhase;</span>
+<span class="fc" id="L103">    frameIndex = 0L;</span>
+<span class="fc" id="L104">  }</span>
+
+  /** Returns the oscillator frequency in hertz. */
+  public double frequencyHz() {
+<span class="nc" id="L108">    return frequencyHz;</span>
+  }
+
+  /** Returns the peak amplitude. */
+  public float amplitude() {
+<span class="nc" id="L113">    return amplitude;</span>
+  }
+
+  /** Returns the normalized initial phase in radians. */
+  public double initialPhaseRadians() {
+<span class="fc" id="L118">    return initialPhase;</span>
+  }
+
+  private static double normalizePhase(double value) {
+<span class="fc" id="L122">    double normalized = value % TWO_PI;</span>
+<span class="pc bpc" id="L123" title="1 of 2 branches missed.">    return normalized &lt; 0.0d ? normalized + TWO_PI : normalized;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

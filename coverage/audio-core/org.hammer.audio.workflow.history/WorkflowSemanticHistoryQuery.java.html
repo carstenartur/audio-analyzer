@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WorkflowSemanticHistoryQuery.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Core</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.history</a> &gt; <span class="el_source">WorkflowSemanticHistoryQuery.java</span></div><h1>WorkflowSemanticHistoryQuery.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.history;
+
+/**
+ * Bounded semantic-history query for one workflow branch.
+ *
+ * @param branch required branch whose reachable semantic projection is searched
+ * @param workflowId optional exact workflow identifier
+ * @param nodeId optional exact node identifier
+ * @param nodeType optional exact node type
+ * @param labelText optional full-text expression over workflow names and node labels
+ * @param propertyKey optional exact workflow/node metadata key
+ * @param propertyValue optional exact workflow/node metadata value
+ * @param limit maximum result count between 1 and 200
+ */
+public record WorkflowSemanticHistoryQuery(
+    String branch,
+    String workflowId,
+    String nodeId,
+    String nodeType,
+    String labelText,
+    String propertyKey,
+    String propertyValue,
+    int limit) {
+
+<span class="fc" id="L25">  public WorkflowSemanticHistoryQuery {</span>
+<span class="fc" id="L26">    WorkflowSemanticHistoryFilter filter =</span>
+        new WorkflowSemanticHistoryFilter(
+            branch, workflowId, nodeId, nodeType, labelText, propertyKey, propertyValue);
+<span class="fc" id="L29">    branch = filter.branch();</span>
+<span class="fc" id="L30">    workflowId = filter.workflowId();</span>
+<span class="fc" id="L31">    nodeId = filter.nodeId();</span>
+<span class="fc" id="L32">    nodeType = filter.nodeType();</span>
+<span class="fc" id="L33">    labelText = filter.labelText();</span>
+<span class="fc" id="L34">    propertyKey = filter.propertyKey();</span>
+<span class="fc" id="L35">    propertyValue = filter.propertyValue();</span>
+<span class="fc bfc" id="L36" title="All 4 branches covered.">    if (limit &lt;= 0 || limit &gt; 200) {</span>
+<span class="fc" id="L37">      throw new IllegalArgumentException(&quot;limit must be between 1 and 200&quot;);</span>
+    }
+<span class="fc" id="L39">  }</span>
+
+  /** Returns the unbounded semantic filter represented by this bounded query. */
+  public WorkflowSemanticHistoryFilter filter() {
+<span class="nc" id="L43">    return new WorkflowSemanticHistoryFilter(</span>
+        branch, workflowId, nodeId, nodeType, labelText, propertyKey, propertyValue);
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>
