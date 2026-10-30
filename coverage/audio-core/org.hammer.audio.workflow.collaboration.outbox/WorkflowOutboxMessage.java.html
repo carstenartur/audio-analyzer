@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WorkflowOutboxMessage.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Core</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.collaboration.outbox</a> &gt; <span class="el_source">WorkflowOutboxMessage.java</span></div><h1>WorkflowOutboxMessage.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.collaboration.outbox;
+
+import java.time.Instant;
+import java.util.Objects;
+import org.hammer.audio.workflow.collaboration.store.StoredWorkflowOutboxEntry;
+
+/**
+ * Transport-neutral envelope published from one committed durable outbox row.
+ *
+ * @param eventId stable transport idempotency key
+ * @param sessionId owning collaboration session
+ * @param sequence durable session event sequence
+ * @param revision semantic workflow revision
+ * @param eventType stable event type
+ * @param occurredAt original transaction event time
+ * @param payload deterministic serialized payload
+ */
+public record WorkflowOutboxMessage(
+    String eventId,
+    String sessionId,
+    long sequence,
+    long revision,
+    String eventType,
+    Instant occurredAt,
+    String payload) {
+
+<span class="nc" id="L27">  public WorkflowOutboxMessage {</span>
+<span class="nc" id="L28">    eventId = requireNotBlank(eventId, &quot;eventId&quot;);</span>
+<span class="nc" id="L29">    sessionId = requireNotBlank(sessionId, &quot;sessionId&quot;);</span>
+<span class="nc bnc" id="L30" title="All 4 branches missed.">    if (sequence &lt;= 0 || revision &lt;= 0) {</span>
+<span class="nc" id="L31">      throw new IllegalArgumentException(&quot;sequence and revision must be &gt; 0&quot;);</span>
+    }
+<span class="nc" id="L33">    eventType = requireNotBlank(eventType, &quot;eventType&quot;);</span>
+<span class="nc" id="L34">    Objects.requireNonNull(occurredAt, &quot;occurredAt&quot;);</span>
+<span class="nc" id="L35">    payload = requireNotBlank(payload, &quot;payload&quot;);</span>
+<span class="nc" id="L36">  }</span>
+
+  /** Creates a publication envelope without exposing lease or retry metadata. */
+  public static WorkflowOutboxMessage from(StoredWorkflowOutboxEntry entry) {
+<span class="nc" id="L40">    StoredWorkflowOutboxEntry requiredEntry = Objects.requireNonNull(entry, &quot;entry&quot;);</span>
+<span class="nc" id="L41">    return new WorkflowOutboxMessage(</span>
+<span class="nc" id="L42">        requiredEntry.eventId(),</span>
+<span class="nc" id="L43">        requiredEntry.sessionId(),</span>
+<span class="nc" id="L44">        requiredEntry.sequence(),</span>
+<span class="nc" id="L45">        requiredEntry.revision(),</span>
+<span class="nc" id="L46">        requiredEntry.eventType(),</span>
+<span class="nc" id="L47">        requiredEntry.occurredAt(),</span>
+<span class="nc" id="L48">        requiredEntry.payload());</span>
+  }
+
+  private static String requireNotBlank(String value, String name) {
+<span class="nc" id="L52">    Objects.requireNonNull(value, name);</span>
+<span class="nc bnc" id="L53" title="All 2 branches missed.">    if (value.isBlank()) {</span>
+<span class="nc" id="L54">      throw new IllegalArgumentException(name + &quot; must not be blank&quot;);</span>
+    }
+<span class="nc" id="L56">    return value;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

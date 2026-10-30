@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WorkflowOutboxBackoffPolicy.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Core</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.collaboration.outbox</a> &gt; <span class="el_source">WorkflowOutboxBackoffPolicy.java</span></div><h1>WorkflowOutboxBackoffPolicy.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.collaboration.outbox;
+
+import java.time.Duration;
+import java.util.Objects;
+
+/**
+ * Deterministic capped exponential retry policy for failed outbox publication.
+ *
+ * @param initialDelay retry delay after the first failed publication
+ * @param maximumDelay inclusive upper bound for all retry delays
+ */
+public record WorkflowOutboxBackoffPolicy(Duration initialDelay, Duration maximumDelay) {
+
+<span class="fc" id="L14">  public WorkflowOutboxBackoffPolicy {</span>
+<span class="fc" id="L15">    Objects.requireNonNull(initialDelay, &quot;initialDelay&quot;);</span>
+<span class="fc" id="L16">    Objects.requireNonNull(maximumDelay, &quot;maximumDelay&quot;);</span>
+<span class="pc bpc" id="L17" title="1 of 4 branches missed.">    if (initialDelay.isZero() || initialDelay.isNegative()) {</span>
+<span class="fc" id="L18">      throw new IllegalArgumentException(&quot;initialDelay must be &gt; 0&quot;);</span>
+    }
+<span class="fc bfc" id="L20" title="All 2 branches covered.">    if (maximumDelay.compareTo(initialDelay) &lt; 0) {</span>
+<span class="fc" id="L21">      throw new IllegalArgumentException(&quot;maximumDelay must be &gt;= initialDelay&quot;);</span>
+    }
+<span class="fc" id="L23">  }</span>
+
+  /** Returns the delay after the supplied one-based failed publication attempt. */
+  public Duration delayAfterFailure(int failedAttempt) {
+<span class="fc bfc" id="L27" title="All 2 branches covered.">    if (failedAttempt &lt;= 0) {</span>
+<span class="fc" id="L28">      throw new IllegalArgumentException(&quot;failedAttempt must be &gt; 0&quot;);</span>
+    }
+<span class="fc" id="L30">    Duration delay = initialDelay;</span>
+<span class="pc bpc" id="L31" title="1 of 4 branches missed.">    for (int attempt = 1; attempt &lt; failedAttempt &amp;&amp; delay.compareTo(maximumDelay) &lt; 0; attempt++) {</span>
+<span class="fc bfc" id="L32" title="All 2 branches covered.">      if (delay.compareTo(maximumDelay.dividedBy(2)) &gt; 0) {</span>
+<span class="fc" id="L33">        return maximumDelay;</span>
+      }
+<span class="fc" id="L35">      delay = delay.multipliedBy(2);</span>
+    }
+<span class="pc bpc" id="L37" title="1 of 2 branches missed.">    return delay.compareTo(maximumDelay) &gt; 0 ? maximumDelay : delay;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

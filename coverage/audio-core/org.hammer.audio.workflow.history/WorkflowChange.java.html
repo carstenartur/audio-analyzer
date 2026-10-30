@@ -1,0 +1,136 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WorkflowChange.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Core</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.history</a> &gt; <span class="el_source">WorkflowChange.java</span></div><h1>WorkflowChange.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.history;
+
+import java.util.Objects;
+import org.hammer.audio.workflow.Edge;
+import org.hammer.audio.workflow.Node;
+
+/**
+ * Sealed hierarchy of domain-level change atoms produced by a semantic workflow diff.
+ *
+ * &lt;p&gt;Each variant represents a single indivisible change between two {@link
+ * org.hammer.audio.workflow.Workflow} snapshots. Callers can switch exhaustively over all variants
+ * using a {@code switch} expression on the sealed type.
+ *
+ * &lt;p&gt;Owned by the semantic-analysis/history-projection layer. Must not contain UI, JGit or
+ * execution dependencies.
+ */
+public sealed interface WorkflowChange
+    permits WorkflowChange.NodeAdded,
+        WorkflowChange.NodeRemoved,
+        WorkflowChange.EdgeAdded,
+        WorkflowChange.EdgeRemoved,
+        WorkflowChange.ParameterChanged,
+        WorkflowChange.FieldChanged {
+
+  /** Semantic workflow element owning a field change. */
+<span class="fc" id="L26">  enum ElementKind {</span>
+<span class="fc" id="L27">    WORKFLOW,</span>
+<span class="fc" id="L28">    NODE,</span>
+<span class="fc" id="L29">    EDGE</span>
+  }
+
+  /**
+   * A node that is present in the &lt;em&gt;after&lt;/em&gt; snapshot but absent in the &lt;em&gt;before&lt;/em&gt;
+   * snapshot.
+   *
+   * @param node the added node
+   */
+  record NodeAdded(Node node) implements WorkflowChange {
+<span class="fc" id="L39">    public NodeAdded {</span>
+<span class="fc" id="L40">      Objects.requireNonNull(node, &quot;node&quot;);</span>
+<span class="fc" id="L41">    }</span>
+  }
+
+  /**
+   * A node that is present in the &lt;em&gt;before&lt;/em&gt; snapshot but absent in the &lt;em&gt;after&lt;/em&gt;
+   * snapshot.
+   *
+   * @param node the removed node
+   */
+  record NodeRemoved(Node node) implements WorkflowChange {
+<span class="fc" id="L51">    public NodeRemoved {</span>
+<span class="fc" id="L52">      Objects.requireNonNull(node, &quot;node&quot;);</span>
+<span class="fc" id="L53">    }</span>
+  }
+
+  /**
+   * An edge that is present in the &lt;em&gt;after&lt;/em&gt; snapshot but absent in the &lt;em&gt;before&lt;/em&gt;
+   * snapshot.
+   *
+   * @param edge the added edge
+   */
+  record EdgeAdded(Edge edge) implements WorkflowChange {
+<span class="fc" id="L63">    public EdgeAdded {</span>
+<span class="fc" id="L64">      Objects.requireNonNull(edge, &quot;edge&quot;);</span>
+<span class="fc" id="L65">    }</span>
+  }
+
+  /**
+   * An edge that is present in the &lt;em&gt;before&lt;/em&gt; snapshot but absent in the &lt;em&gt;after&lt;/em&gt;
+   * snapshot.
+   *
+   * @param edge the removed edge
+   */
+  record EdgeRemoved(Edge edge) implements WorkflowChange {
+<span class="fc" id="L75">    public EdgeRemoved {</span>
+<span class="fc" id="L76">      Objects.requireNonNull(edge, &quot;edge&quot;);</span>
+<span class="fc" id="L77">    }</span>
+  }
+
+  /**
+   * A metadata property on a node or edge whose value changed between the two snapshots.
+   *
+   * &lt;p&gt;If the property was absent before the change {@code oldValue} is {@code null}. If it was
+   * removed by the change {@code newValue} is {@code null}.
+   *
+   * @param targetId stable identifier of the node or edge that owns the property
+   * @param propertyKey stable metadata key
+   * @param oldValue value before the change, or {@code null} if the property was newly added
+   * @param newValue value after the change, or {@code null} if the property was removed
+   */
+  record ParameterChanged(String targetId, String propertyKey, String oldValue, String newValue)
+      implements WorkflowChange {
+<span class="fc" id="L93">    public ParameterChanged {</span>
+<span class="pc bpc" id="L94" title="2 of 4 branches missed.">      if (targetId == null || targetId.isBlank()) {</span>
+<span class="nc" id="L95">        throw new IllegalArgumentException(&quot;targetId must not be blank&quot;);</span>
+      }
+<span class="pc bpc" id="L97" title="2 of 4 branches missed.">      if (propertyKey == null || propertyKey.isBlank()) {</span>
+<span class="nc" id="L98">        throw new IllegalArgumentException(&quot;propertyKey must not be blank&quot;);</span>
+      }
+<span class="pc bpc" id="L100" title="1 of 2 branches missed.">      if (Objects.equals(oldValue, newValue)) {</span>
+<span class="nc" id="L101">        throw new IllegalArgumentException(&quot;A workflow change requires different values&quot;);</span>
+      }
+<span class="fc" id="L103">    }</span>
+  }
+
+  /**
+   * A non-legacy semantic field whose canonical value changed.
+   *
+   * &lt;p&gt;This variant extends the original metadata-focused diff without replacing the established
+   * {@link ParameterChanged} contract. It covers workflow name/metadata, node type/label/ports and
+   * edge endpoints.
+   *
+   * @param elementKind kind of workflow element owning the field
+   * @param targetId stable workflow, node or edge identifier
+   * @param fieldPath stable semantic field path
+   * @param oldValue canonical previous value, or {@code null} when added
+   * @param newValue canonical next value, or {@code null} when removed
+   */
+  record FieldChanged(
+      ElementKind elementKind, String targetId, String fieldPath, String oldValue, String newValue)
+      implements WorkflowChange {
+<span class="fc" id="L122">    public FieldChanged {</span>
+<span class="fc" id="L123">      Objects.requireNonNull(elementKind, &quot;elementKind&quot;);</span>
+<span class="pc bpc" id="L124" title="2 of 4 branches missed.">      if (targetId == null || targetId.isBlank()) {</span>
+<span class="nc" id="L125">        throw new IllegalArgumentException(&quot;targetId must not be blank&quot;);</span>
+      }
+<span class="pc bpc" id="L127" title="2 of 4 branches missed.">      if (fieldPath == null || fieldPath.isBlank()) {</span>
+<span class="nc" id="L128">        throw new IllegalArgumentException(&quot;fieldPath must not be blank&quot;);</span>
+      }
+<span class="pc bpc" id="L130" title="1 of 2 branches missed.">      if (Objects.equals(oldValue, newValue)) {</span>
+<span class="nc" id="L131">        throw new IllegalArgumentException(&quot;A workflow change requires different values&quot;);</span>
+      }
+<span class="fc" id="L133">    }</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

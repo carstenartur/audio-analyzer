@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>DemoPresetGenerator.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer DSP and Analysis</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.signal</a> &gt; <span class="el_source">DemoPresetGenerator.java</span></div><h1>DemoPresetGenerator.java</h1><pre class="source lang-java linenums">package org.hammer.audio.signal;
+
+import org.hammer.audio.DemoSignalType;
+import org.hammer.audio.core.AudioBlock;
+import org.hammer.audio.core.AudioFormatDescriptor;
+
+/** Synthetic stereo scenarios for reproducible measurement demos without audio hardware. */
+public final class DemoPresetGenerator implements SignalGenerator {
+
+  private static final double TWO_PI = 2.0 * Math.PI;
+  private static final double DEFAULT_AMPLITUDE = 0.75;
+  private static final int STEREO_DELAY_SAMPLES = 6;
+
+  private final AudioFormatDescriptor format;
+  private final DemoSignalType signalType;
+  private long frameIndex;
+
+<span class="nc" id="L18">  public DemoPresetGenerator(AudioFormatDescriptor format, DemoSignalType signalType) {</span>
+<span class="nc" id="L19">    this.format = format;</span>
+<span class="nc" id="L20">    this.signalType = signalType;</span>
+<span class="nc" id="L21">  }</span>
+
+  @Override
+  public AudioFormatDescriptor format() {
+<span class="nc" id="L25">    return format;</span>
+  }
+
+  @Override
+  public AudioBlock nextBlock(int frames) {
+<span class="nc bnc" id="L30" title="All 2 branches missed.">    if (frames &lt; 1) {</span>
+<span class="nc" id="L31">      throw new IllegalArgumentException(&quot;frames must be &gt;= 1&quot;);</span>
+    }
+<span class="nc" id="L33">    float[][] samples = new float[format.channels()][frames];</span>
+<span class="nc bnc" id="L34" title="All 2 branches missed.">    for (int frame = 0; frame &lt; frames; frame++) {</span>
+<span class="nc" id="L35">      long absoluteFrame = frameIndex + frame;</span>
+<span class="nc" id="L36">      int delay = delaySamples(absoluteFrame);</span>
+<span class="nc bnc" id="L37" title="All 2 branches missed.">      for (int channel = 0; channel &lt; format.channels(); channel++) {</span>
+<span class="nc bnc" id="L38" title="All 2 branches missed.">        long sourceFrame = channel == 1 ? absoluteFrame - delay : absoluteFrame;</span>
+<span class="nc" id="L39">        samples[channel][frame] = (float) sampleAt(sourceFrame, channel);</span>
+      }
+    }
+<span class="nc" id="L42">    AudioBlock block = AudioBlock.wrap(format, samples, frameIndex, System.nanoTime());</span>
+<span class="nc" id="L43">    frameIndex += frames;</span>
+<span class="nc" id="L44">    return block;</span>
+  }
+
+  @Override
+  public void reset() {
+<span class="nc" id="L49">    frameIndex = 0L;</span>
+<span class="nc" id="L50">  }</span>
+
+  private int delaySamples(long absoluteFrame) {
+<span class="nc bnc" id="L53" title="All 4 branches missed.">    return switch (signalType) {</span>
+<span class="nc" id="L54">      case MOVING_CHIRP -&gt; (int) Math.round(6.0 * Math.sin(TWO_PI * seconds(absoluteFrame) / 3.0));</span>
+<span class="nc" id="L55">      case MOSQUITO_BURST -&gt; 4;</span>
+<span class="nc" id="L56">      case STEREO_DELAY_TEST -&gt; STEREO_DELAY_SAMPLES;</span>
+<span class="nc" id="L57">      default -&gt; 0;</span>
+    };
+  }
+
+  private double sampleAt(long absoluteFrame, int channel) {
+<span class="nc bnc" id="L62" title="All 8 branches missed.">    return switch (signalType) {</span>
+<span class="nc" id="L63">      case MOSQUITO_BURST -&gt; mosquitoLikeBurst(absoluteFrame, channel);</span>
+<span class="nc" id="L64">      case MOVING_CHIRP -&gt; movingChirp(absoluteFrame);</span>
+<span class="nc" id="L65">      case HUM_HARMONICS -&gt; humWithHarmonics(absoluteFrame, channel);</span>
+<span class="nc" id="L66">      case CLIPPING_TEST -&gt; clippingTest(absoluteFrame);</span>
+<span class="nc" id="L67">      case STEREO_DELAY_TEST -&gt; stereoDelayProbe(absoluteFrame);</span>
+<span class="nc" id="L68">      case SINE -&gt; DEFAULT_AMPLITUDE * Math.sin(TWO_PI * 440.0 * seconds(absoluteFrame));</span>
+      case SQUARE -&gt;
+<span class="nc" id="L70">          DEFAULT_AMPLITUDE * Math.signum(Math.sin(TWO_PI * 440.0 * seconds(absoluteFrame)));</span>
+<span class="nc" id="L71">      case CHIRP -&gt; chirp(absoluteFrame);</span>
+    };
+  }
+
+  private double mosquitoLikeBurst(long absoluteFrame, int channel) {
+<span class="nc" id="L76">    double sampleRate = format.sampleRate();</span>
+<span class="nc" id="L77">    double burstPeriod = 0.42;</span>
+<span class="nc" id="L78">    double burstPosition = seconds(absoluteFrame) % burstPeriod;</span>
+<span class="nc" id="L79">    double burstLength = 0.055;</span>
+    double envelope =
+<span class="nc bnc" id="L81" title="All 2 branches missed.">        burstPosition &lt; burstLength ? Math.sin(Math.PI * burstPosition / burstLength) : 0.0;</span>
+<span class="nc" id="L82">    double carrier = Math.sin(TWO_PI * 5_200.0 * absoluteFrame / sampleRate);</span>
+<span class="nc" id="L83">    double flutter = 0.65 + 0.35 * Math.sin(TWO_PI * 95.0 * absoluteFrame / sampleRate);</span>
+<span class="nc" id="L84">    double echo = 0.18 * envelope * Math.sin(TWO_PI * 5_200.0 * (absoluteFrame - 18) / sampleRate);</span>
+<span class="nc" id="L85">    double noise = 0.015 * deterministicNoise(absoluteFrame + channel * 17L);</span>
+<span class="nc" id="L86">    return 0.52 * envelope * flutter * carrier + echo + noise;</span>
+  }
+
+  private double movingChirp(long absoluteFrame) {
+<span class="nc" id="L90">    double cycle = 3.0;</span>
+<span class="nc" id="L91">    double position = (seconds(absoluteFrame) % cycle) / cycle;</span>
+<span class="nc" id="L92">    double frequency = 350.0 + position * 4_500.0;</span>
+<span class="nc" id="L93">    return 0.58 * Math.sin(TWO_PI * frequency * absoluteFrame / format.sampleRate());</span>
+  }
+
+  private double chirp(long absoluteFrame) {
+<span class="nc" id="L97">    double cycle = 2.5;</span>
+<span class="nc" id="L98">    double position = (seconds(absoluteFrame) % cycle) / cycle;</span>
+<span class="nc" id="L99">    double frequency = 120.0 + position * 2_680.0;</span>
+<span class="nc" id="L100">    return DEFAULT_AMPLITUDE * Math.sin(TWO_PI * frequency * absoluteFrame / format.sampleRate());</span>
+  }
+
+  private double humWithHarmonics(long absoluteFrame, int channel) {
+<span class="nc" id="L104">    double t = seconds(absoluteFrame);</span>
+<span class="nc" id="L105">    double noise = 0.012 * deterministicNoise(absoluteFrame + channel * 31L);</span>
+<span class="nc" id="L106">    return 0.45 * Math.sin(TWO_PI * 50.0 * t)</span>
+<span class="nc" id="L107">        + 0.18 * Math.sin(TWO_PI * 100.0 * t)</span>
+<span class="nc" id="L108">        + 0.09 * Math.sin(TWO_PI * 150.0 * t)</span>
+        + noise;
+  }
+
+  private double clippingTest(long absoluteFrame) {
+<span class="nc" id="L113">    double value = 1.6 * Math.sin(TWO_PI * 440.0 * seconds(absoluteFrame));</span>
+<span class="nc" id="L114">    return Math.max(-1.0, Math.min(1.0, value));</span>
+  }
+
+  private double stereoDelayProbe(long absoluteFrame) {
+<span class="nc" id="L118">    double t = seconds(absoluteFrame);</span>
+<span class="nc" id="L119">    double burst = Math.sin(TWO_PI * 880.0 * t) + 0.45 * Math.sin(TWO_PI * 2_700.0 * t);</span>
+<span class="nc bnc" id="L120" title="All 2 branches missed.">    double gate = (absoluteFrame / 1_200) % 2 == 0 ? 1.0 : 0.25;</span>
+<span class="nc" id="L121">    return DEFAULT_AMPLITUDE * gate * burst / 1.45;</span>
+  }
+
+  private double seconds(long absoluteFrame) {
+<span class="nc" id="L125">    return absoluteFrame / (double) format.sampleRate();</span>
+  }
+
+  private static double deterministicNoise(long value) {
+<span class="nc" id="L129">    long mixed = value * 6_364_136_223_846_793_005L + 1_442_695_040_888_963_407L;</span>
+<span class="nc" id="L130">    mixed ^= mixed &gt;&gt;&gt; 33;</span>
+<span class="nc" id="L131">    return ((mixed &amp; 0xffffL) / 32767.5) - 1.0;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

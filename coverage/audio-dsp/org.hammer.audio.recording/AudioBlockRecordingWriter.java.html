@@ -1,0 +1,282 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>AudioBlockRecordingWriter.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer DSP and Analysis</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.recording</a> &gt; <span class="el_source">AudioBlockRecordingWriter.java</span></div><h1>AudioBlockRecordingWriter.java</h1><pre class="source lang-java linenums">package org.hammer.audio.recording;
+
+import java.io.Closeable;
+import java.io.DataOutputStream;
+import java.io.FilterOutputStream;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
+import java.security.DigestOutputStream;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.Objects;
+import org.hammer.audio.core.AudioBlock;
+import org.hammer.audio.core.AudioFormatDescriptor;
+
+/**
+ * Writes streamable, integrity-protected version-2 audio recordings.
+ *
+ * &lt;p&gt;Path-backed writers use a sibling {@code .partial} file and move it to the requested target
+ * only after the completion footer has been flushed successfully. Instances are not thread-safe.
+ */
+public final class AudioBlockRecordingWriter implements Closeable {
+
+  private final CountingOutputStream counter;
+  private final DigestOutputStream digestStream;
+  private final DataOutputStream out;
+  private final Path targetFile;
+  private final Path partialFile;
+
+  private AudioFormatDescriptor format;
+  private long blocksWritten;
+  private long totalFrames;
+<span class="fc" id="L37">  private long firstFrameIndex = Long.MIN_VALUE;</span>
+<span class="fc" id="L38">  private long lastFrameIndex = Long.MIN_VALUE;</span>
+<span class="fc" id="L39">  private long firstTimestampNanos = Long.MIN_VALUE;</span>
+<span class="fc" id="L40">  private long lastTimestampNanos = Long.MIN_VALUE;</span>
+<span class="fc" id="L41">  private long expectedNextFrameIndex = Long.MIN_VALUE;</span>
+  private long continuityGapCount;
+  private long payloadBytes;
+  private boolean closed;
+  private boolean finalized;
+
+  /** Open an atomic path-backed writer. */
+  public static AudioBlockRecordingWriter open(Path file) throws IOException {
+<span class="fc" id="L49">    Objects.requireNonNull(file, &quot;file&quot;);</span>
+<span class="fc" id="L50">    Path target = file.toAbsolutePath().normalize();</span>
+<span class="fc" id="L51">    Path parent = target.getParent();</span>
+<span class="pc bpc" id="L52" title="1 of 2 branches missed.">    if (parent == null) {</span>
+<span class="nc" id="L53">      throw new IOException(&quot;Recording target has no parent directory: &quot; + target);</span>
+    }
+<span class="fc" id="L55">    Files.createDirectories(parent);</span>
+<span class="fc" id="L56">    Path partial = target.resolveSibling(target.getFileName() + &quot;.partial&quot;);</span>
+<span class="fc" id="L57">    Files.deleteIfExists(partial);</span>
+<span class="fc" id="L58">    OutputStream stream =</span>
+<span class="fc" id="L59">        Files.newOutputStream(</span>
+            partial,
+            StandardOpenOption.CREATE_NEW,
+            StandardOpenOption.WRITE,
+            StandardOpenOption.TRUNCATE_EXISTING);
+<span class="fc" id="L64">    return new AudioBlockRecordingWriter(stream, target, partial);</span>
+  }
+
+  /** Wrap an existing output stream; no path move is performed on close. */
+  public AudioBlockRecordingWriter(OutputStream stream) {
+<span class="nc" id="L69">    this(stream, null, null);</span>
+<span class="nc" id="L70">  }</span>
+
+<span class="fc" id="L72">  private AudioBlockRecordingWriter(OutputStream stream, Path targetFile, Path partialFile) {</span>
+<span class="fc" id="L73">    MessageDigest digest = newSha256();</span>
+<span class="fc" id="L74">    this.counter = new CountingOutputStream(Objects.requireNonNull(stream, &quot;stream&quot;));</span>
+<span class="fc" id="L75">    this.digestStream = new DigestOutputStream(counter, digest);</span>
+<span class="fc" id="L76">    this.out = new DataOutputStream(digestStream);</span>
+<span class="fc" id="L77">    this.targetFile = targetFile;</span>
+<span class="fc" id="L78">    this.partialFile = partialFile;</span>
+<span class="fc" id="L79">  }</span>
+
+  /** Returns the format header already written, or {@code null} before the first block. */
+  public AudioFormatDescriptor format() {
+<span class="nc" id="L83">    return format;</span>
+  }
+
+  /** Number of blocks successfully serialized. */
+  public long blocksWritten() {
+<span class="fc" id="L88">    return blocksWritten;</span>
+  }
+
+  /** Number of frames successfully serialized. */
+  public long totalFrames() {
+<span class="fc" id="L93">    return totalFrames;</span>
+  }
+
+  /** Number of detected source-frame discontinuities. */
+  public long continuityGapCount() {
+<span class="fc" id="L98">    return continuityGapCount;</span>
+  }
+
+  /** Bytes written to the partial/output stream, including the current header/footer state. */
+  public long bytesWritten() {
+<span class="nc" id="L103">    return counter.count();</span>
+  }
+
+  /** Target path, or {@code null} for stream-backed writers. */
+  public Path targetFile() {
+<span class="nc" id="L108">    return targetFile;</span>
+  }
+
+  /** Partial path, or {@code null} for stream-backed writers. */
+  public Path partialFile() {
+<span class="fc" id="L113">    return partialFile;</span>
+  }
+
+  /** Append one immutable audio block. */
+  public void write(AudioBlock block) throws IOException {
+<span class="fc" id="L118">    Objects.requireNonNull(block, &quot;block&quot;);</span>
+<span class="pc bpc" id="L119" title="1 of 2 branches missed.">    if (closed) {</span>
+<span class="nc" id="L120">      throw new IllegalStateException(&quot;writer is closed&quot;);</span>
+    }
+<span class="fc bfc" id="L122" title="All 2 branches covered.">    if (format == null) {</span>
+<span class="fc" id="L123">      writeHeader(block.format());</span>
+<span class="fc" id="L124">      format = block.format();</span>
+<span class="fc bfc" id="L125" title="All 2 branches covered.">    } else if (!format.equals(block.format())) {</span>
+<span class="fc" id="L126">      throw new IllegalStateException(</span>
+<span class="fc" id="L127">          &quot;format mismatch: expected &quot; + format + &quot; but block was &quot; + block.format());</span>
+    }
+<span class="fc bfc" id="L129" title="All 2 branches covered.">    if (blocksWritten == 0L) {</span>
+<span class="fc" id="L130">      firstFrameIndex = block.frameIndex();</span>
+<span class="fc" id="L131">      firstTimestampNanos = block.timestampNanos();</span>
+<span class="pc bpc" id="L132" title="1 of 2 branches missed.">    } else if (block.frameIndex() != expectedNextFrameIndex) {</span>
+<span class="nc" id="L133">      continuityGapCount++;</span>
+    }
+
+<span class="fc" id="L136">    int frames = block.frames();</span>
+<span class="fc" id="L137">    int channels = block.channels();</span>
+<span class="fc" id="L138">    out.writeInt(frames);</span>
+<span class="fc" id="L139">    out.writeLong(block.frameIndex());</span>
+<span class="fc" id="L140">    out.writeLong(block.timestampNanos());</span>
+<span class="fc bfc" id="L141" title="All 2 branches covered.">    for (int channel = 0; channel &lt; channels; channel++) {</span>
+<span class="fc" id="L142">      float[] samples = block.channelView(channel);</span>
+<span class="fc bfc" id="L143" title="All 2 branches covered.">      for (int frame = 0; frame &lt; frames; frame++) {</span>
+<span class="fc" id="L144">        out.writeFloat(samples[frame]);</span>
+      }
+    }
+<span class="fc" id="L147">    blocksWritten++;</span>
+<span class="fc" id="L148">    totalFrames = Math.addExact(totalFrames, frames);</span>
+<span class="fc" id="L149">    lastFrameIndex = block.frameIndex();</span>
+<span class="fc" id="L150">    lastTimestampNanos = block.timestampNanos();</span>
+<span class="fc" id="L151">    expectedNextFrameIndex = Math.addExact(block.frameIndex(), frames);</span>
+<span class="fc" id="L152">    payloadBytes = Math.addExact(payloadBytes, 20L + 4L * channels * frames);</span>
+<span class="fc" id="L153">  }</span>
+
+  /**
+   * Abort without a completion footer. A path-backed writer leaves the sibling partial file for
+   * inspection/recovery and never replaces the requested target.
+   */
+  public void abort() throws IOException {
+<span class="pc bpc" id="L160" title="1 of 2 branches missed.">    if (closed) {</span>
+<span class="nc" id="L161">      return;</span>
+    }
+<span class="fc" id="L163">    closed = true;</span>
+<span class="fc" id="L164">    out.close();</span>
+<span class="fc" id="L165">  }</span>
+
+  @Override
+  public void close() throws IOException {
+<span class="pc bpc" id="L169" title="1 of 2 branches missed.">    if (closed) {</span>
+<span class="nc" id="L170">      return;</span>
+    }
+<span class="pc bpc" id="L172" title="1 of 2 branches missed.">    if (format == null) {</span>
+<span class="nc" id="L173">      abort();</span>
+<span class="nc bnc" id="L174" title="All 2 branches missed.">      if (partialFile != null) {</span>
+<span class="nc" id="L175">        Files.deleteIfExists(partialFile);</span>
+      }
+<span class="nc" id="L177">      return;</span>
+    }
+<span class="fc" id="L179">    IOException failure = null;</span>
+    try {
+<span class="fc" id="L181">      writeFooter();</span>
+<span class="fc" id="L182">      out.flush();</span>
+<span class="fc" id="L183">      finalized = true;</span>
+<span class="nc" id="L184">    } catch (IOException exception) {</span>
+<span class="nc" id="L185">      failure = exception;</span>
+<span class="fc" id="L186">    }</span>
+    try {
+<span class="fc" id="L188">      out.close();</span>
+<span class="nc" id="L189">    } catch (IOException exception) {</span>
+<span class="nc bnc" id="L190" title="All 2 branches missed.">      if (failure == null) {</span>
+<span class="nc" id="L191">        failure = exception;</span>
+      } else {
+<span class="nc" id="L193">        failure.addSuppressed(exception);</span>
+      }
+<span class="fc" id="L195">    }</span>
+<span class="fc" id="L196">    closed = true;</span>
+<span class="pc bpc" id="L197" title="2 of 4 branches missed.">    if (failure == null &amp;&amp; targetFile != null) {</span>
+<span class="fc" id="L198">      moveFinalizedPartial();</span>
+    }
+<span class="pc bpc" id="L200" title="1 of 2 branches missed.">    if (failure != null) {</span>
+<span class="nc" id="L201">      throw failure;</span>
+    }
+<span class="fc" id="L203">  }</span>
+
+  /** Returns whether the completion footer was written successfully. */
+  public boolean finalized() {
+<span class="nc" id="L207">    return finalized;</span>
+  }
+
+  private void writeHeader(AudioFormatDescriptor descriptor) throws IOException {
+<span class="fc" id="L211">    out.writeInt(AudioBlockRecordingFormat.MAGIC);</span>
+<span class="fc" id="L212">    out.writeShort(AudioBlockRecordingFormat.VERSION);</span>
+<span class="fc" id="L213">    out.writeShort(descriptor.channels());</span>
+<span class="fc" id="L214">    out.writeFloat(descriptor.sampleRate());</span>
+<span class="fc" id="L215">    out.writeShort(descriptor.sourceSampleSizeInBits());</span>
+<span class="fc" id="L216">    out.writeShort(0);</span>
+<span class="fc" id="L217">  }</span>
+
+  private void writeFooter() throws IOException {
+<span class="fc" id="L220">    out.writeInt(AudioBlockRecordingFormat.FOOTER_MARKER);</span>
+<span class="fc" id="L221">    out.flush();</span>
+<span class="fc" id="L222">    digestStream.on(false);</span>
+<span class="fc" id="L223">    byte[] checksum = digestStream.getMessageDigest().digest();</span>
+<span class="fc" id="L224">    out.writeInt(AudioBlockRecordingFormat.FOOTER_MAGIC);</span>
+<span class="fc" id="L225">    out.writeLong(blocksWritten);</span>
+<span class="fc" id="L226">    out.writeLong(totalFrames);</span>
+<span class="fc" id="L227">    out.writeLong(firstFrameIndex);</span>
+<span class="fc" id="L228">    out.writeLong(lastFrameIndex);</span>
+<span class="fc" id="L229">    out.writeLong(firstTimestampNanos);</span>
+<span class="fc" id="L230">    out.writeLong(lastTimestampNanos);</span>
+<span class="fc" id="L231">    out.writeLong(continuityGapCount);</span>
+<span class="fc" id="L232">    out.writeLong(payloadBytes);</span>
+<span class="fc" id="L233">    out.writeInt(checksum.length);</span>
+<span class="fc" id="L234">    out.write(checksum);</span>
+<span class="fc" id="L235">  }</span>
+
+  private void moveFinalizedPartial() throws IOException {
+    try {
+<span class="fc" id="L239">      Files.move(</span>
+          partialFile,
+          targetFile,
+          StandardCopyOption.ATOMIC_MOVE,
+          StandardCopyOption.REPLACE_EXISTING);
+<span class="nc" id="L244">    } catch (AtomicMoveNotSupportedException exception) {</span>
+<span class="nc" id="L245">      Files.move(partialFile, targetFile, StandardCopyOption.REPLACE_EXISTING);</span>
+<span class="fc" id="L246">    }</span>
+<span class="fc" id="L247">  }</span>
+
+  private static MessageDigest newSha256() {
+    try {
+<span class="fc" id="L251">      return MessageDigest.getInstance(&quot;SHA-256&quot;);</span>
+<span class="nc" id="L252">    } catch (NoSuchAlgorithmException exception) {</span>
+<span class="nc" id="L253">      throw new IllegalStateException(&quot;SHA-256 is required by the Java platform&quot;, exception);</span>
+    }
+  }
+
+  private static final class CountingOutputStream extends FilterOutputStream {
+
+    private long byteCount;
+
+    private CountingOutputStream(OutputStream stream) {
+<span class="fc" id="L262">      super(stream);</span>
+<span class="fc" id="L263">    }</span>
+
+    @Override
+    public void write(int value) throws IOException {
+<span class="nc" id="L267">      out.write(value);</span>
+<span class="nc" id="L268">      byteCount++;</span>
+<span class="nc" id="L269">    }</span>
+
+    @Override
+    public void write(byte[] bytes, int offset, int length) throws IOException {
+<span class="fc" id="L273">      out.write(bytes, offset, length);</span>
+<span class="fc" id="L274">      byteCount = Math.addExact(byteCount, length);</span>
+<span class="fc" id="L275">    }</span>
+
+    private long count() {
+<span class="nc" id="L278">      return byteCount;</span>
+    }
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

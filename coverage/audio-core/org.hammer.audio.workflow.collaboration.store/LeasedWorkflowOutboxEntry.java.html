@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>LeasedWorkflowOutboxEntry.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Core</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.collaboration.store</a> &gt; <span class="el_source">LeasedWorkflowOutboxEntry.java</span></div><h1>LeasedWorkflowOutboxEntry.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.collaboration.store;
+
+import java.time.Instant;
+import java.util.Objects;
+
+/**
+ * One pending durable outbox event exclusively leased by a dispatcher instance.
+ *
+ * @param entry durable event awaiting publication
+ * @param leaseOwner stable dispatcher-instance identifier
+ * @param leaseToken opaque token required for acknowledgement
+ * @param leaseExpiresAt time after which another dispatcher may reclaim the event
+ */
+public record LeasedWorkflowOutboxEntry(
+    StoredWorkflowOutboxEntry entry, String leaseOwner, String leaseToken, Instant leaseExpiresAt) {
+
+<span class="nc" id="L17">  public LeasedWorkflowOutboxEntry {</span>
+<span class="nc" id="L18">    Objects.requireNonNull(entry, &quot;entry&quot;);</span>
+<span class="nc bnc" id="L19" title="All 2 branches missed.">    if (!entry.pending()) {</span>
+<span class="nc" id="L20">      throw new IllegalArgumentException(&quot;Only pending outbox entries may be leased&quot;);</span>
+    }
+<span class="nc" id="L22">    leaseOwner = requireNotBlank(leaseOwner, &quot;leaseOwner&quot;);</span>
+<span class="nc" id="L23">    leaseToken = requireNotBlank(leaseToken, &quot;leaseToken&quot;);</span>
+<span class="nc" id="L24">    Objects.requireNonNull(leaseExpiresAt, &quot;leaseExpiresAt&quot;);</span>
+<span class="nc" id="L25">  }</span>
+
+  private static String requireNotBlank(String value, String name) {
+<span class="nc" id="L28">    Objects.requireNonNull(value, name);</span>
+<span class="nc bnc" id="L29" title="All 2 branches missed.">    if (value.isBlank()) {</span>
+<span class="nc" id="L30">      throw new IllegalArgumentException(name + &quot; must not be blank&quot;);</span>
+    }
+<span class="nc" id="L32">    return value;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

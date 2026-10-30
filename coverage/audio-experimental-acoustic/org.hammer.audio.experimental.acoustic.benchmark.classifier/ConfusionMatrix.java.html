@@ -1,0 +1,207 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ConfusionMatrix.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.benchmark.classifier</a> &gt; <span class="el_source">ConfusionMatrix.java</span></div><h1>ConfusionMatrix.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.benchmark.classifier;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+
+/**
+ * Label-indexed confusion matrix.
+ *
+ * &lt;p&gt;Rows correspond to actual (ground-truth) labels; columns correspond to predicted labels. All
+ * per-label metrics — accuracy, precision, recall and F1 — are computed on demand from the matrix.
+ */
+@SuppressWarnings(&quot;PMD.UseConcurrentHashMap&quot;)
+public final class ConfusionMatrix {
+
+  private final Map&lt;String, Map&lt;String, Integer&gt;&gt; matrix;
+  private final int totalCount;
+
+<span class="fc" id="L24">  private ConfusionMatrix(Map&lt;String, Map&lt;String, Integer&gt;&gt; matrix, int totalCount) {</span>
+<span class="fc" id="L25">    this.matrix = matrix;</span>
+<span class="fc" id="L26">    this.totalCount = totalCount;</span>
+<span class="fc" id="L27">  }</span>
+
+  /**
+   * Build a confusion matrix from parallel lists of actual and predicted labels.
+   *
+   * @param actual actual (ground-truth) labels; must not be {@code null}
+   * @param predicted predicted labels; must not be {@code null}; must have the same size as {@code
+   *     actual}
+   * @return confusion matrix; never {@code null}
+   */
+  public static ConfusionMatrix of(List&lt;String&gt; actual, List&lt;String&gt; predicted) {
+<span class="fc" id="L38">    Objects.requireNonNull(actual, &quot;actual&quot;);</span>
+<span class="fc" id="L39">    Objects.requireNonNull(predicted, &quot;predicted&quot;);</span>
+<span class="pc bpc" id="L40" title="1 of 2 branches missed.">    if (actual.size() != predicted.size()) {</span>
+<span class="nc" id="L41">      throw new IllegalArgumentException(&quot;actual and predicted must have the same size&quot;);</span>
+    }
+<span class="fc" id="L43">    Map&lt;String, Map&lt;String, Integer&gt;&gt; m = new LinkedHashMap&lt;&gt;();</span>
+<span class="fc bfc" id="L44" title="All 2 branches covered.">    for (int i = 0; i &lt; actual.size(); i++) {</span>
+<span class="fc" id="L45">      String act = Objects.requireNonNull(actual.get(i), &quot;actual label must not be null&quot;);</span>
+<span class="fc" id="L46">      String pred = Objects.requireNonNull(predicted.get(i), &quot;predicted label must not be null&quot;);</span>
+<span class="fc" id="L47">      m.computeIfAbsent(act, k -&gt; new LinkedHashMap&lt;&gt;()).merge(pred, 1, Integer::sum);</span>
+    }
+    // Unmodifiable
+<span class="fc" id="L50">    Map&lt;String, Map&lt;String, Integer&gt;&gt; immutable = new LinkedHashMap&lt;&gt;();</span>
+<span class="fc bfc" id="L51" title="All 2 branches covered.">    for (Map.Entry&lt;String, Map&lt;String, Integer&gt;&gt; entry : m.entrySet()) {</span>
+<span class="fc" id="L52">      immutable.put(</span>
+<span class="fc" id="L53">          entry.getKey(), Collections.unmodifiableMap(new LinkedHashMap&lt;&gt;(entry.getValue())));</span>
+<span class="fc" id="L54">    }</span>
+<span class="fc" id="L55">    return new ConfusionMatrix(Collections.unmodifiableMap(immutable), actual.size());</span>
+  }
+
+  /**
+   * Total number of samples in the confusion matrix.
+   *
+   * @return total count; always {@code &gt;= 0}
+   */
+  public int totalCount() {
+<span class="fc" id="L64">    return totalCount;</span>
+  }
+
+  /**
+   * Overall accuracy: fraction of correctly classified samples.
+   *
+   * @return accuracy in {@code [0,1]}, or {@code 0} when the matrix is empty
+   */
+  public double accuracy() {
+<span class="pc bpc" id="L73" title="1 of 2 branches missed.">    if (totalCount == 0) {</span>
+<span class="nc" id="L74">      return 0.0;</span>
+    }
+<span class="fc" id="L76">    int correct = 0;</span>
+<span class="fc bfc" id="L77" title="All 2 branches covered.">    for (Map.Entry&lt;String, Map&lt;String, Integer&gt;&gt; row : matrix.entrySet()) {</span>
+<span class="fc" id="L78">      correct += row.getValue().getOrDefault(row.getKey(), 0);</span>
+<span class="fc" id="L79">    }</span>
+<span class="fc" id="L80">    return correct / (double) totalCount;</span>
+  }
+
+  /**
+   * Precision for the given predicted label: {@code TP / (TP + FP)}, or {@code null} when no
+   * samples were predicted as that label.
+   *
+   * @param label target label; must not be {@code null}
+   * @return precision in {@code [0,1]}, or {@code null}
+   */
+  public Double precision(String label) {
+<span class="fc" id="L91">    Objects.requireNonNull(label, &quot;label&quot;);</span>
+<span class="fc" id="L92">    int truePositives = 0;</span>
+<span class="fc" id="L93">    int totalPredicted = 0;</span>
+<span class="fc bfc" id="L94" title="All 2 branches covered.">    for (Map.Entry&lt;String, Map&lt;String, Integer&gt;&gt; row : matrix.entrySet()) {</span>
+<span class="fc" id="L95">      int cellCount = row.getValue().getOrDefault(label, 0);</span>
+<span class="fc" id="L96">      totalPredicted += cellCount;</span>
+<span class="fc bfc" id="L97" title="All 2 branches covered.">      if (label.equals(row.getKey())) {</span>
+<span class="fc" id="L98">        truePositives = cellCount;</span>
+      }
+<span class="fc" id="L100">    }</span>
+<span class="fc bfc" id="L101" title="All 2 branches covered.">    return totalPredicted == 0 ? null : truePositives / (double) totalPredicted;</span>
+  }
+
+  /**
+   * Recall for the given actual label: {@code TP / (TP + FN)}, or {@code null} when no samples
+   * exist for that label.
+   *
+   * @param label target label; must not be {@code null}
+   * @return recall in {@code [0,1]}, or {@code null}
+   */
+  public Double recall(String label) {
+<span class="fc" id="L112">    Objects.requireNonNull(label, &quot;label&quot;);</span>
+<span class="fc" id="L113">    Map&lt;String, Integer&gt; row = matrix.get(label);</span>
+<span class="fc bfc" id="L114" title="All 2 branches covered.">    if (row == null) {</span>
+<span class="fc" id="L115">      return null;</span>
+    }
+<span class="fc" id="L117">    int total = 0;</span>
+<span class="fc bfc" id="L118" title="All 2 branches covered.">    for (int c : row.values()) {</span>
+<span class="fc" id="L119">      total += c;</span>
+<span class="fc" id="L120">    }</span>
+<span class="pc bpc" id="L121" title="1 of 2 branches missed.">    if (total == 0) {</span>
+<span class="nc" id="L122">      return null;</span>
+    }
+<span class="fc" id="L124">    return row.getOrDefault(label, 0) / (double) total;</span>
+  }
+
+  /**
+   * F1 score for the given label: harmonic mean of precision and recall, or {@code null} when
+   * either metric is unavailable.
+   *
+   * @param label target label; must not be {@code null}
+   * @return F1 score in {@code [0,1]}, or {@code null}
+   */
+  public Double f1(String label) {
+<span class="fc" id="L135">    Objects.requireNonNull(label, &quot;label&quot;);</span>
+<span class="fc" id="L136">    Double p = precision(label);</span>
+<span class="fc" id="L137">    Double r = recall(label);</span>
+<span class="pc bpc" id="L138" title="1 of 6 branches missed.">    if (p == null || r == null || (p + r) == 0.0) {</span>
+<span class="fc" id="L139">      return null;</span>
+    }
+<span class="fc" id="L141">    return 2.0 * p * r / (p + r);</span>
+  }
+
+  /**
+   * Count the number of samples where the actual label is {@code actual} and the predicted label is
+   * {@code predicted}.
+   *
+   * @param actual actual label; must not be {@code null}
+   * @param predicted predicted label; must not be {@code null}
+   * @return count; always {@code &gt;= 0}
+   */
+  public int count(String actual, String predicted) {
+<span class="fc" id="L153">    Objects.requireNonNull(actual, &quot;actual&quot;);</span>
+<span class="fc" id="L154">    Objects.requireNonNull(predicted, &quot;predicted&quot;);</span>
+<span class="fc" id="L155">    Map&lt;String, Integer&gt; row = matrix.get(actual);</span>
+<span class="fc bfc" id="L156" title="All 2 branches covered.">    return row == null ? 0 : row.getOrDefault(predicted, 0);</span>
+  }
+
+  /**
+   * Set of all labels observed either as actual or predicted labels in the matrix.
+   *
+   * @return label set; never {@code null}
+   */
+  public Set&lt;String&gt; labels() {
+<span class="fc" id="L165">    Set&lt;String&gt; labels = new LinkedHashSet&lt;&gt;(matrix.keySet());</span>
+<span class="fc bfc" id="L166" title="All 2 branches covered.">    for (Map&lt;String, Integer&gt; row : matrix.values()) {</span>
+<span class="fc" id="L167">      labels.addAll(row.keySet());</span>
+<span class="fc" id="L168">    }</span>
+<span class="fc" id="L169">    return labels;</span>
+  }
+
+  /**
+   * Return an unmodifiable view of the underlying matrix (actual → predicted → count).
+   *
+   * @return confusion matrix map; never {@code null}
+   */
+  public Map&lt;String, Map&lt;String, Integer&gt;&gt; asMap() {
+<span class="nc" id="L178">    return matrix;</span>
+  }
+
+  /**
+   * Render a compact Markdown table for this confusion matrix.
+   *
+   * @return Markdown snippet; never {@code null}
+   */
+  public String toMarkdown() {
+<span class="fc" id="L187">    List&lt;String&gt; labelList = new ArrayList&lt;&gt;(labels());</span>
+<span class="pc bpc" id="L188" title="1 of 2 branches missed.">    if (labelList.isEmpty()) {</span>
+<span class="nc" id="L189">      return &quot;*(empty confusion matrix)*\n&quot;;</span>
+    }
+<span class="fc" id="L191">    StringBuilder sb = new StringBuilder(256);</span>
+<span class="fc" id="L192">    sb.append(&quot;| Actual \\ Predicted |&quot;);</span>
+<span class="fc bfc" id="L193" title="All 2 branches covered.">    for (String l : labelList) {</span>
+<span class="fc" id="L194">      sb.append(' ').append(l).append(&quot; |&quot;);</span>
+<span class="fc" id="L195">    }</span>
+<span class="fc" id="L196">    sb.append(&quot;\n|---|&quot;).append(&quot;---|&quot;.repeat(labelList.size())).append('\n');</span>
+<span class="fc bfc" id="L197" title="All 2 branches covered.">    for (String act : labelList) {</span>
+<span class="fc" id="L198">      sb.append(&quot;| &quot;).append(act).append(&quot; |&quot;);</span>
+<span class="fc bfc" id="L199" title="All 2 branches covered.">      for (String pred : labelList) {</span>
+<span class="fc" id="L200">        sb.append(' ').append(count(act, pred)).append(&quot; |&quot;);</span>
+<span class="fc" id="L201">      }</span>
+<span class="fc" id="L202">      sb.append('\n');</span>
+<span class="fc" id="L203">    }</span>
+<span class="fc" id="L204">    return sb.toString();</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

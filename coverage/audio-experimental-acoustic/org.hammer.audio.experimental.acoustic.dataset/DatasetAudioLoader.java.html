@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>DatasetAudioLoader.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.dataset</a> &gt; <span class="el_source">DatasetAudioLoader.java</span></div><h1>DatasetAudioLoader.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.dataset;
+
+import java.io.IOException;
+import java.nio.file.Path;
+import java.util.Objects;
+import javax.sound.sampled.AudioFormat;
+import javax.sound.sampled.AudioInputStream;
+import javax.sound.sampled.AudioSystem;
+import javax.sound.sampled.UnsupportedAudioFileException;
+import org.hammer.audio.capture.SampleDecoder;
+import org.hammer.audio.core.AudioBlock;
+import org.hammer.audio.core.AudioFormatDescriptor;
+
+/** Loads local dataset audio files into normalized {@link AudioBlock} instances. */
+<span class="fc" id="L15">public final class DatasetAudioLoader {</span>
+
+  /**
+   * Inspect one audio file without exposing the decoded samples.
+   *
+   * @param audioPath local audio file
+   * @return basic audio metadata
+   * @throws IOException when the audio file cannot be opened
+   */
+  public static AudioFileInfo inspect(Path audioPath) throws IOException {
+<span class="fc" id="L25">    Objects.requireNonNull(audioPath, &quot;audioPath&quot;);</span>
+<span class="fc" id="L26">    try (AudioInputStream stream = AudioSystem.getAudioInputStream(audioPath.toFile())) {</span>
+<span class="fc" id="L27">      AudioFormat format = stream.getFormat();</span>
+<span class="fc" id="L28">      double sampleRate = format.getSampleRate();</span>
+<span class="fc" id="L29">      long frameLength = stream.getFrameLength();</span>
+<span class="pc bpc" id="L30" title="2 of 4 branches missed.">      double duration = frameLength &gt; 0 &amp;&amp; sampleRate &gt; 0.0 ? frameLength / sampleRate : 0.0;</span>
+<span class="fc" id="L31">      return new AudioFileInfo(</span>
+<span class="fc" id="L32">          sampleRate, duration, format.getChannels(), format.getSampleSizeInBits());</span>
+<span class="nc" id="L33">    } catch (UnsupportedAudioFileException ex) {</span>
+<span class="nc" id="L34">      throw new IOException(&quot;Unsupported audio file: &quot; + audioPath, ex);</span>
+    }
+  }
+
+  /**
+   * Decode one audio file into a normalized {@link AudioBlock}.
+   *
+   * @param audioPath local audio file
+   * @return decoded audio block
+   * @throws IOException when the audio file cannot be decoded
+   */
+  public AudioBlock load(Path audioPath) throws IOException {
+<span class="fc" id="L46">    Objects.requireNonNull(audioPath, &quot;audioPath&quot;);</span>
+<span class="fc" id="L47">    try (AudioInputStream sourceStream = AudioSystem.getAudioInputStream(audioPath.toFile())) {</span>
+<span class="fc" id="L48">      AudioFormat baseFormat = sourceStream.getFormat();</span>
+<span class="fc" id="L49">      AudioFormat targetFormat = pcmFormat(baseFormat);</span>
+      try (AudioInputStream pcmStream =
+<span class="pc bpc" id="L51" title="1 of 2 branches missed.">          needsConversion(baseFormat)</span>
+<span class="nc" id="L52">              ? AudioSystem.getAudioInputStream(targetFormat, sourceStream)</span>
+<span class="fc" id="L53">              : sourceStream) {</span>
+<span class="fc" id="L54">        AudioFormat effectiveFormat = pcmStream.getFormat();</span>
+<span class="fc" id="L55">        AudioFormatDescriptor descriptor =</span>
+            new AudioFormatDescriptor(
+<span class="fc" id="L57">                effectiveFormat.getSampleRate(),</span>
+<span class="fc" id="L58">                effectiveFormat.getChannels(),</span>
+<span class="fc" id="L59">                effectiveFormat.getSampleSizeInBits());</span>
+<span class="fc" id="L60">        SampleDecoder decoder =</span>
+            new SampleDecoder(
+                descriptor,
+<span class="fc" id="L63">                AudioFormat.Encoding.PCM_SIGNED.equals(effectiveFormat.getEncoding()),</span>
+<span class="fc" id="L64">                effectiveFormat.isBigEndian());</span>
+<span class="fc" id="L65">        byte[] bytes = pcmStream.readAllBytes();</span>
+<span class="fc" id="L66">        int frames = decoder.framesIn(bytes.length);</span>
+<span class="fc" id="L67">        float[][] samples = new float[descriptor.channels()][frames];</span>
+<span class="fc" id="L68">        decoder.decode(bytes, bytes.length, samples);</span>
+<span class="fc" id="L69">        return AudioBlock.wrap(descriptor, samples, 0L, 0L);</span>
+      }
+<span class="nc" id="L71">    } catch (UnsupportedAudioFileException ex) {</span>
+<span class="nc" id="L72">      throw new IOException(&quot;Unsupported audio file: &quot; + audioPath, ex);</span>
+    }
+  }
+
+  private static boolean needsConversion(AudioFormat format) {
+<span class="fc" id="L77">    AudioFormat.Encoding encoding = format.getEncoding();</span>
+<span class="fc bfc" id="L78" title="All 2 branches covered.">    return !AudioFormat.Encoding.PCM_SIGNED.equals(encoding)</span>
+<span class="pc bpc" id="L79" title="1 of 2 branches missed.">        &amp;&amp; !AudioFormat.Encoding.PCM_UNSIGNED.equals(encoding);</span>
+  }
+
+  private static AudioFormat pcmFormat(AudioFormat format) {
+<span class="pc bpc" id="L83" title="1 of 2 branches missed.">    if (!needsConversion(format)) {</span>
+<span class="fc" id="L84">      return format;</span>
+    }
+<span class="nc" id="L86">    int channels = Math.max(1, format.getChannels());</span>
+<span class="nc" id="L87">    return new AudioFormat(</span>
+        AudioFormat.Encoding.PCM_SIGNED,
+<span class="nc" id="L89">        format.getSampleRate(),</span>
+        16,
+        channels,
+        channels * 2,
+<span class="nc" id="L93">        format.getSampleRate(),</span>
+        false);
+  }
+
+  /**
+   * Basic metadata for one inspected audio file.
+   *
+   * @param sampleRateHz audio sample rate in hertz
+   * @param durationSeconds decoded or header-derived duration in seconds
+   * @param channelCount number of audio channels
+   * @param sampleSizeBits source sample size in bits
+   */
+  public record AudioFileInfo(
+      double sampleRateHz, double durationSeconds, int channelCount, int sampleSizeBits) {
+
+<span class="fc" id="L108">    public AudioFileInfo {</span>
+<span class="pc bpc" id="L109" title="2 of 4 branches missed.">      if (!Double.isFinite(sampleRateHz) || sampleRateHz &lt;= 0.0) {</span>
+<span class="nc" id="L110">        throw new IllegalArgumentException(&quot;sampleRateHz must be finite and &gt; 0&quot;);</span>
+      }
+<span class="pc bpc" id="L112" title="2 of 4 branches missed.">      if (!Double.isFinite(durationSeconds) || durationSeconds &lt; 0.0) {</span>
+<span class="nc" id="L113">        throw new IllegalArgumentException(&quot;durationSeconds must be finite and &gt;= 0&quot;);</span>
+      }
+<span class="pc bpc" id="L115" title="1 of 2 branches missed.">      if (channelCount &lt; 1) {</span>
+<span class="nc" id="L116">        throw new IllegalArgumentException(&quot;channelCount must be &gt;= 1&quot;);</span>
+      }
+<span class="pc bpc" id="L118" title="1 of 2 branches missed.">      if (sampleSizeBits &lt; 1) {</span>
+<span class="nc" id="L119">        throw new IllegalArgumentException(&quot;sampleSizeBits must be &gt;= 1&quot;);</span>
+      }
+<span class="fc" id="L121">    }</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

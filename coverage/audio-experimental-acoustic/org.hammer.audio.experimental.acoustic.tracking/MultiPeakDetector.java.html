@@ -1,0 +1,170 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>MultiPeakDetector.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.tracking</a> &gt; <span class="el_source">MultiPeakDetector.java</span></div><h1>MultiPeakDetector.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.tracking;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.Objects;
+import org.hammer.audio.analysis.Fft;
+import org.hammer.audio.core.AudioBlock;
+import org.hammer.audio.experimental.acoustic.FrequencyBand;
+
+/**
+ * Multi-peak detector replacing the single-peak {@code WingbeatFrequencyTracker} as the entry stage
+ * of the tracking pipeline.
+ *
+ * &lt;p&gt;For each channel of an {@link AudioBlock} the detector performs a Hann-windowed real FFT,
+ * restricts the spectrum to the configured {@link FrequencyBand}, finds at most {@code maxPeaks}
+ * local maxima ordered by magnitude, refines each peak frequency by parabolic interpolation across
+ * its three adjacent bins, and rejects peaks whose magnitude is below a configurable signal-to-
+ * noise multiple of the band median.
+ *
+ * &lt;p&gt;The detector is allocation-aware: it reuses internal scratch arrays for the FFT and magnitudes
+ * between calls, which makes it safe to use inside a bounded per-frame budget. Each detector
+ * instance is single-threaded; create one per processing thread.
+ */
+public final class MultiPeakDetector {
+
+  private final int fftSize;
+  private final FrequencyBand band;
+  private final int maxPeaks;
+  private final double minSnr;
+  private final Fft fft;
+
+  private final float[] re;
+  private final float[] im;
+  private final float[] magnitudes;
+
+  /**
+   * Create a detector with explicit limits.
+   *
+   * @param fftSize power-of-two FFT length
+   * @param band frequency search band
+   * @param maxPeaks maximum number of peaks returned per channel (must be &amp;gt;= 1)
+   * @param minSnr minimum ratio of peak magnitude to band median; peaks below are dropped (&amp;gt;= 0)
+   */
+<span class="fc" id="L46">  public MultiPeakDetector(int fftSize, FrequencyBand band, int maxPeaks, double minSnr) {</span>
+<span class="fc bfc" id="L47" title="All 4 branches covered.">    if (fftSize &lt;= 0 || (fftSize &amp; (fftSize - 1)) != 0) {</span>
+<span class="fc" id="L48">      throw new IllegalArgumentException(&quot;fftSize must be a positive power of two&quot;);</span>
+    }
+<span class="fc" id="L50">    Objects.requireNonNull(band, &quot;band&quot;);</span>
+<span class="fc bfc" id="L51" title="All 2 branches covered.">    if (maxPeaks &lt; 1) {</span>
+<span class="fc" id="L52">      throw new IllegalArgumentException(&quot;maxPeaks must be &gt;= 1&quot;);</span>
+    }
+<span class="pc bpc" id="L54" title="1 of 4 branches missed.">    if (!Double.isFinite(minSnr) || minSnr &lt; 0.0) {</span>
+<span class="fc" id="L55">      throw new IllegalArgumentException(&quot;minSnr must be finite and &gt;= 0&quot;);</span>
+    }
+<span class="fc" id="L57">    this.fftSize = fftSize;</span>
+<span class="fc" id="L58">    this.band = band;</span>
+<span class="fc" id="L59">    this.maxPeaks = maxPeaks;</span>
+<span class="fc" id="L60">    this.minSnr = minSnr;</span>
+<span class="fc" id="L61">    this.fft = new Fft(fftSize);</span>
+<span class="fc" id="L62">    this.re = new float[fftSize];</span>
+<span class="fc" id="L63">    this.im = new float[fftSize];</span>
+<span class="fc" id="L64">    this.magnitudes = new float[fftSize / 2 + 1];</span>
+<span class="fc" id="L65">  }</span>
+
+  /** Detect peaks on a single channel. The returned list is immutable. */
+  public List&lt;DetectedPeak&gt; detect(AudioBlock block, int channel) {
+<span class="fc" id="L69">    Objects.requireNonNull(block, &quot;block&quot;);</span>
+<span class="pc bpc" id="L70" title="1 of 4 branches missed.">    if (channel &lt; 0 || channel &gt;= block.channels()) {</span>
+<span class="fc" id="L71">      throw new IllegalArgumentException(&quot;channel out of range: &quot; + channel);</span>
+    }
+<span class="fc" id="L73">    float[] samples = block.channelView(channel);</span>
+<span class="fc" id="L74">    int copied = Math.min(samples.length, fftSize);</span>
+<span class="fc" id="L75">    Arrays.fill(re, 0.0f);</span>
+<span class="fc" id="L76">    Arrays.fill(im, 0.0f);</span>
+<span class="fc" id="L77">    System.arraycopy(samples, 0, re, 0, copied);</span>
+<span class="fc" id="L78">    applyHannWindow(re, copied);</span>
+<span class="fc" id="L79">    fft.forward(re, im);</span>
+<span class="fc" id="L80">    fft.magnitudesOneSided(re, im, magnitudes);</span>
+
+<span class="fc" id="L82">    double sampleRate = block.format().sampleRate();</span>
+<span class="fc" id="L83">    int lowBin = Math.max(1, (int) Math.ceil(band.lowHz() * fftSize / sampleRate));</span>
+<span class="fc" id="L84">    int highBin =</span>
+<span class="fc" id="L85">        Math.min(magnitudes.length - 2, (int) Math.floor(band.highHz() * fftSize / sampleRate));</span>
+<span class="pc bpc" id="L86" title="1 of 2 branches missed.">    if (highBin &lt; lowBin) {</span>
+<span class="nc" id="L87">      return List.of();</span>
+    }
+<span class="fc" id="L89">    double median = bandMedian(lowBin, highBin);</span>
+
+<span class="fc" id="L91">    List&lt;DetectedPeak&gt; peaks = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L92" title="All 2 branches covered.">    for (int bin = lowBin; bin &lt;= highBin; bin++) {</span>
+<span class="fc" id="L93">      double mag = magnitudes[bin];</span>
+<span class="fc bfc" id="L94" title="All 4 branches covered.">      if (mag &lt;= magnitudes[bin - 1] || mag &lt; magnitudes[bin + 1]) {</span>
+<span class="fc" id="L95">        continue;</span>
+      }
+<span class="pc bpc" id="L97" title="1 of 2 branches missed.">      double snr = median &gt; 0.0 ? mag / median : Double.POSITIVE_INFINITY;</span>
+<span class="fc bfc" id="L98" title="All 2 branches covered.">      if (snr &lt; minSnr) {</span>
+<span class="fc" id="L99">        continue;</span>
+      }
+<span class="fc" id="L101">      double refinedBin = parabolicRefine(bin);</span>
+<span class="fc" id="L102">      double frequency = refinedBin * sampleRate / fftSize;</span>
+<span class="fc" id="L103">      peaks.add(new DetectedPeak(channel, frequency, mag, snr));</span>
+    }
+<span class="fc" id="L105">    peaks.sort((a, b) -&gt; Double.compare(b.magnitude(), a.magnitude()));</span>
+<span class="fc bfc" id="L106" title="All 2 branches covered.">    if (peaks.size() &gt; maxPeaks) {</span>
+<span class="fc" id="L107">      return List.copyOf(peaks.subList(0, maxPeaks));</span>
+    }
+<span class="fc" id="L109">    return List.copyOf(peaks);</span>
+  }
+
+  /** Detect peaks on every channel and return per-channel results in channel order. */
+  public List&lt;List&lt;DetectedPeak&gt;&gt; detectAllChannels(AudioBlock block) {
+<span class="fc" id="L114">    Objects.requireNonNull(block, &quot;block&quot;);</span>
+<span class="fc" id="L115">    List&lt;List&lt;DetectedPeak&gt;&gt; result = new ArrayList&lt;&gt;(block.channels());</span>
+<span class="fc bfc" id="L116" title="All 2 branches covered.">    for (int channel = 0; channel &lt; block.channels(); channel++) {</span>
+<span class="fc" id="L117">      result.add(detect(block, channel));</span>
+    }
+<span class="fc" id="L119">    return List.copyOf(result);</span>
+  }
+
+  private double bandMedian(int lowBin, int highBin) {
+<span class="fc" id="L123">    int length = highBin - lowBin + 1;</span>
+<span class="fc" id="L124">    float[] bandCopy = new float[length];</span>
+<span class="fc" id="L125">    System.arraycopy(magnitudes, lowBin, bandCopy, 0, length);</span>
+<span class="fc" id="L126">    Arrays.sort(bandCopy);</span>
+<span class="fc" id="L127">    return bandCopy[length / 2];</span>
+  }
+
+  private double parabolicRefine(int bin) {
+<span class="fc" id="L131">    double left = magnitudes[bin - 1];</span>
+<span class="fc" id="L132">    double centre = magnitudes[bin];</span>
+<span class="fc" id="L133">    double right = magnitudes[bin + 1];</span>
+<span class="fc" id="L134">    double denom = left - 2.0 * centre + right;</span>
+<span class="pc bpc" id="L135" title="1 of 2 branches missed.">    if (denom == 0.0) {</span>
+<span class="nc" id="L136">      return bin;</span>
+    }
+<span class="fc" id="L138">    double offset = 0.5 * (left - right) / denom;</span>
+<span class="pc bpc" id="L139" title="2 of 4 branches missed.">    if (!Double.isFinite(offset) || Math.abs(offset) &gt; 1.0) {</span>
+<span class="nc" id="L140">      return bin;</span>
+    }
+<span class="fc" id="L142">    return bin + offset;</span>
+  }
+
+  private static void applyHannWindow(float[] samples, int frames) {
+<span class="pc bpc" id="L146" title="1 of 2 branches missed.">    if (frames &lt;= 1) {</span>
+<span class="nc" id="L147">      return;</span>
+    }
+<span class="fc" id="L149">    double denom = frames - 1.0;</span>
+<span class="fc bfc" id="L150" title="All 2 branches covered.">    for (int i = 0; i &lt; frames; i++) {</span>
+<span class="fc" id="L151">      samples[i] *= (float) (0.5 - 0.5 * Math.cos(2.0 * Math.PI * i / denom));</span>
+    }
+<span class="fc" id="L153">  }</span>
+
+  /** Read-only access to the search band for callers wiring downstream stages. */
+  public FrequencyBand band() {
+<span class="nc" id="L157">    return band;</span>
+  }
+
+  /** Read-only access to the maximum number of peaks per channel. */
+  public int maxPeaks() {
+<span class="nc" id="L162">    return maxPeaks;</span>
+  }
+
+  /** Returned for use as an empty-result sentinel where a {@link List#of()} is preferred. */
+  static List&lt;DetectedPeak&gt; emptyPeaks() {
+<span class="nc" id="L167">    return Collections.emptyList();</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

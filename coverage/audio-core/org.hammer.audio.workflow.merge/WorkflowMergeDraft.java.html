@@ -1,0 +1,243 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WorkflowMergeDraft.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Core</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.merge</a> &gt; <span class="el_source">WorkflowMergeDraft.java</span></div><h1>WorkflowMergeDraft.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.merge;
+
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.UnaryOperator;
+import org.hammer.audio.workflow.Edge;
+import org.hammer.audio.workflow.Metadata;
+import org.hammer.audio.workflow.Node;
+import org.hammer.audio.workflow.Port;
+import org.hammer.audio.workflow.Workflow;
+
+/** Internal deterministic mutable draft used while calculating and resolving one merge. */
+final class WorkflowMergeDraft {
+
+  private final String workflowId;
+<span class="fc" id="L22">  private final Map&lt;String, Node&gt; nodesById = new ConcurrentHashMap&lt;&gt;();</span>
+<span class="fc" id="L23">  private final Map&lt;String, Edge&gt; edgesById = new ConcurrentHashMap&lt;&gt;();</span>
+<span class="fc" id="L24">  private final Map&lt;String, String&gt; workflowMetadata = new ConcurrentHashMap&lt;&gt;();</span>
+  private String workflowName;
+
+<span class="fc" id="L27">  private WorkflowMergeDraft(Workflow base) {</span>
+<span class="fc" id="L28">    workflowId = base.id();</span>
+<span class="fc" id="L29">    workflowName = base.name();</span>
+<span class="fc" id="L30">    workflowMetadata.putAll(base.metadata().entries());</span>
+<span class="fc bfc" id="L31" title="All 2 branches covered.">    for (Node node : base.nodes()) {</span>
+<span class="fc" id="L32">      putNode(node);</span>
+<span class="fc" id="L33">    }</span>
+<span class="fc bfc" id="L34" title="All 2 branches covered.">    for (Edge edge : base.edges()) {</span>
+<span class="fc" id="L35">      putEdge(edge);</span>
+<span class="fc" id="L36">    }</span>
+<span class="fc" id="L37">  }</span>
+
+  static WorkflowMergeDraft from(Workflow base) {
+<span class="fc" id="L40">    return new WorkflowMergeDraft(Objects.requireNonNull(base, &quot;base&quot;));</span>
+  }
+
+  Workflow workflow() {
+<span class="fc" id="L44">    return new Workflow(</span>
+        workflowId,
+        workflowName,
+<span class="fc" id="L47">        nodesById.values().stream().sorted(Comparator.comparing(Node::id)).toList(),</span>
+<span class="fc" id="L48">        edgesById.values().stream().sorted(Comparator.comparing(Edge::id)).toList(),</span>
+        new Metadata(workflowMetadata));
+  }
+
+  void setWorkflowName(String value) {
+<span class="fc" id="L53">    workflowName = requireText(value, &quot;workflowName&quot;);</span>
+<span class="fc" id="L54">  }</span>
+
+  void setWorkflowMetadata(String key, String value) {
+<span class="fc" id="L57">    setMetadata(workflowMetadata, key, value);</span>
+<span class="fc" id="L58">  }</span>
+
+  void putNode(Node node) {
+<span class="fc" id="L61">    Node required = Objects.requireNonNull(node, &quot;node&quot;);</span>
+<span class="fc" id="L62">    nodesById.put(required.id(), required);</span>
+<span class="fc" id="L63">  }</span>
+
+  void removeNode(String nodeId) {
+<span class="nc" id="L66">    nodesById.remove(nodeId);</span>
+<span class="nc" id="L67">  }</span>
+
+  void setNodeType(String nodeId, String type) {
+<span class="fc" id="L70">    updateNode(</span>
+        nodeId,
+        node -&gt;
+<span class="fc" id="L73">            new Node(</span>
+<span class="fc" id="L74">                node.id(),</span>
+<span class="fc" id="L75">                requireText(type, &quot;type&quot;),</span>
+<span class="fc" id="L76">                node.label(),</span>
+<span class="fc" id="L77">                node.inputPorts(),</span>
+<span class="fc" id="L78">                node.outputPorts(),</span>
+<span class="fc" id="L79">                node.metadata()));</span>
+<span class="fc" id="L80">  }</span>
+
+  void setNodeLabel(String nodeId, String label) {
+<span class="fc" id="L83">    updateNode(</span>
+        nodeId,
+        node -&gt;
+<span class="fc" id="L86">            new Node(</span>
+<span class="fc" id="L87">                node.id(),</span>
+<span class="fc" id="L88">                node.type(),</span>
+<span class="fc" id="L89">                requireText(label, &quot;label&quot;),</span>
+<span class="fc" id="L90">                node.inputPorts(),</span>
+<span class="fc" id="L91">                node.outputPorts(),</span>
+<span class="fc" id="L92">                node.metadata()));</span>
+<span class="fc" id="L93">  }</span>
+
+  void setNodeInputPorts(String nodeId, List&lt;Port&gt; ports) {
+<span class="fc" id="L96">    updateNode(</span>
+        nodeId,
+        node -&gt;
+<span class="fc" id="L99">            new Node(</span>
+<span class="fc" id="L100">                node.id(),</span>
+<span class="fc" id="L101">                node.type(),</span>
+<span class="fc" id="L102">                node.label(),</span>
+<span class="fc" id="L103">                List.copyOf(ports),</span>
+<span class="fc" id="L104">                node.outputPorts(),</span>
+<span class="fc" id="L105">                node.metadata()));</span>
+<span class="fc" id="L106">  }</span>
+
+  void setNodeOutputPorts(String nodeId, List&lt;Port&gt; ports) {
+<span class="fc" id="L109">    updateNode(</span>
+        nodeId,
+        node -&gt;
+<span class="fc" id="L112">            new Node(</span>
+<span class="fc" id="L113">                node.id(),</span>
+<span class="fc" id="L114">                node.type(),</span>
+<span class="fc" id="L115">                node.label(),</span>
+<span class="fc" id="L116">                node.inputPorts(),</span>
+<span class="fc" id="L117">                List.copyOf(ports),</span>
+<span class="fc" id="L118">                node.metadata()));</span>
+<span class="fc" id="L119">  }</span>
+
+  void setNodeMetadata(String nodeId, String key, String value) {
+<span class="fc" id="L122">    updateNode(</span>
+        nodeId,
+        node -&gt; {
+<span class="fc" id="L125">          Map&lt;String, String&gt; entries = new ConcurrentHashMap&lt;&gt;(node.metadata().entries());</span>
+<span class="fc" id="L126">          setMetadata(entries, key, value);</span>
+<span class="fc" id="L127">          return new Node(</span>
+<span class="fc" id="L128">              node.id(),</span>
+<span class="fc" id="L129">              node.type(),</span>
+<span class="fc" id="L130">              node.label(),</span>
+<span class="fc" id="L131">              node.inputPorts(),</span>
+<span class="fc" id="L132">              node.outputPorts(),</span>
+              new Metadata(entries));
+        });
+<span class="fc" id="L135">  }</span>
+
+  void putEdge(Edge edge) {
+<span class="fc" id="L138">    Edge required = Objects.requireNonNull(edge, &quot;edge&quot;);</span>
+<span class="fc" id="L139">    edgesById.put(required.id(), required);</span>
+<span class="fc" id="L140">  }</span>
+
+  void removeEdge(String edgeId) {
+<span class="nc" id="L143">    edgesById.remove(edgeId);</span>
+<span class="nc" id="L144">  }</span>
+
+  void setEdgeEndpoints(String edgeId, Edge source) {
+<span class="fc" id="L147">    Objects.requireNonNull(source, &quot;source&quot;);</span>
+<span class="fc" id="L148">    updateEdge(</span>
+        edgeId,
+        edge -&gt;
+<span class="fc" id="L151">            new Edge(</span>
+<span class="fc" id="L152">                edge.id(),</span>
+<span class="fc" id="L153">                source.sourceNodeId(),</span>
+<span class="fc" id="L154">                source.sourcePortId(),</span>
+<span class="fc" id="L155">                source.targetNodeId(),</span>
+<span class="fc" id="L156">                source.targetPortId(),</span>
+<span class="fc" id="L157">                edge.metadata()));</span>
+<span class="fc" id="L158">  }</span>
+
+  void setEdgeMetadata(String edgeId, String key, String value) {
+<span class="nc" id="L161">    updateEdge(</span>
+        edgeId,
+        edge -&gt; {
+<span class="nc" id="L164">          Map&lt;String, String&gt; entries = new ConcurrentHashMap&lt;&gt;(edge.metadata().entries());</span>
+<span class="nc" id="L165">          setMetadata(entries, key, value);</span>
+<span class="nc" id="L166">          return new Edge(</span>
+<span class="nc" id="L167">              edge.id(),</span>
+<span class="nc" id="L168">              edge.sourceNodeId(),</span>
+<span class="nc" id="L169">              edge.sourcePortId(),</span>
+<span class="nc" id="L170">              edge.targetNodeId(),</span>
+<span class="nc" id="L171">              edge.targetPortId(),</span>
+              new Metadata(entries));
+        });
+<span class="nc" id="L174">  }</span>
+
+  void replaceNodeNeighborhood(
+      String nodeId, Node node, Collection&lt;Edge&gt; selectedEdges, Set&lt;String&gt; relatedEdgeIds) {
+<span class="fc" id="L178">    Objects.requireNonNull(nodeId, &quot;nodeId&quot;);</span>
+<span class="fc" id="L179">    Objects.requireNonNull(selectedEdges, &quot;selectedEdges&quot;);</span>
+<span class="fc" id="L180">    Objects.requireNonNull(relatedEdgeIds, &quot;relatedEdgeIds&quot;);</span>
+<span class="fc bfc" id="L181" title="All 2 branches covered.">    for (String edgeId : relatedEdgeIds) {</span>
+<span class="fc" id="L182">      edgesById.remove(edgeId);</span>
+<span class="fc" id="L183">    }</span>
+<span class="fc bfc" id="L184" title="All 2 branches covered.">    if (node == null) {</span>
+<span class="fc" id="L185">      nodesById.remove(nodeId);</span>
+<span class="fc" id="L186">      return;</span>
+    }
+<span class="fc" id="L188">    nodesById.put(nodeId, node);</span>
+<span class="fc bfc" id="L189" title="All 2 branches covered.">    for (Edge edge : selectedEdges) {</span>
+<span class="pc bpc" id="L190" title="1 of 2 branches missed.">      if (references(edge, nodeId)) {</span>
+<span class="fc" id="L191">        edgesById.put(edge.id(), edge);</span>
+      }
+<span class="fc" id="L193">    }</span>
+<span class="fc" id="L194">  }</span>
+
+  private void updateNode(String nodeId, UnaryOperator&lt;Node&gt; update) {
+<span class="fc" id="L197">    Node current = nodesById.get(nodeId);</span>
+<span class="pc bpc" id="L198" title="1 of 2 branches missed.">    if (current == null) {</span>
+<span class="nc" id="L199">      throw new IllegalStateException(&quot;Merge draft has no node &quot; + nodeId);</span>
+    }
+<span class="fc" id="L201">    nodesById.put(nodeId, Objects.requireNonNull(update.apply(current), &quot;updated node&quot;));</span>
+<span class="fc" id="L202">  }</span>
+
+  private void updateEdge(String edgeId, UnaryOperator&lt;Edge&gt; update) {
+<span class="fc" id="L205">    Edge current = edgesById.get(edgeId);</span>
+<span class="pc bpc" id="L206" title="1 of 2 branches missed.">    if (current == null) {</span>
+<span class="nc" id="L207">      throw new IllegalStateException(&quot;Merge draft has no edge &quot; + edgeId);</span>
+    }
+<span class="fc" id="L209">    edgesById.put(edgeId, Objects.requireNonNull(update.apply(current), &quot;updated edge&quot;));</span>
+<span class="fc" id="L210">  }</span>
+
+  private static void setMetadata(Map&lt;String, String&gt; entries, String key, String value) {
+<span class="fc" id="L213">    String requiredKey = requireText(key, &quot;metadata key&quot;);</span>
+<span class="pc bpc" id="L214" title="1 of 2 branches missed.">    if (value == null) {</span>
+<span class="nc" id="L215">      entries.remove(requiredKey);</span>
+    } else {
+<span class="fc" id="L217">      entries.put(requiredKey, value);</span>
+    }
+<span class="fc" id="L219">  }</span>
+
+  static List&lt;Edge&gt; connectedEdges(List&lt;Edge&gt; edges, String nodeId) {
+<span class="fc" id="L222">    List&lt;Edge&gt; connected = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L223" title="All 2 branches covered.">    for (Edge edge : edges) {</span>
+<span class="pc bpc" id="L224" title="1 of 2 branches missed.">      if (references(edge, nodeId)) {</span>
+<span class="fc" id="L225">        connected.add(edge);</span>
+      }
+<span class="fc" id="L227">    }</span>
+<span class="fc" id="L228">    connected.sort(Comparator.comparing(Edge::id));</span>
+<span class="fc" id="L229">    return List.copyOf(connected);</span>
+  }
+
+  static boolean references(Edge edge, String nodeId) {
+<span class="pc bpc" id="L233" title="2 of 4 branches missed.">    return edge.sourceNodeId().equals(nodeId) || edge.targetNodeId().equals(nodeId);</span>
+  }
+
+  private static String requireText(String value, String name) {
+<span class="pc bpc" id="L237" title="2 of 4 branches missed.">    if (value == null || value.isBlank()) {</span>
+<span class="nc" id="L238">      throw new IllegalArgumentException(name + &quot; must not be blank&quot;);</span>
+    }
+<span class="fc" id="L240">    return value;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

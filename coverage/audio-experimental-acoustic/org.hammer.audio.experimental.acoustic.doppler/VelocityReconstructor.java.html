@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>VelocityReconstructor.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.doppler</a> &gt; <span class="el_source">VelocityReconstructor.java</span></div><h1>VelocityReconstructor.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.doppler;
+
+import java.util.List;
+import java.util.Objects;
+import org.hammer.audio.acquisition.Microphone;
+import org.hammer.audio.acquisition.MicrophoneArray;
+import org.hammer.audio.geometry.Vector2;
+import org.hammer.audio.geometry.Vector3;
+
+/** Reconstructs a global velocity vector from microphone radial velocities and array geometry. */
+<span class="fc" id="L11">public final class VelocityReconstructor {</span>
+
+  private static final double SINGULAR_GEOMETRY_DETERMINANT_EPSILON = 1.0e-9;
+
+  /**
+   * Reconstruct horizontal velocity by weighted least squares over microphone line-of-sight axes.
+   */
+  public Vector3 reconstruct(
+      List&lt;RadialVelocityEstimate&gt; radialVelocities,
+      MicrophoneArray geometry,
+      Vector2 sourcePositionMeters) {
+<span class="fc" id="L22">    Objects.requireNonNull(radialVelocities, &quot;radialVelocities&quot;);</span>
+<span class="fc" id="L23">    Objects.requireNonNull(geometry, &quot;geometry&quot;);</span>
+<span class="fc" id="L24">    Objects.requireNonNull(sourcePositionMeters, &quot;sourcePositionMeters&quot;);</span>
+<span class="pc bpc" id="L25" title="1 of 2 branches missed.">    if (radialVelocities.isEmpty()) {</span>
+<span class="nc" id="L26">      return Vector3.ZERO;</span>
+    }
+
+<span class="fc" id="L29">    double a00 = 0.0;</span>
+<span class="fc" id="L30">    double a01 = 0.0;</span>
+<span class="fc" id="L31">    double a11 = 0.0;</span>
+<span class="fc" id="L32">    double b0 = 0.0;</span>
+<span class="fc" id="L33">    double b1 = 0.0;</span>
+<span class="fc bfc" id="L34" title="All 2 branches covered.">    for (RadialVelocityEstimate radial : radialVelocities) {</span>
+<span class="fc" id="L35">      Microphone microphone = geometry.microphone(radial.channel());</span>
+<span class="fc" id="L36">      Vector2 direction =</span>
+<span class="fc" id="L37">          sourcePositionMeters.minus(microphone.positionMeters()).normalized().scale(-1.0);</span>
+<span class="pc bpc" id="L38" title="1 of 2 branches missed.">      double weight = radial.weight() &gt; 0.0 ? radial.weight() : 1.0;</span>
+<span class="fc" id="L39">      a00 += weight * direction.x() * direction.x();</span>
+<span class="fc" id="L40">      a01 += weight * direction.x() * direction.y();</span>
+<span class="fc" id="L41">      a11 += weight * direction.y() * direction.y();</span>
+<span class="fc" id="L42">      b0 += weight * direction.x() * radial.radialVelocityMetersPerSecond();</span>
+<span class="fc" id="L43">      b1 += weight * direction.y() * radial.radialVelocityMetersPerSecond();</span>
+<span class="fc" id="L44">    }</span>
+<span class="fc" id="L45">    double determinant = a00 * a11 - a01 * a01;</span>
+<span class="fc bfc" id="L46" title="All 2 branches covered.">    if (Math.abs(determinant) &lt; SINGULAR_GEOMETRY_DETERMINANT_EPSILON) {</span>
+<span class="fc" id="L47">      return degenerateGeometryFallback(radialVelocities, geometry, sourcePositionMeters);</span>
+    }
+<span class="fc" id="L49">    double vx = (b0 * a11 - b1 * a01) / determinant;</span>
+<span class="fc" id="L50">    double vy = (a00 * b1 - a01 * b0) / determinant;</span>
+<span class="fc" id="L51">    return new Vector3(vx, vy, 0.0);</span>
+  }
+
+  /** Weighted average radial velocity. */
+  public double fusedRadialVelocity(List&lt;RadialVelocityEstimate&gt; radialVelocities) {
+<span class="fc" id="L56">    Objects.requireNonNull(radialVelocities, &quot;radialVelocities&quot;);</span>
+<span class="fc" id="L57">    double weighted = 0.0;</span>
+<span class="fc" id="L58">    double totalWeight = 0.0;</span>
+<span class="fc bfc" id="L59" title="All 2 branches covered.">    for (RadialVelocityEstimate radial : radialVelocities) {</span>
+<span class="pc bpc" id="L60" title="1 of 2 branches missed.">      double weight = radial.weight() &gt; 0.0 ? radial.weight() : 1.0;</span>
+<span class="fc" id="L61">      weighted += radial.radialVelocityMetersPerSecond() * weight;</span>
+<span class="fc" id="L62">      totalWeight += weight;</span>
+<span class="fc" id="L63">    }</span>
+<span class="pc bpc" id="L64" title="1 of 2 branches missed.">    return totalWeight &gt; 0.0 ? weighted / totalWeight : 0.0;</span>
+  }
+
+  /** Weighted standard deviation of per-microphone radial velocities. */
+  public double radialVelocityStandardDeviation(List&lt;RadialVelocityEstimate&gt; radialVelocities) {
+<span class="fc" id="L69">    Objects.requireNonNull(radialVelocities, &quot;radialVelocities&quot;);</span>
+<span class="pc bpc" id="L70" title="1 of 2 branches missed.">    if (radialVelocities.size() &lt; 2) {</span>
+<span class="nc" id="L71">      return 0.0;</span>
+    }
+<span class="fc" id="L73">    double mean = fusedRadialVelocity(radialVelocities);</span>
+<span class="fc" id="L74">    double weightedVariance = 0.0;</span>
+<span class="fc" id="L75">    double totalWeight = 0.0;</span>
+<span class="fc bfc" id="L76" title="All 2 branches covered.">    for (RadialVelocityEstimate radial : radialVelocities) {</span>
+<span class="pc bpc" id="L77" title="1 of 2 branches missed.">      double weight = radial.weight() &gt; 0.0 ? radial.weight() : 1.0;</span>
+<span class="fc" id="L78">      double error = radial.radialVelocityMetersPerSecond() - mean;</span>
+<span class="fc" id="L79">      weightedVariance += weight * error * error;</span>
+<span class="fc" id="L80">      totalWeight += weight;</span>
+<span class="fc" id="L81">    }</span>
+<span class="pc bpc" id="L82" title="1 of 2 branches missed.">    return totalWeight &gt; 0.0 ? Math.sqrt(weightedVariance / totalWeight) : 0.0;</span>
+  }
+
+  private Vector3 degenerateGeometryFallback(
+      List&lt;RadialVelocityEstimate&gt; radialVelocities,
+      MicrophoneArray geometry,
+      Vector2 sourcePositionMeters) {
+<span class="fc" id="L89">    Vector2 weightedVelocity = Vector2.ZERO;</span>
+<span class="fc" id="L90">    double totalWeight = 0.0;</span>
+<span class="fc bfc" id="L91" title="All 2 branches covered.">    for (RadialVelocityEstimate radial : radialVelocities) {</span>
+<span class="fc" id="L92">      Microphone microphone = geometry.microphone(radial.channel());</span>
+<span class="fc" id="L93">      Vector2 direction =</span>
+<span class="fc" id="L94">          sourcePositionMeters.minus(microphone.positionMeters()).normalized().scale(-1.0);</span>
+<span class="pc bpc" id="L95" title="1 of 2 branches missed.">      double weight = radial.weight() &gt; 0.0 ? radial.weight() : 1.0;</span>
+<span class="fc" id="L96">      weightedVelocity =</span>
+<span class="fc" id="L97">          weightedVelocity.plus(direction.scale(radial.radialVelocityMetersPerSecond() * weight));</span>
+<span class="fc" id="L98">      totalWeight += weight;</span>
+<span class="fc" id="L99">    }</span>
+<span class="pc bpc" id="L100" title="1 of 2 branches missed.">    return totalWeight &gt; 0.0</span>
+<span class="fc" id="L101">        ? Vector3.from(weightedVelocity.scale(1.0 / totalWeight))</span>
+<span class="nc" id="L102">        : Vector3.ZERO;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

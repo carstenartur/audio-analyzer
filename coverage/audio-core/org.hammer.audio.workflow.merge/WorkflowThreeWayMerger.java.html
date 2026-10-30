@@ -1,0 +1,840 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WorkflowThreeWayMerger.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Core</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.merge</a> &gt; <span class="el_source">WorkflowThreeWayMerger.java</span></div><h1>WorkflowThreeWayMerger.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.merge;
+
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.EnumSet;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.TreeSet;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.BiConsumer;
+import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+import org.hammer.audio.workflow.Edge;
+import org.hammer.audio.workflow.Metadata;
+import org.hammer.audio.workflow.Node;
+import org.hammer.audio.workflow.Workflow;
+import org.hammer.audio.workflow.WorkflowSemanticValueFormatter;
+import org.hammer.audio.workflow.WorkflowValidator;
+import org.hammer.audio.workflow.merge.WorkflowMergeModels.Conflict;
+import org.hammer.audio.workflow.merge.WorkflowMergeModels.ConflictKind;
+import org.hammer.audio.workflow.merge.WorkflowMergeModels.ElementKind;
+import org.hammer.audio.workflow.merge.WorkflowMergeModels.Preview;
+import org.hammer.audio.workflow.merge.WorkflowMergeModels.Resolution;
+import org.hammer.audio.workflow.merge.WorkflowMergeModels.ResolutionChoice;
+import org.hammer.audio.workflow.merge.WorkflowMergeModels.Result;
+
+/** Deterministic semantic three-way merger over immutable workflow values. */
+@SuppressWarnings(&quot;PMD.CouplingBetweenObjects&quot;)
+public final class WorkflowThreeWayMerger {
+
+  private static final String OBJECT_FIELD = &quot;$object&quot;;
+
+<span class="fc" id="L37">  private static final Set&lt;ResolutionChoice&gt; OBJECT_CHOICES =</span>
+<span class="fc" id="L38">      Set.copyOf(</span>
+<span class="fc" id="L39">          EnumSet.of(</span>
+              ResolutionChoice.BASE,
+              ResolutionChoice.LOCAL,
+              ResolutionChoice.REMOTE,
+              ResolutionChoice.DELETE));
+<span class="fc" id="L44">  private static final Set&lt;ResolutionChoice&gt; TYPED_VALUE_CHOICES =</span>
+<span class="fc" id="L45">      Set.copyOf(</span>
+<span class="fc" id="L46">          EnumSet.of(ResolutionChoice.BASE, ResolutionChoice.LOCAL, ResolutionChoice.REMOTE));</span>
+<span class="fc" id="L47">  private static final Set&lt;ResolutionChoice&gt; CUSTOM_STRING_CHOICES =</span>
+<span class="fc" id="L48">      Set.copyOf(</span>
+<span class="fc" id="L49">          EnumSet.of(</span>
+              ResolutionChoice.BASE,
+              ResolutionChoice.LOCAL,
+              ResolutionChoice.REMOTE,
+              ResolutionChoice.CUSTOM));
+<span class="fc" id="L54">  private static final Set&lt;ResolutionChoice&gt; OPTIONAL_STRING_CHOICES =</span>
+<span class="fc" id="L55">      Set.copyOf(</span>
+<span class="fc" id="L56">          EnumSet.of(</span>
+              ResolutionChoice.BASE,
+              ResolutionChoice.LOCAL,
+              ResolutionChoice.REMOTE,
+              ResolutionChoice.DELETE,
+              ResolutionChoice.CUSTOM));
+
+  private final WorkflowValidator validator;
+
+  /** Creates a merger using the production workflow validator. */
+  public WorkflowThreeWayMerger() {
+<span class="fc" id="L67">    this(new WorkflowValidator());</span>
+<span class="fc" id="L68">  }</span>
+
+  /** Creates a merger using an explicit validator. */
+<span class="fc" id="L71">  public WorkflowThreeWayMerger(WorkflowValidator validator) {</span>
+<span class="fc" id="L72">    this.validator = Objects.requireNonNull(validator, &quot;validator&quot;);</span>
+<span class="fc" id="L73">  }</span>
+
+  /** Calculates all automatic decisions and ordered unresolved semantic conflicts. */
+  public Preview preview(Workflow base, Workflow local, Workflow remote) {
+<span class="fc" id="L77">    Computation computation = compute(base, local, remote);</span>
+<span class="fc" id="L78">    Workflow workflow = computation.draft().workflow();</span>
+<span class="fc" id="L79">    return new Preview(</span>
+        workflow,
+<span class="fc" id="L81">        computation.pending().stream().map(PendingConflict::conflict).toList(),</span>
+<span class="fc" id="L82">        validator.validate(workflow));</span>
+  }
+
+  /** Applies explicit resolutions and returns a validated deterministic candidate. */
+  public Result resolve(
+      Workflow base, Workflow local, Workflow remote, List&lt;Resolution&gt; resolutions) {
+<span class="fc" id="L88">    Objects.requireNonNull(resolutions, &quot;resolutions&quot;);</span>
+<span class="fc" id="L89">    Computation computation = compute(base, local, remote);</span>
+<span class="fc" id="L90">    Map&lt;String, Resolution&gt; indexedResolutions = indexResolutions(resolutions);</span>
+<span class="fc" id="L91">    Set&lt;String&gt; knownConflictIds =</span>
+<span class="fc" id="L92">        computation.pending().stream()</span>
+<span class="fc" id="L93">            .map(pending -&gt; pending.conflict().conflictId())</span>
+<span class="fc" id="L94">            .collect(Collectors.toUnmodifiableSet());</span>
+<span class="fc bfc" id="L95" title="All 2 branches covered.">    for (String conflictId : indexedResolutions.keySet()) {</span>
+<span class="fc bfc" id="L96" title="All 2 branches covered.">      if (!knownConflictIds.contains(conflictId)) {</span>
+<span class="fc" id="L97">        throw new IllegalArgumentException(&quot;Unknown workflow merge conflict: &quot; + conflictId);</span>
+      }
+<span class="fc" id="L99">    }</span>
+
+<span class="fc" id="L101">    List&lt;Conflict&gt; unresolved = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L102" title="All 2 branches covered.">    for (PendingConflict pending : computation.pending()) {</span>
+<span class="fc" id="L103">      Resolution resolution = indexedResolutions.get(pending.conflict().conflictId());</span>
+<span class="fc bfc" id="L104" title="All 2 branches covered.">      if (resolution == null) {</span>
+<span class="fc" id="L105">        unresolved.add(pending.conflict());</span>
+      } else {
+<span class="fc" id="L107">        pending.apply(resolution);</span>
+      }
+<span class="fc" id="L109">    }</span>
+
+<span class="fc" id="L111">    Workflow workflow = computation.draft().workflow();</span>
+<span class="fc" id="L112">    return new Result(workflow, unresolved, validator.validate(workflow));</span>
+  }
+
+  private Computation compute(Workflow base, Workflow local, Workflow remote) {
+<span class="fc" id="L116">    requireCompatibleInputs(base, local, remote);</span>
+<span class="fc" id="L117">    WorkflowMergeDraft draft = WorkflowMergeDraft.from(base);</span>
+<span class="fc" id="L118">    List&lt;PendingConflict&gt; pending = new ArrayList&lt;&gt;();</span>
+
+<span class="fc" id="L120">    mergeStringValue(</span>
+        pending,
+<span class="fc" id="L122">        location(ConflictKind.DIVERGENT_VALUE, ElementKind.WORKFLOW, base.id(), &quot;name&quot;),</span>
+<span class="fc" id="L123">        values(base.name(), local.name(), remote.name()),</span>
+        false,
+<span class="fc" id="L125">        draft::setWorkflowName);</span>
+<span class="fc" id="L126">    mergeMetadata(</span>
+        pending,
+        ElementKind.WORKFLOW,
+<span class="fc" id="L129">        base.id(),</span>
+<span class="fc" id="L130">        base.metadata(),</span>
+<span class="fc" id="L131">        local.metadata(),</span>
+<span class="fc" id="L132">        remote.metadata(),</span>
+<span class="fc" id="L133">        draft::setWorkflowMetadata);</span>
+
+<span class="fc" id="L135">    Map&lt;String, Node&gt; baseNodes = indexNodes(base.nodes());</span>
+<span class="fc" id="L136">    Map&lt;String, Node&gt; localNodes = indexNodes(local.nodes());</span>
+<span class="fc" id="L137">    Map&lt;String, Node&gt; remoteNodes = indexNodes(remote.nodes());</span>
+<span class="fc" id="L138">    Map&lt;String, Edge&gt; baseEdges = indexEdges(base.edges());</span>
+<span class="fc" id="L139">    Map&lt;String, Edge&gt; localEdges = indexEdges(local.edges());</span>
+<span class="fc" id="L140">    Map&lt;String, Edge&gt; remoteEdges = indexEdges(remote.edges());</span>
+
+<span class="fc" id="L142">    SpecialNodes specialNodes =</span>
+<span class="fc" id="L143">        findSpecialNodes(</span>
+<span class="fc" id="L144">            baseNodes, localNodes, remoteNodes, base.edges(), local.edges(), remote.edges());</span>
+<span class="fc" id="L145">    installSpecialNodeConflicts(draft, pending, specialNodes);</span>
+<span class="fc" id="L146">    mergeNodes(draft, pending, baseNodes, localNodes, remoteNodes, specialNodes.nodeIds());</span>
+<span class="fc" id="L147">    mergeEdges(draft, pending, baseEdges, localEdges, remoteEdges, specialNodes.blockedEdgeIds());</span>
+
+<span class="fc" id="L149">    pending.sort(java.util.Comparator.comparing(PendingConflict::conflict, Conflict.ORDERING));</span>
+<span class="fc" id="L150">    return new Computation(draft, pending);</span>
+  }
+
+  private void requireCompatibleInputs(Workflow base, Workflow local, Workflow remote) {
+<span class="fc" id="L154">    Objects.requireNonNull(base, &quot;base&quot;);</span>
+<span class="fc" id="L155">    Objects.requireNonNull(local, &quot;local&quot;);</span>
+<span class="fc" id="L156">    Objects.requireNonNull(remote, &quot;remote&quot;);</span>
+<span class="pc bpc" id="L157" title="2 of 4 branches missed.">    if (!base.id().equals(local.id()) || !base.id().equals(remote.id())) {</span>
+<span class="nc" id="L158">      throw new IllegalArgumentException(</span>
+          &quot;Three-way merge requires one stable workflow id, found &quot;
+<span class="nc" id="L160">              + base.id()</span>
+              + &quot;, &quot;
+<span class="nc" id="L162">              + local.id()</span>
+              + &quot; and &quot;
+<span class="nc" id="L164">              + remote.id());</span>
+    }
+<span class="fc" id="L166">    requireValid(&quot;base&quot;, base);</span>
+<span class="fc" id="L167">    requireValid(&quot;local&quot;, local);</span>
+<span class="fc" id="L168">    requireValid(&quot;remote&quot;, remote);</span>
+<span class="fc" id="L169">  }</span>
+
+  private void requireValid(String role, Workflow workflow) {
+<span class="fc" id="L172">    List&lt;String&gt; violations = validator.validate(workflow);</span>
+<span class="pc bpc" id="L173" title="1 of 2 branches missed.">    if (!violations.isEmpty()) {</span>
+<span class="nc" id="L174">      throw new IllegalArgumentException(</span>
+<span class="nc" id="L175">          role + &quot; workflow is structurally invalid: &quot; + String.join(&quot;; &quot;, violations));</span>
+    }
+<span class="fc" id="L177">  }</span>
+
+  private static SpecialNodes findSpecialNodes(
+      Map&lt;String, Node&gt; baseNodes,
+      Map&lt;String, Node&gt; localNodes,
+      Map&lt;String, Node&gt; remoteNodes,
+      List&lt;Edge&gt; baseEdges,
+      List&lt;Edge&gt; localEdges,
+      List&lt;Edge&gt; remoteEdges) {
+<span class="fc" id="L186">    Map&lt;String, SpecialNode&gt; specialById = new ConcurrentHashMap&lt;&gt;();</span>
+<span class="fc" id="L187">    Set&lt;String&gt; blockedEdgeIds = new TreeSet&lt;&gt;();</span>
+<span class="fc bfc" id="L188" title="All 2 branches covered.">    for (String nodeId : union(baseNodes, localNodes, remoteNodes)) {</span>
+<span class="fc" id="L189">      Node base = baseNodes.get(nodeId);</span>
+<span class="fc" id="L190">      Node local = localNodes.get(nodeId);</span>
+<span class="fc" id="L191">      Node remote = remoteNodes.get(nodeId);</span>
+<span class="fc" id="L192">      MergeLocation location =</span>
+<span class="fc" id="L193">          specialNodeLocation(nodeId, base, local, remote, baseEdges, localEdges, remoteEdges);</span>
+<span class="fc bfc" id="L194" title="All 2 branches covered.">      if (location == null) {</span>
+<span class="fc" id="L195">        continue;</span>
+      }
+
+<span class="fc" id="L198">      List&lt;Edge&gt; baseConnected = WorkflowMergeDraft.connectedEdges(baseEdges, nodeId);</span>
+<span class="fc" id="L199">      List&lt;Edge&gt; localConnected = WorkflowMergeDraft.connectedEdges(localEdges, nodeId);</span>
+<span class="fc" id="L200">      List&lt;Edge&gt; remoteConnected = WorkflowMergeDraft.connectedEdges(remoteEdges, nodeId);</span>
+<span class="fc" id="L201">      Set&lt;String&gt; relatedEdgeIds = new TreeSet&lt;&gt;();</span>
+<span class="fc" id="L202">      addEdgeIds(relatedEdgeIds, baseConnected);</span>
+<span class="fc" id="L203">      addEdgeIds(relatedEdgeIds, localConnected);</span>
+<span class="fc" id="L204">      addEdgeIds(relatedEdgeIds, remoteConnected);</span>
+<span class="fc" id="L205">      blockedEdgeIds.addAll(relatedEdgeIds);</span>
+<span class="fc" id="L206">      specialById.put(</span>
+          nodeId,
+          new SpecialNode(
+              location,
+              base,
+              local,
+              remote,
+              baseConnected,
+              localConnected,
+              remoteConnected,
+              relatedEdgeIds));
+<span class="fc" id="L217">    }</span>
+<span class="fc" id="L218">    return new SpecialNodes(specialById, blockedEdgeIds);</span>
+  }
+
+  private static MergeLocation specialNodeLocation(
+      String nodeId,
+      Node base,
+      Node local,
+      Node remote,
+      List&lt;Edge&gt; baseEdges,
+      List&lt;Edge&gt; localEdges,
+      List&lt;Edge&gt; remoteEdges) {
+<span class="pc bpc" id="L229" title="3 of 8 branches missed.">    if (base == null &amp;&amp; local != null &amp;&amp; remote != null &amp;&amp; !local.equals(remote)) {</span>
+<span class="fc" id="L230">      return location(ConflictKind.STABLE_ID_COLLISION, ElementKind.NODE, nodeId, OBJECT_FIELD);</span>
+    }
+<span class="pc bpc" id="L232" title="2 of 6 branches missed.">    if (base != null &amp;&amp; local == null &amp;&amp; remote != null) {</span>
+<span class="fc bfc" id="L233" title="All 2 branches covered.">      if (connectionsChanged(baseEdges, remoteEdges, nodeId)) {</span>
+<span class="fc" id="L234">        return location(ConflictKind.DELETE_CONNECT, ElementKind.NODE, nodeId, &quot;connections&quot;);</span>
+      }
+<span class="pc bpc" id="L236" title="1 of 2 branches missed.">      if (!base.equals(remote)) {</span>
+<span class="fc" id="L237">        return location(ConflictKind.DELETE_MODIFY, ElementKind.NODE, nodeId, OBJECT_FIELD);</span>
+      }
+    }
+<span class="pc bpc" id="L240" title="4 of 6 branches missed.">    if (base != null &amp;&amp; remote == null &amp;&amp; local != null) {</span>
+<span class="nc bnc" id="L241" title="All 2 branches missed.">      if (connectionsChanged(baseEdges, localEdges, nodeId)) {</span>
+<span class="nc" id="L242">        return location(ConflictKind.DELETE_CONNECT, ElementKind.NODE, nodeId, &quot;connections&quot;);</span>
+      }
+<span class="nc bnc" id="L244" title="All 2 branches missed.">      if (!base.equals(local)) {</span>
+<span class="nc" id="L245">        return location(ConflictKind.DELETE_MODIFY, ElementKind.NODE, nodeId, OBJECT_FIELD);</span>
+      }
+    }
+<span class="fc" id="L248">    return null;</span>
+  }
+
+  private static void installSpecialNodeConflicts(
+      WorkflowMergeDraft draft, List&lt;PendingConflict&gt; pending, SpecialNodes specialNodes) {
+<span class="fc bfc" id="L253" title="All 2 branches covered.">    for (Map.Entry&lt;String, SpecialNode&gt; entry : specialNodes.byId().entrySet()) {</span>
+<span class="fc" id="L254">      String nodeId = entry.getKey();</span>
+<span class="fc" id="L255">      SpecialNode special = entry.getValue();</span>
+<span class="fc" id="L256">      draft.replaceNodeNeighborhood(</span>
+<span class="fc" id="L257">          nodeId, special.base(), special.baseEdges(), special.relatedEdgeIds());</span>
+<span class="fc" id="L258">      MergeValues&lt;String&gt; evidence =</span>
+<span class="fc" id="L259">          values(</span>
+<span class="fc" id="L260">              WorkflowSemanticValueFormatter.neighborhood(special.base(), special.baseEdges()),</span>
+<span class="fc" id="L261">              WorkflowSemanticValueFormatter.neighborhood(special.local(), special.localEdges()),</span>
+<span class="fc" id="L262">              WorkflowSemanticValueFormatter.neighborhood(special.remote(), special.remoteEdges()));</span>
+<span class="fc" id="L263">      Conflict conflict = conflict(special.location(), evidence, OBJECT_CHOICES);</span>
+<span class="fc" id="L264">      pending.add(</span>
+          new PendingConflict(
+              conflict,
+              resolution -&gt;
+<span class="fc" id="L268">                  applyNeighborhoodResolution(draft, nodeId, special, resolution.choice())));</span>
+<span class="fc" id="L269">    }</span>
+<span class="fc" id="L270">  }</span>
+
+  private static void applyNeighborhoodResolution(
+      WorkflowMergeDraft draft, String nodeId, SpecialNode special, ResolutionChoice choice) {
+<span class="pc bpc" id="L274" title="3 of 6 branches missed.">    switch (choice) {</span>
+      case BASE -&gt;
+<span class="nc" id="L276">          draft.replaceNodeNeighborhood(</span>
+<span class="nc" id="L277">              nodeId, special.base(), special.baseEdges(), special.relatedEdgeIds());</span>
+      case LOCAL -&gt;
+<span class="fc" id="L279">          draft.replaceNodeNeighborhood(</span>
+<span class="fc" id="L280">              nodeId, special.local(), special.localEdges(), special.relatedEdgeIds());</span>
+      case REMOTE -&gt;
+<span class="fc" id="L282">          draft.replaceNodeNeighborhood(</span>
+<span class="fc" id="L283">              nodeId, special.remote(), special.remoteEdges(), special.relatedEdgeIds());</span>
+      case DELETE -&gt;
+<span class="fc" id="L285">          draft.replaceNodeNeighborhood(nodeId, null, List.of(), special.relatedEdgeIds());</span>
+<span class="nc" id="L286">      case CUSTOM -&gt; throw unsupportedChoice(choice, special.location().fieldPath());</span>
+    }
+<span class="fc" id="L288">  }</span>
+
+  private static void mergeNodes(
+      WorkflowMergeDraft draft,
+      List&lt;PendingConflict&gt; pending,
+      Map&lt;String, Node&gt; baseNodes,
+      Map&lt;String, Node&gt; localNodes,
+      Map&lt;String, Node&gt; remoteNodes,
+      Set&lt;String&gt; specialNodeIds) {
+<span class="fc bfc" id="L297" title="All 2 branches covered.">    for (String nodeId : union(baseNodes, localNodes, remoteNodes)) {</span>
+<span class="fc bfc" id="L298" title="All 2 branches covered.">      if (specialNodeIds.contains(nodeId)) {</span>
+<span class="fc" id="L299">        continue;</span>
+      }
+<span class="fc" id="L301">      MergeValues&lt;Node&gt; nodeValues =</span>
+<span class="fc" id="L302">          values(baseNodes.get(nodeId), localNodes.get(nodeId), remoteNodes.get(nodeId));</span>
+<span class="pc bpc" id="L303" title="1 of 2 branches missed.">      if (nodeValues.base() == null) {</span>
+<span class="nc" id="L304">        mergeAddedNode(draft, pending, nodeId, nodeValues);</span>
+<span class="pc bpc" id="L305" title="2 of 4 branches missed.">      } else if (nodeValues.local() == null || nodeValues.remote() == null) {</span>
+<span class="nc" id="L306">        mergeDeletedNode(draft, pending, nodeId, nodeValues);</span>
+      } else {
+<span class="fc" id="L308">        draft.putNode(nodeValues.base());</span>
+<span class="fc" id="L309">        mergeNodeFields(draft, pending, nodeValues);</span>
+      }
+<span class="fc" id="L311">    }</span>
+<span class="fc" id="L312">  }</span>
+
+  private static void mergeAddedNode(
+      WorkflowMergeDraft draft,
+      List&lt;PendingConflict&gt; pending,
+      String nodeId,
+      MergeValues&lt;Node&gt; nodeValues) {
+<span class="nc bnc" id="L319" title="All 2 branches missed.">    if (nodeValues.local() == null) {</span>
+<span class="nc" id="L320">      draft.putNode(nodeValues.remote());</span>
+<span class="nc bnc" id="L321" title="All 4 branches missed.">    } else if (nodeValues.remote() == null || nodeValues.local().equals(nodeValues.remote())) {</span>
+<span class="nc" id="L322">      draft.putNode(nodeValues.local());</span>
+    } else {
+<span class="nc" id="L324">      addNodeObjectConflict(</span>
+          draft,
+          pending,
+<span class="nc" id="L327">          location(ConflictKind.STABLE_ID_COLLISION, ElementKind.NODE, nodeId, OBJECT_FIELD),</span>
+          nodeValues);
+    }
+<span class="nc" id="L330">  }</span>
+
+  private static void mergeDeletedNode(
+      WorkflowMergeDraft draft,
+      List&lt;PendingConflict&gt; pending,
+      String nodeId,
+      MergeValues&lt;Node&gt; nodeValues) {
+<span class="nc bnc" id="L337" title="All 4 branches missed.">    if (nodeValues.local() == null &amp;&amp; nodeValues.remote() == null) {</span>
+<span class="nc" id="L338">      draft.removeNode(nodeId);</span>
+<span class="nc bnc" id="L339" title="All 4 branches missed.">    } else if (nodeValues.local() == null &amp;&amp; nodeValues.base().equals(nodeValues.remote())) {</span>
+<span class="nc" id="L340">      draft.removeNode(nodeId);</span>
+<span class="nc bnc" id="L341" title="All 4 branches missed.">    } else if (nodeValues.remote() == null &amp;&amp; nodeValues.base().equals(nodeValues.local())) {</span>
+<span class="nc" id="L342">      draft.removeNode(nodeId);</span>
+    } else {
+<span class="nc" id="L344">      addNodeObjectConflict(</span>
+          draft,
+          pending,
+<span class="nc" id="L347">          location(ConflictKind.DELETE_MODIFY, ElementKind.NODE, nodeId, OBJECT_FIELD),</span>
+          nodeValues);
+    }
+<span class="nc" id="L350">  }</span>
+
+  private static void addNodeObjectConflict(
+      WorkflowMergeDraft draft,
+      List&lt;PendingConflict&gt; pending,
+      MergeLocation location,
+      MergeValues&lt;Node&gt; nodeValues) {
+<span class="nc bnc" id="L357" title="All 2 branches missed.">    if (nodeValues.base() == null) {</span>
+<span class="nc" id="L358">      draft.removeNode(location.elementId());</span>
+    } else {
+<span class="nc" id="L360">      draft.putNode(nodeValues.base());</span>
+    }
+<span class="nc" id="L362">    Conflict conflict =</span>
+<span class="nc" id="L363">        conflict(</span>
+<span class="nc" id="L364">            location, formatted(nodeValues, WorkflowSemanticValueFormatter::node), OBJECT_CHOICES);</span>
+<span class="nc" id="L365">    pending.add(</span>
+        new PendingConflict(
+            conflict,
+            resolution -&gt;
+<span class="nc" id="L369">                applyNodeObjectResolution(draft, location, nodeValues, resolution.choice())));</span>
+<span class="nc" id="L370">  }</span>
+
+  private static void applyNodeObjectResolution(
+      WorkflowMergeDraft draft,
+      MergeLocation location,
+      MergeValues&lt;Node&gt; nodeValues,
+      ResolutionChoice choice) {
+<span class="nc" id="L377">    Node selected = selectObject(nodeValues, location, choice);</span>
+<span class="nc bnc" id="L378" title="All 2 branches missed.">    if (selected == null) {</span>
+<span class="nc" id="L379">      draft.removeNode(location.elementId());</span>
+    } else {
+<span class="nc" id="L381">      draft.putNode(selected);</span>
+    }
+<span class="nc" id="L383">  }</span>
+
+  private static void mergeNodeFields(
+      WorkflowMergeDraft draft, List&lt;PendingConflict&gt; pending, MergeValues&lt;Node&gt; nodeValues) {
+<span class="fc" id="L387">    String nodeId = nodeValues.base().id();</span>
+<span class="fc" id="L388">    mergeTypedValue(</span>
+        pending,
+<span class="fc" id="L390">        location(ConflictKind.DIVERGENT_VALUE, ElementKind.NODE, nodeId, &quot;type&quot;),</span>
+<span class="fc" id="L391">        mapped(nodeValues, Node::type),</span>
+<span class="fc" id="L392">        Function.identity(),</span>
+<span class="fc" id="L393">        value -&gt; draft.setNodeType(nodeId, value));</span>
+<span class="fc" id="L394">    mergeStringValue(</span>
+        pending,
+<span class="fc" id="L396">        location(ConflictKind.DIVERGENT_VALUE, ElementKind.NODE, nodeId, &quot;label&quot;),</span>
+<span class="fc" id="L397">        mapped(nodeValues, Node::label),</span>
+        false,
+<span class="fc" id="L399">        value -&gt; draft.setNodeLabel(nodeId, value));</span>
+<span class="fc" id="L400">    mergeTypedValue(</span>
+        pending,
+<span class="fc" id="L402">        location(ConflictKind.DIVERGENT_VALUE, ElementKind.NODE, nodeId, &quot;inputPorts&quot;),</span>
+<span class="fc" id="L403">        mapped(nodeValues, Node::inputPorts),</span>
+        WorkflowSemanticValueFormatter::ports,
+<span class="fc" id="L405">        value -&gt; draft.setNodeInputPorts(nodeId, value));</span>
+<span class="fc" id="L406">    mergeTypedValue(</span>
+        pending,
+<span class="fc" id="L408">        location(ConflictKind.DIVERGENT_VALUE, ElementKind.NODE, nodeId, &quot;outputPorts&quot;),</span>
+<span class="fc" id="L409">        mapped(nodeValues, Node::outputPorts),</span>
+        WorkflowSemanticValueFormatter::ports,
+<span class="fc" id="L411">        value -&gt; draft.setNodeOutputPorts(nodeId, value));</span>
+<span class="fc" id="L412">    mergeMetadata(</span>
+        pending,
+        ElementKind.NODE,
+        nodeId,
+<span class="fc" id="L416">        nodeValues.base().metadata(),</span>
+<span class="fc" id="L417">        nodeValues.local().metadata(),</span>
+<span class="fc" id="L418">        nodeValues.remote().metadata(),</span>
+<span class="fc" id="L419">        (key, value) -&gt; draft.setNodeMetadata(nodeId, key, value));</span>
+<span class="fc" id="L420">  }</span>
+
+  private static void mergeEdges(
+      WorkflowMergeDraft draft,
+      List&lt;PendingConflict&gt; pending,
+      Map&lt;String, Edge&gt; baseEdges,
+      Map&lt;String, Edge&gt; localEdges,
+      Map&lt;String, Edge&gt; remoteEdges,
+      Set&lt;String&gt; blockedEdgeIds) {
+<span class="fc bfc" id="L429" title="All 2 branches covered.">    for (String edgeId : union(baseEdges, localEdges, remoteEdges)) {</span>
+<span class="fc bfc" id="L430" title="All 2 branches covered.">      if (blockedEdgeIds.contains(edgeId)) {</span>
+<span class="fc" id="L431">        continue;</span>
+      }
+<span class="fc" id="L433">      MergeValues&lt;Edge&gt; edgeValues =</span>
+<span class="fc" id="L434">          values(baseEdges.get(edgeId), localEdges.get(edgeId), remoteEdges.get(edgeId));</span>
+<span class="fc bfc" id="L435" title="All 2 branches covered.">      if (edgeValues.base() == null) {</span>
+<span class="fc" id="L436">        mergeAddedEdge(draft, pending, edgeId, edgeValues);</span>
+<span class="pc bpc" id="L437" title="2 of 4 branches missed.">      } else if (edgeValues.local() == null || edgeValues.remote() == null) {</span>
+<span class="nc" id="L438">        mergeDeletedEdge(draft, pending, edgeId, edgeValues);</span>
+      } else {
+<span class="fc" id="L440">        draft.putEdge(edgeValues.base());</span>
+<span class="fc" id="L441">        mergeEdgeFields(draft, pending, edgeValues);</span>
+      }
+<span class="fc" id="L443">    }</span>
+<span class="fc" id="L444">  }</span>
+
+  private static void mergeAddedEdge(
+      WorkflowMergeDraft draft,
+      List&lt;PendingConflict&gt; pending,
+      String edgeId,
+      MergeValues&lt;Edge&gt; edgeValues) {
+<span class="pc bpc" id="L451" title="1 of 2 branches missed.">    if (edgeValues.local() == null) {</span>
+<span class="fc" id="L452">      draft.putEdge(edgeValues.remote());</span>
+<span class="nc bnc" id="L453" title="All 4 branches missed.">    } else if (edgeValues.remote() == null || edgeValues.local().equals(edgeValues.remote())) {</span>
+<span class="nc" id="L454">      draft.putEdge(edgeValues.local());</span>
+    } else {
+<span class="nc" id="L456">      addEdgeObjectConflict(</span>
+          draft,
+          pending,
+<span class="nc" id="L459">          location(ConflictKind.STABLE_ID_COLLISION, ElementKind.EDGE, edgeId, OBJECT_FIELD),</span>
+          edgeValues);
+    }
+<span class="fc" id="L462">  }</span>
+
+  private static void mergeDeletedEdge(
+      WorkflowMergeDraft draft,
+      List&lt;PendingConflict&gt; pending,
+      String edgeId,
+      MergeValues&lt;Edge&gt; edgeValues) {
+<span class="nc bnc" id="L469" title="All 4 branches missed.">    if (edgeValues.local() == null &amp;&amp; edgeValues.remote() == null) {</span>
+<span class="nc" id="L470">      draft.removeEdge(edgeId);</span>
+<span class="nc bnc" id="L471" title="All 4 branches missed.">    } else if (edgeValues.local() == null &amp;&amp; edgeValues.base().equals(edgeValues.remote())) {</span>
+<span class="nc" id="L472">      draft.removeEdge(edgeId);</span>
+<span class="nc bnc" id="L473" title="All 4 branches missed.">    } else if (edgeValues.remote() == null &amp;&amp; edgeValues.base().equals(edgeValues.local())) {</span>
+<span class="nc" id="L474">      draft.removeEdge(edgeId);</span>
+    } else {
+<span class="nc" id="L476">      addEdgeObjectConflict(</span>
+          draft,
+          pending,
+<span class="nc" id="L479">          location(ConflictKind.DELETE_MODIFY, ElementKind.EDGE, edgeId, OBJECT_FIELD),</span>
+          edgeValues);
+    }
+<span class="nc" id="L482">  }</span>
+
+  private static void addEdgeObjectConflict(
+      WorkflowMergeDraft draft,
+      List&lt;PendingConflict&gt; pending,
+      MergeLocation location,
+      MergeValues&lt;Edge&gt; edgeValues) {
+<span class="nc bnc" id="L489" title="All 2 branches missed.">    if (edgeValues.base() == null) {</span>
+<span class="nc" id="L490">      draft.removeEdge(location.elementId());</span>
+    } else {
+<span class="nc" id="L492">      draft.putEdge(edgeValues.base());</span>
+    }
+<span class="nc" id="L494">    Conflict conflict =</span>
+<span class="nc" id="L495">        conflict(</span>
+<span class="nc" id="L496">            location, formatted(edgeValues, WorkflowSemanticValueFormatter::edge), OBJECT_CHOICES);</span>
+<span class="nc" id="L497">    pending.add(</span>
+        new PendingConflict(
+            conflict,
+            resolution -&gt;
+<span class="nc" id="L501">                applyEdgeObjectResolution(draft, location, edgeValues, resolution.choice())));</span>
+<span class="nc" id="L502">  }</span>
+
+  private static void applyEdgeObjectResolution(
+      WorkflowMergeDraft draft,
+      MergeLocation location,
+      MergeValues&lt;Edge&gt; edgeValues,
+      ResolutionChoice choice) {
+<span class="nc" id="L509">    Edge selected = selectObject(edgeValues, location, choice);</span>
+<span class="nc bnc" id="L510" title="All 2 branches missed.">    if (selected == null) {</span>
+<span class="nc" id="L511">      draft.removeEdge(location.elementId());</span>
+    } else {
+<span class="nc" id="L513">      draft.putEdge(selected);</span>
+    }
+<span class="nc" id="L515">  }</span>
+
+  private static void mergeEdgeFields(
+      WorkflowMergeDraft draft, List&lt;PendingConflict&gt; pending, MergeValues&lt;Edge&gt; edgeValues) {
+<span class="fc" id="L519">    String edgeId = edgeValues.base().id();</span>
+<span class="fc" id="L520">    mergeTypedValue(</span>
+        pending,
+<span class="fc" id="L522">        location(ConflictKind.DIVERGENT_EDGE_ENDPOINTS, ElementKind.EDGE, edgeId, &quot;endpoints&quot;),</span>
+<span class="fc" id="L523">        mapped(edgeValues, WorkflowThreeWayMerger::endpointsOnly),</span>
+        WorkflowSemanticValueFormatter::endpoints,
+<span class="fc" id="L525">        value -&gt; draft.setEdgeEndpoints(edgeId, value));</span>
+<span class="fc" id="L526">    mergeMetadata(</span>
+        pending,
+        ElementKind.EDGE,
+        edgeId,
+<span class="fc" id="L530">        edgeValues.base().metadata(),</span>
+<span class="fc" id="L531">        edgeValues.local().metadata(),</span>
+<span class="fc" id="L532">        edgeValues.remote().metadata(),</span>
+<span class="nc" id="L533">        (key, value) -&gt; draft.setEdgeMetadata(edgeId, key, value));</span>
+<span class="fc" id="L534">  }</span>
+
+  private static Edge endpointsOnly(Edge edge) {
+<span class="fc" id="L537">    return new Edge(</span>
+<span class="fc" id="L538">        edge.id(),</span>
+<span class="fc" id="L539">        edge.sourceNodeId(),</span>
+<span class="fc" id="L540">        edge.sourcePortId(),</span>
+<span class="fc" id="L541">        edge.targetNodeId(),</span>
+<span class="fc" id="L542">        edge.targetPortId());</span>
+  }
+
+  private static void mergeMetadata(
+      List&lt;PendingConflict&gt; pending,
+      ElementKind elementKind,
+      String elementId,
+      Metadata base,
+      Metadata local,
+      Metadata remote,
+      BiConsumer&lt;String, String&gt; setter) {
+<span class="fc bfc" id="L553" title="All 2 branches covered.">    for (String key : union(base.entries(), local.entries(), remote.entries())) {</span>
+<span class="fc" id="L554">      mergeStringValue(</span>
+          pending,
+<span class="fc" id="L556">          location(ConflictKind.DIVERGENT_VALUE, elementKind, elementId, &quot;metadata.&quot; + key),</span>
+<span class="fc" id="L557">          values(base.entries().get(key), local.entries().get(key), remote.entries().get(key)),</span>
+          true,
+<span class="fc" id="L559">          value -&gt; setter.accept(key, value));</span>
+<span class="fc" id="L560">    }</span>
+<span class="fc" id="L561">  }</span>
+
+  private static void mergeStringValue(
+      List&lt;PendingConflict&gt; pending,
+      MergeLocation location,
+      MergeValues&lt;String&gt; mergeValues,
+      boolean optional,
+      Consumer&lt;String&gt; setter) {
+<span class="fc" id="L569">    String automatic = mergeValues.automatic();</span>
+<span class="pc bpc" id="L570" title="1 of 4 branches missed.">    if (automatic != null || mergeValues.automaticallyResolved()) {</span>
+<span class="fc" id="L571">      setter.accept(automatic);</span>
+<span class="fc" id="L572">      return;</span>
+    }
+<span class="pc bpc" id="L574" title="1 of 2 branches missed.">    Set&lt;ResolutionChoice&gt; choices = optional ? OPTIONAL_STRING_CHOICES : CUSTOM_STRING_CHOICES;</span>
+<span class="fc" id="L575">    Conflict conflict = conflict(location, mergeValues, choices);</span>
+<span class="fc" id="L576">    pending.add(</span>
+        new PendingConflict(
+            conflict,
+            resolution -&gt;
+<span class="fc" id="L580">                setter.accept(selectString(mergeValues, optional, location, resolution))));</span>
+<span class="fc" id="L581">  }</span>
+
+  private static &lt;T&gt; void mergeTypedValue(
+      List&lt;PendingConflict&gt; pending,
+      MergeLocation location,
+      MergeValues&lt;T&gt; mergeValues,
+      Function&lt;T, String&gt; formatter,
+      Consumer&lt;T&gt; setter) {
+<span class="fc" id="L589">    T automatic = mergeValues.automatic();</span>
+<span class="pc bpc" id="L590" title="1 of 4 branches missed.">    if (automatic != null || mergeValues.automaticallyResolved()) {</span>
+<span class="fc" id="L591">      setter.accept(automatic);</span>
+<span class="fc" id="L592">      return;</span>
+    }
+<span class="fc" id="L594">    Conflict conflict = conflict(location, formatted(mergeValues, formatter), TYPED_VALUE_CHOICES);</span>
+<span class="fc" id="L595">    pending.add(</span>
+        new PendingConflict(
+<span class="fc" id="L597">            conflict, resolution -&gt; setter.accept(selectTyped(mergeValues, location, resolution))));</span>
+<span class="fc" id="L598">  }</span>
+
+  private static String selectString(
+      MergeValues&lt;String&gt; mergeValues,
+      boolean optional,
+      MergeLocation location,
+      Resolution resolution) {
+<span class="pc bpc" id="L605" title="4 of 5 branches missed.">    return switch (resolution.choice()) {</span>
+<span class="nc" id="L606">      case BASE -&gt; mergeValues.base();</span>
+<span class="nc" id="L607">      case LOCAL -&gt; mergeValues.local();</span>
+<span class="nc" id="L608">      case REMOTE -&gt; mergeValues.remote();</span>
+      case DELETE -&gt; {
+<span class="nc bnc" id="L610" title="All 2 branches missed.">        if (!optional) {</span>
+<span class="nc" id="L611">          throw unsupportedChoice(resolution.choice(), location.fieldPath());</span>
+        }
+<span class="nc" id="L613">        yield null;</span>
+      }
+<span class="fc" id="L615">      case CUSTOM -&gt; resolution.customValue();</span>
+    };
+  }
+
+  private static &lt;T&gt; T selectTyped(
+      MergeValues&lt;T&gt; mergeValues, MergeLocation location, Resolution resolution) {
+<span class="pc bpc" id="L621" title="3 of 4 branches missed.">    return switch (resolution.choice()) {</span>
+<span class="nc" id="L622">      case BASE -&gt; mergeValues.base();</span>
+<span class="nc" id="L623">      case LOCAL -&gt; mergeValues.local();</span>
+<span class="fc" id="L624">      case REMOTE -&gt; mergeValues.remote();</span>
+<span class="nc" id="L625">      case DELETE, CUSTOM -&gt; throw unsupportedChoice(resolution.choice(), location.fieldPath());</span>
+    };
+  }
+
+  private static &lt;T&gt; T selectObject(
+      MergeValues&lt;T&gt; mergeValues, MergeLocation location, ResolutionChoice choice) {
+<span class="nc bnc" id="L631" title="All 5 branches missed.">    return switch (choice) {</span>
+<span class="nc" id="L632">      case BASE -&gt; mergeValues.base();</span>
+<span class="nc" id="L633">      case LOCAL -&gt; mergeValues.local();</span>
+<span class="nc" id="L634">      case REMOTE -&gt; mergeValues.remote();</span>
+<span class="nc" id="L635">      case DELETE -&gt; null;</span>
+<span class="nc" id="L636">      case CUSTOM -&gt; throw unsupportedChoice(choice, location.fieldPath());</span>
+    };
+  }
+
+  private static Conflict conflict(
+      MergeLocation location, MergeValues&lt;String&gt; evidence, Set&lt;ResolutionChoice&gt; allowedChoices) {
+<span class="fc" id="L642">    return new Conflict(</span>
+<span class="fc" id="L643">        conflictId(location),</span>
+<span class="fc" id="L644">        location.kind(),</span>
+<span class="fc" id="L645">        location.elementKind(),</span>
+<span class="fc" id="L646">        location.elementId(),</span>
+<span class="fc" id="L647">        location.fieldPath(),</span>
+<span class="fc" id="L648">        evidence.base(),</span>
+<span class="fc" id="L649">        evidence.local(),</span>
+<span class="fc" id="L650">        evidence.remote(),</span>
+        allowedChoices);
+  }
+
+  private static String conflictId(MergeLocation location) {
+<span class="fc" id="L655">    return location.kind().name()</span>
+        + &quot;:&quot;
+<span class="fc" id="L657">        + location.elementKind().name()</span>
+        + &quot;:&quot;
+<span class="fc" id="L659">        + segment(location.elementId())</span>
+        + &quot;:&quot;
+<span class="fc" id="L661">        + segment(location.fieldPath());</span>
+  }
+
+  private static String segment(String value) {
+<span class="fc" id="L665">    return value.length() + &quot;:&quot; + value;</span>
+  }
+
+  private static Map&lt;String, Resolution&gt; indexResolutions(List&lt;Resolution&gt; resolutions) {
+<span class="fc" id="L669">    Map&lt;String, Resolution&gt; indexed = new ConcurrentHashMap&lt;&gt;();</span>
+<span class="fc bfc" id="L670" title="All 2 branches covered.">    for (Resolution resolution : resolutions) {</span>
+<span class="fc" id="L671">      Resolution required = Objects.requireNonNull(resolution, &quot;resolution&quot;);</span>
+<span class="pc bpc" id="L672" title="1 of 2 branches missed.">      if (indexed.putIfAbsent(required.conflictId(), required) != null) {</span>
+<span class="nc" id="L673">        throw new IllegalArgumentException(</span>
+<span class="nc" id="L674">            &quot;Duplicate workflow merge resolution for &quot; + required.conflictId());</span>
+      }
+<span class="fc" id="L676">    }</span>
+<span class="fc" id="L677">    return indexed;</span>
+  }
+
+  private static Map&lt;String, Node&gt; indexNodes(List&lt;Node&gt; nodes) {
+<span class="fc" id="L681">    Map&lt;String, Node&gt; indexed = new ConcurrentHashMap&lt;&gt;();</span>
+<span class="fc bfc" id="L682" title="All 2 branches covered.">    for (Node node : nodes) {</span>
+<span class="pc bpc" id="L683" title="1 of 2 branches missed.">      if (indexed.putIfAbsent(node.id(), node) != null) {</span>
+<span class="nc" id="L684">        throw new IllegalArgumentException(&quot;Duplicate node id: &quot; + node.id());</span>
+      }
+<span class="fc" id="L686">    }</span>
+<span class="fc" id="L687">    return indexed;</span>
+  }
+
+  private static Map&lt;String, Edge&gt; indexEdges(List&lt;Edge&gt; edges) {
+<span class="fc" id="L691">    Map&lt;String, Edge&gt; indexed = new ConcurrentHashMap&lt;&gt;();</span>
+<span class="fc bfc" id="L692" title="All 2 branches covered.">    for (Edge edge : edges) {</span>
+<span class="pc bpc" id="L693" title="1 of 2 branches missed.">      if (indexed.putIfAbsent(edge.id(), edge) != null) {</span>
+<span class="nc" id="L694">        throw new IllegalArgumentException(&quot;Duplicate edge id: &quot; + edge.id());</span>
+      }
+<span class="fc" id="L696">    }</span>
+<span class="fc" id="L697">    return indexed;</span>
+  }
+
+  private static boolean connectionsChanged(
+      List&lt;Edge&gt; baseEdges, List&lt;Edge&gt; sideEdges, String nodeId) {
+<span class="fc" id="L702">    return !WorkflowMergeDraft.connectedEdges(baseEdges, nodeId)</span>
+<span class="fc bfc" id="L703" title="All 2 branches covered.">        .equals(WorkflowMergeDraft.connectedEdges(sideEdges, nodeId));</span>
+  }
+
+  private static void addEdgeIds(Set&lt;String&gt; target, Collection&lt;Edge&gt; edges) {
+<span class="fc bfc" id="L707" title="All 2 branches covered.">    for (Edge edge : edges) {</span>
+<span class="fc" id="L708">      target.add(edge.id());</span>
+<span class="fc" id="L709">    }</span>
+<span class="fc" id="L710">  }</span>
+
+  private static &lt;T&gt; List&lt;String&gt; union(
+      Map&lt;String, T&gt; base, Map&lt;String, T&gt; local, Map&lt;String, T&gt; remote) {
+<span class="fc" id="L714">    Set&lt;String&gt; keys = new TreeSet&lt;&gt;(base.keySet());</span>
+<span class="fc" id="L715">    keys.addAll(local.keySet());</span>
+<span class="fc" id="L716">    keys.addAll(remote.keySet());</span>
+<span class="fc" id="L717">    return List.copyOf(keys);</span>
+  }
+
+  private static &lt;T, R&gt; MergeValues&lt;R&gt; mapped(MergeValues&lt;T&gt; values, Function&lt;T, R&gt; mapper) {
+<span class="fc" id="L721">    return new MergeValues&lt;&gt;(</span>
+<span class="fc" id="L722">        mapper.apply(values.base()), mapper.apply(values.local()), mapper.apply(values.remote()));</span>
+  }
+
+  private static &lt;T&gt; MergeValues&lt;String&gt; formatted(
+      MergeValues&lt;T&gt; values, Function&lt;T, String&gt; formatter) {
+<span class="fc" id="L727">    return new MergeValues&lt;&gt;(</span>
+<span class="fc" id="L728">        format(formatter, values.base()),</span>
+<span class="fc" id="L729">        format(formatter, values.local()),</span>
+<span class="fc" id="L730">        format(formatter, values.remote()));</span>
+  }
+
+  private static &lt;T&gt; String format(Function&lt;T, String&gt; formatter, T value) {
+<span class="pc bpc" id="L734" title="1 of 2 branches missed.">    return value == null ? null : formatter.apply(value);</span>
+  }
+
+  private static MergeLocation location(
+      ConflictKind kind, ElementKind elementKind, String elementId, String fieldPath) {
+<span class="fc" id="L739">    return new MergeLocation(kind, elementKind, elementId, fieldPath);</span>
+  }
+
+  private static &lt;T&gt; MergeValues&lt;T&gt; values(T base, T local, T remote) {
+<span class="fc" id="L743">    return new MergeValues&lt;&gt;(base, local, remote);</span>
+  }
+
+  private static IllegalArgumentException unsupportedChoice(
+      ResolutionChoice choice, String fieldPath) {
+<span class="nc" id="L748">    return new IllegalArgumentException(</span>
+        &quot;Resolution choice &quot; + choice + &quot; is not supported for &quot; + fieldPath);
+  }
+
+  private record MergeLocation(
+      ConflictKind kind, ElementKind elementKind, String elementId, String fieldPath) {
+<span class="fc" id="L754">    MergeLocation {</span>
+<span class="fc" id="L755">      Objects.requireNonNull(kind, &quot;kind&quot;);</span>
+<span class="fc" id="L756">      Objects.requireNonNull(elementKind, &quot;elementKind&quot;);</span>
+<span class="fc" id="L757">      Objects.requireNonNull(elementId, &quot;elementId&quot;);</span>
+<span class="fc" id="L758">      Objects.requireNonNull(fieldPath, &quot;fieldPath&quot;);</span>
+<span class="fc" id="L759">    }</span>
+  }
+
+<span class="fc" id="L762">  private record MergeValues&lt;T&gt;(T base, T local, T remote) {</span>
+    boolean automaticallyResolved() {
+<span class="pc bpc" id="L764" title="1 of 2 branches missed.">      return Objects.equals(local, remote)</span>
+<span class="pc bpc" id="L765" title="1 of 2 branches missed.">          || Objects.equals(local, base)</span>
+<span class="pc bpc" id="L766" title="1 of 2 branches missed.">          || Objects.equals(remote, base);</span>
+    }
+
+    T automatic() {
+<span class="fc bfc" id="L770" title="All 2 branches covered.">      if (Objects.equals(local, remote)) {</span>
+<span class="fc" id="L771">        return local;</span>
+      }
+<span class="fc bfc" id="L773" title="All 2 branches covered.">      if (Objects.equals(local, base)) {</span>
+<span class="fc" id="L774">        return remote;</span>
+      }
+<span class="fc bfc" id="L776" title="All 2 branches covered.">      if (Objects.equals(remote, base)) {</span>
+<span class="fc" id="L777">        return local;</span>
+      }
+<span class="fc" id="L779">      return null;</span>
+    }
+  }
+
+  private record PendingConflict(Conflict conflict, Consumer&lt;Resolution&gt; applier) {
+<span class="fc" id="L784">    PendingConflict {</span>
+<span class="fc" id="L785">      Objects.requireNonNull(conflict, &quot;conflict&quot;);</span>
+<span class="fc" id="L786">      Objects.requireNonNull(applier, &quot;applier&quot;);</span>
+<span class="fc" id="L787">    }</span>
+
+    void apply(Resolution resolution) {
+<span class="pc bpc" id="L790" title="1 of 2 branches missed.">      if (!conflict.allowedChoices().contains(resolution.choice())) {</span>
+<span class="nc" id="L791">        throw unsupportedChoice(resolution.choice(), conflict.fieldPath());</span>
+      }
+<span class="fc" id="L793">      applier.accept(resolution);</span>
+<span class="fc" id="L794">    }</span>
+  }
+
+  private record Computation(WorkflowMergeDraft draft, List&lt;PendingConflict&gt; pending) {
+<span class="fc" id="L798">    Computation {</span>
+<span class="fc" id="L799">      Objects.requireNonNull(draft, &quot;draft&quot;);</span>
+<span class="fc" id="L800">      pending = List.copyOf(Objects.requireNonNull(pending, &quot;pending&quot;));</span>
+<span class="fc" id="L801">      Set&lt;String&gt; identities = new HashSet&lt;&gt;();</span>
+<span class="fc bfc" id="L802" title="All 2 branches covered.">      for (PendingConflict conflict : pending) {</span>
+<span class="pc bpc" id="L803" title="1 of 2 branches missed.">        if (!identities.add(conflict.conflict().conflictId())) {</span>
+<span class="nc" id="L804">          throw new IllegalStateException(</span>
+<span class="nc" id="L805">              &quot;Duplicate calculated merge conflict &quot; + conflict.conflict().conflictId());</span>
+        }
+<span class="fc" id="L807">      }</span>
+<span class="fc" id="L808">    }</span>
+  }
+
+  private record SpecialNodes(Map&lt;String, SpecialNode&gt; byId, Set&lt;String&gt; blockedEdgeIds) {
+<span class="fc" id="L812">    SpecialNodes {</span>
+<span class="fc" id="L813">      byId = Map.copyOf(Objects.requireNonNull(byId, &quot;byId&quot;));</span>
+<span class="fc" id="L814">      blockedEdgeIds = Set.copyOf(Objects.requireNonNull(blockedEdgeIds, &quot;blockedEdgeIds&quot;));</span>
+<span class="fc" id="L815">    }</span>
+
+    Set&lt;String&gt; nodeIds() {
+<span class="fc" id="L818">      return byId.keySet();</span>
+    }
+  }
+
+  private record SpecialNode(
+      MergeLocation location,
+      Node base,
+      Node local,
+      Node remote,
+      List&lt;Edge&gt; baseEdges,
+      List&lt;Edge&gt; localEdges,
+      List&lt;Edge&gt; remoteEdges,
+      Set&lt;String&gt; relatedEdgeIds) {
+<span class="fc" id="L831">    SpecialNode {</span>
+<span class="fc" id="L832">      Objects.requireNonNull(location, &quot;location&quot;);</span>
+<span class="fc" id="L833">      baseEdges = List.copyOf(Objects.requireNonNull(baseEdges, &quot;baseEdges&quot;));</span>
+<span class="fc" id="L834">      localEdges = List.copyOf(Objects.requireNonNull(localEdges, &quot;localEdges&quot;));</span>
+<span class="fc" id="L835">      remoteEdges = List.copyOf(Objects.requireNonNull(remoteEdges, &quot;remoteEdges&quot;));</span>
+<span class="fc" id="L836">      relatedEdgeIds = Set.copyOf(Objects.requireNonNull(relatedEdgeIds, &quot;relatedEdgeIds&quot;));</span>
+<span class="fc" id="L837">    }</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

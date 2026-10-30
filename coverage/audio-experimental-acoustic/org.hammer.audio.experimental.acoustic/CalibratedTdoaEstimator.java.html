@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>CalibratedTdoaEstimator.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic</a> &gt; <span class="el_source">CalibratedTdoaEstimator.java</span></div><h1>CalibratedTdoaEstimator.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic;
+
+import java.time.Clock;
+import java.util.Objects;
+import org.hammer.audio.acquisition.Microphone;
+import org.hammer.audio.acquisition.MicrophoneArray;
+import org.hammer.audio.acquisition.MicrophoneArrayCalibration;
+import org.hammer.audio.acquisition.SynchronizationAssessment;
+import org.hammer.audio.core.AudioBlock;
+
+/** Applies validated per-channel offset/drift calibration to another TDOA estimator. */
+public final class CalibratedTdoaEstimator implements SynchronizationAwareTdoaEstimator {
+
+  private final TdoaEstimator delegate;
+  private final MicrophoneArrayCalibration calibration;
+  private final Clock clock;
+  private final double maximumErrorSamples;
+  private final double speedOfSoundMetersPerSecond;
+
+  /** Creates a calibrated decorator with an explicit timing-error budget. */
+  public CalibratedTdoaEstimator(
+      TdoaEstimator delegate,
+      MicrophoneArrayCalibration calibration,
+      Clock clock,
+      double maximumErrorSamples,
+<span class="fc" id="L26">      double speedOfSoundMetersPerSecond) {</span>
+<span class="fc" id="L27">    this.delegate = Objects.requireNonNull(delegate, &quot;delegate&quot;);</span>
+<span class="fc" id="L28">    this.calibration = Objects.requireNonNull(calibration, &quot;calibration&quot;);</span>
+<span class="fc" id="L29">    this.clock = Objects.requireNonNull(clock, &quot;clock&quot;);</span>
+<span class="fc" id="L30">    this.maximumErrorSamples = requirePositiveFinite(maximumErrorSamples, &quot;maximumErrorSamples&quot;);</span>
+<span class="fc" id="L31">    this.speedOfSoundMetersPerSecond =</span>
+<span class="fc" id="L32">        requirePositiveFinite(speedOfSoundMetersPerSecond, &quot;speedOfSoundMetersPerSecond&quot;);</span>
+<span class="fc" id="L33">  }</span>
+
+  @Override
+  public TdoaEstimate estimate(
+      AudioBlock block, MicrophoneArray array, int firstChannel, int secondChannel) {
+<span class="fc" id="L38">    requireCompatibleArray(array);</span>
+<span class="fc" id="L39">    SynchronizationAssessment assessment = synchronizationAssessment(block, array);</span>
+<span class="fc bfc" id="L40" title="All 2 branches covered.">    if (!assessment.usable()) {</span>
+<span class="fc" id="L41">      throw new UnusableSynchronizationException(String.join(&quot; &quot;, assessment.diagnostics()));</span>
+    }
+<span class="fc" id="L43">    TdoaEstimate raw = delegate.estimate(block, array, firstChannel, secondChannel);</span>
+<span class="fc" id="L44">    double hardwareDelaySamples =</span>
+<span class="fc" id="L45">        calibration.relativeOffsetSamples(firstChannel, secondChannel, block.frameIndex());</span>
+<span class="fc" id="L46">    double rawDelaySamples = raw.delaySeconds() * block.format().sampleRate();</span>
+<span class="fc" id="L47">    double correctedDelaySamples = rawDelaySamples - hardwareDelaySamples;</span>
+<span class="fc" id="L48">    int roundedDelaySamples = (int) Math.round(correctedDelaySamples);</span>
+<span class="fc" id="L49">    double correctedDelaySeconds = correctedDelaySamples / block.format().sampleRate();</span>
+<span class="fc" id="L50">    double confidenceScale =</span>
+<span class="fc" id="L51">        Math.max(0.0, 1.0 - assessment.estimatedErrorSamples() / maximumErrorSamples);</span>
+<span class="fc" id="L52">    return new TdoaEstimate(</span>
+<span class="fc" id="L53">        raw.firstMicrophoneId(),</span>
+<span class="fc" id="L54">        raw.secondMicrophoneId(),</span>
+        roundedDelaySamples,
+        correctedDelaySeconds,
+        correctedDelaySeconds * speedOfSoundMetersPerSecond,
+<span class="fc" id="L58">        raw.confidence() * confidenceScale);</span>
+  }
+
+  @Override
+  public SynchronizationAssessment synchronizationAssessment(
+      AudioBlock block, MicrophoneArray array) {
+<span class="fc" id="L64">    Objects.requireNonNull(block, &quot;block&quot;);</span>
+<span class="fc" id="L65">    requireCompatibleArray(array);</span>
+<span class="fc" id="L66">    return calibration.assess(clock.instant(), block.format().sampleRate(), maximumErrorSamples);</span>
+  }
+
+  private void requireCompatibleArray(MicrophoneArray array) {
+<span class="fc" id="L70">    Objects.requireNonNull(array, &quot;array&quot;);</span>
+<span class="pc bpc" id="L71" title="1 of 2 branches missed.">    if (array.channels() != calibration.array().channels()) {</span>
+<span class="nc" id="L72">      throw new IllegalArgumentException(&quot;microphone array does not match calibration profile&quot;);</span>
+    }
+<span class="fc bfc" id="L74" title="All 2 branches covered.">    for (int channel = 0; channel &lt; array.channels(); channel++) {</span>
+<span class="fc" id="L75">      Microphone actual = array.microphone(channel);</span>
+<span class="fc" id="L76">      Microphone calibrated = calibration.array().microphone(channel);</span>
+<span class="pc bpc" id="L77" title="1 of 2 branches missed.">      if (!actual.equals(calibrated)) {</span>
+<span class="nc" id="L78">        throw new IllegalArgumentException(&quot;microphone array does not match calibration profile&quot;);</span>
+      }
+    }
+<span class="fc" id="L81">  }</span>
+
+  private static double requirePositiveFinite(double value, String name) {
+<span class="pc bpc" id="L84" title="2 of 4 branches missed.">    if (Double.isFinite(value) &amp;&amp; value &gt; 0.0) {</span>
+<span class="fc" id="L85">      return value;</span>
+    }
+<span class="nc" id="L87">    throw new IllegalArgumentException(name + &quot; must be finite and &gt; 0&quot;);</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

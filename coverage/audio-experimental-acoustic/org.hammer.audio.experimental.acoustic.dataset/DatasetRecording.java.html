@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>DatasetRecording.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.dataset</a> &gt; <span class="el_source">DatasetRecording.java</span></div><h1>DatasetRecording.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.dataset;
+
+import java.nio.file.Path;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+
+/**
+ * One normalized recording entry in a dataset manifest.
+ *
+ * @param recordingId unique recording identifier inside one dataset
+ * @param audioPath path to audio file (relative to {@link DatasetDescriptor#localRootPath()} or
+ *     absolute)
+ * @param sampleRateHz audio sampling rate in hertz
+ * @param durationSeconds clip duration in seconds
+ * @param labels semantic labels (species, sex, age, feeding status, etc.)
+ * @param annotations optional event/time annotations
+ * @param metadata additional metadata key/value entries
+ */
+public record DatasetRecording(
+    String recordingId,
+    Path audioPath,
+    double sampleRateHz,
+    double durationSeconds,
+    Map&lt;String, String&gt; labels,
+    List&lt;DatasetAnnotation&gt; annotations,
+    Map&lt;String, String&gt; metadata) {
+
+<span class="fc" id="L29">  public DatasetRecording {</span>
+<span class="fc" id="L30">    Objects.requireNonNull(recordingId, &quot;recordingId&quot;);</span>
+<span class="fc" id="L31">    Objects.requireNonNull(audioPath, &quot;audioPath&quot;);</span>
+<span class="fc" id="L32">    Objects.requireNonNull(labels, &quot;labels&quot;);</span>
+<span class="fc" id="L33">    Objects.requireNonNull(annotations, &quot;annotations&quot;);</span>
+<span class="fc" id="L34">    Objects.requireNonNull(metadata, &quot;metadata&quot;);</span>
+<span class="pc bpc" id="L35" title="1 of 2 branches missed.">    if (recordingId.isBlank()) {</span>
+<span class="nc" id="L36">      throw new IllegalArgumentException(&quot;recordingId must not be blank&quot;);</span>
+    }
+<span class="pc bpc" id="L38" title="1 of 4 branches missed.">    if (!Double.isFinite(sampleRateHz) || sampleRateHz &lt;= 0.0) {</span>
+<span class="fc" id="L39">      throw new IllegalArgumentException(&quot;sampleRateHz must be finite and &gt; 0&quot;);</span>
+    }
+<span class="pc bpc" id="L41" title="2 of 4 branches missed.">    if (!Double.isFinite(durationSeconds) || durationSeconds &lt; 0.0) {</span>
+<span class="nc" id="L42">      throw new IllegalArgumentException(&quot;durationSeconds must be finite and &gt;= 0&quot;);</span>
+    }
+<span class="fc" id="L44">    labels = validateAndCopyMap(labels, &quot;labels&quot;);</span>
+<span class="fc" id="L45">    metadata = validateAndCopyMap(metadata, &quot;metadata&quot;);</span>
+<span class="fc" id="L46">    annotations = List.copyOf(annotations);</span>
+<span class="fc" id="L47">  }</span>
+
+  private static Map&lt;String, String&gt; validateAndCopyMap(Map&lt;String, String&gt; values, String field) {
+<span class="fc bfc" id="L50" title="All 2 branches covered.">    for (Map.Entry&lt;String, String&gt; entry : values.entrySet()) {</span>
+<span class="fc" id="L51">      String key = Objects.requireNonNull(entry.getKey(), field + &quot; key&quot;);</span>
+<span class="fc" id="L52">      String value = Objects.requireNonNull(entry.getValue(), field + &quot; value&quot;);</span>
+<span class="pc bpc" id="L53" title="1 of 2 branches missed.">      if (key.isBlank()) {</span>
+<span class="nc" id="L54">        throw new IllegalArgumentException(field + &quot; keys must not be blank&quot;);</span>
+      }
+<span class="pc bpc" id="L56" title="1 of 2 branches missed.">      if (value.isBlank()) {</span>
+<span class="nc" id="L57">        throw new IllegalArgumentException(field + &quot; values must not be blank&quot;);</span>
+      }
+<span class="fc" id="L59">    }</span>
+<span class="fc" id="L60">    return Map.copyOf(values);</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

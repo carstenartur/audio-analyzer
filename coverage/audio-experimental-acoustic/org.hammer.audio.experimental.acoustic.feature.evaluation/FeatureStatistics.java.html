@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>FeatureStatistics.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.feature.evaluation</a> &gt; <span class="el_source">FeatureStatistics.java</span></div><h1>FeatureStatistics.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.feature.evaluation;
+
+import java.util.Objects;
+import org.hammer.audio.experimental.acoustic.dataset.FeatureHistogram;
+
+/**
+ * Descriptive statistics for a single extracted feature over a corpus of samples.
+ *
+ * @param featureName human-readable feature name; must not be blank
+ * @param mean arithmetic mean of the observed values
+ * @param stdDev population standard deviation of the observed values; {@code 0} for a single sample
+ * @param histogram histogram of the observed values
+ * @param missingCount number of samples for which the feature value was treated as missing (i.e.
+ *     equal to exactly {@code 0} when no audio data was available); always {@code &gt;= 0}
+ */
+public record FeatureStatistics(
+    String featureName, double mean, double stdDev, FeatureHistogram histogram, int missingCount) {
+
+  /** Validate fields. */
+<span class="fc" id="L20">  public FeatureStatistics {</span>
+<span class="fc" id="L21">    Objects.requireNonNull(featureName, &quot;featureName&quot;);</span>
+<span class="fc" id="L22">    Objects.requireNonNull(histogram, &quot;histogram&quot;);</span>
+<span class="pc bpc" id="L23" title="1 of 2 branches missed.">    if (featureName.isBlank()) {</span>
+<span class="nc" id="L24">      throw new IllegalArgumentException(&quot;featureName must not be blank&quot;);</span>
+    }
+<span class="pc bpc" id="L26" title="1 of 2 branches missed.">    if (!Double.isFinite(mean)) {</span>
+<span class="nc" id="L27">      throw new IllegalArgumentException(&quot;mean must be finite&quot;);</span>
+    }
+<span class="pc bpc" id="L29" title="2 of 4 branches missed.">    if (!Double.isFinite(stdDev) || stdDev &lt; 0.0) {</span>
+<span class="nc" id="L30">      throw new IllegalArgumentException(&quot;stdDev must be finite and &gt;= 0&quot;);</span>
+    }
+<span class="pc bpc" id="L32" title="1 of 2 branches missed.">    if (missingCount &lt; 0) {</span>
+<span class="nc" id="L33">      throw new IllegalArgumentException(&quot;missingCount must be &gt;= 0&quot;);</span>
+    }
+<span class="fc" id="L35">  }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

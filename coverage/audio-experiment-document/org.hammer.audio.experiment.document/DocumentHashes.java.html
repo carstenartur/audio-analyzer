@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>DocumentHashes.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experiment Document</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experiment.document</a> &gt; <span class="el_source">DocumentHashes.java</span></div><h1>DocumentHashes.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experiment.document;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+
+/** SHA-256 utilities used by portable document, workflow, schema and asset contracts. */
+public final class DocumentHashes {
+
+  private static final int BUFFER_SIZE = 8192;
+
+  private DocumentHashes() {
+    // utility class
+  }
+
+  /** Return the lower-case SHA-256 of UTF-8 text. */
+  public static String sha256(String value) {
+<span class="fc" id="L22">    return sha256(value.getBytes(StandardCharsets.UTF_8));</span>
+  }
+
+  /** Return the lower-case SHA-256 of bytes. */
+  public static String sha256(byte[] value) {
+<span class="fc" id="L27">    MessageDigest digest = newSha256();</span>
+<span class="fc" id="L28">    return hexadecimal(digest.digest(value));</span>
+  }
+
+  /** Stream one local asset without loading it completely into memory. The stream remains open. */
+  public static String sha256(InputStream input) throws IOException {
+<span class="fc" id="L33">    MessageDigest digest = newSha256();</span>
+<span class="fc" id="L34">    byte[] buffer = new byte[BUFFER_SIZE];</span>
+<span class="fc" id="L35">    int read = input.read(buffer);</span>
+<span class="fc bfc" id="L36" title="All 2 branches covered.">    while (read &gt;= 0) {</span>
+<span class="pc bpc" id="L37" title="1 of 2 branches missed.">      if (read &gt; 0) {</span>
+<span class="fc" id="L38">        digest.update(buffer, 0, read);</span>
+      }
+<span class="fc" id="L40">      read = input.read(buffer);</span>
+    }
+<span class="fc" id="L42">    return hexadecimal(digest.digest());</span>
+  }
+
+  /** Stream and hash one local asset path. */
+  public static String sha256(Path path) throws IOException {
+<span class="fc" id="L47">    try (InputStream input = Files.newInputStream(path)) {</span>
+<span class="fc" id="L48">      return sha256(input);</span>
+    }
+  }
+
+  private static String hexadecimal(byte[] value) {
+<span class="fc" id="L53">    StringBuilder hex = new StringBuilder(value.length * 2);</span>
+<span class="fc bfc" id="L54" title="All 2 branches covered.">    for (byte item : value) {</span>
+<span class="fc" id="L55">      hex.append(Character.forDigit((item &gt;&gt;&gt; 4) &amp; 0x0f, 16))</span>
+<span class="fc" id="L56">          .append(Character.forDigit(item &amp; 0x0f, 16));</span>
+    }
+<span class="fc" id="L58">    return hex.toString();</span>
+  }
+
+  private static MessageDigest newSha256() {
+    try {
+<span class="fc" id="L63">      return MessageDigest.getInstance(&quot;SHA-256&quot;);</span>
+<span class="nc" id="L64">    } catch (NoSuchAlgorithmException exception) {</span>
+<span class="nc" id="L65">      throw new IllegalStateException(&quot;SHA-256 is required by the Java platform&quot;, exception);</span>
+    }
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

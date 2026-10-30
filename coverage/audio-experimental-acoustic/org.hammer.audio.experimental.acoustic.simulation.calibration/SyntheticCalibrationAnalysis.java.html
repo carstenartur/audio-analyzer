@@ -1,0 +1,185 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>SyntheticCalibrationAnalysis.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.simulation.calibration</a> &gt; <span class="el_source">SyntheticCalibrationAnalysis.java</span></div><h1>SyntheticCalibrationAnalysis.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.simulation.calibration;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+import java.util.Random;
+import org.hammer.audio.experimental.acoustic.feature.comparison.SyntheticRealComparison;
+import org.hammer.audio.experimental.acoustic.feature.comparison.SyntheticRealComparisonReport;
+import org.hammer.audio.experimental.acoustic.simulation.WingbeatSignalParameters;
+import org.hammer.audio.experimental.acoustic.wingbeat.WingbeatFeatureVector;
+
+/**
+ * Analyses the distribution difference between a synthetic generator configuration and real
+ * wingbeat recordings.
+ *
+ * &lt;p&gt;Synthetic feature vectors are derived analytically from a {@link WingbeatSignalParameters}
+ * instance — no full audio pipeline is required. Each synthetic vector captures the dominant
+ * frequency (with jitter noise), harmonic profile, spectral centroid, spectral bandwidth,
+ * modulation depth, frequency drift, jitter and an estimated SNR. The resulting corpus is compared
+ * against the real corpus using {@link SyntheticRealComparison}.
+ *
+ * &lt;p&gt;This service is stateless and may be called concurrently.
+ */
+public final class SyntheticCalibrationAnalysis {
+
+  /** Default number of synthetic vectors generated per call to {@link #analyse}. */
+  static final int DEFAULT_SYNTHETIC_COUNT = 200;
+
+  /** Default random seed for reproducible synthetic generation. */
+  static final long DEFAULT_SEED = 0xCAFEBABECAFEBABEL;
+
+  private final SyntheticRealComparison comparison;
+
+  /** Create an analysis instance. */
+<span class="fc" id="L35">  public SyntheticCalibrationAnalysis() {</span>
+<span class="fc" id="L36">    this.comparison = new SyntheticRealComparison();</span>
+<span class="fc" id="L37">  }</span>
+
+  /**
+   * Analyse differences between synthetic vectors derived from {@code params} and the supplied real
+   * corpus using the {@link SyntheticRealComparisonReport#DEFAULT_WEAKNESS_THRESHOLD default
+   * weakness threshold}.
+   *
+   * &lt;p&gt;The synthetic corpus size matches {@code real.size()} for a fair statistical comparison.
+   *
+   * @param params generator parameters to evaluate; must not be {@code null}
+   * @param real real recording feature vectors; must not be {@code null} or empty
+   * @return comparison report; never {@code null}
+   */
+  public SyntheticRealComparisonReport analyse(
+      WingbeatSignalParameters params, List&lt;WingbeatFeatureVector&gt; real) {
+<span class="fc" id="L52">    Objects.requireNonNull(params, &quot;params&quot;);</span>
+<span class="fc" id="L53">    Objects.requireNonNull(real, &quot;real&quot;);</span>
+<span class="fc bfc" id="L54" title="All 2 branches covered.">    if (real.isEmpty()) {</span>
+<span class="fc" id="L55">      throw new IllegalArgumentException(&quot;real corpus must not be empty&quot;);</span>
+    }
+<span class="fc" id="L57">    double meanTrackDurationSeconds =</span>
+<span class="fc" id="L58">        real.stream()</span>
+<span class="fc" id="L59">            .mapToDouble(WingbeatFeatureVector::trackDurationSeconds)</span>
+<span class="fc" id="L60">            .average()</span>
+<span class="fc" id="L61">            .orElse(1.0);</span>
+<span class="fc" id="L62">    List&lt;WingbeatFeatureVector&gt; synthetic =</span>
+<span class="fc" id="L63">        generateSyntheticVectors(params, real.size(), DEFAULT_SEED, meanTrackDurationSeconds);</span>
+<span class="fc" id="L64">    return comparison.compare(synthetic, real);</span>
+  }
+
+  /**
+   * Generate {@code count} synthetic {@link WingbeatFeatureVector}s analytically from the given
+   * generator parameters without running the full audio pipeline.
+   *
+   * &lt;p&gt;Each vector is derived from the parameter values:
+   *
+   * &lt;ul&gt;
+   *   &lt;li&gt;Fundamental frequency is drawn from a uniform distribution centred on {@link
+   *       WingbeatSignalParameters#fundamentalFrequencyHz()} with half-width {@link
+   *       WingbeatSignalParameters#jitterHz()}.
+   *   &lt;li&gt;Harmonic amplitudes and ratios are taken directly from the resolved amplitude list.
+   *   &lt;li&gt;Spectral centroid and bandwidth are computed analytically from the per-vector jittered
+   *       fundamental frequency so they remain consistent with the reported fundamental.
+   *   &lt;li&gt;SNR is estimated as {@code totalHarmonicAmplitude / noiseAmplitude} when noise is
+   *       non-zero; {@code 0} otherwise.
+   * &lt;/ul&gt;
+   *
+   * @param params generator parameters; must not be {@code null}
+   * @param count number of vectors to generate; must be {@code &gt;= 1}
+   * @param seed random seed for the jitter simulation
+   * @param meanTrackDurationSeconds track duration assigned to every generated vector; must be
+   *     finite and {@code &gt;= 0}
+   * @return unmodifiable list of synthetic feature vectors; never {@code null}
+   */
+  public static List&lt;WingbeatFeatureVector&gt; generateSyntheticVectors(
+      WingbeatSignalParameters params, int count, long seed, double meanTrackDurationSeconds) {
+<span class="fc" id="L93">    Objects.requireNonNull(params, &quot;params&quot;);</span>
+<span class="fc bfc" id="L94" title="All 2 branches covered.">    if (count &lt; 1) {</span>
+<span class="fc" id="L95">      throw new IllegalArgumentException(&quot;count must be &gt;= 1&quot;);</span>
+    }
+<span class="pc bpc" id="L97" title="2 of 4 branches missed.">    if (!Double.isFinite(meanTrackDurationSeconds) || meanTrackDurationSeconds &lt; 0.0) {</span>
+<span class="nc" id="L98">      throw new IllegalArgumentException(&quot;meanTrackDurationSeconds must be finite and &gt;= 0&quot;);</span>
+    }
+<span class="fc" id="L100">    Random rng = new Random(seed);</span>
+<span class="fc" id="L101">    List&lt;Double&gt; resolvedAmplitudes = params.resolvedHarmonicAmplitudes();</span>
+<span class="fc" id="L102">    List&lt;Double&gt; ratios = computeHarmonicRatios(resolvedAmplitudes);</span>
+<span class="fc" id="L103">    double snr = estimateSnr(resolvedAmplitudes, params.noiseAmplitude());</span>
+<span class="fc" id="L104">    double jitter = params.jitterHz();</span>
+
+<span class="fc" id="L106">    List&lt;WingbeatFeatureVector&gt; vectors = new ArrayList&lt;&gt;(count);</span>
+<span class="fc bfc" id="L107" title="All 2 branches covered.">    for (int i = 0; i &lt; count; i++) {</span>
+<span class="fc bfc" id="L108" title="All 2 branches covered.">      double freqOffset = jitter &gt; 0.0 ? (rng.nextDouble() * 2.0 - 1.0) * jitter : 0.0;</span>
+<span class="fc" id="L109">      double freq = Math.max(0.0, params.fundamentalFrequencyHz() + freqOffset);</span>
+<span class="fc" id="L110">      double centroid = computeSpectralCentroid(freq, resolvedAmplitudes);</span>
+<span class="fc" id="L111">      double bandwidth = computeSpectralBandwidth(freq, resolvedAmplitudes, centroid);</span>
+<span class="fc" id="L112">      vectors.add(</span>
+          new WingbeatFeatureVector(
+              freq,
+              resolvedAmplitudes,
+              ratios,
+              centroid,
+              bandwidth,
+<span class="fc" id="L119">              params.driftHzPerSecond(),</span>
+              jitter,
+<span class="fc" id="L121">              params.modulationDepth(),</span>
+              snr,
+              meanTrackDurationSeconds,
+              1.0));
+    }
+<span class="fc" id="L126">    return List.copyOf(vectors);</span>
+  }
+
+  private static List&lt;Double&gt; computeHarmonicRatios(List&lt;Double&gt; amplitudes) {
+<span class="pc bpc" id="L130" title="1 of 4 branches missed.">    if (amplitudes.size() &lt; 2 || amplitudes.get(0) &lt;= 0.0) {</span>
+<span class="fc" id="L131">      return List.of();</span>
+    }
+<span class="fc" id="L133">    double fundamental = amplitudes.get(0);</span>
+<span class="fc" id="L134">    List&lt;Double&gt; ratios = new ArrayList&lt;&gt;(amplitudes.size() - 1);</span>
+<span class="fc bfc" id="L135" title="All 2 branches covered.">    for (int i = 1; i &lt; amplitudes.size(); i++) {</span>
+<span class="fc" id="L136">      ratios.add(amplitudes.get(i) / fundamental);</span>
+    }
+<span class="fc" id="L138">    return List.copyOf(ratios);</span>
+  }
+
+  private static double computeSpectralCentroid(double fundamentalHz, List&lt;Double&gt; amplitudes) {
+<span class="fc" id="L142">    double weightedFreq = 0.0;</span>
+<span class="fc" id="L143">    double totalWeight = 0.0;</span>
+<span class="fc bfc" id="L144" title="All 2 branches covered.">    for (int k = 0; k &lt; amplitudes.size(); k++) {</span>
+<span class="fc" id="L145">      double freq = fundamentalHz * (k + 1);</span>
+<span class="fc" id="L146">      double amp = amplitudes.get(k);</span>
+<span class="fc" id="L147">      weightedFreq += freq * amp;</span>
+<span class="fc" id="L148">      totalWeight += amp;</span>
+    }
+<span class="pc bpc" id="L150" title="1 of 2 branches missed.">    return totalWeight &gt; 0.0 ? weightedFreq / totalWeight : fundamentalHz;</span>
+  }
+
+  private static double computeSpectralBandwidth(
+      double fundamentalHz, List&lt;Double&gt; amplitudes, double centroidHz) {
+<span class="fc" id="L155">    double weightedVariance = 0.0;</span>
+<span class="fc" id="L156">    double totalWeight = 0.0;</span>
+<span class="fc bfc" id="L157" title="All 2 branches covered.">    for (int k = 0; k &lt; amplitudes.size(); k++) {</span>
+<span class="fc" id="L158">      double freq = fundamentalHz * (k + 1);</span>
+<span class="fc" id="L159">      double amp = amplitudes.get(k);</span>
+<span class="fc" id="L160">      double deviation = freq - centroidHz;</span>
+<span class="fc" id="L161">      weightedVariance += deviation * deviation * amp;</span>
+<span class="fc" id="L162">      totalWeight += amp;</span>
+    }
+<span class="pc bpc" id="L164" title="1 of 2 branches missed.">    return totalWeight &gt; 0.0 ? Math.sqrt(weightedVariance / totalWeight) : 0.0;</span>
+  }
+
+  /**
+   * Estimate SNR as {@code totalHarmonicAmplitude / noiseAmplitude}.
+   *
+   * @param amplitudes resolved harmonic amplitudes
+   * @param noiseAmplitude additive noise amplitude from the generator parameters
+   * @return estimated SNR, or {@code 0} when noise amplitude is zero or negative
+   */
+  static double estimateSnr(List&lt;Double&gt; amplitudes, double noiseAmplitude) {
+<span class="fc bfc" id="L175" title="All 2 branches covered.">    if (noiseAmplitude &lt;= 0.0) {</span>
+<span class="fc" id="L176">      return 0.0;</span>
+    }
+<span class="fc" id="L178">    double total = 0.0;</span>
+<span class="fc bfc" id="L179" title="All 2 branches covered.">    for (double a : amplitudes) {</span>
+<span class="fc" id="L180">      total += a;</span>
+<span class="fc" id="L181">    }</span>
+<span class="fc" id="L182">    return total / noiseAmplitude;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

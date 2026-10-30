@@ -1,0 +1,311 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>SimulationScenarios.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.simulation</a> &gt; <span class="el_source">SimulationScenarios.java</span></div><h1>SimulationScenarios.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.simulation;
+
+import java.util.ArrayList;
+import java.util.List;
+import org.hammer.audio.acquisition.Microphone;
+import org.hammer.audio.acquisition.MicrophoneArray;
+import org.hammer.audio.experimental.acoustic.scenario.AcousticGroundTruth;
+import org.hammer.audio.experimental.acoustic.scenario.ClassificationGroundTruth;
+import org.hammer.audio.experimental.acoustic.scenario.Scenario;
+import org.hammer.audio.experimental.acoustic.scenario.ScenarioEnvironment;
+import org.hammer.audio.experimental.acoustic.scenario.ScenarioSource;
+import org.hammer.audio.experimental.acoustic.scenario.ScenarioTrajectory;
+import org.hammer.audio.geometry.Vector2;
+
+/**
+ * Catalog of reproducible localization scenarios used by validation tests and demos.
+ *
+ * &lt;p&gt;Every scenario is a self-contained, deterministic {@link SimulationScenario} record bundling a
+ * {@link Room2D}, a {@link MicrophoneArray}, a list of {@link SoundEmitter2D}s, a sample rate, a
+ * duration in seconds and a random seed. Two calls with identical scenario parameters produce
+ * bit-identical signals via {@link SimulatedMicrophoneArraySource}.
+ *
+ * &lt;p&gt;The provided scenarios mirror the canonical research situations:
+ *
+ * &lt;ul&gt;
+ *   &lt;li&gt;{@link #singleSource()} — one stationary tonal source in an anechoic room.
+ *   &lt;li&gt;{@link #twoCloseFrequencies()} — two stationary sources at different positions whose
+ *       frequencies are close enough to challenge naive single-peak trackers.
+ *   &lt;li&gt;{@link #noisyRoom()} — single source with significant background noise.
+ *   &lt;li&gt;{@link #movingSource()} — one source travelling across the room with constant velocity.
+ *   &lt;li&gt;{@link #movingAcrossArray()} — one source travelling laterally across the array.
+ *   &lt;li&gt;{@link #twoMovingSources()} — two tones with distinct velocities.
+ *   &lt;li&gt;{@link #reflectedEnvironment()} — single source with wall reflections enabled.
+ *   &lt;li&gt;{@link #twoMosquitoWingbeats()} — two stationary deterministic wingbeat emitters at close
+ *       mosquito frequencies, paired with matching benchmark metadata via {@link
+ *       #twoMosquitoWingbeatsGroundTruth()}.
+ * &lt;/ul&gt;
+ */
+public final class SimulationScenarios {
+
+  private static final float SAMPLE_RATE = 16_000.0f;
+
+  private SimulationScenarios() {
+    // utility
+  }
+
+  /** One stationary 600 Hz tone at (1.5, 1.0) in an anechoic 3x2 m room. */
+  public static SimulationScenario singleSource() {
+<span class="fc" id="L49">    return new SimulationScenario(</span>
+        &quot;single-source&quot;,
+        new Room2D(3.0, 2.0, 0.0, 0.0),
+<span class="fc" id="L52">        defaultArray(),</span>
+<span class="fc" id="L53">        List.of(new SoundEmitter2D(new Vector2(1.5, 1.0), Vector2.ZERO, 600.0, 0.5)),</span>
+        SAMPLE_RATE,
+        0.5,
+        1L);
+  }
+
+  /** Two stationary tones at 600 and 640 Hz, located at distinct positions in an anechoic room. */
+  public static SimulationScenario twoCloseFrequencies() {
+<span class="fc" id="L61">    return new SimulationScenario(</span>
+        &quot;two-close-frequencies&quot;,
+        new Room2D(3.0, 2.0, 0.0, 0.0),
+<span class="fc" id="L64">        defaultArray(),</span>
+<span class="fc" id="L65">        List.of(</span>
+            new SoundEmitter2D(new Vector2(1.0, 1.0), Vector2.ZERO, 600.0, 0.5),
+            new SoundEmitter2D(new Vector2(2.0, 1.0), Vector2.ZERO, 640.0, 0.5)),
+        SAMPLE_RATE,
+        0.5,
+        2L);
+  }
+
+  /** Single source plus broadband room noise; tests robustness of peak detection. */
+  public static SimulationScenario noisyRoom() {
+<span class="fc" id="L75">    return new SimulationScenario(</span>
+        &quot;noisy-room&quot;,
+        new Room2D(3.0, 2.0, 0.0, 0.05),
+<span class="fc" id="L78">        defaultArray(),</span>
+<span class="fc" id="L79">        List.of(new SoundEmitter2D(new Vector2(1.5, 1.2), Vector2.ZERO, 720.0, 0.5)),</span>
+        SAMPLE_RATE,
+        0.5,
+        3L);
+  }
+
+  /** One source travelling from (0.5, 1.0) to (2.5, 1.0) over the scenario duration. */
+  public static SimulationScenario movingSource() {
+<span class="fc" id="L87">    return new SimulationScenario(</span>
+        &quot;moving-source&quot;,
+        new Room2D(3.0, 2.0, 0.0, 0.0),
+<span class="fc" id="L90">        defaultArray(),</span>
+<span class="fc" id="L91">        List.of(new SoundEmitter2D(new Vector2(0.5, 1.0), new Vector2(4.0, 0.0), 660.0, 0.5)),</span>
+        SAMPLE_RATE,
+        0.5,
+        4L);
+  }
+
+  /** One source moving primarily toward the array for Doppler validation. */
+  public static SimulationScenario movingTowardArray() {
+<span class="fc" id="L99">    return new SimulationScenario(</span>
+        &quot;moving-toward-array&quot;,
+        new Room2D(3.0, 2.0, 0.0, 0.0),
+<span class="fc" id="L102">        defaultArray(),</span>
+<span class="fc" id="L103">        List.of(new SoundEmitter2D(new Vector2(1.5, 1.8), new Vector2(0.0, -2.0), 700.0, 0.5)),</span>
+        SAMPLE_RATE,
+        0.5,
+        6L);
+  }
+
+  /** One source moving laterally across the array. */
+  public static SimulationScenario movingAcrossArray() {
+<span class="fc" id="L111">    return new SimulationScenario(</span>
+        &quot;moving-across-array&quot;,
+        new Room2D(3.0, 2.0, 0.0, 0.0),
+<span class="fc" id="L114">        defaultArray(),</span>
+<span class="fc" id="L115">        List.of(new SoundEmitter2D(new Vector2(0.6, 1.0), new Vector2(2.0, 0.0), 760.0, 0.5)),</span>
+        SAMPLE_RATE,
+        0.5,
+        7L);
+  }
+
+  /** Two moving sources with different frequencies and velocities. */
+  public static SimulationScenario twoMovingSources() {
+<span class="fc" id="L123">    return new SimulationScenario(</span>
+        &quot;two-moving-sources&quot;,
+        new Room2D(3.0, 2.0, 0.0, 0.0),
+<span class="fc" id="L126">        defaultArray(),</span>
+<span class="fc" id="L127">        List.of(</span>
+            new SoundEmitter2D(new Vector2(0.8, 1.0), new Vector2(1.4, 0.0), 620.0, 0.45),
+            new SoundEmitter2D(new Vector2(2.2, 1.4), new Vector2(-0.8, -0.4), 840.0, 0.45)),
+        SAMPLE_RATE,
+        0.5,
+        8L);
+  }
+
+  /**
+   * Two stationary deterministic wingbeat sources at 600 Hz and 640 Hz.
+   *
+   * &lt;p&gt;Both sources are placed at distinct positions in an anechoic room. Their fundamentals are
+   * intentionally close (40 Hz apart) to exercise the ability of narrow-band trackers to separate
+   * overlapping tonal content, while the emitted waveforms reuse the mosquito-like harmonic, drift,
+   * jitter and noise parameters exported through ground truth.
+   */
+  public static SimulationScenario twoMosquitoWingbeats() {
+<span class="fc" id="L144">    List&lt;WingbeatSignalParameters&gt; params = mosquitoWingbeatParameters();</span>
+<span class="fc" id="L145">    return new SimulationScenario(</span>
+        &quot;two-mosquito-wingbeats&quot;,
+        new Room2D(3.0, 2.0, 0.0, 0.0),
+<span class="fc" id="L148">        defaultArray(),</span>
+<span class="fc" id="L149">        List.of(</span>
+            new WingbeatEmitter2D(
+<span class="fc" id="L151">                new Vector2(1.0, 1.0), Vector2.ZERO, 0.5, params.get(0), SAMPLE_RATE, 9L),</span>
+            new WingbeatEmitter2D(
+<span class="fc" id="L153">                new Vector2(2.0, 1.0), Vector2.ZERO, 0.5, params.get(1), SAMPLE_RATE, 10L)),</span>
+        SAMPLE_RATE,
+        0.5,
+        9L);
+  }
+
+  /**
+   * Build a rich benchmark ground-truth {@link Scenario} for the {@link #twoMosquitoWingbeats()}
+   * scenario.
+   *
+   * &lt;p&gt;This richer ground-truth record is intended for benchmark comparison of frequency-extraction
+   * and classification algorithms. Its acoustic metadata is derived from the same emitter
+   * parameters used by {@link #twoMosquitoWingbeats()}.
+   */
+  public static Scenario twoMosquitoWingbeatsGroundTruth() {
+<span class="fc" id="L168">    SimulationScenario scenario = twoMosquitoWingbeats();</span>
+<span class="fc" id="L169">    List&lt;ScenarioSource&gt; sources = new ArrayList&lt;&gt;(scenario.emitters().size());</span>
+<span class="fc bfc" id="L170" title="All 2 branches covered.">    for (int i = 0; i &lt; scenario.emitters().size(); i++) {</span>
+<span class="fc" id="L171">      AcousticEmitter2D emitter = scenario.emitters().get(i);</span>
+<span class="fc" id="L172">      ScenarioTrajectory trajectory =</span>
+<span class="fc" id="L173">          ScenarioTrajectory.linear(</span>
+<span class="fc" id="L174">              emitter.startMeters(),</span>
+<span class="fc" id="L175">              emitter.velocityMetersPerSecond(),</span>
+<span class="fc" id="L176">              scenario.durationSeconds(),</span>
+              2);
+<span class="fc" id="L178">      AcousticGroundTruth acoustic = emitter.acousticGroundTruth();</span>
+<span class="fc" id="L179">      ClassificationGroundTruth labels = ClassificationGroundTruth.synthetic(&quot;synthetic-wingbeat&quot;);</span>
+<span class="fc" id="L180">      sources.add(</span>
+<span class="fc" id="L181">          ScenarioSource.builder(&quot;source-&quot; + i, &quot;mosquito&quot;)</span>
+<span class="fc" id="L182">              .trajectory(trajectory)</span>
+<span class="fc" id="L183">              .acousticProperties(acoustic)</span>
+<span class="fc" id="L184">              .labels(labels)</span>
+<span class="fc" id="L185">              .build());</span>
+    }
+<span class="fc" id="L187">    ScenarioEnvironment environment =</span>
+        new ScenarioEnvironment(
+            SimulatedMicrophoneArraySource.DEFAULT_SPEED_OF_SOUND_METERS_PER_SECOND,
+            &quot;Simulated air&quot;);
+<span class="fc" id="L191">    return new Scenario(</span>
+<span class="fc" id="L192">        scenario.name(), &quot;Simulated scenario: &quot; + scenario.name(), sources, environment);</span>
+  }
+
+  private static List&lt;WingbeatSignalParameters&gt; mosquitoWingbeatParameters() {
+<span class="fc" id="L196">    return List.of(</span>
+<span class="fc" id="L197">        WingbeatSignalParameters.mosquitoLike(600.0), WingbeatSignalParameters.mosquitoLike(640.0));</span>
+  }
+
+  /** Single source with reflective walls (specular x-axis reflection in the simulator). */
+  public static SimulationScenario reflectedEnvironment() {
+<span class="fc" id="L202">    return new SimulationScenario(</span>
+        &quot;reflected-environment&quot;,
+        new Room2D(3.0, 2.0, 0.35, 0.01),
+<span class="fc" id="L205">        defaultArray(),</span>
+<span class="fc" id="L206">        List.of(new SoundEmitter2D(new Vector2(0.8, 1.0), Vector2.ZERO, 580.0, 0.5)),</span>
+        SAMPLE_RATE,
+        0.5,
+        5L);
+  }
+
+  /** All bundled scenarios in canonical order. */
+  public static List&lt;SimulationScenario&gt; all() {
+<span class="fc" id="L214">    return List.of(</span>
+<span class="fc" id="L215">        singleSource(),</span>
+<span class="fc" id="L216">        twoCloseFrequencies(),</span>
+<span class="fc" id="L217">        noisyRoom(),</span>
+<span class="fc" id="L218">        movingSource(),</span>
+<span class="fc" id="L219">        movingTowardArray(),</span>
+<span class="fc" id="L220">        movingAcrossArray(),</span>
+<span class="fc" id="L221">        twoMovingSources(),</span>
+<span class="fc" id="L222">        reflectedEnvironment(),</span>
+<span class="fc" id="L223">        twoMosquitoWingbeats());</span>
+  }
+
+  /** Default 4-microphone square array spanning roughly 30 cm, centered near (1.5, 0.1). */
+  public static MicrophoneArray defaultArray() {
+<span class="fc" id="L228">    return new MicrophoneArray(</span>
+<span class="fc" id="L229">        List.of(</span>
+            new Microphone(&quot;m0&quot;, new Vector2(1.35, 0.0), 0),
+            new Microphone(&quot;m1&quot;, new Vector2(1.65, 0.0), 1),
+            new Microphone(&quot;m2&quot;, new Vector2(1.35, 0.3), 2),
+            new Microphone(&quot;m3&quot;, new Vector2(1.65, 0.3), 3)));
+  }
+
+  /**
+   * One reproducible simulation scenario.
+   *
+   * @param name scenario name
+   * @param room room geometry and acoustic parameters
+   * @param array microphone array definition
+   * @param emitters emitters active in the scenario
+   * @param sampleRate sample rate in Hz
+   * @param durationSeconds simulation duration in seconds
+   * @param randomSeed deterministic seed for generated noise
+   */
+  public record SimulationScenario(
+      String name,
+      Room2D room,
+      MicrophoneArray array,
+      List&lt;AcousticEmitter2D&gt; emitters,
+      float sampleRate,
+      double durationSeconds,
+      long randomSeed) {
+
+    /* Validate and defensively copy emitters. */
+<span class="fc" id="L257">    public SimulationScenario {</span>
+<span class="pc bpc" id="L258" title="2 of 4 branches missed.">      if (name == null || name.isBlank()) {</span>
+<span class="nc" id="L259">        throw new IllegalArgumentException(&quot;name must not be blank&quot;);</span>
+      }
+<span class="pc bpc" id="L261" title="2 of 4 branches missed.">      if (room == null || array == null) {</span>
+<span class="nc" id="L262">        throw new IllegalArgumentException(&quot;room and array must not be null&quot;);</span>
+      }
+<span class="pc bpc" id="L264" title="2 of 4 branches missed.">      if (emitters == null || emitters.isEmpty()) {</span>
+<span class="nc" id="L265">        throw new IllegalArgumentException(&quot;emitters must not be empty&quot;);</span>
+      }
+<span class="pc bpc" id="L267" title="1 of 2 branches missed.">      if (sampleRate &lt;= 0.0f) {</span>
+<span class="nc" id="L268">        throw new IllegalArgumentException(&quot;sampleRate must be &gt; 0&quot;);</span>
+      }
+<span class="pc bpc" id="L270" title="1 of 2 branches missed.">      if (durationSeconds &lt;= 0.0) {</span>
+<span class="nc" id="L271">        throw new IllegalArgumentException(&quot;durationSeconds must be &gt; 0&quot;);</span>
+      }
+<span class="fc" id="L273">      emitters = List.copyOf(emitters);</span>
+<span class="fc" id="L274">    }</span>
+
+    /** Create a fresh deterministic audio source for this scenario. */
+    public SimulatedMicrophoneArraySource newSource() {
+<span class="fc" id="L278">      return new SimulatedMicrophoneArraySource(</span>
+          room, array, emitters, sampleRate, durationSeconds, randomSeed);
+    }
+
+    /**
+     * Build the ground-truth {@link org.hammer.audio.experimental.acoustic.scenario.Scenario} for
+     * this simulation scenario.
+     *
+     * &lt;p&gt;Each emitter is mapped to a {@link ScenarioSource} with a linear {@link
+     * ScenarioTrajectory} and the emitter-provided {@link AcousticGroundTruth}.
+     */
+    public Scenario groundTruth() {
+<span class="fc" id="L290">      List&lt;ScenarioSource&gt; sources = new ArrayList&lt;&gt;(emitters.size());</span>
+<span class="fc bfc" id="L291" title="All 2 branches covered.">      for (int i = 0; i &lt; emitters.size(); i++) {</span>
+<span class="fc" id="L292">        AcousticEmitter2D emitter = emitters.get(i);</span>
+<span class="fc" id="L293">        ScenarioTrajectory trajectory =</span>
+<span class="fc" id="L294">            ScenarioTrajectory.linear(</span>
+<span class="fc" id="L295">                emitter.startMeters(), emitter.velocityMetersPerSecond(), durationSeconds, 2);</span>
+<span class="fc" id="L296">        AcousticGroundTruth acoustic = emitter.acousticGroundTruth();</span>
+<span class="fc" id="L297">        sources.add(</span>
+<span class="fc" id="L298">            ScenarioSource.builder(&quot;source-&quot; + i, &quot;emitter&quot;)</span>
+<span class="fc" id="L299">                .trajectory(trajectory)</span>
+<span class="fc" id="L300">                .acousticProperties(acoustic)</span>
+<span class="fc" id="L301">                .build());</span>
+      }
+<span class="fc" id="L303">      ScenarioEnvironment environment =</span>
+          new ScenarioEnvironment(
+              SimulatedMicrophoneArraySource.DEFAULT_SPEED_OF_SOUND_METERS_PER_SECOND,
+              &quot;Simulated air&quot;);
+<span class="fc" id="L307">      return new Scenario(name, &quot;Simulated scenario: &quot; + name, sources, environment);</span>
+    }
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

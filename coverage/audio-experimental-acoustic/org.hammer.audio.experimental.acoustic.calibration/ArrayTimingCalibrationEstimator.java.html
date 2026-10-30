@@ -1,0 +1,163 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ArrayTimingCalibrationEstimator.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.calibration</a> &gt; <span class="el_source">ArrayTimingCalibrationEstimator.java</span></div><h1>ArrayTimingCalibrationEstimator.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.calibration;
+
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+import org.hammer.audio.acquisition.ChannelTimingCalibration;
+import org.hammer.audio.acquisition.MicrophoneArray;
+import org.hammer.audio.acquisition.MicrophoneArrayCalibration;
+import org.hammer.audio.core.AudioBlock;
+
+/** Deterministic normalized-correlation estimator for microphone timing calibration. */
+public final class ArrayTimingCalibrationEstimator {
+
+  private final int maximumLagSamples;
+  private final double minimumConfidence;
+  private final double maximumAbsoluteDriftPpm;
+
+  /** Creates an estimator with explicit search and validity bounds. */
+  public ArrayTimingCalibrationEstimator(
+<span class="fc" id="L21">      int maximumLagSamples, double minimumConfidence, double maximumAbsoluteDriftPpm) {</span>
+<span class="pc bpc" id="L22" title="1 of 2 branches missed.">    if (maximumLagSamples &lt; 1) {</span>
+<span class="nc" id="L23">      throw new IllegalArgumentException(&quot;maximumLagSamples must be &gt;= 1&quot;);</span>
+    }
+<span class="pc bpc" id="L25" title="3 of 6 branches missed.">    if (!Double.isFinite(minimumConfidence) || minimumConfidence &lt; 0.0 || minimumConfidence &gt; 1.0) {</span>
+<span class="nc" id="L26">      throw new IllegalArgumentException(&quot;minimumConfidence must be in [0,1]&quot;);</span>
+    }
+<span class="fc" id="L28">    this.maximumLagSamples = maximumLagSamples;</span>
+<span class="fc" id="L29">    this.minimumConfidence = minimumConfidence;</span>
+<span class="fc" id="L30">    this.maximumAbsoluteDriftPpm =</span>
+<span class="fc" id="L31">        requirePositiveFinite(maximumAbsoluteDriftPpm, &quot;maximumAbsoluteDriftPpm&quot;);</span>
+<span class="fc" id="L32">  }</span>
+
+  /** Estimates channel delays for one common calibration event. */
+  public CalibrationEventObservation observe(AudioBlock block, int referenceChannel) {
+<span class="fc" id="L36">    Objects.requireNonNull(block, &quot;block&quot;);</span>
+<span class="pc bpc" id="L37" title="2 of 4 branches missed.">    if (referenceChannel &lt; 0 || referenceChannel &gt;= block.channels()) {</span>
+<span class="nc" id="L38">      throw new IllegalArgumentException(&quot;referenceChannel must exist in audio block&quot;);</span>
+    }
+<span class="fc" id="L40">    List&lt;Double&gt; offsets = new ArrayList&lt;&gt;(block.channels());</span>
+<span class="fc" id="L41">    List&lt;Double&gt; confidences = new ArrayList&lt;&gt;(block.channels());</span>
+<span class="fc" id="L42">    float[] reference = block.channelView(referenceChannel);</span>
+<span class="fc bfc" id="L43" title="All 2 branches covered.">    for (int channel = 0; channel &lt; block.channels(); channel++) {</span>
+<span class="fc bfc" id="L44" title="All 2 branches covered.">      if (channel == referenceChannel) {</span>
+<span class="fc" id="L45">        offsets.add(0.0);</span>
+<span class="fc" id="L46">        confidences.add(1.0);</span>
+<span class="fc" id="L47">        continue;</span>
+      }
+<span class="fc" id="L49">      LagScore score = strongestLag(reference, block.channelView(channel));</span>
+<span class="pc bpc" id="L50" title="1 of 2 branches missed.">      if (score.confidence() &lt; minimumConfidence) {</span>
+<span class="nc" id="L51">        throw new IllegalArgumentException(</span>
+            &quot;Calibration correlation confidence below threshold for channel &quot; + channel);
+      }
+<span class="fc" id="L54">      offsets.add((double) score.lag());</span>
+<span class="fc" id="L55">      confidences.add(score.confidence());</span>
+    }
+<span class="fc" id="L57">    return new CalibrationEventObservation(</span>
+<span class="fc" id="L58">        block.frameIndex(), referenceChannel, offsets, confidences);</span>
+  }
+
+  /** Derives a complete affine timing profile from two repeated calibration events. */
+  public MicrophoneArrayCalibration calibrate(
+      String profileId,
+      MicrophoneArray array,
+      CalibrationEventObservation first,
+      CalibrationEventObservation second,
+      Instant calibratedAt,
+      Instant validUntil) {
+<span class="fc" id="L69">    Objects.requireNonNull(array, &quot;array&quot;);</span>
+<span class="fc" id="L70">    Objects.requireNonNull(first, &quot;first&quot;);</span>
+<span class="fc" id="L71">    Objects.requireNonNull(second, &quot;second&quot;);</span>
+<span class="pc bpc" id="L72" title="1 of 2 branches missed.">    if (first.referenceChannel() != second.referenceChannel()) {</span>
+<span class="nc" id="L73">      throw new IllegalArgumentException(&quot;calibration events must use the same reference channel&quot;);</span>
+    }
+<span class="pc bpc" id="L75" title="2 of 4 branches missed.">    if (first.channels() != array.channels() || second.channels() != array.channels()) {</span>
+<span class="nc" id="L76">      throw new IllegalArgumentException(&quot;calibration events must cover the microphone array&quot;);</span>
+    }
+<span class="fc" id="L78">    long elapsedFrames = second.frameIndex() - first.frameIndex();</span>
+<span class="pc bpc" id="L79" title="1 of 2 branches missed.">    if (elapsedFrames &lt;= 0) {</span>
+<span class="nc" id="L80">      throw new IllegalArgumentException(&quot;second calibration event must be later than first&quot;);</span>
+    }
+<span class="fc" id="L82">    List&lt;ChannelTimingCalibration&gt; channels = new ArrayList&lt;&gt;(array.channels());</span>
+<span class="fc bfc" id="L83" title="All 2 branches covered.">    for (int channel = 0; channel &lt; array.channels(); channel++) {</span>
+<span class="fc" id="L84">      double firstOffset = first.offsetsSamples().get(channel);</span>
+<span class="fc" id="L85">      double secondOffset = second.offsetsSamples().get(channel);</span>
+<span class="fc" id="L86">      double driftPpm = (secondOffset - firstOffset) * 1.0e6 / elapsedFrames;</span>
+<span class="fc bfc" id="L87" title="All 2 branches covered.">      if (Math.abs(driftPpm) &gt; maximumAbsoluteDriftPpm) {</span>
+<span class="fc" id="L88">        throw new IllegalArgumentException(</span>
+            &quot;Estimated drift exceeds configured bound for channel &quot; + channel);
+      }
+<span class="fc" id="L91">      double confidence =</span>
+<span class="fc" id="L92">          Math.min(first.confidences().get(channel), second.confidences().get(channel));</span>
+<span class="fc" id="L93">      double residualEstimate = 1.0 - confidence;</span>
+<span class="fc bfc" id="L94" title="All 2 branches covered.">      if (channel == first.referenceChannel()) {</span>
+<span class="fc" id="L95">        channels.add(</span>
+            new ChannelTimingCalibration(
+<span class="fc" id="L97">                channel, first.frameIndex(), 0.0, 0.0, 0.0, 0.0, 1.0, false));</span>
+      } else {
+<span class="fc" id="L99">        channels.add(</span>
+            new ChannelTimingCalibration(
+                channel,
+<span class="fc" id="L102">                first.frameIndex(),</span>
+                firstOffset,
+                driftPpm,
+                residualEstimate,
+                0.0,
+                1.0,
+                false));
+      }
+    }
+<span class="fc" id="L111">    return new MicrophoneArrayCalibration(</span>
+<span class="fc" id="L112">        profileId, array, first.referenceChannel(), channels, calibratedAt, validUntil);</span>
+  }
+
+  private LagScore strongestLag(float[] reference, float[] channel) {
+<span class="fc" id="L116">    int frames = Math.min(reference.length, channel.length);</span>
+<span class="fc" id="L117">    int maximumLag = Math.min(maximumLagSamples, frames - 1);</span>
+<span class="fc" id="L118">    int bestLag = 0;</span>
+<span class="fc" id="L119">    double bestCorrelation = 0.0;</span>
+<span class="fc bfc" id="L120" title="All 2 branches covered.">    for (int lag = -maximumLag; lag &lt;= maximumLag; lag++) {</span>
+<span class="fc" id="L121">      double correlation = normalizedCorrelation(reference, channel, frames, lag);</span>
+<span class="fc bfc" id="L122" title="All 2 branches covered.">      if (Math.abs(correlation) &gt; Math.abs(bestCorrelation)) {</span>
+<span class="fc" id="L123">        bestCorrelation = correlation;</span>
+<span class="fc" id="L124">        bestLag = lag;</span>
+      }
+    }
+<span class="fc" id="L127">    return new LagScore(bestLag, Math.min(1.0, Math.abs(bestCorrelation)));</span>
+  }
+
+  private static double normalizedCorrelation(float[] first, float[] second, int frames, int lag) {
+<span class="fc" id="L131">    int firstStart = Math.max(0, -lag);</span>
+<span class="fc" id="L132">    int secondStart = Math.max(0, lag);</span>
+<span class="fc" id="L133">    int overlap = frames - Math.abs(lag);</span>
+<span class="fc" id="L134">    double sum = 0.0;</span>
+<span class="fc" id="L135">    double firstEnergy = 0.0;</span>
+<span class="fc" id="L136">    double secondEnergy = 0.0;</span>
+<span class="fc bfc" id="L137" title="All 2 branches covered.">    for (int index = 0; index &lt; overlap; index++) {</span>
+<span class="fc" id="L138">      double firstValue = first[firstStart + index];</span>
+<span class="fc" id="L139">      double secondValue = second[secondStart + index];</span>
+<span class="fc" id="L140">      sum += firstValue * secondValue;</span>
+<span class="fc" id="L141">      firstEnergy += firstValue * firstValue;</span>
+<span class="fc" id="L142">      secondEnergy += secondValue * secondValue;</span>
+    }
+<span class="fc" id="L144">    double denominator = Math.sqrt(firstEnergy * secondEnergy);</span>
+<span class="pc bpc" id="L145" title="1 of 2 branches missed.">    return denominator &gt; 0.0 ? sum / denominator : 0.0;</span>
+  }
+
+  private static double requirePositiveFinite(double value, String name) {
+<span class="pc bpc" id="L149" title="2 of 4 branches missed.">    if (Double.isFinite(value) &amp;&amp; value &gt; 0.0) {</span>
+<span class="fc" id="L150">      return value;</span>
+    }
+<span class="nc" id="L152">    throw new IllegalArgumentException(name + &quot; must be finite and &gt; 0&quot;);</span>
+  }
+
+  private record LagScore(int lag, double confidence) {
+<span class="fc" id="L156">    private LagScore {</span>
+<span class="pc bpc" id="L157" title="3 of 6 branches missed.">      if (!Double.isFinite(confidence) || confidence &lt; 0.0 || confidence &gt; 1.0) {</span>
+<span class="nc" id="L158">        throw new IllegalArgumentException(&quot;confidence must be finite and in [0,1]&quot;);</span>
+      }
+<span class="fc" id="L160">    }</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

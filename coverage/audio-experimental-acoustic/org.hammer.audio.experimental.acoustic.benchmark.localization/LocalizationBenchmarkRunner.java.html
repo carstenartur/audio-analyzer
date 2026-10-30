@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>LocalizationBenchmarkRunner.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.benchmark.localization</a> &gt; <span class="el_source">LocalizationBenchmarkRunner.java</span></div><h1>LocalizationBenchmarkRunner.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.benchmark.localization;
+
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import org.hammer.audio.experimental.acoustic.simulation.SimulationScenarios.SimulationScenario;
+
+/**
+ * Runs multiple {@link LocalizationBenchmark} implementations across a set of simulation scenarios
+ * and aggregates the results.
+ *
+ * &lt;p&gt;Adding a new localization algorithm requires only implementing {@link LocalizationBenchmark}
+ * and including it in the list passed to this runner.
+ *
+ * &lt;p&gt;This service is stateless and may be called concurrently as long as the registered benchmarks
+ * are also stateless.
+ */
+@SuppressWarnings(&quot;PMD.UseConcurrentHashMap&quot;)
+public final class LocalizationBenchmarkRunner {
+
+  private final List&lt;LocalizationBenchmark&gt; benchmarks;
+
+  /**
+   * Create a runner with the given benchmarks.
+   *
+   * @param benchmarks benchmarks to run; must not be {@code null} or empty
+   */
+<span class="fc" id="L30">  public LocalizationBenchmarkRunner(List&lt;LocalizationBenchmark&gt; benchmarks) {</span>
+<span class="fc" id="L31">    Objects.requireNonNull(benchmarks, &quot;benchmarks&quot;);</span>
+<span class="pc bpc" id="L32" title="1 of 2 branches missed.">    if (benchmarks.isEmpty()) {</span>
+<span class="nc" id="L33">      throw new IllegalArgumentException(&quot;benchmarks must not be empty&quot;);</span>
+    }
+<span class="fc" id="L35">    this.benchmarks = List.copyOf(benchmarks);</span>
+<span class="fc" id="L36">  }</span>
+
+  /**
+   * Create a runner containing {@link TdoaLocalizationBenchmark} as the sole default benchmark.
+   *
+   * @return default runner instance; never {@code null}
+   */
+  public static LocalizationBenchmarkRunner defaultRunner() {
+<span class="fc" id="L44">    return new LocalizationBenchmarkRunner(List.of(new TdoaLocalizationBenchmark()));</span>
+  }
+
+  /**
+   * Run all registered benchmarks on each scenario in the given list.
+   *
+   * &lt;p&gt;The outer map key is the benchmark name; the inner list contains one result per scenario in
+   * the order supplied.
+   *
+   * @param scenarios the scenarios to benchmark; must not be {@code null} or empty
+   * @return map of benchmark name to per-scenario results; never {@code null}
+   */
+  public Map&lt;String, List&lt;LocalizationBenchmarkResult&gt;&gt; run(List&lt;SimulationScenario&gt; scenarios) {
+<span class="fc" id="L57">    Objects.requireNonNull(scenarios, &quot;scenarios&quot;);</span>
+<span class="pc bpc" id="L58" title="1 of 2 branches missed.">    if (scenarios.isEmpty()) {</span>
+<span class="nc" id="L59">      throw new IllegalArgumentException(&quot;scenarios must not be empty&quot;);</span>
+    }
+
+<span class="fc" id="L62">    Map&lt;String, List&lt;LocalizationBenchmarkResult&gt;&gt; results = new LinkedHashMap&lt;&gt;();</span>
+<span class="fc bfc" id="L63" title="All 2 branches covered.">    for (LocalizationBenchmark benchmark : benchmarks) {</span>
+<span class="fc" id="L64">      List&lt;LocalizationBenchmarkResult&gt; benchmarkResults =</span>
+<span class="fc" id="L65">          new java.util.ArrayList&lt;&gt;(scenarios.size());</span>
+<span class="fc bfc" id="L66" title="All 2 branches covered.">      for (SimulationScenario scenario : scenarios) {</span>
+<span class="fc" id="L67">        benchmarkResults.add(benchmark.run(scenario));</span>
+<span class="fc" id="L68">      }</span>
+<span class="fc" id="L69">      results.put(benchmark.name(), Collections.unmodifiableList(benchmarkResults));</span>
+<span class="fc" id="L70">    }</span>
+<span class="fc" id="L71">    return Collections.unmodifiableMap(results);</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

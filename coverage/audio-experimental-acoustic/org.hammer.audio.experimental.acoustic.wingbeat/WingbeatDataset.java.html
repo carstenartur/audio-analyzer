@@ -1,0 +1,330 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WingbeatDataset.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.wingbeat</a> &gt; <span class="el_source">WingbeatDataset.java</span></div><h1>WingbeatDataset.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.wingbeat;
+
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+
+/**
+ * A labelled dataset of wingbeat recordings for classifier evaluation.
+ *
+ * &lt;p&gt;A {@code WingbeatDataset} holds a collection of {@link LabelledRecording} entries. The {@link
+ * #evaluate(WingbeatClassifier)} method runs a classifier against every entry and returns an {@link
+ * Evaluation} summary.
+ *
+ * &lt;p&gt;This abstraction allows different classifiers to be compared against identical reference data
+ * without hard-coding any specific dataset format or filesystem layout.
+ *
+ * @param name human-readable dataset name; must not be blank
+ * @param entries the labelled recordings in this dataset; must not be empty
+ */
+public record WingbeatDataset(String name, List&lt;LabelledRecording&gt; entries) {
+
+  /** Validate and defensively copy the entry list. */
+<span class="fc" id="L25">  public WingbeatDataset {</span>
+<span class="fc" id="L26">    Objects.requireNonNull(name, &quot;name&quot;);</span>
+<span class="fc" id="L27">    Objects.requireNonNull(entries, &quot;entries&quot;);</span>
+<span class="fc bfc" id="L28" title="All 2 branches covered.">    if (name.isBlank()) {</span>
+<span class="fc" id="L29">      throw new IllegalArgumentException(&quot;name must not be blank&quot;);</span>
+    }
+<span class="fc bfc" id="L31" title="All 2 branches covered.">    if (entries.isEmpty()) {</span>
+<span class="fc" id="L32">      throw new IllegalArgumentException(&quot;entries must not be empty&quot;);</span>
+    }
+<span class="fc" id="L34">    entries = List.copyOf(entries);</span>
+<span class="fc" id="L35">  }</span>
+
+  /**
+   * Evaluate a classifier against every entry in this dataset.
+   *
+   * &lt;p&gt;Each entry's feature vector is passed to the classifier; the predicted label is compared
+   * against the ground-truth label. The result includes overall accuracy plus per-label sample and
+   * correct-classification counts.
+   *
+   * @param classifier the classifier to evaluate; must not be {@code null}
+   * @return evaluation summary; never {@code null}
+   */
+  public Evaluation evaluate(WingbeatClassifier classifier) {
+<span class="fc" id="L48">    Objects.requireNonNull(classifier, &quot;classifier&quot;);</span>
+<span class="fc" id="L49">    int correct = 0;</span>
+<span class="fc" id="L50">    Map&lt;String, Integer&gt; labelSampleCounts = new LinkedHashMap&lt;&gt;();</span>
+<span class="fc" id="L51">    Map&lt;String, Integer&gt; labelCorrectCounts = new LinkedHashMap&lt;&gt;();</span>
+<span class="fc" id="L52">    Map&lt;String, Map&lt;String, Integer&gt;&gt; confusionMatrix = new LinkedHashMap&lt;&gt;();</span>
+<span class="fc bfc" id="L53" title="All 2 branches covered.">    for (LabelledRecording recording : entries) {</span>
+<span class="fc" id="L54">      String groundTruthLabel = recording.groundTruthLabel();</span>
+<span class="fc" id="L55">      labelSampleCounts.merge(groundTruthLabel, 1, Integer::sum);</span>
+<span class="fc" id="L56">      labelCorrectCounts.putIfAbsent(groundTruthLabel, 0);</span>
+<span class="fc" id="L57">      confusionMatrix.computeIfAbsent(groundTruthLabel, k -&gt; new LinkedHashMap&lt;&gt;());</span>
+<span class="fc" id="L58">      ClassificationResult result = classifier.classify(recording.features());</span>
+<span class="fc" id="L59">      String predictedLabel = result.label();</span>
+<span class="fc" id="L60">      confusionMatrix.get(groundTruthLabel).merge(predictedLabel, 1, Integer::sum);</span>
+<span class="fc bfc" id="L61" title="All 2 branches covered.">      if (groundTruthLabel.equals(predictedLabel)) {</span>
+<span class="fc" id="L62">        correct++;</span>
+<span class="fc" id="L63">        labelCorrectCounts.merge(groundTruthLabel, 1, Integer::sum);</span>
+      }
+<span class="fc" id="L65">    }</span>
+<span class="fc" id="L66">    return new Evaluation(</span>
+<span class="fc" id="L67">        name, entries.size(), correct, labelSampleCounts, labelCorrectCounts, confusionMatrix);</span>
+  }
+
+  /**
+   * Summary of a classifier evaluation against a {@link WingbeatDataset}.
+   *
+   * @param datasetName the name of the evaluated dataset
+   * @param sampleCount total number of evaluated recordings
+   * @param correctCount number of correctly classified recordings
+   * @param labelSampleCounts total evaluated recordings per ground-truth label
+   * @param labelCorrectCounts correctly classified recordings per ground-truth label
+   * @param confusionMatrix full confusion matrix; outer key is ground-truth label, inner key is
+   *     predicted label, value is count
+   */
+  @SuppressWarnings(&quot;PMD.UseConcurrentHashMap&quot;)
+  public record Evaluation(
+      String datasetName,
+      int sampleCount,
+      int correctCount,
+      Map&lt;String, Integer&gt; labelSampleCounts,
+      Map&lt;String, Integer&gt; labelCorrectCounts,
+      Map&lt;String, Map&lt;String, Integer&gt;&gt; confusionMatrix) {
+
+    /* Validate counts. */
+<span class="fc" id="L91">    public Evaluation {</span>
+<span class="fc" id="L92">      Objects.requireNonNull(datasetName, &quot;datasetName&quot;);</span>
+<span class="fc" id="L93">      Objects.requireNonNull(labelSampleCounts, &quot;labelSampleCounts&quot;);</span>
+<span class="fc" id="L94">      Objects.requireNonNull(labelCorrectCounts, &quot;labelCorrectCounts&quot;);</span>
+<span class="fc" id="L95">      Objects.requireNonNull(confusionMatrix, &quot;confusionMatrix&quot;);</span>
+<span class="pc bpc" id="L96" title="1 of 2 branches missed.">      if (sampleCount &lt; 0) {</span>
+<span class="nc" id="L97">        throw new IllegalArgumentException(&quot;sampleCount must be &gt;= 0&quot;);</span>
+      }
+<span class="pc bpc" id="L99" title="2 of 4 branches missed.">      if (correctCount &lt; 0 || correctCount &gt; sampleCount) {</span>
+<span class="nc" id="L100">        throw new IllegalArgumentException(&quot;correctCount must be in [0, sampleCount]&quot;);</span>
+      }
+<span class="fc" id="L102">      labelSampleCounts = Map.copyOf(labelSampleCounts);</span>
+<span class="fc" id="L103">      labelCorrectCounts = Map.copyOf(labelCorrectCounts);</span>
+<span class="fc" id="L104">      Map&lt;String, Map&lt;String, Integer&gt;&gt; confusionCopy = new LinkedHashMap&lt;&gt;();</span>
+<span class="fc bfc" id="L105" title="All 2 branches covered.">      for (Map.Entry&lt;String, Map&lt;String, Integer&gt;&gt; row : confusionMatrix.entrySet()) {</span>
+<span class="fc" id="L106">        confusionCopy.put(row.getKey(), Map.copyOf(row.getValue()));</span>
+<span class="fc" id="L107">      }</span>
+<span class="fc" id="L108">      confusionMatrix = Map.copyOf(confusionCopy);</span>
+<span class="fc" id="L109">      int totalLabelSamples = 0;</span>
+<span class="fc bfc" id="L110" title="All 2 branches covered.">      for (Map.Entry&lt;String, Integer&gt; entry : labelSampleCounts.entrySet()) {</span>
+<span class="fc" id="L111">        String label = Objects.requireNonNull(entry.getKey(), &quot;labelSampleCounts key&quot;);</span>
+<span class="fc" id="L112">        Integer count = Objects.requireNonNull(entry.getValue(), &quot;labelSampleCounts value&quot;);</span>
+<span class="pc bpc" id="L113" title="1 of 2 branches missed.">        if (label.isBlank()) {</span>
+<span class="nc" id="L114">          throw new IllegalArgumentException(&quot;labelSampleCounts keys must not be blank&quot;);</span>
+        }
+<span class="pc bpc" id="L116" title="1 of 2 branches missed.">        if (count &lt; 0) {</span>
+<span class="nc" id="L117">          throw new IllegalArgumentException(&quot;labelSampleCounts values must be &gt;= 0&quot;);</span>
+        }
+<span class="fc" id="L119">        totalLabelSamples += count;</span>
+<span class="fc" id="L120">      }</span>
+<span class="fc" id="L121">      int totalLabelCorrect = 0;</span>
+<span class="fc bfc" id="L122" title="All 2 branches covered.">      for (Map.Entry&lt;String, Integer&gt; entry : labelCorrectCounts.entrySet()) {</span>
+<span class="fc" id="L123">        String label = Objects.requireNonNull(entry.getKey(), &quot;labelCorrectCounts key&quot;);</span>
+<span class="fc" id="L124">        Integer count = Objects.requireNonNull(entry.getValue(), &quot;labelCorrectCounts value&quot;);</span>
+<span class="pc bpc" id="L125" title="1 of 2 branches missed.">        if (label.isBlank()) {</span>
+<span class="nc" id="L126">          throw new IllegalArgumentException(&quot;labelCorrectCounts keys must not be blank&quot;);</span>
+        }
+<span class="pc bpc" id="L128" title="1 of 2 branches missed.">        if (count &lt; 0) {</span>
+<span class="nc" id="L129">          throw new IllegalArgumentException(&quot;labelCorrectCounts values must be &gt;= 0&quot;);</span>
+        }
+<span class="fc" id="L131">        Integer labelSamples = labelSampleCounts.get(label);</span>
+<span class="pc bpc" id="L132" title="1 of 2 branches missed.">        if (labelSamples == null) {</span>
+<span class="nc" id="L133">          throw new IllegalArgumentException(</span>
+              &quot;labelCorrectCounts labels must also exist in labelSampleCounts&quot;);
+        }
+<span class="pc bpc" id="L136" title="1 of 2 branches missed.">        if (count &gt; labelSamples) {</span>
+<span class="nc" id="L137">          throw new IllegalArgumentException(</span>
+              &quot;labelCorrectCounts values must be &lt;= corresponding labelSampleCounts values&quot;);
+        }
+<span class="fc" id="L140">        totalLabelCorrect += count;</span>
+<span class="fc" id="L141">      }</span>
+<span class="pc bpc" id="L142" title="1 of 2 branches missed.">      if (totalLabelSamples != sampleCount) {</span>
+<span class="nc" id="L143">        throw new IllegalArgumentException(&quot;labelSampleCounts must sum to sampleCount&quot;);</span>
+      }
+<span class="fc bfc" id="L145" title="All 2 branches covered.">      if (totalLabelCorrect != correctCount) {</span>
+<span class="fc" id="L146">        throw new IllegalArgumentException(&quot;labelCorrectCounts must sum to correctCount&quot;);</span>
+      }
+<span class="fc" id="L148">      int totalConfusionCount = 0;</span>
+<span class="fc" id="L149">      Map&lt;String, Integer&gt; confusionRowSums = new LinkedHashMap&lt;&gt;();</span>
+<span class="fc" id="L150">      Map&lt;String, Integer&gt; confusionDiagonal = new LinkedHashMap&lt;&gt;();</span>
+<span class="fc bfc" id="L151" title="All 2 branches covered.">      for (Map.Entry&lt;String, Map&lt;String, Integer&gt;&gt; rowEntry : confusionMatrix.entrySet()) {</span>
+<span class="fc" id="L152">        String actualLabel = Objects.requireNonNull(rowEntry.getKey(), &quot;confusionMatrix row key&quot;);</span>
+<span class="pc bpc" id="L153" title="1 of 2 branches missed.">        if (actualLabel.isBlank()) {</span>
+<span class="nc" id="L154">          throw new IllegalArgumentException(&quot;confusionMatrix row labels must not be blank&quot;);</span>
+        }
+<span class="fc" id="L156">        int rowSum = 0;</span>
+<span class="fc bfc" id="L157" title="All 2 branches covered.">        for (Map.Entry&lt;String, Integer&gt; cellEntry : rowEntry.getValue().entrySet()) {</span>
+<span class="fc" id="L158">          String predictedLabel =</span>
+<span class="fc" id="L159">              Objects.requireNonNull(cellEntry.getKey(), &quot;confusionMatrix column key&quot;);</span>
+<span class="fc" id="L160">          Integer count = Objects.requireNonNull(cellEntry.getValue(), &quot;confusionMatrix value&quot;);</span>
+<span class="pc bpc" id="L161" title="1 of 2 branches missed.">          if (predictedLabel.isBlank()) {</span>
+<span class="nc" id="L162">            throw new IllegalArgumentException(&quot;confusionMatrix column labels must not be blank&quot;);</span>
+          }
+<span class="fc bfc" id="L164" title="All 2 branches covered.">          if (count &lt; 0) {</span>
+<span class="fc" id="L165">            throw new IllegalArgumentException(&quot;confusionMatrix values must be &gt;= 0&quot;);</span>
+          }
+<span class="fc" id="L167">          rowSum += count;</span>
+<span class="fc bfc" id="L168" title="All 2 branches covered.">          if (actualLabel.equals(predictedLabel)) {</span>
+<span class="fc" id="L169">            confusionDiagonal.merge(actualLabel, count, Integer::sum);</span>
+          }
+<span class="fc" id="L171">        }</span>
+<span class="fc" id="L172">        confusionRowSums.put(actualLabel, rowSum);</span>
+<span class="fc" id="L173">        totalConfusionCount += rowSum;</span>
+<span class="fc" id="L174">      }</span>
+<span class="fc bfc" id="L175" title="All 2 branches covered.">      if (totalConfusionCount != sampleCount) {</span>
+<span class="fc" id="L176">        throw new IllegalArgumentException(&quot;confusionMatrix must sum to sampleCount&quot;);</span>
+      }
+<span class="fc bfc" id="L178" title="All 2 branches covered.">      for (Map.Entry&lt;String, Integer&gt; entry : labelSampleCounts.entrySet()) {</span>
+<span class="fc" id="L179">        int rowSum = confusionRowSums.getOrDefault(entry.getKey(), 0);</span>
+<span class="pc bpc" id="L180" title="1 of 2 branches missed.">        if (rowSum != entry.getValue()) {</span>
+<span class="nc" id="L181">          throw new IllegalArgumentException(</span>
+              &quot;confusionMatrix row sums must match labelSampleCounts values&quot;);
+        }
+<span class="fc" id="L184">      }</span>
+<span class="fc bfc" id="L185" title="All 2 branches covered.">      for (String actualLabel : confusionRowSums.keySet()) {</span>
+<span class="pc bpc" id="L186" title="1 of 2 branches missed.">        if (!labelSampleCounts.containsKey(actualLabel)) {</span>
+<span class="nc" id="L187">          throw new IllegalArgumentException(</span>
+              &quot;confusionMatrix rows must only contain labels from labelSampleCounts&quot;);
+        }
+<span class="fc" id="L190">      }</span>
+<span class="fc bfc" id="L191" title="All 2 branches covered.">      for (Map.Entry&lt;String, Integer&gt; entry : labelCorrectCounts.entrySet()) {</span>
+<span class="fc" id="L192">        int diagonalCount = confusionDiagonal.getOrDefault(entry.getKey(), 0);</span>
+<span class="pc bpc" id="L193" title="1 of 2 branches missed.">        if (diagonalCount != entry.getValue()) {</span>
+<span class="nc" id="L194">          throw new IllegalArgumentException(</span>
+              &quot;confusionMatrix diagonal must match labelCorrectCounts values&quot;);
+        }
+<span class="fc" id="L197">      }</span>
+<span class="fc" id="L198">    }</span>
+
+    /**
+     * Classification accuracy as a ratio in {@code [0,1]}, or {@code null} when the dataset is
+     * empty.
+     *
+     * @return accuracy or {@code null}
+     */
+    public Double accuracy() {
+<span class="fc bfc" id="L207" title="All 2 branches covered.">      return sampleCount == 0 ? null : correctCount / (double) sampleCount;</span>
+    }
+
+    /**
+     * Precision for the given predicted label: {@code TP / (TP + FP)}, or {@code null} when no
+     * samples were predicted as that label.
+     *
+     * &lt;p&gt;Precision answers: of everything the classifier predicted as {@code label}, how many were
+     * actually that label?
+     *
+     * @param label the label to compute precision for
+     * @return precision in {@code [0,1]}, or {@code null} when unpredictable
+     */
+    public Double precision(String label) {
+<span class="fc" id="L221">      Objects.requireNonNull(label, &quot;label&quot;);</span>
+<span class="fc" id="L222">      int truePositives = labelCorrectCounts.getOrDefault(label, 0);</span>
+<span class="fc" id="L223">      int totalPredicted = 0;</span>
+<span class="fc bfc" id="L224" title="All 2 branches covered.">      for (Map&lt;String, Integer&gt; row : confusionMatrix.values()) {</span>
+<span class="fc" id="L225">        totalPredicted += row.getOrDefault(label, 0);</span>
+<span class="fc" id="L226">      }</span>
+<span class="fc bfc" id="L227" title="All 2 branches covered.">      return totalPredicted == 0 ? null : truePositives / (double) totalPredicted;</span>
+    }
+
+    /**
+     * Recall for the given ground-truth label: {@code TP / (TP + FN)}, or {@code null} when no
+     * samples exist for that label.
+     *
+     * &lt;p&gt;Recall answers: of all recordings that are actually {@code label}, how many did the
+     * classifier correctly identify?
+     *
+     * @param label the label to compute recall for
+     * @return recall in {@code [0,1]}, or {@code null} when no samples exist for that label
+     */
+    public Double recall(String label) {
+<span class="fc" id="L241">      Objects.requireNonNull(label, &quot;label&quot;);</span>
+<span class="fc" id="L242">      Integer total = labelSampleCounts.get(label);</span>
+<span class="pc bpc" id="L243" title="1 of 4 branches missed.">      if (total == null || total == 0) {</span>
+<span class="fc" id="L244">        return null;</span>
+      }
+<span class="fc" id="L246">      return labelCorrectCounts.getOrDefault(label, 0) / (double) total;</span>
+    }
+
+    /**
+     * Set of all labels that appear in the confusion matrix (either as actual or predicted).
+     *
+     * @return sorted set of all observed labels
+     */
+    public Set&lt;String&gt; allLabels() {
+<span class="fc" id="L255">      Set&lt;String&gt; labels = new java.util.TreeSet&lt;&gt;(labelSampleCounts.keySet());</span>
+<span class="fc bfc" id="L256" title="All 2 branches covered.">      for (Map&lt;String, Integer&gt; row : confusionMatrix.values()) {</span>
+<span class="fc" id="L257">        labels.addAll(row.keySet());</span>
+<span class="fc" id="L258">      }</span>
+<span class="fc" id="L259">      return labels;</span>
+    }
+
+    /**
+     * Number of samples whose ground-truth label is {@link WingbeatLabel#UNKNOWN}.
+     *
+     * &lt;p&gt;These samples are included in {@link #sampleCount} and the confusion matrix, but they
+     * cannot inform whether the classifier is working correctly because the expected answer is
+     * itself unknown. Use {@link #evaluatedSampleCount()} to exclude them from quantitative
+     * metrics.
+     *
+     * @return count of samples with an unknown ground-truth label; never negative
+     */
+    public int groundTruthUnknownCount() {
+<span class="fc" id="L273">      return labelSampleCounts.getOrDefault(WingbeatLabel.UNKNOWN, 0);</span>
+    }
+
+    /**
+     * Number of samples whose ground-truth label is known but whose predicted label is {@link
+     * WingbeatLabel#UNKNOWN}.
+     *
+     * &lt;p&gt;These represent cases where the classifier declined to assign a class. They count as false
+     * negatives for all known ground-truth labels.
+     *
+     * @return count of predictions that are unknown for evaluable samples; never negative
+     */
+    public int predictionUnknownCount() {
+<span class="fc" id="L286">      int count = 0;</span>
+<span class="fc bfc" id="L287" title="All 2 branches covered.">      for (Map.Entry&lt;String, Map&lt;String, Integer&gt;&gt; row : confusionMatrix.entrySet()) {</span>
+<span class="fc bfc" id="L288" title="All 2 branches covered.">        if (!WingbeatLabel.UNKNOWN.equals(row.getKey())) {</span>
+<span class="fc" id="L289">          count += row.getValue().getOrDefault(WingbeatLabel.UNKNOWN, 0);</span>
+        }
+<span class="fc" id="L291">      }</span>
+<span class="fc" id="L292">      return count;</span>
+    }
+
+    /**
+     * Number of samples that can meaningfully contribute to accuracy/precision/recall evaluation:
+     * those whose ground-truth label is not {@link WingbeatLabel#UNKNOWN}.
+     *
+     * @return {@code sampleCount - groundTruthUnknownCount()}; never negative
+     */
+    public int evaluatedSampleCount() {
+<span class="fc" id="L302">      return sampleCount - groundTruthUnknownCount();</span>
+    }
+
+    /**
+     * Classification accuracy computed over only the evaluable samples (ground truth ≠ {@link
+     * WingbeatLabel#UNKNOWN}), or {@code null} when no evaluable samples exist.
+     *
+     * &lt;p&gt;This differs from {@link #accuracy()} in that samples with an unknown ground truth are
+     * excluded from both the numerator and denominator, preventing them from inflating or deflating
+     * the reported accuracy.
+     *
+     * @return evaluated accuracy in {@code [0,1]}, or {@code null} when no evaluable samples exist
+     */
+    public Double evaluatedAccuracy() {
+<span class="fc" id="L316">      int evaluable = evaluatedSampleCount();</span>
+<span class="fc bfc" id="L317" title="All 2 branches covered.">      if (evaluable == 0) {</span>
+<span class="fc" id="L318">        return null;</span>
+      }
+<span class="fc" id="L320">      int correctEvaluated = 0;</span>
+<span class="fc bfc" id="L321" title="All 2 branches covered.">      for (Map.Entry&lt;String, Integer&gt; entry : labelCorrectCounts.entrySet()) {</span>
+<span class="fc bfc" id="L322" title="All 2 branches covered.">        if (!WingbeatLabel.UNKNOWN.equals(entry.getKey())) {</span>
+<span class="fc" id="L323">          correctEvaluated += entry.getValue();</span>
+        }
+<span class="fc" id="L325">      }</span>
+<span class="fc" id="L326">      return correctEvaluated / (double) evaluable;</span>
+    }
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

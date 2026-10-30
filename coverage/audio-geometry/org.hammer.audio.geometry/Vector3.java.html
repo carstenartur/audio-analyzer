@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>Vector3.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Geometry</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.geometry</a> &gt; <span class="el_source">Vector3.java</span></div><h1>Vector3.java</h1><pre class="source lang-java linenums">package org.hammer.audio.geometry;
+
+/** Immutable three-dimensional vector; units are defined by the API that uses it. */
+public record Vector3(double x, double y, double z) {
+
+  /** Zero vector. */
+<span class="nc" id="L7">  public static final Vector3 ZERO = new Vector3(0.0, 0.0, 0.0);</span>
+
+  /** Create a finite vector. */
+<span class="nc" id="L10">  public Vector3 {</span>
+<span class="nc bnc" id="L11" title="All 6 branches missed.">    if (!Double.isFinite(x) || !Double.isFinite(y) || !Double.isFinite(z)) {</span>
+<span class="nc" id="L12">      throw new IllegalArgumentException(&quot;coordinates must be finite&quot;);</span>
+    }
+<span class="nc" id="L14">  }</span>
+
+  /** Convert a 2D vector into the horizontal plane. */
+  public static Vector3 from(Vector2 vector) {
+<span class="nc" id="L18">    return new Vector3(vector.x(), vector.y(), 0.0);</span>
+  }
+
+  /** Return this vector plus {@code other}. */
+  public Vector3 plus(Vector3 other) {
+<span class="nc" id="L23">    return new Vector3(x + other.x, y + other.y, z + other.z);</span>
+  }
+
+  /** Return this vector multiplied by {@code scalar}. */
+  public Vector3 scale(double scalar) {
+<span class="nc bnc" id="L28" title="All 2 branches missed.">    if (!Double.isFinite(scalar)) {</span>
+<span class="nc" id="L29">      throw new IllegalArgumentException(&quot;scalar must be finite&quot;);</span>
+    }
+<span class="nc" id="L31">    return new Vector3(x * scalar, y * scalar, z * scalar);</span>
+  }
+
+  /** Horizontal projection used by existing 2D tracking filters. */
+  public Vector2 xy() {
+<span class="nc" id="L36">    return new Vector2(x, y);</span>
+  }
+
+  /** Euclidean length. */
+  public double length() {
+<span class="nc" id="L41">    return Math.sqrt(x * x + y * y + z * z);</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

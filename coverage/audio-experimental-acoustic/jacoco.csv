@@ -1,0 +1,190 @@
+GROUP,PACKAGE,CLASS,INSTRUCTION_MISSED,INSTRUCTION_COVERED,BRANCH_MISSED,BRANCH_COVERED,LINE_MISSED,LINE_COVERED,COMPLEXITY_MISSED,COMPLEXITY_COVERED,METHOD_MISSED,METHOD_COVERED
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.benchmark,SnapshotGroundTruthAligner.MatchPair,0,15,0,0,0,6,0,3,0,3
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.benchmark,BenchmarkMeasurements,0,37,0,0,0,8,0,2,0,2
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.benchmark,ClassificationAccuracyMetric,25,90,12,16,5,12,12,5,0,3
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.benchmark,DopplerErrorMetric,37,200,16,28,7,34,16,12,0,6
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.benchmark,AlignedSourceObservation,0,17,0,0,0,4,0,1,0,1
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.benchmark,TrackingBenchmarkComparator.ComparisonAccumulator,24,465,4,24,4,104,4,24,0,14
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.benchmark,SnapshotGroundTruthAligner.Edge,0,43,0,0,0,16,0,8,0,8
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.benchmark,BenchmarkReport,236,572,18,26,12,92,19,17,1,13
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.benchmark,LocalizationErrorMetric,37,239,16,32,7,40,16,14,0,6
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.benchmark,SnapshotGroundTruthAligner.IndexedTrack,0,15,0,0,0,6,0,3,0,3
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.benchmark,GroundTruthObservation,0,53,1,11,0,7,1,10,0,5
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.benchmark,TrackingScenarioBenchmarkRunner,12,225,2,10,3,43,2,12,0,8
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.benchmark,TrackingBenchmarkComparator,43,494,20,54,9,108,16,36,0,15
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.benchmark,SnapshotAlignment,5,43,2,2,1,9,2,1,0,1
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.benchmark,ClassificationPrediction,15,47,0,0,2,7,1,3,1,3
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.benchmark,SnapshotGroundTruthAligner,69,916,15,75,15,187,16,57,5,23
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.benchmark,FrequencyErrorMetric,37,225,16,30,7,38,16,13,0,6
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.benchmark,SnapshotGroundTruthAligner.PathResult,0,27,0,0,0,10,0,5,0,5
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.benchmark,SnapshotGroundTruthAligner.Assignment,0,9,0,0,0,4,0,2,0,2
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.benchmark,TrackingBenchmarkComparator.ClassificationSummary,0,25,0,0,0,2,0,2,0,2
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.benchmark.localization,LocalizationBenchmarkRunner,10,78,2,6,2,18,2,5,0,3
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.benchmark.localization,LocalizationBenchmarkResult,30,52,9,9,6,9,9,1,0,1
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.benchmark.localization,LocalizationBenchmark,0,4,0,0,0,1,0,1,0,1
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.benchmark.localization,TdoaLocalizationBenchmark,1,107,6,8,0,26,6,6,0,5
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.plugin,AcousticLocalizationPlugin.new MenuContribution() {...},4,15,0,0,2,6,2,4,2,4
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.plugin,AcousticLocalizationPlugin.new ViewContribution() {...},2,7,0,0,1,3,1,3,1,3
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.plugin,AcousticLocalizationPlugin.new ViewContribution() {...},2,7,0,0,1,3,1,3,1,3
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.plugin,AcousticLocalizationPlugin.new ViewContribution() {...},2,7,0,0,1,3,1,3,1,3
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.plugin,AcousticLocalizationPlugin.new AnalysisContribution() {...},6,9,0,0,2,1,2,1,2,1
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.plugin,AcousticLocalizationPlugin.new DemoSignalContribution() {...},9,12,0,0,3,1,3,1,3,1
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.plugin,AcousticLocalizationPlugin.new SignalSourceContribution() {...},9,18,0,0,3,2,3,2,3,2
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.plugin,AcousticLocalizationPlugin.new ExperimentContribution() {...},9,18,0,0,3,2,3,2,3,2
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.plugin,AcousticLocalizationPlugin.new PipelineContribution() {...},9,18,0,0,3,2,3,2,3,2
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.plugin,AcousticLocalizationPlugin,0,330,0,0,0,68,0,26,0,26
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.plugin,AcousticLocalizationPlugin.new ExportFormatContribution() {...},9,18,0,0,3,2,3,2,3,2
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.plugin,AcousticLocalizationPlugin.new SnapshotStreamContribution() {...},12,15,0,0,4,1,4,1,4,1
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.plugin,AcousticLocalizationPlugin.new VisualizationContribution() {...},9,18,0,0,3,2,3,2,3,2
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.plugin,AcousticLocalizationPlugin.new CalibrationContribution() {...},12,15,0,0,4,1,4,1,4,1
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.plugin,AcousticLocalizationPlugin.new BenchmarkContribution() {...},9,18,0,0,3,2,3,2,3,2
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.visualization,AcousticDebugFrame,46,0,2,0,12,0,3,0,2,0
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.wingbeat,RuleBasedWingbeatClassifier,2,166,1,11,1,31,1,10,0,5
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.wingbeat,WingbeatFeatureVector,39,197,17,35,7,32,17,11,0,2
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.wingbeat,FeatureDistributionComparison,10,292,2,6,2,49,2,5,0,3
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.wingbeat,WingbeatDataset,0,134,0,8,0,28,0,7,0,3
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.wingbeat,WingbeatDataset.Evaluation,70,568,16,60,14,106,16,31,0,9
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.wingbeat,DatasetWingbeatEvaluationWorkflow,352,976,44,56,54,207,46,42,14,24
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.wingbeat,DatasetWingbeatEvaluationWorkflow.RecordingAnalysis,0,41,0,0,0,7,0,1,0,1
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.wingbeat,LabelledRecording,5,42,1,3,1,9,1,2,0,1
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.wingbeat,WingbeatFeatureExtractor,16,547,11,31,4,100,11,24,0,14
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.wingbeat,ClassificationResult,10,43,4,4,2,8,4,3,0,3
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.feature.ranking,VarianceBetweenClassesScorer,0,9,0,0,0,3,0,3,0,3
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.feature.ranking,FeatureRankingEntry,10,56,2,4,2,12,2,3,0,2
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.feature.ranking,InformationGainScorer,2,79,2,6,1,18,2,6,0,4
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.feature.ranking,FisherScorer,0,9,0,0,0,3,0,3,0,3
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.feature.ranking,FeatureRankingService,5,97,1,5,1,18,1,6,0,4
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.feature.ranking,FeatureScorer,0,4,0,0,0,1,0,1,0,1
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.benchmark.tdoa,TdoaAlgorithmBenchmarkResult,26,59,10,10,5,10,10,2,0,2
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.benchmark.tdoa,TdoaAlgorithmBenchmarkRunner,18,181,4,12,4,49,4,7,0,3
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.benchmark.tdoa,TdoaBenchmarkCase,20,57,9,9,4,10,9,1,0,1
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.benchmark.tdoa,TdoaAlgorithmBenchmarkReport,5,87,1,3,1,19,1,4,0,3
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.benchmark.tdoa,NamedTdoaEstimator,5,18,2,2,1,4,2,1,0,1
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.benchmark.classifier,ClassifierBenchmark,0,4,0,0,0,1,0,1,0,1
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.benchmark.classifier,RuleBasedClassifierBenchmark,10,60,2,4,2,14,2,4,0,3
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.benchmark.classifier,ClassifierBenchmarkResult,5,150,3,9,1,30,3,5,0,2
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.benchmark.classifier,ConfusionMatrix,14,434,5,35,5,76,6,26,1,11
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.benchmark.classifier,ClassifierBenchmarkRunner,15,66,3,5,3,15,3,4,0,3
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.calibration,ArrayTimingCalibrationEstimator,43,393,14,30,8,74,14,14,0,6
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.calibration,SyntheticCalibrationFixture,27,59,6,8,6,12,7,2,1,1
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.calibration,CalibrationEventObservation,30,92,10,12,6,14,10,3,0,2
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.calibration,ArrayTimingCalibrationEstimator.LagScore,5,20,3,3,1,3,3,1,0,1
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.dataset,DatasetAudioLoader,45,136,5,7,9,33,5,6,0,5
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.dataset,HumBugDbImporter.AudioFileIndex,7,96,1,3,1,20,1,6,0,5
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.dataset,DatasetAudioLoader.AudioFileInfo,20,35,6,6,4,6,6,1,0,1
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.dataset,FeatureHistogram.Bucket,5,30,1,5,1,7,1,3,0,1
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.dataset,DatasetDescriptor,27,103,5,9,5,21,5,4,0,2
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.dataset,HumBugDbImporter,97,1004,38,88,26,216,38,57,2,30
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.dataset,FeatureHistogram,0,311,0,26,0,56,0,18,0,5
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.dataset,DatasetAnalytics.DistributionStats,2,162,1,11,1,29,1,8,0,3
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.dataset,DatasetAnnotation,22,86,6,10,4,16,6,4,0,2
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.dataset,DatasetRecording,22,114,6,10,4,21,6,4,0,2
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.dataset,DatasetAnalytics,0,336,0,20,0,68,0,14,0,4
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.dataset,DatasetManifest,0,20,0,0,0,5,0,1,0,1
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.doppler,RadialVelocityEstimate,25,44,8,8,5,7,8,1,0,1
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.doppler,SimpleMultiSensorDopplerEstimator,12,354,7,23,2,74,7,17,0,9
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.doppler,SimpleDopplerEstimator,8,50,4,8,2,11,5,5,1,3
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.doppler,FrequencyTrack.FrequencyTrackSnapshot,39,0,8,0,7,0,5,0,1,0
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.doppler,VelocityReconstructor,11,330,9,19,3,61,9,10,0,5
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.doppler,ExactDopplerEstimator,22,36,6,6,6,7,8,2,2,2
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.doppler,FrequencyTrack,36,142,7,15,6,28,9,8,2,4
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.doppler,SourceObservation,10,40,4,4,2,7,4,1,0,1
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.workbench,AcousticLocalizationWorkbenchPanel.ScenarioWorker,457,0,18,0,95,0,15,0,6,0
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.workbench,WorkbenchExperimentExporter,18,114,0,2,2,28,3,5,3,4
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.workbench,ImportedRecordingWorkbenchPanel.new SwingWorker() {...},119,0,2,0,28,0,4,0,3,0
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.workbench,ImportedRecordingWorkbenchPanel.new SwingWorker() {...},82,0,6,0,15,0,6,0,3,0
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.workbench,ImportedRecordingWorkbenchPanel.new SwingWorker() {...},52,0,0,0,10,0,3,0,3,0
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.workbench,PlaybackModel,3,177,0,26,1,43,1,28,1,15
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.workbench,WorkbenchScenarioRunner,24,320,4,15,8,71,4,14,0,8
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.workbench,ImportedRecordingWorkbenchPanel,276,1437,34,46,68,276,32,44,10,26
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.workbench,AcousticLocalizationWorkbenchPanel.RoomMapPanel,1102,288,46,12,201,59,40,9,15,5
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.workbench,WorkbenchParameters,18,63,4,4,3,7,4,2,0,2
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.workbench,WorkbenchParameters.TdoaEstimatorType,0,21,0,0,0,4,0,1,0,1
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.workbench,AcousticLocalizationWorkbenchPanel,2106,910,98,2,422,159,91,16,42,15
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.workbench,AcousticLocalizationWorkbenchPanel.AnalysisTabContent,21,0,0,0,8,0,1,0,1,0
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.workbench,WorkbenchRunExporter,0,1221,0,34,0,254,0,30,0,13
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.workbench,WorkbenchParameters.Builder,64,109,6,4,23,25,15,5,10,5
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.workbench,WorkbenchRunResult,8,274,3,15,1,48,3,35,0,29
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.workbench,AcousticLocalizationWorkbenchPanel.new SwingWorker() {...},106,0,2,0,24,0,4,0,3,0
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.workbench,AcousticLocalizationWorkbenchPanel.ScenarioItem,4,9,0,0,1,3,1,1,1,1
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.workbench,ImportedRecordingWorkbenchPanel.ImportResult,34,0,0,0,6,0,1,0,1,0
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.workbench,ImportedRecordingWorkbenchPanel.RecordingItem,4,24,2,2,1,4,2,2,0,2
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic,TdoaPairConsistencyAnalyzer,34,433,12,32,5,90,13,20,1,10
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic,MosquitoLocalizationPipeline,38,296,9,27,6,56,7,17,0,6
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic,DiagnosticTdoaEstimator,3,30,1,1,1,6,1,2,0,2
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic,TdoaEstimate,20,60,9,9,4,7,9,2,0,2
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic,TdoaPairConsistencyAnalyzer.UnorderedPair,15,34,6,6,3,6,6,2,0,2
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic,GccPhatCorrelation,10,301,5,19,2,52,5,12,0,5
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic,AdaptiveBeamformingSearch,21,328,8,38,4,71,8,23,0,8
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic,TdoaPeakDiagnostics,18,68,5,5,3,13,5,4,0,4
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic,DelayAndSumBeamformer,12,222,3,15,2,39,4,12,1,6
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic,AdaptiveBeamformingSearch.SearchBounds,43,164,9,13,7,27,9,7,0,5
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic,TdoaConsistencyReport,16,86,7,13,3,12,7,8,0,5
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic,AmbiguousTdoaEstimateException,0,4,0,0,0,2,0,1,0,1
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic,TdoaPairConsistencyAnalyzer.CycleAnalysis,0,15,0,0,0,1,0,1,0,1
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic,TdoaConsistencyFinding.Kind,0,15,0,0,0,3,0,1,0,1
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic,AcousticLocalizationSnapshot,16,53,2,2,4,7,3,1,1,1
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic,TdoaPairConsistencyAnalyzer.OrientedDelay,15,29,6,6,3,5,6,1,0,1
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic,SubSampleGccPhatTdoaEstimator,22,358,11,23,5,67,11,15,0,9
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic,AdaptiveBeamformingSearch.BeamformingConfidencePoint,10,34,5,5,2,5,5,1,0,1
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic,SubSampleGccPhatTdoaEstimator.PeakSelection,0,12,0,0,0,1,0,1,0,1
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic,GccPhatTdoaEstimator.LagScore,5,20,3,3,1,3,3,1,0,1
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic,DiagnosticTdoaEstimate,0,17,0,0,0,4,0,1,0,1
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic,SpectralPeak,15,37,7,7,3,5,7,1,0,1
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic,CrossCorrelationTdoaEstimator,6,190,3,9,1,38,3,7,0,4
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic,DelayAndSumBeamformer.BeamformingPoint,10,18,3,3,2,4,3,1,0,1
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic,MosquitoLocalizationPipeline.TdoaPairingMode,0,15,0,0,0,3,0,1,0,1
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic,TdoaPairConsistencyAnalyzer.PairAnalysis,0,12,0,0,0,1,0,1,0,1
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic,WingbeatFrequencyTracker,1,191,1,9,1,35,1,7,0,3
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic,AdaptiveBeamformingSearch.BeamformingSearchResult,11,72,4,4,2,16,4,4,0,4
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic,UnusableSynchronizationException,0,4,0,0,0,2,0,1,0,1
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic,FrequencyBand,19,23,8,4,2,5,7,1,1,1
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic,GccPhatTdoaEstimator,7,162,3,9,1,34,3,8,0,5
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic,CalibratedTdoaEstimator,16,179,4,8,3,37,4,7,0,5
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic,TdoaConsistencyFinding,19,68,5,9,3,13,6,6,1,4
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.feature.evaluation,FeatureEvaluationReport,5,60,1,3,1,12,1,5,0,4
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.feature.evaluation,ClassSeparationScore,20,82,7,7,4,13,7,1,0,1
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.feature.evaluation,FeatureStatistics,20,41,5,5,4,8,5,1,0,1
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.feature.evaluation,FeatureEvaluationService,38,774,8,52,7,142,8,35,0,13
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.feature.evaluation,FeatureEvaluationEntry,20,51,6,6,4,9,6,1,0,1
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.feature.comparison,FeatureDifference,30,51,8,8,6,9,8,1,0,1
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.feature.comparison,SyntheticRealComparisonReport,10,55,3,7,2,12,3,4,0,2
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.feature.comparison,SyntheticRealComparison,10,285,2,18,2,49,2,19,0,11
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.tracking,SourceTracker.Observation,25,83,9,9,5,13,9,3,0,3
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.tracking,SourceTracker.Track,0,6,0,0,0,2,0,1,0,1
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.tracking,TrackingPipeline.LocalizationComponents,0,38,0,0,0,7,0,1,0,1
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.tracking,FrequencyClusterer,16,416,10,54,2,89,10,30,0,8
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.tracking,FrequencyCluster,15,40,5,5,3,8,5,2,0,2
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.tracking,DetectedPeak,20,38,7,7,4,6,7,1,0,1
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.tracking,TrackingPipeline.DopplerDiagnostics,20,60,8,8,4,9,8,1,0,1
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.tracking,TrackingSnapshot,5,93,1,1,1,23,1,4,0,4
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.tracking,SourceTracker,5,585,8,42,1,126,8,29,0,12
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.tracking,TrackingPipeline,107,433,16,16,27,96,16,14,4,10
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.tracking,MultiPeakDetector,18,421,8,32,7,72,11,19,3,7
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.tracking,FrameSchedule,0,63,2,10,0,10,2,7,0,3
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.tracking,ProcessingBudget,8,71,0,2,3,18,2,7,2,6
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.tracking,TrackingPipeline.PipelineFrequencyTrack,0,15,0,0,0,6,0,1,0,1
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.tracking,TrackedSource,45,128,17,17,9,16,17,2,0,2
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.tracking,Kalman2D,12,575,10,42,4,90,10,27,0,11
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.scenario,Scenario,5,45,1,3,1,10,1,2,0,1
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.scenario,ScenarioSource,5,43,1,3,1,8,1,3,0,2
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.scenario,ScenarioSource.Builder,0,44,0,0,0,11,0,5,0,5
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.scenario,ScenarioTrajectory,19,222,9,33,4,43,9,14,0,2
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.scenario,AcousticGroundTruth,48,169,16,44,9,22,16,16,0,2
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.scenario,ScenarioEnvironment,0,32,1,3,0,6,1,3,0,2
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.scenario,ClassificationGroundTruth,0,62,0,0,0,10,0,4,0,4
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.simulation.calibration,GeneratorCalibrationService,0,54,0,2,0,12,0,3,0,2
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.simulation.calibration,SyntheticCalibrationAnalysis,7,321,5,25,1,65,5,17,0,7
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.simulation.calibration,SyntheticParameterEstimator,5,268,2,24,1,51,2,16,0,5
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.simulation.calibration,GeneratorComparisonReport,0,109,0,4,0,25,0,8,0,6
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.simulation.calibration,CalibrationResult,2,65,1,1,1,17,1,4,0,4
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.simulation,WingbeatSignalGenerator.PhaseAccumulatorCache,0,158,0,12,0,35,0,10,0,4
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.simulation,WingbeatSignalParameters,5,262,8,36,1,43,8,20,0,6
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.simulation,WingbeatEmitter2D,41,101,11,11,8,24,12,7,1,7
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.simulation,WingbeatSignalGenerator,48,515,11,43,9,100,15,32,4,16
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.simulation,SoundEmitter2D,31,62,9,9,5,8,10,3,1,3
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.simulation,SimulationScenarios,0,449,0,2,0,64,0,14,0,13
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.simulation,SimulatedMicrophoneArraySource,25,317,7,19,6,62,8,12,1,6
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.simulation,Room2D,41,51,18,10,7,7,15,1,1,1
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.simulation,SimulationScenarios.SimulationScenario,25,128,8,10,5,23,8,4,0,3
+Audio Analyzer Experimental Acoustic,org.hammer.audio.experimental.acoustic.simulation,AcousticEmitter2D,0,12,0,0,0,2,0,2,0,2

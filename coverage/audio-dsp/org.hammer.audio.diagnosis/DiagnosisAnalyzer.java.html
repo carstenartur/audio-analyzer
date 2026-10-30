@@ -1,0 +1,555 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>DiagnosisAnalyzer.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer DSP and Analysis</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.diagnosis</a> &gt; <span class="el_source">DiagnosisAnalyzer.java</span></div><h1>DiagnosisAnalyzer.java</h1><pre class="source lang-java linenums">package org.hammer.audio.diagnosis;
+
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Locale;
+import org.hammer.audio.analysis.SpectrumSnapshot;
+import org.hammer.audio.core.AudioBlock;
+import org.hammer.audio.localization.StereoDelaySnapshot;
+import org.hammer.audio.spectrogram.SpectrogramFrame;
+import org.hammer.audio.spectrogram.SpectrogramHistory;
+
+/**
+ * Rule-based acoustic diagnosis: consumes one {@link AudioBlock}, one optional {@link
+ * SpectrumSnapshot}, optional {@link SpectrogramHistory} and optional {@link StereoDelaySnapshot}
+ * and emits an immutable {@link DiagnosisSnapshot} of findings.
+ *
+ * &lt;p&gt;Initial rule set:
+ *
+ * &lt;ul&gt;
+ *   &lt;li&gt;Hard clipping (any sample magnitude {@code &gt;= clippingThreshold}).
+ *   &lt;li&gt;Low confidence / silence (RMS below {@code silenceRmsThreshold}).
+ *   &lt;li&gt;Mains hum at 50 Hz / 60 Hz, including 100 / 150 Hz or 120 / 180 Hz harmonics.
+ *   &lt;li&gt;Dominant tone (single prominent peak well above the local median spectrum).
+ *   &lt;li&gt;Broadband noise (near-flat spectrum with no prominent peak).
+ *   &lt;li&gt;Intermittent high-frequency burst (recent high-band frame energy spikes vs. its mean).
+ *   &lt;li&gt;Drifting peak (dominant frequency moves across the recent history).
+ * &lt;/ul&gt;
+ *
+ * &lt;p&gt;This analyzer is stateless aside from its configuration constants; instances are thread-safe
+ * provided callers do not share the supplied snapshots or histories across threads.
+ */
+@SuppressWarnings({&quot;PMD.GodClass&quot;, &quot;PMD.CyclomaticComplexity&quot;, &quot;PMD.TooManyMethods&quot;})
+public final class DiagnosisAnalyzer {
+
+  /** Default sample-magnitude threshold treated as clipping. */
+  public static final double DEFAULT_CLIPPING_THRESHOLD = 0.999;
+
+  /** Default RMS threshold below which the signal is considered effectively silent. */
+  public static final double DEFAULT_SILENCE_RMS_THRESHOLD = 1.0e-3;
+
+  /** Default dominance ratio (peak / median) above which a single tone is reported. */
+  public static final double DEFAULT_DOMINANCE_RATIO = 8.0;
+
+  /** Default flatness threshold above which a spectrum is treated as broadband noise. */
+  public static final double DEFAULT_FLATNESS_THRESHOLD = 0.45;
+
+  /** Default high-frequency cutoff for the intermittent-burst rule (Hz). */
+  public static final double DEFAULT_HIGH_FREQUENCY_CUTOFF_HZ = 4000.0;
+
+  /** Default factor by which the last frame's high-band energy must exceed history mean. */
+  public static final double DEFAULT_BURST_RATIO = 3.0;
+
+  /** Default minimum drift (Hz) of the dominant peak across history to flag a drifting peak. */
+  public static final double DEFAULT_DRIFT_HZ = 80.0;
+
+  private static final double HUM_TOLERANCE_HZ = 4.0;
+  private static final double HUM_RATIO_THRESHOLD = 5.0;
+  private static final double HUM_RELATIVE_THRESHOLD = 0.25;
+  private static final double HARMONIC_RATIO_THRESHOLD = 3.0;
+
+  private final double clippingThreshold;
+  private final double silenceRmsThreshold;
+  private final double dominanceRatio;
+  private final double flatnessThreshold;
+  private final double highFrequencyCutoffHz;
+  private final double burstRatio;
+  private final double driftHz;
+
+  /** Create a diagnosis analyzer with default thresholds. */
+  public DiagnosisAnalyzer() {
+<span class="fc" id="L72">    this(</span>
+        DEFAULT_CLIPPING_THRESHOLD,
+        DEFAULT_SILENCE_RMS_THRESHOLD,
+        DEFAULT_DOMINANCE_RATIO,
+        DEFAULT_FLATNESS_THRESHOLD,
+        DEFAULT_HIGH_FREQUENCY_CUTOFF_HZ,
+        DEFAULT_BURST_RATIO,
+        DEFAULT_DRIFT_HZ);
+<span class="fc" id="L80">  }</span>
+
+  /**
+   * Create a diagnosis analyzer with explicit thresholds.
+   *
+   * @param clippingThreshold sample magnitude threshold for clipping
+   * @param silenceRmsThreshold RMS threshold below which the signal is considered silent
+   * @param dominanceRatio peak / median ratio required to report a dominant tone
+   * @param flatnessThreshold spectral flatness threshold for broadband noise
+   * @param highFrequencyCutoffHz low edge of the high-band used for burst detection
+   * @param burstRatio current / mean high-band energy ratio for burst detection
+   * @param driftHz minimum drift in Hz of the dominant peak required for a drift finding
+   */
+  public DiagnosisAnalyzer(
+      double clippingThreshold,
+      double silenceRmsThreshold,
+      double dominanceRatio,
+      double flatnessThreshold,
+      double highFrequencyCutoffHz,
+      double burstRatio,
+<span class="fc" id="L100">      double driftHz) {</span>
+<span class="fc" id="L101">    this.clippingThreshold = clippingThreshold;</span>
+<span class="fc" id="L102">    this.silenceRmsThreshold = silenceRmsThreshold;</span>
+<span class="fc" id="L103">    this.dominanceRatio = dominanceRatio;</span>
+<span class="fc" id="L104">    this.flatnessThreshold = flatnessThreshold;</span>
+<span class="fc" id="L105">    this.highFrequencyCutoffHz = highFrequencyCutoffHz;</span>
+<span class="fc" id="L106">    this.burstRatio = burstRatio;</span>
+<span class="fc" id="L107">    this.driftHz = driftHz;</span>
+<span class="fc" id="L108">  }</span>
+
+  /**
+   * Run the diagnostic rules and produce a snapshot.
+   *
+   * @param block latest audio block (may be {@code null})
+   * @param spectrum latest spectrum snapshot (may be {@code null})
+   * @param history rolling spectrogram history (may be {@code null} or empty)
+   * @param stereoDelay latest stereo delay snapshot (may be {@code null})
+   * @return immutable diagnosis snapshot; never {@code null}
+   */
+  public DiagnosisSnapshot analyze(
+      AudioBlock block,
+      SpectrumSnapshot spectrum,
+      SpectrogramHistory history,
+      StereoDelaySnapshot stereoDelay) {
+<span class="fc" id="L124">    long frameIndex = 0L;</span>
+<span class="fc" id="L125">    long timestamp = 0L;</span>
+<span class="pc bpc" id="L126" title="1 of 2 branches missed.">    if (block != null) {</span>
+<span class="fc" id="L127">      frameIndex = block.frameIndex();</span>
+<span class="fc" id="L128">      timestamp = block.timestampNanos();</span>
+<span class="nc bnc" id="L129" title="All 2 branches missed.">    } else if (spectrum != null) {</span>
+<span class="nc" id="L130">      frameIndex = spectrum.sourceFrameIndex();</span>
+<span class="nc" id="L131">      timestamp = spectrum.sourceTimestampNanos();</span>
+<span class="nc bnc" id="L132" title="All 2 branches missed.">    } else if (stereoDelay != null) {</span>
+<span class="nc" id="L133">      frameIndex = stereoDelay.sourceFrameIndex();</span>
+<span class="nc" id="L134">      timestamp = stereoDelay.sourceTimestampNanos();</span>
+    }
+
+<span class="fc" id="L137">    List&lt;DiagnosisFinding&gt; findings = new ArrayList&lt;&gt;();</span>
+
+<span class="fc" id="L139">    LevelStats stats = computeLevelStats(block);</span>
+<span class="fc bfc" id="L140" title="All 2 branches covered.">    boolean clipping = stats.maxAbs &gt;= clippingThreshold;</span>
+<span class="fc bfc" id="L141" title="All 2 branches covered.">    if (clipping) {</span>
+<span class="fc" id="L142">      findings.add(</span>
+          new DiagnosisFinding(
+              DiagnosisType.CLIPPING,
+              DiagnosisSeverity.CRITICAL,
+              1.0,
+<span class="fc" id="L147">              String.format(</span>
+                  Locale.ROOT,
+                  &quot;Clipping detected: peak level reached %.3f.&quot;,
+<span class="fc" id="L150">                  Math.min(1.0, stats.maxAbs)),</span>
+              Double.NaN,
+              stats.maxAbs));
+    }
+
+<span class="pc bpc" id="L155" title="1 of 4 branches missed.">    boolean silent = stats.frames &gt; 0 &amp;&amp; stats.rms &lt; silenceRmsThreshold;</span>
+<span class="fc bfc" id="L156" title="All 2 branches covered.">    if (silent) {</span>
+<span class="fc" id="L157">      findings.add(</span>
+          new DiagnosisFinding(
+              DiagnosisType.LOW_CONFIDENCE_SILENCE,
+              DiagnosisSeverity.INFO,
+<span class="fc" id="L161">              clamp01(1.0 - stats.rms / Math.max(silenceRmsThreshold, 1e-9)),</span>
+<span class="fc" id="L162">              String.format(</span>
+<span class="fc" id="L163">                  Locale.ROOT, &quot;Low confidence: signal level too low (RMS=%.4f).&quot;, stats.rms),</span>
+              Double.NaN,
+              stats.rms));
+      // Without enough signal energy we should not produce spectral findings.
+<span class="fc" id="L167">      return new DiagnosisSnapshot(frameIndex, timestamp, sortFindings(findings));</span>
+    }
+
+<span class="pc bpc" id="L170" title="2 of 4 branches missed.">    if (spectrum != null &amp;&amp; spectrum.binCount() &gt; 2) {</span>
+<span class="fc" id="L171">      addSpectralFindings(spectrum, findings);</span>
+    }
+<span class="pc bpc" id="L173" title="1 of 4 branches missed.">    if (history != null &amp;&amp; history.size() &gt;= 4) {</span>
+<span class="fc" id="L174">      addHistoryFindings(history, findings);</span>
+    }
+
+<span class="fc" id="L177">    return new DiagnosisSnapshot(frameIndex, timestamp, sortFindings(findings));</span>
+  }
+
+  private void addSpectralFindings(SpectrumSnapshot spectrum, List&lt;DiagnosisFinding&gt; findings) {
+<span class="fc" id="L181">    float[] magnitudes = spectrum.magnitudes();</span>
+<span class="fc" id="L182">    int peakBin = findPeakBin(magnitudes);</span>
+<span class="pc bpc" id="L183" title="1 of 2 branches missed.">    if (peakBin &lt;= 0) {</span>
+<span class="nc" id="L184">      return;</span>
+    }
+<span class="fc" id="L186">    double peakHz = spectrum.frequencyOfBin(peakBin);</span>
+<span class="fc" id="L187">    double peakMag = magnitudes[peakBin];</span>
+<span class="fc" id="L188">    double median = robustMedian(magnitudes);</span>
+<span class="fc" id="L189">    double ratio = peakMag / Math.max(median, 1e-9);</span>
+
+<span class="fc" id="L191">    HumResult hum50 = humEnergyRatio(spectrum, magnitudes, 50.0, median, peakMag);</span>
+<span class="fc" id="L192">    HumResult hum60 = humEnergyRatio(spectrum, magnitudes, 60.0, median, peakMag);</span>
+<span class="fc bfc" id="L193" title="All 4 branches covered.">    boolean has50 = hum50.ratio &gt;= HUM_RATIO_THRESHOLD &amp;&amp; hum50.relative &gt;= HUM_RELATIVE_THRESHOLD;</span>
+<span class="fc bfc" id="L194" title="All 4 branches covered.">    boolean has60 = hum60.ratio &gt;= HUM_RATIO_THRESHOLD &amp;&amp; hum60.relative &gt;= HUM_RELATIVE_THRESHOLD;</span>
+<span class="pc bpc" id="L195" title="1 of 4 branches missed.">    if (has50 &amp;&amp; hum50.ratio &gt;= hum60.ratio) {</span>
+<span class="fc" id="L196">      findings.add(buildHumFinding(spectrum, magnitudes, median, 50.0, hum50));</span>
+<span class="pc bpc" id="L197" title="1 of 2 branches missed.">    } else if (has60) {</span>
+<span class="nc" id="L198">      findings.add(buildHumFinding(spectrum, magnitudes, median, 60.0, hum60));</span>
+    }
+
+<span class="fc" id="L201">    double flatness = spectralFlatness(magnitudes);</span>
+<span class="pc bpc" id="L202" title="3 of 4 branches missed.">    boolean broadband = flatness &gt;= flatnessThreshold &amp;&amp; ratio &lt; dominanceRatio;</span>
+<span class="pc bpc" id="L203" title="1 of 2 branches missed.">    if (broadband) {</span>
+<span class="nc" id="L204">      findings.add(</span>
+          new DiagnosisFinding(
+              DiagnosisType.BROADBAND_NOISE,
+              DiagnosisSeverity.INFO,
+<span class="nc" id="L208">              clamp01((flatness - flatnessThreshold) / Math.max(1.0 - flatnessThreshold, 1e-6)),</span>
+<span class="nc" id="L209">              String.format(</span>
+<span class="nc" id="L210">                  Locale.ROOT, &quot;Broadband noise: flat spectrum (flatness=%.2f).&quot;, flatness),</span>
+              Double.NaN,
+              flatness));
+    }
+
+    // Dominant tone: avoid re-reporting if we already flagged this as hum.
+<span class="fc" id="L216">    boolean alreadyHum =</span>
+<span class="fc" id="L217">        findings.stream()</span>
+<span class="fc" id="L218">            .anyMatch(</span>
+                f -&gt;
+<span class="fc bfc" id="L220" title="All 2 branches covered.">                    f.type() == DiagnosisType.MAINS_HUM_50HZ</span>
+<span class="pc bpc" id="L221" title="1 of 2 branches missed.">                        || f.type() == DiagnosisType.MAINS_HUM_60HZ);</span>
+<span class="pc bpc" id="L222" title="2 of 6 branches missed.">    if (ratio &gt;= dominanceRatio &amp;&amp; !alreadyHum &amp;&amp; !broadband) {</span>
+<span class="fc" id="L223">      findings.add(</span>
+          new DiagnosisFinding(
+              DiagnosisType.DOMINANT_TONE,
+              DiagnosisSeverity.INFO,
+<span class="fc" id="L227">              clamp01(Math.log10(ratio) / 2.0),</span>
+<span class="fc" id="L228">              String.format(Locale.ROOT, &quot;Dominant tone: %.1f Hz.&quot;, peakHz),</span>
+              peakHz,
+              ratio));
+    }
+<span class="fc" id="L232">  }</span>
+
+  private DiagnosisFinding buildHumFinding(
+      SpectrumSnapshot spectrum,
+      float[] magnitudes,
+      double median,
+      double fundamentalHz,
+      HumResult hum) {
+<span class="fc" id="L240">    double h2 = harmonicRatio(spectrum, magnitudes, fundamentalHz * 2.0, median);</span>
+<span class="fc" id="L241">    double h3 = harmonicRatio(spectrum, magnitudes, fundamentalHz * 3.0, median);</span>
+<span class="fc" id="L242">    List&lt;String&gt; harmonics = new ArrayList&lt;&gt;();</span>
+<span class="pc bpc" id="L243" title="1 of 2 branches missed.">    if (h2 &gt;= HARMONIC_RATIO_THRESHOLD) {</span>
+<span class="fc" id="L244">      harmonics.add(String.format(Locale.ROOT, &quot;%.0f Hz&quot;, fundamentalHz * 2.0));</span>
+    }
+<span class="pc bpc" id="L246" title="1 of 2 branches missed.">    if (h3 &gt;= HARMONIC_RATIO_THRESHOLD) {</span>
+<span class="fc" id="L247">      harmonics.add(String.format(Locale.ROOT, &quot;%.0f Hz&quot;, fundamentalHz * 3.0));</span>
+    }
+    String harmonicText;
+<span class="pc bpc" id="L250" title="1 of 2 branches missed.">    if (harmonics.isEmpty()) {</span>
+<span class="nc" id="L251">      harmonicText = &quot;no clear harmonics&quot;;</span>
+<span class="pc bpc" id="L252" title="1 of 2 branches missed.">    } else if (harmonics.size() == 1) {</span>
+<span class="nc" id="L253">      harmonicText = &quot;harmonic at &quot; + harmonics.get(0);</span>
+    } else {
+<span class="fc" id="L255">      harmonicText =</span>
+<span class="fc" id="L256">          &quot;harmonics at &quot; + harmonics.get(0) + &quot; and &quot; + harmonics.get(harmonics.size() - 1);</span>
+    }
+    DiagnosisType type =
+<span class="pc bpc" id="L259" title="1 of 2 branches missed.">        fundamentalHz &lt; 55.0 ? DiagnosisType.MAINS_HUM_50HZ : DiagnosisType.MAINS_HUM_60HZ;</span>
+    DiagnosisSeverity severity =
+<span class="pc bpc" id="L261" title="1 of 2 branches missed.">        harmonics.isEmpty() ? DiagnosisSeverity.INFO : DiagnosisSeverity.WARNING;</span>
+<span class="fc" id="L262">    double confidence = clamp01(Math.log10(Math.max(1.0, hum.ratio)) / 1.5);</span>
+<span class="fc" id="L263">    String message =</span>
+<span class="fc" id="L264">        String.format(</span>
+<span class="fc" id="L265">            Locale.ROOT, &quot;Likely mains hum: %.0f Hz with %s.&quot;, fundamentalHz, harmonicText);</span>
+<span class="fc" id="L266">    return new DiagnosisFinding(type, severity, confidence, message, fundamentalHz, hum.ratio);</span>
+  }
+
+  private void addHistoryFindings(SpectrogramHistory history, List&lt;DiagnosisFinding&gt; findings) {
+<span class="fc" id="L270">    BurstResult burst = analyzeBurst(history);</span>
+<span class="pc bpc" id="L271" title="2 of 4 branches missed.">    if (burst != null &amp;&amp; burst.ratio &gt;= burstRatio) {</span>
+<span class="fc" id="L272">      findings.add(</span>
+          new DiagnosisFinding(
+              DiagnosisType.INTERMITTENT_HIGH_FREQUENCY_BURST,
+              DiagnosisSeverity.WARNING,
+<span class="fc" id="L276">              clamp01((burst.ratio - burstRatio) / (burstRatio * 2.0)),</span>
+<span class="fc" id="L277">              String.format(</span>
+                  Locale.ROOT,
+                  &quot;Intermittent high-frequency bursts detected (&gt;%.0f Hz, ratio=%.1fx).&quot;,
+<span class="fc" id="L280">                  highFrequencyCutoffHz,</span>
+<span class="fc" id="L281">                  burst.ratio),</span>
+              burst.dominantHz,
+              burst.ratio));
+    }
+
+<span class="fc" id="L286">    DriftResult drift = analyzeDrift(history);</span>
+<span class="pc bpc" id="L287" title="2 of 4 branches missed.">    if (drift != null &amp;&amp; drift.spanHz &gt;= driftHz) {</span>
+<span class="fc" id="L288">      findings.add(</span>
+          new DiagnosisFinding(
+              DiagnosisType.DRIFTING_PEAK,
+              DiagnosisSeverity.INFO,
+<span class="fc" id="L292">              clamp01(drift.spanHz / Math.max(driftHz * 4.0, 1.0)),</span>
+<span class="fc" id="L293">              String.format(</span>
+                  Locale.ROOT,
+                  &quot;Drifting peak: dominant frequency moved %.0f Hz (%.0f → %.0f Hz).&quot;,
+<span class="fc" id="L296">                  drift.spanHz,</span>
+<span class="fc" id="L297">                  drift.startHz,</span>
+<span class="fc" id="L298">                  drift.endHz),</span>
+              drift.endHz,
+              drift.spanHz));
+    }
+<span class="fc" id="L302">  }</span>
+
+  /* ---------------- helpers ---------------- */
+
+  private static LevelStats computeLevelStats(AudioBlock block) {
+<span class="pc bpc" id="L307" title="3 of 6 branches missed.">    if (block == null || block.channels() == 0 || block.frames() == 0) {</span>
+<span class="nc" id="L308">      return new LevelStats(0.0, 0.0, 0);</span>
+    }
+<span class="fc" id="L310">    double sumSquares = 0.0;</span>
+<span class="fc" id="L311">    double maxAbs = 0.0;</span>
+<span class="fc" id="L312">    long count = 0L;</span>
+<span class="fc bfc" id="L313" title="All 2 branches covered.">    for (int c = 0; c &lt; block.channels(); c++) {</span>
+<span class="fc" id="L314">      float[] samples = block.channelView(c);</span>
+<span class="fc bfc" id="L315" title="All 2 branches covered.">      for (int i = 0; i &lt; block.frames(); i++) {</span>
+<span class="fc" id="L316">        float s = samples[i];</span>
+<span class="fc" id="L317">        double abs = Math.abs(s);</span>
+<span class="fc" id="L318">        sumSquares += (double) s * s;</span>
+<span class="fc bfc" id="L319" title="All 2 branches covered.">        if (abs &gt; maxAbs) {</span>
+<span class="fc" id="L320">          maxAbs = abs;</span>
+        }
+<span class="fc" id="L322">        count++;</span>
+      }
+    }
+<span class="pc bpc" id="L325" title="1 of 2 branches missed.">    double rms = count == 0L ? 0.0 : Math.sqrt(sumSquares / count);</span>
+<span class="fc" id="L326">    return new LevelStats(rms, maxAbs, block.frames());</span>
+  }
+
+  private static int findPeakBin(float[] magnitudes) {
+<span class="fc" id="L330">    int peakBin = -1;</span>
+<span class="fc" id="L331">    float peakMag = 0f;</span>
+<span class="fc bfc" id="L332" title="All 2 branches covered.">    for (int i = 1; i &lt; magnitudes.length; i++) {</span>
+<span class="fc bfc" id="L333" title="All 2 branches covered.">      if (magnitudes[i] &gt; peakMag) {</span>
+<span class="fc" id="L334">        peakMag = magnitudes[i];</span>
+<span class="fc" id="L335">        peakBin = i;</span>
+      }
+    }
+<span class="fc" id="L338">    return peakBin;</span>
+  }
+
+  private static double robustMedian(float[] magnitudes) {
+<span class="pc bpc" id="L342" title="1 of 2 branches missed.">    if (magnitudes.length &lt;= 2) {</span>
+<span class="nc" id="L343">      return 0.0;</span>
+    }
+<span class="fc" id="L345">    float[] copy = new float[magnitudes.length - 1];</span>
+<span class="fc" id="L346">    System.arraycopy(magnitudes, 1, copy, 0, copy.length);</span>
+<span class="fc" id="L347">    java.util.Arrays.sort(copy);</span>
+<span class="fc" id="L348">    int mid = copy.length / 2;</span>
+<span class="fc" id="L349">    return copy[mid];</span>
+  }
+
+  private HumResult humEnergyRatio(
+      SpectrumSnapshot spectrum,
+      float[] magnitudes,
+      double targetHz,
+      double median,
+      double globalPeak) {
+<span class="fc" id="L358">    int peakBin =</span>
+<span class="fc" id="L359">        findPeakBinInRange(spectrum, targetHz - HUM_TOLERANCE_HZ, targetHz + HUM_TOLERANCE_HZ);</span>
+<span class="pc bpc" id="L360" title="1 of 2 branches missed.">    if (peakBin &lt; 0) {</span>
+<span class="nc" id="L361">      return new HumResult(0.0, 0.0, 0);</span>
+    }
+<span class="fc" id="L363">    double mag = magnitudes[peakBin];</span>
+<span class="fc" id="L364">    double ratio = mag / Math.max(median, 1e-9);</span>
+<span class="pc bpc" id="L365" title="1 of 2 branches missed.">    double relative = globalPeak &gt; 0.0 ? mag / globalPeak : 0.0;</span>
+<span class="fc" id="L366">    return new HumResult(ratio, relative, peakBin);</span>
+  }
+
+  private double harmonicRatio(
+      SpectrumSnapshot spectrum, float[] magnitudes, double targetHz, double median) {
+<span class="pc bpc" id="L371" title="1 of 2 branches missed.">    if (targetHz &gt; spectrum.sampleRate() / 2.0) {</span>
+<span class="nc" id="L372">      return 0.0;</span>
+    }
+<span class="fc" id="L374">    int peakBin =</span>
+<span class="fc" id="L375">        findPeakBinInRange(spectrum, targetHz - HUM_TOLERANCE_HZ, targetHz + HUM_TOLERANCE_HZ);</span>
+<span class="pc bpc" id="L376" title="1 of 2 branches missed.">    if (peakBin &lt; 0) {</span>
+<span class="nc" id="L377">      return 0.0;</span>
+    }
+<span class="fc" id="L379">    return magnitudes[peakBin] / Math.max(median, 1e-9);</span>
+  }
+
+  private static int findPeakBinInRange(SpectrumSnapshot spectrum, double minHz, double maxHz) {
+<span class="fc" id="L383">    float binWidth = spectrum.binWidthHz();</span>
+<span class="pc bpc" id="L384" title="1 of 2 branches missed.">    if (binWidth &lt;= 0f) {</span>
+<span class="nc" id="L385">      return -1;</span>
+    }
+<span class="fc" id="L387">    int minBin = Math.max(1, (int) Math.floor(minHz / binWidth));</span>
+<span class="fc" id="L388">    int maxBin = Math.min(spectrum.binCount() - 1, (int) Math.ceil(maxHz / binWidth));</span>
+<span class="fc" id="L389">    int peakBin = -1;</span>
+<span class="fc" id="L390">    float peakMag = 0f;</span>
+<span class="fc bfc" id="L391" title="All 2 branches covered.">    for (int i = minBin; i &lt;= maxBin; i++) {</span>
+<span class="fc" id="L392">      float m = spectrum.magnitude(i);</span>
+<span class="fc bfc" id="L393" title="All 2 branches covered.">      if (m &gt; peakMag) {</span>
+<span class="fc" id="L394">        peakMag = m;</span>
+<span class="fc" id="L395">        peakBin = i;</span>
+      }
+    }
+<span class="fc" id="L398">    return peakBin;</span>
+  }
+
+  private static double spectralFlatness(float[] magnitudes) {
+    // Geometric mean / arithmetic mean on bins above DC.
+<span class="pc bpc" id="L403" title="1 of 2 branches missed.">    if (magnitudes.length &lt;= 2) {</span>
+<span class="nc" id="L404">      return 0.0;</span>
+    }
+<span class="fc" id="L406">    double sumLog = 0.0;</span>
+<span class="fc" id="L407">    double sum = 0.0;</span>
+<span class="fc" id="L408">    int n = 0;</span>
+<span class="fc bfc" id="L409" title="All 2 branches covered.">    for (int i = 1; i &lt; magnitudes.length; i++) {</span>
+<span class="fc" id="L410">      double m = Math.max(magnitudes[i], 1e-9);</span>
+<span class="fc" id="L411">      sumLog += Math.log(m);</span>
+<span class="fc" id="L412">      sum += m;</span>
+<span class="fc" id="L413">      n++;</span>
+    }
+<span class="pc bpc" id="L415" title="2 of 4 branches missed.">    if (n == 0 || sum &lt;= 0.0) {</span>
+<span class="nc" id="L416">      return 0.0;</span>
+    }
+<span class="fc" id="L418">    double geo = Math.exp(sumLog / n);</span>
+<span class="fc" id="L419">    double arith = sum / n;</span>
+<span class="fc" id="L420">    return geo / arith;</span>
+  }
+
+  private BurstResult analyzeBurst(SpectrogramHistory history) {
+<span class="fc" id="L424">    SpectrogramFrame latest = history.latest();</span>
+<span class="pc bpc" id="L425" title="1 of 2 branches missed.">    if (latest == null) {</span>
+<span class="nc" id="L426">      return null;</span>
+    }
+<span class="fc" id="L428">    float binWidth = latest.binWidthHz();</span>
+<span class="fc" id="L429">    int startBin = Math.max(1, (int) Math.floor(highFrequencyCutoffHz / Math.max(binWidth, 1e-6)));</span>
+<span class="pc bpc" id="L430" title="1 of 2 branches missed.">    if (startBin &gt;= latest.binCount()) {</span>
+<span class="nc" id="L431">      return null;</span>
+    }
+<span class="fc" id="L433">    double currentEnergy = highBandEnergy(latest, startBin);</span>
+<span class="fc" id="L434">    int historyFrames = history.size();</span>
+<span class="pc bpc" id="L435" title="1 of 2 branches missed.">    if (historyFrames &lt; 4) {</span>
+<span class="nc" id="L436">      return null;</span>
+    }
+<span class="fc" id="L438">    double sum = 0.0;</span>
+<span class="fc" id="L439">    int count = 0;</span>
+<span class="fc" id="L440">    double peakBaseline = 0.0;</span>
+<span class="fc bfc" id="L441" title="All 2 branches covered.">    for (int i = 0; i &lt; historyFrames - 1; i++) {</span>
+<span class="fc" id="L442">      double energy = highBandEnergy(history.frameAt(i), startBin);</span>
+<span class="fc" id="L443">      sum += energy;</span>
+<span class="fc bfc" id="L444" title="All 2 branches covered.">      if (energy &gt; peakBaseline) {</span>
+<span class="fc" id="L445">        peakBaseline = energy;</span>
+      }
+<span class="fc" id="L447">      count++;</span>
+    }
+<span class="fc" id="L449">    double mean = sum / Math.max(count, 1);</span>
+<span class="fc" id="L450">    double denominator = Math.max(mean, 1e-9);</span>
+<span class="fc" id="L451">    double ratio = currentEnergy / denominator;</span>
+    // Require both elevated vs. mean and elevated vs. recent maximum to avoid sustained-noise
+    // false positives.
+<span class="fc" id="L454">    double peakRatio = currentEnergy / Math.max(peakBaseline, 1e-9);</span>
+<span class="pc bpc" id="L455" title="1 of 2 branches missed.">    if (peakRatio &lt; 1.5) {</span>
+<span class="nc" id="L456">      return null;</span>
+    }
+<span class="fc" id="L458">    int dominantHfBin = findDominantHighBandBin(latest, startBin);</span>
+<span class="fc" id="L459">    double dominantHz = latest.frequencyOfBin(dominantHfBin);</span>
+<span class="fc" id="L460">    return new BurstResult(ratio, dominantHz);</span>
+  }
+
+  private static double highBandEnergy(SpectrogramFrame frame, int startBin) {
+<span class="fc" id="L464">    float[] view = frame.magnitudesView();</span>
+<span class="fc" id="L465">    double sum = 0.0;</span>
+<span class="fc bfc" id="L466" title="All 2 branches covered.">    for (int i = startBin; i &lt; view.length; i++) {</span>
+<span class="fc" id="L467">      sum += (double) view[i] * view[i];</span>
+    }
+<span class="fc" id="L469">    return sum;</span>
+  }
+
+  private static int findDominantHighBandBin(SpectrogramFrame frame, int startBin) {
+<span class="fc" id="L473">    float[] view = frame.magnitudesView();</span>
+<span class="fc" id="L474">    int peakBin = startBin;</span>
+<span class="fc" id="L475">    float peakMag = 0f;</span>
+<span class="fc bfc" id="L476" title="All 2 branches covered.">    for (int i = startBin; i &lt; view.length; i++) {</span>
+<span class="fc bfc" id="L477" title="All 2 branches covered.">      if (view[i] &gt; peakMag) {</span>
+<span class="fc" id="L478">        peakMag = view[i];</span>
+<span class="fc" id="L479">        peakBin = i;</span>
+      }
+    }
+<span class="fc" id="L482">    return peakBin;</span>
+  }
+
+  private DriftResult analyzeDrift(SpectrogramHistory history) {
+<span class="fc" id="L486">    int frames = history.size();</span>
+<span class="pc bpc" id="L487" title="1 of 2 branches missed.">    if (frames &lt; 4) {</span>
+<span class="nc" id="L488">      return null;</span>
+    }
+<span class="fc" id="L490">    double startHz = dominantHzOf(history.frameAt(0));</span>
+<span class="fc" id="L491">    double endHz = dominantHzOf(history.frameAt(frames - 1));</span>
+<span class="fc" id="L492">    double min = Math.min(startHz, endHz);</span>
+<span class="fc" id="L493">    double max = Math.max(startHz, endHz);</span>
+<span class="fc" id="L494">    int sampleCount = Math.min(frames, 8);</span>
+<span class="fc bfc" id="L495" title="All 2 branches covered.">    for (int i = 0; i &lt; sampleCount; i++) {</span>
+<span class="fc" id="L496">      int idx = (int) Math.round((double) i * (frames - 1) / Math.max(sampleCount - 1, 1));</span>
+<span class="fc" id="L497">      double hz = dominantHzOf(history.frameAt(idx));</span>
+<span class="fc" id="L498">      min = Math.min(min, hz);</span>
+<span class="fc" id="L499">      max = Math.max(max, hz);</span>
+    }
+<span class="fc" id="L501">    double span = max - min;</span>
+<span class="fc" id="L502">    return new DriftResult(startHz, endHz, span);</span>
+  }
+
+  private static double dominantHzOf(SpectrogramFrame frame) {
+<span class="fc" id="L506">    float[] view = frame.magnitudesView();</span>
+<span class="fc" id="L507">    int peakBin = -1;</span>
+<span class="fc" id="L508">    float peakMag = 0f;</span>
+<span class="fc bfc" id="L509" title="All 2 branches covered.">    for (int i = 1; i &lt; view.length; i++) {</span>
+<span class="fc bfc" id="L510" title="All 2 branches covered.">      if (view[i] &gt; peakMag) {</span>
+<span class="fc" id="L511">        peakMag = view[i];</span>
+<span class="fc" id="L512">        peakBin = i;</span>
+      }
+    }
+<span class="pc bpc" id="L515" title="1 of 2 branches missed.">    return peakBin &lt;= 0 ? 0.0 : frame.frequencyOfBin(peakBin);</span>
+  }
+
+  private static List&lt;DiagnosisFinding&gt; sortFindings(List&lt;DiagnosisFinding&gt; findings) {
+<span class="fc" id="L519">    findings.sort(</span>
+<span class="fc" id="L520">        Comparator.&lt;DiagnosisFinding&gt;comparingInt(f -&gt; severityRank(f.severity()))</span>
+<span class="fc" id="L521">            .reversed()</span>
+<span class="fc" id="L522">            .thenComparing(Comparator.comparingDouble(DiagnosisFinding::confidence).reversed()));</span>
+<span class="fc" id="L523">    return findings;</span>
+  }
+
+  private static int severityRank(DiagnosisSeverity severity) {
+<span class="fc bfc" id="L527" title="All 3 branches covered.">    return switch (severity) {</span>
+<span class="fc" id="L528">      case CRITICAL -&gt; 3;</span>
+<span class="fc" id="L529">      case WARNING -&gt; 2;</span>
+<span class="fc" id="L530">      case INFO -&gt; 1;</span>
+    };
+  }
+
+  private static double clamp01(double v) {
+<span class="pc bpc" id="L535" title="1 of 2 branches missed.">    if (Double.isNaN(v)) {</span>
+<span class="nc" id="L536">      return 0.0;</span>
+    }
+<span class="pc bpc" id="L538" title="1 of 2 branches missed.">    if (v &lt; 0.0) {</span>
+<span class="nc" id="L539">      return 0.0;</span>
+    }
+<span class="fc bfc" id="L541" title="All 2 branches covered.">    if (v &gt; 1.0) {</span>
+<span class="fc" id="L542">      return 1.0;</span>
+    }
+<span class="fc" id="L544">    return v;</span>
+  }
+
+<span class="fc" id="L547">  private record LevelStats(double rms, double maxAbs, int frames) {}</span>
+
+<span class="fc" id="L549">  private record HumResult(double ratio, double relative, int peakBin) {}</span>
+
+<span class="fc" id="L551">  private record BurstResult(double ratio, double dominantHz) {}</span>
+
+<span class="fc" id="L553">  private record DriftResult(double startHz, double endHz, double spanHz) {}</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WingbeatSignalParameters.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.simulation</a> &gt; <span class="el_source">WingbeatSignalParameters.java</span></div><h1>WingbeatSignalParameters.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.simulation;
+
+import java.util.Collections;
+import java.util.List;
+import org.hammer.audio.experimental.acoustic.scenario.AcousticGroundTruth;
+
+/**
+ * Immutable signal-model parameters for a synthetic wingbeat-like source.
+ *
+ * &lt;p&gt;The model is a sum of sinusoidal partials (fundamental + harmonics) with optional amplitude
+ * modulation, linear frequency drift, per-sample frequency jitter and additive white noise:
+ *
+ * &lt;pre&gt;
+ *   f(t)   = fundamentalFrequencyHz + driftHzPerSecond * t + jitterHz * noise(t)
+ *   am(t)  = 1 + modulationDepth * sin(2π * modulationHz * t)         (if modulationHz &amp;gt; 0)
+ *   signal = am(t) * Σ_{k=0}^{harmonicCount-1} A_k * sin((k+1) * φ(t))
+ *            + noiseAmplitude * white_noise(t)
+ * &lt;/pre&gt;
+ *
+ * &lt;p&gt;where {@code A_k} is {@link #harmonicAmplitudes()}{@code .get(k)} when that list is provided,
+ * or {@code 1.0} otherwise, and {@code φ(t)} is the phase accumulated by integrating {@code f(t)}.
+ *
+ * &lt;p&gt;This model does not reproduce the aerodynamics of a real wing. Its purpose is to produce
+ * controlled, parameterised test signals with known ground truth so that feature-extraction and
+ * classification algorithms can be verified before real labelled recordings are available.
+ *
+ * @param fundamentalFrequencyHz emitted fundamental frequency in Hz; must be finite and positive
+ * @param harmonicCount number of partials (1 = fundamental only); must be &amp;gt;= 1
+ * @param harmonicAmplitudes per-partial amplitude coefficients for indices {@code 0 ..
+ *     harmonicCount-1}; {@code null} means all coefficients equal {@code 1.0}; when non-null its
+ *     size must equal {@link #harmonicCount()}. TODO: Replace this flat list with a HarmonicProfile
+ *     abstraction once synthetic fixtures need harmonic phases or rolloff metadata.
+ * @param modulationHz amplitude-modulation frequency in Hz; {@code 0} disables AM
+ * @param modulationDepth AM depth in {@code [0, 1]}; {@code 0} disables AM
+ * @param driftHzPerSecond linear frequency drift per second; {@code 0} for no drift
+ * @param jitterHz maximum signed per-sample frequency deviation from the instantaneous fundamental,
+ *     so the peak-to-peak jitter span is {@code 2 * jitterHz}; {@code 0} for no jitter
+ * @param noiseAmplitude additive white-noise amplitude in {@code [0, 1]}; {@code 0} for no noise
+ */
+public record WingbeatSignalParameters(
+    double fundamentalFrequencyHz,
+    int harmonicCount,
+    List&lt;Double&gt; harmonicAmplitudes,
+    double modulationHz,
+    double modulationDepth,
+    double driftHzPerSecond,
+    double jitterHz,
+    double noiseAmplitude) {
+
+<span class="fc" id="L50">  public WingbeatSignalParameters {</span>
+<span class="pc bpc" id="L51" title="1 of 4 branches missed.">    if (!Double.isFinite(fundamentalFrequencyHz) || fundamentalFrequencyHz &lt;= 0.0) {</span>
+<span class="fc" id="L52">      throw new IllegalArgumentException(&quot;fundamentalFrequencyHz must be finite and &gt; 0&quot;);</span>
+    }
+<span class="fc bfc" id="L54" title="All 2 branches covered.">    if (harmonicCount &lt; 1) {</span>
+<span class="fc" id="L55">      throw new IllegalArgumentException(&quot;harmonicCount must be &gt;= 1&quot;);</span>
+    }
+<span class="fc bfc" id="L57" title="All 2 branches covered.">    if (harmonicAmplitudes != null) {</span>
+<span class="fc bfc" id="L58" title="All 2 branches covered.">      if (harmonicAmplitudes.size() != harmonicCount) {</span>
+<span class="fc" id="L59">        throw new IllegalArgumentException(</span>
+            &quot;harmonicAmplitudes.size() must equal harmonicCount when provided&quot;);
+      }
+<span class="fc bfc" id="L62" title="All 2 branches covered.">      for (int i = 0; i &lt; harmonicAmplitudes.size(); i++) {</span>
+<span class="fc" id="L63">        Double amplitude = harmonicAmplitudes.get(i);</span>
+<span class="fc bfc" id="L64" title="All 2 branches covered.">        if (amplitude == null) {</span>
+<span class="fc" id="L65">          throw new IllegalArgumentException(</span>
+<span class="fc" id="L66">              &quot;harmonicAmplitudes[%d] must not be null&quot;.formatted(i));</span>
+        }
+<span class="fc bfc" id="L68" title="All 2 branches covered.">        if (Double.isNaN(amplitude)) {</span>
+<span class="fc" id="L69">          throw new IllegalArgumentException(&quot;harmonicAmplitudes[%d] must not be NaN&quot;.formatted(i));</span>
+        }
+<span class="fc bfc" id="L71" title="All 2 branches covered.">        if (Double.isInfinite(amplitude)) {</span>
+<span class="fc" id="L72">          throw new IllegalArgumentException(&quot;harmonicAmplitudes[%d] must be finite&quot;.formatted(i));</span>
+        }
+      }
+
+<span class="fc" id="L76">      harmonicAmplitudes = List.copyOf(harmonicAmplitudes);</span>
+    }
+<span class="pc bpc" id="L78" title="1 of 4 branches missed.">    if (!Double.isFinite(modulationHz) || modulationHz &lt; 0.0) {</span>
+<span class="fc" id="L79">      throw new IllegalArgumentException(&quot;modulationHz must be finite and &gt;= 0&quot;);</span>
+    }
+<span class="pc bpc" id="L81" title="2 of 6 branches missed.">    if (!Double.isFinite(modulationDepth) || modulationDepth &lt; 0.0 || modulationDepth &gt; 1.0) {</span>
+<span class="fc" id="L82">      throw new IllegalArgumentException(&quot;modulationDepth must be in [0, 1]&quot;);</span>
+    }
+<span class="pc bpc" id="L84" title="1 of 2 branches missed.">    if (!Double.isFinite(driftHzPerSecond)) {</span>
+<span class="nc" id="L85">      throw new IllegalArgumentException(&quot;driftHzPerSecond must be finite&quot;);</span>
+    }
+<span class="pc bpc" id="L87" title="1 of 4 branches missed.">    if (!Double.isFinite(jitterHz) || jitterHz &lt; 0.0) {</span>
+<span class="fc" id="L88">      throw new IllegalArgumentException(&quot;jitterHz must be finite and &gt;= 0&quot;);</span>
+    }
+<span class="pc bpc" id="L90" title="2 of 6 branches missed.">    if (!Double.isFinite(noiseAmplitude) || noiseAmplitude &lt; 0.0 || noiseAmplitude &gt; 1.0) {</span>
+<span class="fc" id="L91">      throw new IllegalArgumentException(&quot;noiseAmplitude must be in [0, 1]&quot;);</span>
+    }
+<span class="fc" id="L93">  }</span>
+
+  @Override
+  public List&lt;Double&gt; harmonicAmplitudes() {
+<span class="fc bfc" id="L97" title="All 2 branches covered.">    return harmonicAmplitudes == null ? null : List.copyOf(harmonicAmplitudes);</span>
+  }
+
+  /**
+   * Return the fully resolved harmonic amplitude profile used by the generator and ground truth.
+   */
+  public List&lt;Double&gt; resolvedHarmonicAmplitudes() {
+<span class="fc bfc" id="L104" title="All 2 branches covered.">    if (harmonicAmplitudes == null) {</span>
+<span class="fc" id="L105">      return Collections.nCopies(harmonicCount, 1.0);</span>
+    }
+<span class="fc" id="L107">    return harmonicAmplitudes();</span>
+  }
+
+  /**
+   * Create a minimal single-tone parameter set (fundamental only, no modulation, no noise).
+   *
+   * @param fundamentalFrequencyHz fundamental frequency in Hz; must be finite and positive
+   */
+  public static WingbeatSignalParameters of(double fundamentalFrequencyHz) {
+<span class="fc" id="L116">    return new WingbeatSignalParameters(fundamentalFrequencyHz, 1, null, 0.0, 0.0, 0.0, 0.0, 0.0);</span>
+  }
+
+  /**
+   * Create a parameter set that approximates a mosquito-like wingbeat signal with four harmonics, a
+   * small frequency drift, light jitter and a low noise floor.
+   *
+   * &lt;p&gt;The amplitudes follow a {@code 1 / (k+1)} profile (fundamental loudest). This is a rough
+   * phenomenological approximation; it does not represent any validated biological model.
+   *
+   * @param fundamentalFrequencyHz fundamental frequency in Hz; must be finite and positive
+   */
+  public static WingbeatSignalParameters mosquitoLike(double fundamentalFrequencyHz) {
+<span class="fc" id="L129">    return new WingbeatSignalParameters(</span>
+<span class="fc" id="L130">        fundamentalFrequencyHz, 4, List.of(1.0, 0.5, 0.25, 0.125), 0.0, 0.0, 0.5, 1.0, 0.02);</span>
+  }
+
+  /**
+   * Convert these parameters to an {@link AcousticGroundTruth} record suitable for benchmark
+   * comparison.
+   *
+   * &lt;p&gt;The mapping is:
+   *
+   * &lt;ul&gt;
+   *   &lt;li&gt;{@link #fundamentalFrequencyHz()} → {@link AcousticGroundTruth#fundamentalFrequencyHz()}
+   *   &lt;li&gt;{@link #harmonicCount()} → {@link AcousticGroundTruth#harmonicCount()}
+   *   &lt;li&gt;{@link #resolvedHarmonicAmplitudes()} → {@link AcousticGroundTruth#harmonics()}
+   *   &lt;li&gt;{@link #modulationHz()} → {@link AcousticGroundTruth#modulationFrequencyHz()}
+   *   &lt;li&gt;{@link #modulationDepth()} → {@link AcousticGroundTruth#modulationDepth()}
+   *   &lt;li&gt;{@link #jitterHz()} → {@link AcousticGroundTruth#jitter()} as a maximum signed deviation
+   *       in Hz
+   *   &lt;li&gt;{@link #driftHzPerSecond()} → {@link AcousticGroundTruth#drift()}
+   *   &lt;li&gt;{@link #noiseAmplitude()} → {@link AcousticGroundTruth#noiseAmplitude()}
+   * &lt;/ul&gt;
+   */
+  public AcousticGroundTruth toGroundTruth() {
+<span class="fc" id="L152">    return new AcousticGroundTruth(</span>
+        fundamentalFrequencyHz,
+<span class="fc" id="L154">        harmonicCount,</span>
+<span class="fc" id="L155">        resolvedHarmonicAmplitudes(),</span>
+<span class="fc" id="L156">        modulationHz,</span>
+<span class="fc" id="L157">        modulationDepth,</span>
+<span class="fc" id="L158">        jitterHz,</span>
+<span class="fc" id="L159">        driftHzPerSecond,</span>
+<span class="fc" id="L160">        noiseAmplitude,</span>
+        null);
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

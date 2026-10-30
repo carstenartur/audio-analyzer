@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>FileStoreRecordingStorageProbe.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.recording.runtime</a> &gt; <span class="el_source">FileStoreRecordingStorageProbe.java</span></div><h1>FileStoreRecordingStorageProbe.java</h1><pre class="source lang-java linenums">package org.hammer.audio.recording.runtime;
+
+import java.io.IOException;
+import java.nio.file.FileStore;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.Instant;
+import java.util.Objects;
+
+/** Recording-storage probe backed by {@link FileStore}. */
+<span class="nc" id="L11">public final class FileStoreRecordingStorageProbe implements RecordingStorageProbe {</span>
+
+  static final long MINIMUM_WARNING_BYTES = 256L * 1024L * 1024L;
+  static final long MINIMUM_CRITICAL_BYTES = 64L * 1024L * 1024L;
+  static final long WARNING_SECONDS = 300L;
+  static final long CRITICAL_SECONDS = 30L;
+
+  @Override
+  public RecordingStorageStatus probe(
+      Path destination,
+      long bytesWritten,
+      double measuredBytesPerSecond,
+      double expectedBytesPerSecond,
+      Instant checkedAt)
+      throws IOException {
+<span class="nc" id="L26">    Objects.requireNonNull(destination, &quot;destination&quot;);</span>
+<span class="nc" id="L27">    Objects.requireNonNull(checkedAt, &quot;checkedAt&quot;);</span>
+<span class="nc" id="L28">    Path normalized = destination.toAbsolutePath().normalize();</span>
+<span class="nc" id="L29">    Path existing = nearestExistingPath(normalized);</span>
+<span class="nc" id="L30">    FileStore store = Files.getFileStore(existing);</span>
+<span class="nc" id="L31">    long usable = store.getUsableSpace();</span>
+<span class="nc" id="L32">    long unallocated = store.getUnallocatedSpace();</span>
+<span class="nc" id="L33">    long total = store.getTotalSpace();</span>
+<span class="nc bnc" id="L34" title="All 2 branches missed.">    Path writablePath = Files.isDirectory(existing) ? existing : existing.getParent();</span>
+<span class="nc bnc" id="L35" title="All 4 branches missed.">    boolean writable = writablePath != null &amp;&amp; Files.isWritable(writablePath);</span>
+    double effectiveRate =
+<span class="nc bnc" id="L37" title="All 2 branches missed.">        measuredBytesPerSecond &gt; 0.0 ? measuredBytesPerSecond : expectedBytesPerSecond;</span>
+<span class="nc bnc" id="L38" title="All 2 branches missed.">    long remainingSeconds = effectiveRate &gt; 0.0 ? (long) Math.floor(usable / effectiveRate) : -1L;</span>
+<span class="nc" id="L39">    long warningBytes =</span>
+<span class="nc" id="L40">        Math.max(MINIMUM_WARNING_BYTES, safeMultiply(expectedBytesPerSecond, WARNING_SECONDS));</span>
+<span class="nc" id="L41">    long criticalBytes =</span>
+<span class="nc" id="L42">        Math.max(MINIMUM_CRITICAL_BYTES, safeMultiply(expectedBytesPerSecond, CRITICAL_SECONDS));</span>
+    RecordingStorageLevel level;
+<span class="nc bnc" id="L44" title="All 8 branches missed.">    if (!writable</span>
+        || usable &lt;= criticalBytes
+        || (remainingSeconds &gt;= 0 &amp;&amp; remainingSeconds &lt;= CRITICAL_SECONDS)) {
+<span class="nc" id="L47">      level = RecordingStorageLevel.CRITICAL;</span>
+<span class="nc bnc" id="L48" title="All 6 branches missed.">    } else if (usable &lt;= warningBytes</span>
+        || (remainingSeconds &gt;= 0 &amp;&amp; remainingSeconds &lt;= WARNING_SECONDS)) {
+<span class="nc" id="L50">      level = RecordingStorageLevel.WARNING;</span>
+    } else {
+<span class="nc" id="L52">      level = RecordingStorageLevel.NORMAL;</span>
+    }
+<span class="nc" id="L54">    return new RecordingStorageStatus(</span>
+        normalized,
+<span class="nc" id="L56">        store.name(),</span>
+<span class="nc" id="L57">        store.type(),</span>
+        writable,
+        usable,
+        unallocated,
+        total,
+        bytesWritten,
+        measuredBytesPerSecond,
+        expectedBytesPerSecond,
+        remainingSeconds,
+        level,
+        checkedAt,
+        &quot;&quot;);
+  }
+
+  private static Path nearestExistingPath(Path path) throws IOException {
+<span class="nc" id="L72">    Path candidate = path;</span>
+<span class="nc bnc" id="L73" title="All 4 branches missed.">    while (candidate != null &amp;&amp; !Files.exists(candidate)) {</span>
+<span class="nc" id="L74">      candidate = candidate.getParent();</span>
+    }
+<span class="nc bnc" id="L76" title="All 2 branches missed.">    if (candidate == null) {</span>
+<span class="nc" id="L77">      throw new IOException(&quot;No existing ancestor for recording destination: &quot; + path);</span>
+    }
+<span class="nc" id="L79">    return candidate;</span>
+  }
+
+  private static long safeMultiply(double bytesPerSecond, long seconds) {
+<span class="nc bnc" id="L83" title="All 4 branches missed.">    if (bytesPerSecond &lt;= 0.0 || !Double.isFinite(bytesPerSecond)) {</span>
+<span class="nc" id="L84">      return 0L;</span>
+    }
+<span class="nc" id="L86">    double value = bytesPerSecond * seconds;</span>
+<span class="nc bnc" id="L87" title="All 2 branches missed.">    return value &gt;= Long.MAX_VALUE ? Long.MAX_VALUE : (long) Math.ceil(value);</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

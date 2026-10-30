@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WorkflowSessionEntity.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.infrastructure.workflow.collaboration.store</a> &gt; <span class="el_source">WorkflowSessionEntity.java</span></div><h1>WorkflowSessionEntity.java</h1><pre class="source lang-java linenums">package org.hammer.audio.infrastructure.workflow.collaboration.store;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.Id;
+import jakarta.persistence.Index;
+import jakarta.persistence.Lob;
+import jakarta.persistence.Table;
+import jakarta.persistence.Version;
+import java.time.Instant;
+import org.hammer.audio.workflow.collaboration.CollaborationMode;
+import org.hammer.audio.workflow.collaboration.OperationActor;
+import org.hammer.audio.workflow.collaboration.store.StoredWorkflowSession;
+
+/** Hibernate-owned durable collaboration-session aggregate. */
+@Entity
+@Table(
+    name = &quot;workflow_collaboration_session&quot;,
+    indexes = {
+      @Index(name = &quot;idx_workflow_session_open&quot;, columnList = &quot;session_closed&quot;),
+      @Index(name = &quot;idx_workflow_session_workflow&quot;, columnList = &quot;workflow_id&quot;)
+    })
+public class WorkflowSessionEntity {
+
+  @Id
+  @Column(name = &quot;session_id&quot;, nullable = false, length = 255)
+  private String storedSessionId;
+
+  @Version
+  @Column(name = &quot;lock_version&quot;, nullable = false)
+  private long lockVersion;
+
+  @Enumerated(EnumType.STRING)
+  @Column(name = &quot;collaboration_mode&quot;, nullable = false, length = 64)
+  private CollaborationMode mode;
+
+  @Column(name = &quot;owner_actor_id&quot;, nullable = false, length = 255)
+  private String ownerActorId;
+
+  @Column(name = &quot;owner_user_id&quot;, nullable = false, length = 255)
+  private String ownerUserId;
+
+  @Column(name = &quot;owner_display_name&quot;, nullable = false, length = 1024)
+  private String ownerDisplayName;
+
+  @Column(name = &quot;created_at&quot;, nullable = false)
+  private Instant createdAt;
+
+  @Column(name = &quot;workflow_id&quot;, nullable = false, length = 255)
+  private String storedWorkflowId;
+
+  @Lob
+  @Column(name = &quot;workflow_dsl&quot;, nullable = false)
+  private String storedWorkflowDsl;
+
+  @Column(name = &quot;semantic_revision&quot;, nullable = false)
+  private long storedSemanticRevision;
+
+  @Column(name = &quot;event_sequence&quot;, nullable = false)
+  private long storedEventSequence;
+
+  @Column(name = &quot;session_closed&quot;, nullable = false)
+  private boolean sessionClosed;
+
+<span class="fc" id="L67">  protected WorkflowSessionEntity() {</span>
+    // Required by Jakarta Persistence.
+<span class="fc" id="L69">  }</span>
+
+  static WorkflowSessionEntity from(StoredWorkflowSession stored) {
+<span class="fc" id="L72">    WorkflowSessionEntity entity = new WorkflowSessionEntity();</span>
+<span class="fc" id="L73">    entity.storedSessionId = stored.sessionId();</span>
+<span class="fc" id="L74">    entity.mode = stored.mode();</span>
+<span class="fc" id="L75">    entity.ownerActorId = stored.owner().actorId();</span>
+<span class="fc" id="L76">    entity.ownerUserId = stored.owner().userId();</span>
+<span class="fc" id="L77">    entity.ownerDisplayName = stored.owner().displayName();</span>
+<span class="fc" id="L78">    entity.createdAt = stored.createdAt();</span>
+<span class="fc" id="L79">    entity.storedWorkflowId = stored.workflowId();</span>
+<span class="fc" id="L80">    entity.storedWorkflowDsl = stored.workflowDsl();</span>
+<span class="fc" id="L81">    entity.storedSemanticRevision = stored.revision();</span>
+<span class="fc" id="L82">    entity.storedEventSequence = stored.sequence();</span>
+<span class="fc" id="L83">    entity.sessionClosed = stored.closed();</span>
+<span class="fc" id="L84">    return entity;</span>
+  }
+
+  StoredWorkflowSession toStoredSession() {
+<span class="fc" id="L88">    return new StoredWorkflowSession(</span>
+        storedSessionId,
+        mode,
+        new OperationActor(ownerActorId, ownerUserId, ownerDisplayName),
+        createdAt,
+        storedWorkflowId,
+        storedWorkflowDsl,
+        storedSemanticRevision,
+        storedEventSequence,
+        sessionClosed);
+  }
+
+  void applyAcceptedOperation(
+      String updatedWorkflowId,
+      String updatedWorkflowDsl,
+      long updatedRevision,
+      long updatedSequence) {
+<span class="fc" id="L105">    this.storedWorkflowId = updatedWorkflowId;</span>
+<span class="fc" id="L106">    this.storedWorkflowDsl = updatedWorkflowDsl;</span>
+<span class="fc" id="L107">    this.storedSemanticRevision = updatedRevision;</span>
+<span class="fc" id="L108">    this.storedEventSequence = updatedSequence;</span>
+<span class="fc" id="L109">  }</span>
+
+  void advanceEventSequence(long updatedSequence) {
+<span class="fc" id="L112">    this.storedEventSequence = updatedSequence;</span>
+<span class="fc" id="L113">  }</span>
+
+  void markClosed(long updatedSequence) {
+<span class="fc" id="L116">    this.storedEventSequence = updatedSequence;</span>
+<span class="fc" id="L117">    this.sessionClosed = true;</span>
+<span class="fc" id="L118">  }</span>
+
+  String sessionId() {
+<span class="nc" id="L121">    return storedSessionId;</span>
+  }
+
+  String workflowId() {
+<span class="fc" id="L125">    return storedWorkflowId;</span>
+  }
+
+  String workflowDsl() {
+<span class="fc" id="L129">    return storedWorkflowDsl;</span>
+  }
+
+  long semanticRevision() {
+<span class="fc" id="L133">    return storedSemanticRevision;</span>
+  }
+
+  long eventSequence() {
+<span class="fc" id="L137">    return storedEventSequence;</span>
+  }
+
+  boolean closed() {
+<span class="fc" id="L141">    return sessionClosed;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

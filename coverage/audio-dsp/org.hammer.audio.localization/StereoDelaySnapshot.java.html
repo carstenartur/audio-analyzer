@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>StereoDelaySnapshot.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer DSP and Analysis</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.localization</a> &gt; <span class="el_source">StereoDelaySnapshot.java</span></div><h1>StereoDelaySnapshot.java</h1><pre class="source lang-java linenums">package org.hammer.audio.localization;
+
+import java.util.Objects;
+import org.hammer.audio.analysis.AnalysisSnapshot;
+
+/** Immutable result of stereo inter-channel delay analysis. */
+public final class StereoDelaySnapshot implements AnalysisSnapshot {
+
+  private final long sourceFrameIndex;
+  private final long sourceTimestampNanos;
+  private final StereoDelayStatus status;
+  private final int delaySamples;
+  private final double delayMillis;
+  private final double pathLengthDifferenceMeters;
+  private final double angleDegrees;
+  private final double confidence;
+  private final double microphoneSpacingMeters;
+  private final double speedOfSoundMetersPerSecond;
+  private final int minCorrelationLagSamples;
+  private final float[] correlationByLag;
+
+  /**
+   * Create a stereo delay snapshot.
+   *
+   * @param sourceFrameIndex source block frame index
+   * @param sourceTimestampNanos source block timestamp
+   * @param status validity status
+   * @param delaySamples estimated right-channel delay relative to left, in samples
+   * @param delayMillis estimated delay in milliseconds
+   * @param pathLengthDifferenceMeters path-length difference implied by delay
+   * @param angleDegrees approximate angle of arrival from broadside, or NaN
+   * @param confidence normalized cross-correlation confidence
+   * @param microphoneSpacingMeters microphone spacing used for physical checks
+   * @param speedOfSoundMetersPerSecond speed of sound used for conversion
+   * @param minCorrelationLagSamples lag represented by index zero of correlationByLag
+   * @param correlationByLag normalized cross-correlation curve, defensively copied
+   */
+  public StereoDelaySnapshot(
+      long sourceFrameIndex,
+      long sourceTimestampNanos,
+      StereoDelayStatus status,
+      int delaySamples,
+      double delayMillis,
+      double pathLengthDifferenceMeters,
+      double angleDegrees,
+      double confidence,
+      double microphoneSpacingMeters,
+      double speedOfSoundMetersPerSecond,
+      int minCorrelationLagSamples,
+<span class="fc" id="L50">      float[] correlationByLag) {</span>
+<span class="fc" id="L51">    this.sourceFrameIndex = sourceFrameIndex;</span>
+<span class="fc" id="L52">    this.sourceTimestampNanos = sourceTimestampNanos;</span>
+<span class="fc" id="L53">    this.status = Objects.requireNonNull(status, &quot;status&quot;);</span>
+<span class="fc" id="L54">    this.delaySamples = delaySamples;</span>
+<span class="fc" id="L55">    this.delayMillis = delayMillis;</span>
+<span class="fc" id="L56">    this.pathLengthDifferenceMeters = pathLengthDifferenceMeters;</span>
+<span class="fc" id="L57">    this.angleDegrees = angleDegrees;</span>
+<span class="fc" id="L58">    this.confidence = confidence;</span>
+<span class="fc" id="L59">    this.microphoneSpacingMeters = microphoneSpacingMeters;</span>
+<span class="fc" id="L60">    this.speedOfSoundMetersPerSecond = speedOfSoundMetersPerSecond;</span>
+<span class="fc" id="L61">    this.minCorrelationLagSamples = minCorrelationLagSamples;</span>
+<span class="pc bpc" id="L62" title="1 of 2 branches missed.">    this.correlationByLag = correlationByLag == null ? new float[0] : correlationByLag.clone();</span>
+<span class="fc" id="L63">  }</span>
+
+  @Override
+  public long sourceFrameIndex() {
+<span class="nc" id="L67">    return sourceFrameIndex;</span>
+  }
+
+  @Override
+  public long sourceTimestampNanos() {
+<span class="nc" id="L72">    return sourceTimestampNanos;</span>
+  }
+
+  public StereoDelayStatus status() {
+<span class="fc" id="L76">    return status;</span>
+  }
+
+  public boolean valid() {
+<span class="fc bfc" id="L80" title="All 2 branches covered.">    return status == StereoDelayStatus.VALID;</span>
+  }
+
+  public int delaySamples() {
+<span class="fc" id="L84">    return delaySamples;</span>
+  }
+
+  public double delayMillis() {
+<span class="fc" id="L88">    return delayMillis;</span>
+  }
+
+  public double pathLengthDifferenceMeters() {
+<span class="nc" id="L92">    return pathLengthDifferenceMeters;</span>
+  }
+
+  public double angleDegrees() {
+<span class="fc" id="L96">    return angleDegrees;</span>
+  }
+
+  public double confidence() {
+<span class="fc" id="L100">    return confidence;</span>
+  }
+
+  public double microphoneSpacingMeters() {
+<span class="nc" id="L104">    return microphoneSpacingMeters;</span>
+  }
+
+  public double speedOfSoundMetersPerSecond() {
+<span class="nc" id="L108">    return speedOfSoundMetersPerSecond;</span>
+  }
+
+  public int minCorrelationLagSamples() {
+<span class="fc" id="L112">    return minCorrelationLagSamples;</span>
+  }
+
+  public int maxCorrelationLagSamples() {
+<span class="fc" id="L116">    return minCorrelationLagSamples + correlationByLag.length - 1;</span>
+  }
+
+  public int correlationLagForIndex(int index) {
+<span class="nc" id="L120">    return minCorrelationLagSamples + index;</span>
+  }
+
+  public float[] correlationByLag() {
+<span class="fc" id="L124">    return correlationByLag.clone();</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

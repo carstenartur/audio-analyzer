@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>SpectrumAnalyzer.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer DSP and Analysis</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.analysis</a> &gt; <span class="el_source">SpectrumAnalyzer.java</span></div><h1>SpectrumAnalyzer.java</h1><pre class="source lang-java linenums">package org.hammer.audio.analysis;
+
+import org.hammer.audio.core.AudioBlock;
+
+/**
+ * FFT-based spectrum analyzer.
+ *
+ * &lt;p&gt;Takes one channel of an {@link AudioBlock}, applies a Hann window of the configured FFT size,
+ * computes the forward FFT and produces a {@link SpectrumSnapshot} containing the one-sided
+ * magnitude spectrum.
+ *
+ * &lt;p&gt;If the input block contains fewer frames than the FFT size, the remaining samples are
+ * zero-padded. If it contains more, only the first {@code fftSize} frames are analyzed.
+ *
+ * &lt;p&gt;Internally this analyzer caches per-instance scratch buffers; instances are &lt;strong&gt;not
+ * thread-safe&lt;/strong&gt;. Create one per analysis thread or guard externally.
+ *
+ * @author refactoring
+ */
+public final class SpectrumAnalyzer implements AnalysisModule&lt;SpectrumSnapshot&gt; {
+
+  private final int fftSize;
+  private final int channel;
+  private final float sampleRate;
+  private final Fft fft;
+  private final float[] window;
+  private final float[] re;
+  private final float[] im;
+  private final float[] magnitudes;
+
+  /**
+   * Create a new spectrum analyzer.
+   *
+   * @param fftSize FFT size; must be a power of two and {@code &gt;= 2}
+   * @param channel channel index of the source block to analyze (0 for mono)
+   * @param sampleRate sample rate of the source audio in Hz
+   * @throws IllegalArgumentException if any parameter is invalid
+   */
+<span class="fc" id="L39">  public SpectrumAnalyzer(int fftSize, int channel, float sampleRate) {</span>
+<span class="fc bfc" id="L40" title="All 2 branches covered.">    if (channel &lt; 0) {</span>
+<span class="fc" id="L41">      throw new IllegalArgumentException(&quot;channel must be &gt;= 0, was &quot; + channel);</span>
+    }
+<span class="fc bfc" id="L43" title="All 2 branches covered.">    if (!(sampleRate &gt; 0f)) {</span>
+<span class="fc" id="L44">      throw new IllegalArgumentException(&quot;sampleRate must be &gt; 0, was &quot; + sampleRate);</span>
+    }
+<span class="fc" id="L46">    this.fftSize = fftSize;</span>
+<span class="fc" id="L47">    this.channel = channel;</span>
+<span class="fc" id="L48">    this.sampleRate = sampleRate;</span>
+<span class="fc" id="L49">    this.fft = new Fft(fftSize);</span>
+<span class="fc" id="L50">    this.window = hannWindow(fftSize);</span>
+<span class="fc" id="L51">    this.re = new float[fftSize];</span>
+<span class="fc" id="L52">    this.im = new float[fftSize];</span>
+<span class="fc" id="L53">    this.magnitudes = new float[fftSize / 2 + 1];</span>
+<span class="fc" id="L54">  }</span>
+
+  @Override
+  public SpectrumSnapshot analyze(AudioBlock block) {
+<span class="fc" id="L58">    float[] samples = block.channelView(channel);</span>
+<span class="fc" id="L59">    int n = Math.min(samples.length, fftSize);</span>
+
+    // Apply Hann window and zero-pad remainder.
+<span class="fc bfc" id="L62" title="All 2 branches covered.">    for (int i = 0; i &lt; n; i++) {</span>
+<span class="fc" id="L63">      re[i] = samples[i] * window[i];</span>
+<span class="fc" id="L64">      im[i] = 0f;</span>
+    }
+<span class="pc bpc" id="L66" title="1 of 2 branches missed.">    for (int i = n; i &lt; fftSize; i++) {</span>
+<span class="nc" id="L67">      re[i] = 0f;</span>
+<span class="nc" id="L68">      im[i] = 0f;</span>
+    }
+
+<span class="fc" id="L71">    fft.forward(re, im);</span>
+<span class="fc" id="L72">    fft.magnitudes(re, im, magnitudes);</span>
+
+<span class="fc" id="L74">    return new SpectrumSnapshot(</span>
+<span class="fc" id="L75">        block.frameIndex(), block.timestampNanos(), channel, sampleRate, fftSize, magnitudes);</span>
+  }
+
+  /**
+   * @return the configured FFT size
+   */
+  public int fftSize() {
+<span class="nc" id="L82">    return fftSize;</span>
+  }
+
+  /** Compute a Hann window of length {@code n}. */
+  private static float[] hannWindow(int n) {
+<span class="fc" id="L87">    float[] w = new float[n];</span>
+<span class="pc bpc" id="L88" title="1 of 2 branches missed.">    if (n &lt;= 1) {</span>
+<span class="nc bnc" id="L89" title="All 2 branches missed.">      if (n == 1) {</span>
+<span class="nc" id="L90">        w[0] = 1f;</span>
+      }
+<span class="nc" id="L92">      return w;</span>
+    }
+<span class="fc" id="L94">    double scale = 2.0 * Math.PI / (n - 1);</span>
+<span class="fc bfc" id="L95" title="All 2 branches covered.">    for (int i = 0; i &lt; n; i++) {</span>
+<span class="fc" id="L96">      w[i] = (float) (0.5 * (1.0 - Math.cos(scale * i)));</span>
+    }
+<span class="fc" id="L98">    return w;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

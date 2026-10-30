@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ExperimentDocumentCli.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experiment Document</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experiment.document</a> &gt; <span class="el_source">ExperimentDocumentCli.java</span></div><h1>ExperimentDocumentCli.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experiment.document;
+
+import java.io.IOException;
+import java.nio.file.Path;
+
+/** Headless validation and normalization entry point for portable experiment documents. */
+public final class ExperimentDocumentCli {
+
+  private ExperimentDocumentCli() {
+    // utility class
+  }
+
+  /**
+   * Validate or normalize a portable document.
+   *
+   * &lt;p&gt;Usage: {@code validate input.audioexp} or {@code normalize input.audioexp output.audioexp}.
+   */
+  public static void main(String[] args) {
+<span class="nc" id="L19">    int exit = run(args, System.out, System.err);</span>
+<span class="nc bnc" id="L20" title="All 2 branches missed.">    if (exit != 0) {</span>
+<span class="nc" id="L21">      System.exit(exit);</span>
+    }
+<span class="nc" id="L23">  }</span>
+
+  static int run(String[] args, java.io.PrintStream out, java.io.PrintStream error) {
+<span class="fc bfc" id="L26" title="All 6 branches covered.">    if (!((args.length == 2 &amp;&amp; &quot;validate&quot;.equals(args[0]))</span>
+<span class="pc bpc" id="L27" title="1 of 2 branches missed.">        || (args.length == 3 &amp;&amp; &quot;normalize&quot;.equals(args[0])))) {</span>
+<span class="fc" id="L28">      error.println(</span>
+          &quot;Usage: validate &lt;input.audioexp&gt; | normalize &lt;input.audioexp&gt; &lt;output.audioexp&gt;&quot;);
+<span class="fc" id="L30">      return 2;</span>
+    }
+<span class="fc" id="L32">    ExperimentDocumentService service = new ExperimentDocumentService(java.util.List.of());</span>
+    try {
+<span class="fc" id="L34">      Path source = Path.of(args[1]);</span>
+<span class="fc" id="L35">      ExperimentDocumentPreview preview = service.preview(source);</span>
+<span class="pc bpc" id="L36" title="1 of 4 branches missed.">      if (&quot;validate&quot;.equals(args[0]) &amp;&amp; args.length == 2) {</span>
+<span class="fc" id="L37">        out.println(&quot;VALID &quot; + preview.canonicalSha256());</span>
+<span class="fc" id="L38">        out.println(&quot;experiment=&quot; + preview.document().experiment().name());</span>
+<span class="fc" id="L39">        out.println(&quot;executionAllowed=&quot; + preview.executionAllowed());</span>
+<span class="fc" id="L40">        out.println(&quot;readOnly=&quot; + preview.readOnly());</span>
+<span class="fc" id="L41">        out.println(service.inspectionJson(preview));</span>
+<span class="fc" id="L42">        preview</span>
+<span class="fc" id="L43">            .diagnostics()</span>
+<span class="fc" id="L44">            .forEach(</span>
+<span class="nc" id="L45">                item -&gt; out.println(item.severity() + &quot; &quot; + item.pointer() + &quot; &quot; + item.message()));</span>
+<span class="pc bpc" id="L46" title="1 of 2 branches missed.">        return preview.executionAllowed() ? 0 : 1;</span>
+      }
+<span class="pc bpc" id="L48" title="2 of 4 branches missed.">      if (&quot;normalize&quot;.equals(args[0]) &amp;&amp; args.length == 3) {</span>
+<span class="nc" id="L49">        ExperimentDocumentPreview normalized = service.normalize(source, Path.of(args[2]));</span>
+<span class="nc" id="L50">        out.println(&quot;SAVED &quot; + normalized.canonicalSha256());</span>
+<span class="nc" id="L51">        return 0;</span>
+      }
+<span class="nc" id="L53">      error.println(&quot;Unsupported command or argument count&quot;);</span>
+<span class="nc" id="L54">      return 2;</span>
+<span class="nc" id="L55">    } catch (ExperimentDocumentException exception) {</span>
+<span class="nc" id="L56">      error.println(exception.code() + &quot; &quot; + exception.pointer() + &quot; &quot; + exception.getMessage());</span>
+<span class="nc" id="L57">      return 1;</span>
+<span class="fc" id="L58">    } catch (IOException | RuntimeException exception) {</span>
+<span class="fc" id="L59">      error.println(exception.getClass().getSimpleName() + &quot;: &quot; + exception.getMessage());</span>
+<span class="fc" id="L60">      return 1;</span>
+    }
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>RuleBasedWingbeatClassifier.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.wingbeat</a> &gt; <span class="el_source">RuleBasedWingbeatClassifier.java</span></div><h1>RuleBasedWingbeatClassifier.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.wingbeat;
+
+import java.util.Objects;
+
+/**
+ * Rule-based baseline wingbeat classifier.
+ *
+ * &lt;p&gt;Classification is based on frequency thresholds derived from published mosquito wingbeat
+ * literature. The boundaries are approximate and species-dependent; this classifier is intended as
+ * a reproducible, transparent baseline rather than a production-grade identifier.
+ *
+ * &lt;h3&gt;Classification logic&lt;/h3&gt;
+ *
+ * &lt;ol&gt;
+ *   &lt;li&gt;If the fundamental frequency falls outside the broadest mosquito-like range, the result is
+ *       {@link WingbeatLabel#UNKNOWN}.
+ *   &lt;li&gt;Within the mosquito-like range, the frequency is compared against empirical sub-ranges:
+ *       &lt;ul&gt;
+ *         &lt;li&gt;{@link WingbeatLabel#POSSIBLY_BLOOD_FED_FEMALE}: 300–430 Hz (experimental lowest
+ *             female range, capped to low confidence)
+ *         &lt;li&gt;{@link WingbeatLabel#FEMALE_LIKELY}: 430–550 Hz (typical female range)
+ *         &lt;li&gt;{@link WingbeatLabel#MALE_LIKELY}: above the overlap boundary (≥550 Hz)
+ *         &lt;li&gt;{@link WingbeatLabel#MOSQUITO_LIKE}: near the 550 Hz boundary; returned with reduced
+ *             confidence because the male/female ranges overlap here
+ *       &lt;/ul&gt;
+ * &lt;/ol&gt;
+ *
+ * &lt;h3&gt;Assumptions and limitations&lt;/h3&gt;
+ *
+ * &lt;ul&gt;
+ *   &lt;li&gt;Frequency thresholds represent approximate ranges for &lt;em&gt;Anopheles gambiae&lt;/em&gt; and
+ *       similar species. Other mosquito species may have different ranges.
+ *   &lt;li&gt;The {@link WingbeatLabel#POSSIBLY_BLOOD_FED_FEMALE} branch is intentionally conservative:
+ *       it is an exploratory label with a hard confidence cap and must not be read as a confirmed
+ *       feeding-state prediction.
+ *   &lt;li&gt;Environmental factors such as temperature, humidity and fatigue affect wingbeat frequency
+ *       but are not modelled.
+ *   &lt;li&gt;The classifier uses only the fundamental frequency and the feature confidence. Future
+ *       implementations may incorporate harmonic structure, SNR and temporal features.
+ *   &lt;li&gt;Confidence values are heuristic scores and have not been calibrated against a validated
+ *       dataset. Do not interpret them as probabilities without empirical calibration.
+ * &lt;/ul&gt;
+ *
+ * &lt;h3&gt;Expected accuracy&lt;/h3&gt;
+ *
+ * Without a validated labelled dataset, accuracy cannot be stated quantitatively. Evaluate this
+ * classifier using {@link WingbeatDataset} before operational use.
+ */
+<span class="fc" id="L49">public final class RuleBasedWingbeatClassifier implements WingbeatClassifier {</span>
+
+  /** Lowest frequency considered mosquito-like (Hz). */
+  static final double MOSQUITO_BAND_LOW_HZ = 300.0;
+
+  /** Highest frequency considered mosquito-like (Hz). */
+  static final double MOSQUITO_BAND_HIGH_HZ = 800.0;
+
+  /** Upper bound of the blood-fed-female sub-range (Hz). */
+  static final double BLOOD_FED_FEMALE_HIGH_HZ = 430.0;
+
+  /** Maximum confidence for the experimental lowest-frequency female-like label. */
+  static final double MAX_EXPERIMENTAL_BLOOD_FED_CONFIDENCE = 0.35;
+
+  /** Transition frequency between female-likely and male-likely (Hz). */
+  static final double FEMALE_MALE_BOUNDARY_HZ = 550.0;
+
+  /**
+   * Minimum band score below which the boundary region returns {@link WingbeatLabel#MOSQUITO_LIKE}
+   * instead of {@link WingbeatLabel#MALE_LIKELY}.
+   */
+  private static final double OVERLAP_THRESHOLD = 0.15;
+
+  @Override
+  public ClassificationResult classify(WingbeatFeatureVector features) {
+<span class="fc" id="L74">    Objects.requireNonNull(features, &quot;features&quot;);</span>
+<span class="fc" id="L75">    double f = features.fundamentalFrequencyHz();</span>
+<span class="fc bfc" id="L76" title="All 4 branches covered.">    if (f &lt; MOSQUITO_BAND_LOW_HZ || f &gt; MOSQUITO_BAND_HIGH_HZ) {</span>
+<span class="fc" id="L77">      return new ClassificationResult(WingbeatLabel.UNKNOWN, outOfRangeConfidence(f), features);</span>
+    }
+<span class="fc" id="L79">    return subClassify(features, f);</span>
+  }
+
+  private static ClassificationResult subClassify(WingbeatFeatureVector features, double f) {
+<span class="fc" id="L83">    double bandScore = bandScore(f, MOSQUITO_BAND_LOW_HZ, MOSQUITO_BAND_HIGH_HZ);</span>
+<span class="fc" id="L84">    double baseConfidence = Math.min(1.0, bandScore * features.featureConfidence());</span>
+
+<span class="fc bfc" id="L86" title="All 2 branches covered.">    if (f &lt; BLOOD_FED_FEMALE_HIGH_HZ) {</span>
+<span class="fc" id="L87">      double subScore = bandScore(f, MOSQUITO_BAND_LOW_HZ, BLOOD_FED_FEMALE_HIGH_HZ);</span>
+<span class="fc" id="L88">      return new ClassificationResult(</span>
+          WingbeatLabel.POSSIBLY_BLOOD_FED_FEMALE,
+<span class="fc" id="L90">          Math.min(MAX_EXPERIMENTAL_BLOOD_FED_CONFIDENCE, Math.min(1.0, baseConfidence * subScore)),</span>
+          features);
+    }
+<span class="fc bfc" id="L93" title="All 2 branches covered.">    if (f &lt; FEMALE_MALE_BOUNDARY_HZ) {</span>
+<span class="fc" id="L94">      double subScore = bandScore(f, BLOOD_FED_FEMALE_HIGH_HZ, FEMALE_MALE_BOUNDARY_HZ);</span>
+<span class="fc" id="L95">      return new ClassificationResult(</span>
+<span class="fc" id="L96">          WingbeatLabel.FEMALE_LIKELY, Math.min(1.0, baseConfidence * subScore), features);</span>
+    }
+<span class="fc" id="L98">    double maleScore = bandScore(f, FEMALE_MALE_BOUNDARY_HZ, MOSQUITO_BAND_HIGH_HZ);</span>
+<span class="fc bfc" id="L99" title="All 2 branches covered.">    if (maleScore &lt; OVERLAP_THRESHOLD) {</span>
+<span class="fc" id="L100">      return new ClassificationResult(</span>
+<span class="fc" id="L101">          WingbeatLabel.MOSQUITO_LIKE, Math.min(1.0, baseConfidence * maleScore), features);</span>
+    }
+<span class="fc" id="L103">    return new ClassificationResult(</span>
+        WingbeatLabel.MALE_LIKELY,
+<span class="fc" id="L105">        Math.min(1.0, baseConfidence * (maleScore - OVERLAP_THRESHOLD)),</span>
+        features);
+  }
+
+  /**
+   * Compute a band-position score in {@code [0,1]}: {@code 0} at either edge, {@code 1} at the
+   * midpoint.
+   */
+  private static double bandScore(double value, double low, double high) {
+<span class="pc bpc" id="L114" title="1 of 2 branches missed.">    if (low &gt;= high) {</span>
+<span class="nc" id="L115">      return 1.0;</span>
+    }
+<span class="fc" id="L117">    double mid = (low + high) / 2.0;</span>
+<span class="fc" id="L118">    double halfWidth = (high - low) / 2.0;</span>
+<span class="fc" id="L119">    return 1.0 - Math.abs(value - mid) / halfWidth;</span>
+  }
+
+  /**
+   * Confidence for an out-of-range frequency; approaches {@code 1} as the frequency moves further
+   * from the mosquito band, and {@code 0} at the band boundaries.
+   */
+  private static double outOfRangeConfidence(double f) {
+<span class="fc" id="L127">    double distanceLow = Math.max(0.0, MOSQUITO_BAND_LOW_HZ - f);</span>
+<span class="fc" id="L128">    double distanceHigh = Math.max(0.0, f - MOSQUITO_BAND_HIGH_HZ);</span>
+<span class="fc" id="L129">    double distance = distanceLow + distanceHigh;</span>
+<span class="fc" id="L130">    double scale = (MOSQUITO_BAND_HIGH_HZ - MOSQUITO_BAND_LOW_HZ) / 2.0;</span>
+<span class="fc" id="L131">    return Math.min(1.0, distance / scale);</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

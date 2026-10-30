@@ -1,0 +1,1221 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>AudioAnalyseFrame.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer</a> &gt; <span class="el_source">AudioAnalyseFrame.java</span></div><h1>AudioAnalyseFrame.java</h1><pre class="source lang-java linenums">package org.hammer;
+
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.EventQueue;
+import java.awt.FlowLayout;
+import java.awt.event.ActionEvent;
+import java.awt.event.ItemEvent;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
+import java.awt.image.BufferedImage;
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.util.Locale;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import javax.imageio.ImageIO;
+import javax.sound.sampled.AudioFormat;
+import javax.sound.sampled.AudioSystem;
+import javax.sound.sampled.DataLine;
+import javax.sound.sampled.Mixer;
+import javax.sound.sampled.TargetDataLine;
+import javax.swing.AbstractAction;
+import javax.swing.Box;
+import javax.swing.BoxLayout;
+import javax.swing.ButtonGroup;
+import javax.swing.JCheckBoxMenuItem;
+import javax.swing.JComboBox;
+import javax.swing.JFileChooser;
+import javax.swing.JFrame;
+import javax.swing.JLabel;
+import javax.swing.JMenu;
+import javax.swing.JMenuBar;
+import javax.swing.JMenuItem;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JRadioButton;
+import javax.swing.JSlider;
+import javax.swing.JSplitPane;
+import javax.swing.JTextField;
+import javax.swing.SwingConstants;
+import javax.swing.SwingUtilities;
+import javax.swing.Timer;
+import javax.swing.border.EmptyBorder;
+import javax.swing.event.ChangeEvent;
+import javax.swing.event.ChangeListener;
+import javax.swing.filechooser.FileNameExtensionFilter;
+import org.hammer.audio.AudioCaptureService;
+import org.hammer.audio.AudioCaptureServiceImpl;
+import org.hammer.audio.DemoAudioCaptureService;
+import org.hammer.audio.DemoSignalType;
+import org.hammer.audio.analysis.MeasurementCalculator;
+import org.hammer.audio.analysis.MeasurementSnapshot;
+import org.hammer.audio.analysis.SpectrumSnapshot;
+import org.hammer.audio.core.AudioBlock;
+import org.hammer.audio.localization.StereoDelayAnalyzer;
+import org.hammer.audio.localization.StereoDelaySnapshot;
+import org.hammer.audio.localization.StereoDelayStatus;
+import org.hammer.audio.pluginhost.PluginManager;
+import org.hammer.audio.pluginhost.PluginMenuBuilder;
+import org.hammer.audio.ui.theme.UiTheme;
+
+/**
+ * Main application frame for audio analysis and visualization.
+ *
+ * &lt;p&gt;Refactored to use dependency injection with AudioCaptureService instead of direct singleton
+ * access. The frame creates the service and injects it into UI panels. Audio capture is
+ * started/stopped via the menu.
+ *
+ * @author chammer
+ */
+@SuppressWarnings(&quot;PMD.CouplingBetweenObjects&quot;)
+public class AudioAnalyseFrame extends JFrame {
+  private static final long serialVersionUID = 1L;
+<span class="nc" id="L77">  private static final Logger LOGGER = Logger.getLogger(AudioAnalyseFrame.class.getName());</span>
+  private static final String ERROR_TITLE = &quot;Error&quot;;
+  private static final int CONTENT_PANE_HGAP = 5;
+  private static final int CONTENT_PANE_VGAP = 5;
+  private static final int CONTENT_PANE_PADDING = 8;
+  private static final int DEFAULT_WINDOW_WIDTH = 1440;
+  private static final int DEFAULT_WINDOW_HEIGHT = 1000;
+
+  // Keep the historic capture format so existing tests and supported-device checks stay aligned.
+  private static final float DEFAULT_SAMPLE_RATE = 16000.0f;
+  private static final int DEFAULT_SAMPLE_BITS = 8;
+  private static final int DEFAULT_CHANNELS = 2;
+  private static final boolean DEFAULT_SIGNED = false;
+  private static final boolean DEFAULT_BIG_ENDIAN = false;
+  private static final int TOP_PANEL_HGAP = 8;
+<span class="nc" id="L92">  private static final MeasurementSnapshot NO_MEASUREMENT =</span>
+      new MeasurementSnapshot(Double.NaN, Double.NaN, Double.NaN, Double.NaN, false, false);
+
+  private final JPanel contentPane;
+<span class="nc" id="L96">  private final JPanel visualizationPanel = new JPanel(new BorderLayout(4, 4));</span>
+<span class="nc" id="L97">  private final WaveformPanel waveformPanel = new WaveformPanel();</span>
+<span class="nc" id="L98">  private final PhaseDiagramPanel phaseDiagramPanel = new PhaseDiagramPanel();</span>
+<span class="nc" id="L99">  private final SpectrumPanel spectrumPanel = new SpectrumPanel();</span>
+<span class="nc" id="L100">  private final SpectrogramPanel spectrogramPanel = new SpectrogramPanel();</span>
+<span class="nc" id="L101">  private final DiagnosisPanel diagnosisPanel = new DiagnosisPanel();</span>
+<span class="nc" id="L102">  private final transient org.hammer.audio.diagnosis.DiagnosisAnalyzer diagnosisAnalyzer =</span>
+      new org.hammer.audio.diagnosis.DiagnosisAnalyzer();
+<span class="nc" id="L104">  private transient org.hammer.audio.diagnosis.DiagnosisSnapshot lastDiagnosis =</span>
+<span class="nc" id="L105">      org.hammer.audio.diagnosis.DiagnosisSnapshot.empty();</span>
+
+  private final JTextField textFieldDataSize;
+  private final JTextField textFieldDivisor;
+  private final JTextField textFieldAudioFormat;
+  private final JTextField textFieldPeakFrequency;
+  private final JTextField textFieldRms;
+  private final JTextField textFieldPeakLevel;
+  private final JTextField textFieldDominantFrequency;
+  private final JTextField textFieldStereoCorrelation;
+  private final JTextField textFieldClipping;
+  private final JTextField textFieldMicrophoneSpacing;
+  private final JTextField textFieldStereoDelay;
+  private final JTextField textFieldStereoAngle;
+  private final JTextField textFieldStereoConfidence;
+  private final JComboBox&lt;AudioDeviceItem&gt; comboBoxAudioDevice;
+  private final JComboBox&lt;DemoSignalType&gt; comboBoxDemoSignal;
+  private final JRadioButton radioLiveMicrophone;
+  private final JRadioButton radioDemoMode;
+<span class="nc" id="L124">  private final MeasurementCalculator measurementCalculator = new MeasurementCalculator();</span>
+
+  private final JCheckBoxMenuItem mntmStart;
+  private final JCheckBoxMenuItem mntmFreeze;
+  private final Timer refreshTimer;
+
+  // Audio capture service
+  private AudioCaptureService audioCaptureService;
+  private transient AudioBlock frozenBlock;
+<span class="nc" id="L133">  private transient InputMode inputMode = InputMode.LIVE;</span>
+  private transient StereoDelayAnalyzer stereoDelayAnalyzer;
+<span class="nc" id="L135">  private double stereoDelayAnalyzerSpacingMeters = Double.NaN;</span>
+  private transient org.hammer.audio.RecordingTap recordingTap;
+
+  public static void main(String[] args) {
+<span class="nc" id="L139">    EventQueue.invokeLater(</span>
+        () -&gt; {
+          try {
+<span class="nc" id="L142">            LOGGER.info(&quot;Starting AudioAnalyseFrame application&quot;);</span>
+<span class="nc" id="L143">            UiTheme.installDarkTheme();</span>
+<span class="nc" id="L144">            AudioAnalyseFrame frame = new AudioAnalyseFrame();</span>
+<span class="nc" id="L145">            frame.setVisible(true);</span>
+<span class="nc" id="L146">          } catch (Exception e) {</span>
+<span class="nc" id="L147">            LOGGER.log(Level.SEVERE, &quot;Failed to start application&quot;, e);</span>
+<span class="nc" id="L148">            e.printStackTrace();</span>
+<span class="nc" id="L149">          }</span>
+<span class="nc" id="L150">        });</span>
+<span class="nc" id="L151">  }</span>
+
+<span class="nc" id="L153">  public AudioAnalyseFrame() {</span>
+<span class="nc" id="L154">    LOGGER.info(&quot;AudioAnalyseFrame constructor started&quot;);</span>
+<span class="nc" id="L155">    setTitle(&quot;AudioAnalyzer&quot;);</span>
+<span class="nc" id="L156">    setDefaultCloseOperation(DISPOSE_ON_CLOSE);</span>
+
+<span class="nc" id="L158">    contentPane = new JPanel(new BorderLayout(CONTENT_PANE_HGAP, CONTENT_PANE_VGAP));</span>
+<span class="nc" id="L159">    contentPane.setBorder(</span>
+        new EmptyBorder(
+            CONTENT_PANE_PADDING,
+            CONTENT_PANE_PADDING,
+            CONTENT_PANE_PADDING,
+            CONTENT_PANE_PADDING));
+<span class="nc" id="L165">    setContentPane(contentPane);</span>
+
+    // Initialize fields before calling init methods
+<span class="nc" id="L168">    textFieldDataSize = new JTextField();</span>
+<span class="nc" id="L169">    textFieldDivisor = new JTextField();</span>
+<span class="nc" id="L170">    textFieldAudioFormat = new JTextField();</span>
+<span class="nc" id="L171">    textFieldPeakFrequency = new JTextField();</span>
+<span class="nc" id="L172">    textFieldRms = new JTextField();</span>
+<span class="nc" id="L173">    textFieldPeakLevel = new JTextField();</span>
+<span class="nc" id="L174">    textFieldDominantFrequency = new JTextField();</span>
+<span class="nc" id="L175">    textFieldStereoCorrelation = new JTextField();</span>
+<span class="nc" id="L176">    textFieldClipping = new JTextField();</span>
+<span class="nc" id="L177">    textFieldMicrophoneSpacing = new JTextField();</span>
+<span class="nc" id="L178">    textFieldStereoDelay = new JTextField();</span>
+<span class="nc" id="L179">    textFieldStereoAngle = new JTextField();</span>
+<span class="nc" id="L180">    textFieldStereoConfidence = new JTextField();</span>
+<span class="nc" id="L181">    comboBoxAudioDevice = new JComboBox&lt;&gt;();</span>
+<span class="nc" id="L182">    comboBoxDemoSignal = new JComboBox&lt;&gt;(DemoSignalType.values());</span>
+<span class="nc" id="L183">    radioLiveMicrophone = new JRadioButton(&quot;Live microphone&quot;, true);</span>
+<span class="nc" id="L184">    radioDemoMode = new JRadioButton(&quot;Demo mode&quot;);</span>
+<span class="nc" id="L185">    mntmStart = new JCheckBoxMenuItem(&quot;Start/Stop&quot;);</span>
+<span class="nc" id="L186">    mntmFreeze = new JCheckBoxMenuItem(&quot;Pause/Freeze&quot;);</span>
+
+<span class="nc" id="L188">    initializeAudioService(null);</span>
+
+<span class="nc" id="L190">    initMenu();</span>
+<span class="nc" id="L191">    initTopSettingsPanel();</span>
+<span class="nc" id="L192">    initCenterAndEast();</span>
+<span class="nc" id="L193">    initSouthSlider();</span>
+
+<span class="nc" id="L195">    refreshTimer = new Timer(UiConstants.REFRESH_INTERVAL_MS, e -&gt; updateUIFromModel());</span>
+<span class="nc" id="L196">    refreshTimer.setRepeats(true);</span>
+<span class="nc" id="L197">    refreshTimer.start();</span>
+
+<span class="nc" id="L199">    addWindowListener(</span>
+<span class="nc" id="L200">        new WindowAdapter() {</span>
+          @Override
+          public void windowClosing(WindowEvent e) {
+<span class="nc bnc" id="L203" title="All 4 branches missed.">            if (recordingTap != null &amp;&amp; !recordingTap.isClosed()) {</span>
+              try {
+<span class="nc" id="L205">                recordingTap.stop();</span>
+<span class="nc" id="L206">              } catch (IOException ioe) {</span>
+<span class="nc" id="L207">                LOGGER.log(Level.WARNING, &quot;Failed to close recording on window close&quot;, ioe);</span>
+<span class="nc" id="L208">              }</span>
+            }
+<span class="nc" id="L210">            stopAudioIfRunning();</span>
+<span class="nc bnc" id="L211" title="All 4 branches missed.">            if (refreshTimer != null &amp;&amp; refreshTimer.isRunning()) {</span>
+<span class="nc" id="L212">              refreshTimer.stop();</span>
+            }
+<span class="nc" id="L214">          }</span>
+        });
+
+<span class="nc" id="L217">    pack();</span>
+<span class="nc" id="L218">    setSize(DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT);</span>
+<span class="nc" id="L219">    setLocationRelativeTo(null);</span>
+<span class="nc" id="L220">    LOGGER.info(&quot;AudioAnalyseFrame initialized successfully&quot;);</span>
+<span class="nc" id="L221">  }</span>
+
+  /** Initialize the audio capture service and inject into panels. */
+  private void initializeAudioService(Mixer.Info mixerInfo) {
+<span class="nc" id="L225">    LOGGER.info(&quot;Initializing audio capture service&quot;);</span>
+<span class="nc bnc" id="L226" title="All 2 branches missed.">    int divisor = audioCaptureService != null ? audioCaptureService.getDivisor() : 1;</span>
+<span class="nc bnc" id="L227" title="All 2 branches missed.">    if (inputMode == InputMode.DEMO) {</span>
+<span class="nc" id="L228">      audioCaptureService =</span>
+          new DemoAudioCaptureService(
+              DEFAULT_SAMPLE_RATE,
+              DEFAULT_SAMPLE_BITS,
+              DEFAULT_CHANNELS,
+              divisor,
+<span class="nc" id="L234">              selectedDemoSignal());</span>
+    } else {
+<span class="nc" id="L236">      audioCaptureService =</span>
+          new AudioCaptureServiceImpl(
+              DEFAULT_SAMPLE_RATE,
+              DEFAULT_SAMPLE_BITS,
+              DEFAULT_CHANNELS,
+              DEFAULT_SIGNED,
+              DEFAULT_BIG_ENDIAN,
+              divisor,
+              mixerInfo);
+    }
+
+<span class="nc" id="L247">    waveformPanel.setAudioCaptureService(audioCaptureService);</span>
+<span class="nc" id="L248">    phaseDiagramPanel.setAudioCaptureService(audioCaptureService);</span>
+<span class="nc" id="L249">    spectrumPanel.setAudioCaptureService(audioCaptureService);</span>
+<span class="nc" id="L250">    spectrogramPanel.setAudioCaptureService(audioCaptureService);</span>
+<span class="nc" id="L251">    setFrozen(false);</span>
+<span class="nc" id="L252">  }</span>
+
+  private void initMenu() {
+<span class="nc" id="L255">    JMenuBar menuBar = new JMenuBar();</span>
+<span class="nc" id="L256">    setJMenuBar(menuBar);</span>
+
+<span class="nc" id="L258">    JMenu mnFile = new JMenu(&quot;File&quot;);</span>
+<span class="nc" id="L259">    menuBar.add(mnFile);</span>
+
+<span class="nc" id="L261">    mntmStart.setToolTipText(&quot;Start or stop audio input&quot;);</span>
+<span class="nc" id="L262">    mntmStart.addActionListener(this::toggleAudioStartStop);</span>
+<span class="nc" id="L263">    mnFile.add(mntmStart);</span>
+
+<span class="nc" id="L265">    mntmFreeze.setToolTipText(&quot;Freeze waveform and spectrum snapshots for inspection/export&quot;);</span>
+<span class="nc" id="L266">    mntmFreeze.addActionListener(e -&gt; setFrozen(mntmFreeze.isSelected()));</span>
+<span class="nc" id="L267">    mnFile.add(mntmFreeze);</span>
+
+<span class="nc" id="L269">    mnFile.addSeparator();</span>
+
+<span class="nc" id="L271">    JMenuItem exportCsv = new JMenuItem(&quot;Export measurement CSV...&quot;);</span>
+<span class="nc" id="L272">    exportCsv.addActionListener(e -&gt; exportMeasurementCsv());</span>
+<span class="nc" id="L273">    mnFile.add(exportCsv);</span>
+
+<span class="nc" id="L275">    JMenuItem exportPng = new JMenuItem(&quot;Export measurement PNG...&quot;);</span>
+<span class="nc" id="L276">    exportPng.addActionListener(e -&gt; exportMeasurementPng());</span>
+<span class="nc" id="L277">    mnFile.add(exportPng);</span>
+
+<span class="nc" id="L279">    JMenuItem exportBundle = new JMenuItem(&quot;Export evidence bundle...&quot;);</span>
+<span class="nc" id="L280">    exportBundle.setToolTipText(</span>
+        &quot;Export screenshot, samples, spectrum, spectrogram, stereo delay, diagnosis and metadata&quot;
+            + &quot; into one directory.&quot;);
+<span class="nc" id="L283">    exportBundle.addActionListener(e -&gt; exportEvidenceBundle());</span>
+<span class="nc" id="L284">    mnFile.add(exportBundle);</span>
+
+<span class="nc" id="L286">    mnFile.addSeparator();</span>
+
+<span class="nc" id="L288">    JCheckBoxMenuItem mntmPeakHold = new JCheckBoxMenuItem(&quot;Spectrum: peak hold&quot;);</span>
+<span class="nc" id="L289">    mntmPeakHold.addActionListener(</span>
+<span class="nc" id="L290">        e -&gt; spectrumPanel.setPeakHoldEnabled(mntmPeakHold.isSelected()));</span>
+<span class="nc" id="L291">    mnFile.add(mntmPeakHold);</span>
+
+<span class="nc" id="L293">    JCheckBoxMenuItem mntmAveraging = new JCheckBoxMenuItem(&quot;Spectrum: averaging&quot;);</span>
+<span class="nc" id="L294">    mntmAveraging.addActionListener(</span>
+<span class="nc" id="L295">        e -&gt; spectrumPanel.setAveragingEnabled(mntmAveraging.isSelected()));</span>
+<span class="nc" id="L296">    mnFile.add(mntmAveraging);</span>
+
+<span class="nc" id="L298">    JMenuItem mntmResetPeak = new JMenuItem(&quot;Spectrum: reset peak hold&quot;);</span>
+<span class="nc" id="L299">    mntmResetPeak.addActionListener(e -&gt; spectrumPanel.resetPeakHold());</span>
+<span class="nc" id="L300">    mnFile.add(mntmResetPeak);</span>
+
+<span class="nc" id="L302">    mnFile.addSeparator();</span>
+
+<span class="nc" id="L304">    JCheckBoxMenuItem mntmTrigger = new JCheckBoxMenuItem(&quot;Waveform: trigger (oscilloscope)&quot;);</span>
+<span class="nc" id="L305">    mntmTrigger.setToolTipText(</span>
+        &quot;Align the waveform display so each refresh starts on a rising zero crossing&quot;
+            + &quot; (channel 0).&quot;);
+<span class="nc" id="L308">    mntmTrigger.addActionListener(e -&gt; waveformPanel.setTriggerEnabled(mntmTrigger.isSelected()));</span>
+<span class="nc" id="L309">    mnFile.add(mntmTrigger);</span>
+
+<span class="nc" id="L311">    JMenu mnTriggerSlope = new JMenu(&quot;Waveform: trigger slope&quot;);</span>
+<span class="nc" id="L312">    ButtonGroup slopeGroup = new ButtonGroup();</span>
+<span class="nc" id="L313">    JRadioButton mntmTriggerRising = new JRadioButton(&quot;Rising ↑&quot;, true);</span>
+<span class="nc" id="L314">    JRadioButton mntmTriggerFalling = new JRadioButton(&quot;Falling ↓&quot;);</span>
+<span class="nc" id="L315">    slopeGroup.add(mntmTriggerRising);</span>
+<span class="nc" id="L316">    slopeGroup.add(mntmTriggerFalling);</span>
+<span class="nc" id="L317">    mntmTriggerRising.addActionListener(</span>
+        e -&gt;
+<span class="nc" id="L319">            waveformPanel</span>
+<span class="nc" id="L320">                .getTrigger()</span>
+<span class="nc" id="L321">                .setSlope(org.hammer.audio.analysis.WaveformTrigger.Slope.RISING));</span>
+<span class="nc" id="L322">    mntmTriggerFalling.addActionListener(</span>
+        e -&gt;
+<span class="nc" id="L324">            waveformPanel</span>
+<span class="nc" id="L325">                .getTrigger()</span>
+<span class="nc" id="L326">                .setSlope(org.hammer.audio.analysis.WaveformTrigger.Slope.FALLING));</span>
+<span class="nc" id="L327">    mnTriggerSlope.add(mntmTriggerRising);</span>
+<span class="nc" id="L328">    mnTriggerSlope.add(mntmTriggerFalling);</span>
+<span class="nc" id="L329">    mnFile.add(mnTriggerSlope);</span>
+
+<span class="nc" id="L331">    JMenu mnTriggerMode = new JMenu(&quot;Waveform: trigger mode&quot;);</span>
+<span class="nc" id="L332">    ButtonGroup modeGroup = new ButtonGroup();</span>
+<span class="nc" id="L333">    JRadioButton mntmTriggerAuto = new JRadioButton(&quot;Auto (fall back if silent)&quot;, true);</span>
+<span class="nc" id="L334">    JRadioButton mntmTriggerNormal = new JRadioButton(&quot;Normal (only on event)&quot;);</span>
+<span class="nc" id="L335">    modeGroup.add(mntmTriggerAuto);</span>
+<span class="nc" id="L336">    modeGroup.add(mntmTriggerNormal);</span>
+<span class="nc" id="L337">    mntmTriggerAuto.addActionListener(</span>
+        e -&gt;
+<span class="nc" id="L339">            waveformPanel</span>
+<span class="nc" id="L340">                .getTrigger()</span>
+<span class="nc" id="L341">                .setMode(org.hammer.audio.analysis.WaveformTrigger.Mode.AUTO));</span>
+<span class="nc" id="L342">    mntmTriggerNormal.addActionListener(</span>
+        e -&gt;
+<span class="nc" id="L344">            waveformPanel</span>
+<span class="nc" id="L345">                .getTrigger()</span>
+<span class="nc" id="L346">                .setMode(org.hammer.audio.analysis.WaveformTrigger.Mode.NORMAL));</span>
+<span class="nc" id="L347">    mnTriggerMode.add(mntmTriggerAuto);</span>
+<span class="nc" id="L348">    mnTriggerMode.add(mntmTriggerNormal);</span>
+<span class="nc" id="L349">    mnFile.add(mnTriggerMode);</span>
+
+<span class="nc" id="L351">    mnFile.addSeparator();</span>
+
+<span class="nc" id="L353">    JMenuItem mntmStartRecording = new JMenuItem(&quot;Start recording...&quot;);</span>
+<span class="nc" id="L354">    mntmStartRecording.setToolTipText(</span>
+        &quot;Capture every produced AudioBlock into an .aar file for later replay or A/B compare.&quot;);
+<span class="nc" id="L356">    mntmStartRecording.addActionListener(e -&gt; startRecording());</span>
+<span class="nc" id="L357">    mnFile.add(mntmStartRecording);</span>
+
+<span class="nc" id="L359">    JMenuItem mntmStopRecording = new JMenuItem(&quot;Stop recording&quot;);</span>
+<span class="nc" id="L360">    mntmStopRecording.addActionListener(e -&gt; stopRecording());</span>
+<span class="nc" id="L361">    mnFile.add(mntmStopRecording);</span>
+
+<span class="nc" id="L363">    JMenuItem mntmOpenRecording = new JMenuItem(&quot;Open recording...&quot;);</span>
+<span class="nc" id="L364">    mntmOpenRecording.setToolTipText(&quot;Replay a previously captured .aar file as the audio source.&quot;);</span>
+<span class="nc" id="L365">    mntmOpenRecording.addActionListener(e -&gt; openRecording());</span>
+<span class="nc" id="L366">    mnFile.add(mntmOpenRecording);</span>
+
+<span class="nc" id="L368">    JMenuItem mntmCompare = new JMenuItem(&quot;Compare two recordings...&quot;);</span>
+<span class="nc" id="L369">    mntmCompare.setToolTipText(</span>
+        &quot;Compare measurement, spectrum and diagnosis of two .aar recordings and render a&quot;
+            + &quot; Markdown A/B report.&quot;);
+<span class="nc" id="L372">    mntmCompare.addActionListener(e -&gt; compareRecordings());</span>
+<span class="nc" id="L373">    mnFile.add(mntmCompare);</span>
+
+<span class="nc" id="L375">    menuBar.add(Box.createGlue());</span>
+
+<span class="nc" id="L377">    JMenu mnPlugins = new PluginMenuBuilder(new PluginManager().loadPlugins()).buildMenu(this);</span>
+<span class="nc" id="L378">    menuBar.add(mnPlugins);</span>
+
+<span class="nc" id="L380">    JMenu mnHelp = new JMenu(&quot;Help&quot;);</span>
+<span class="nc" id="L381">    menuBar.add(mnHelp);</span>
+
+<span class="nc" id="L383">    JMenuItem mntmAbout = new JMenuItem();</span>
+<span class="nc" id="L384">    mntmAbout.setAction(new SwingAction());</span>
+<span class="nc" id="L385">    mnHelp.add(mntmAbout);</span>
+<span class="nc" id="L386">  }</span>
+
+  private void initTopSettingsPanel() {
+<span class="nc" id="L389">    JPanel topContainer = new JPanel();</span>
+<span class="nc" id="L390">    topContainer.setLayout(new BoxLayout(topContainer, BoxLayout.Y_AXIS));</span>
+<span class="nc" id="L391">    topContainer.setBorder(new EmptyBorder(0, 0, 4, 0));</span>
+<span class="nc" id="L392">    contentPane.add(topContainer, BorderLayout.NORTH);</span>
+<span class="nc" id="L393">    JPanel settingsPanel = createSettingsPanel();</span>
+<span class="nc" id="L394">    JPanel measurementPanel = createMeasurementPanel();</span>
+<span class="nc" id="L395">    settingsPanel.setAlignmentX(LEFT_ALIGNMENT);</span>
+<span class="nc" id="L396">    measurementPanel.setAlignmentX(LEFT_ALIGNMENT);</span>
+<span class="nc" id="L397">    topContainer.add(settingsPanel);</span>
+<span class="nc" id="L398">    topContainer.add(Box.createVerticalStrut(TOP_PANEL_HGAP));</span>
+<span class="nc" id="L399">    topContainer.add(measurementPanel);</span>
+<span class="nc" id="L400">    updateModeControls();</span>
+<span class="nc" id="L401">    updateUIFromModel();</span>
+<span class="nc" id="L402">  }</span>
+
+  private JPanel createSettingsPanel() {
+<span class="nc" id="L405">    JPanel settingsPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));</span>
+<span class="nc" id="L406">    settingsPanel.setBorder(UiTheme.createPanelBorder());</span>
+
+<span class="nc" id="L408">    settingsPanel.add(new JLabel(&quot;Input&quot;));</span>
+<span class="nc" id="L409">    JPanel modePanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));</span>
+<span class="nc" id="L410">    ButtonGroup buttonGroup = new ButtonGroup();</span>
+<span class="nc" id="L411">    buttonGroup.add(radioLiveMicrophone);</span>
+<span class="nc" id="L412">    buttonGroup.add(radioDemoMode);</span>
+<span class="nc" id="L413">    radioLiveMicrophone.addActionListener(e -&gt; switchInputMode(InputMode.LIVE));</span>
+<span class="nc" id="L414">    radioDemoMode.addActionListener(e -&gt; switchInputMode(InputMode.DEMO));</span>
+<span class="nc" id="L415">    modePanel.add(radioLiveMicrophone);</span>
+<span class="nc" id="L416">    modePanel.add(radioDemoMode);</span>
+<span class="nc" id="L417">    settingsPanel.add(modePanel);</span>
+
+<span class="nc" id="L419">    settingsPanel.add(Box.createHorizontalStrut(8));</span>
+<span class="nc" id="L420">    settingsPanel.add(new JLabel(&quot;Demo&quot;));</span>
+<span class="nc" id="L421">    comboBoxDemoSignal.addItemListener(</span>
+        event -&gt; {
+<span class="nc bnc" id="L423" title="All 4 branches missed.">          if (event.getStateChange() == ItemEvent.SELECTED &amp;&amp; inputMode == InputMode.DEMO) {</span>
+<span class="nc" id="L424">            switchServicePreservingRunning(null);</span>
+          }
+<span class="nc" id="L426">        });</span>
+<span class="nc" id="L427">    settingsPanel.add(comboBoxDemoSignal);</span>
+
+<span class="nc" id="L429">    settingsPanel.add(new JLabel(&quot;Device&quot;));</span>
+<span class="nc" id="L430">    populateAudioDeviceChoices();</span>
+<span class="nc" id="L431">    comboBoxAudioDevice.addItemListener(this::audioDeviceSelectionChanged);</span>
+<span class="nc" id="L432">    settingsPanel.add(comboBoxAudioDevice);</span>
+
+<span class="nc" id="L434">    settingsPanel.add(Box.createHorizontalStrut(8));</span>
+<span class="nc" id="L435">    settingsPanel.add(new JLabel(&quot;Size&quot;));</span>
+<span class="nc" id="L436">    configureReadOnlyField(textFieldDataSize, 6);</span>
+<span class="nc" id="L437">    settingsPanel.add(textFieldDataSize);</span>
+
+<span class="nc" id="L439">    settingsPanel.add(new JLabel(&quot;Div&quot;));</span>
+<span class="nc" id="L440">    configureReadOnlyField(textFieldDivisor, 4);</span>
+<span class="nc" id="L441">    settingsPanel.add(textFieldDivisor);</span>
+
+<span class="nc" id="L443">    settingsPanel.add(new JLabel(&quot;Format&quot;));</span>
+<span class="nc" id="L444">    textFieldAudioFormat.setHorizontalAlignment(SwingConstants.CENTER);</span>
+<span class="nc" id="L445">    configureReadOnlyField(textFieldAudioFormat, 18);</span>
+<span class="nc" id="L446">    settingsPanel.add(textFieldAudioFormat);</span>
+
+<span class="nc" id="L448">    settingsPanel.add(new JLabel(&quot;Peak&quot;));</span>
+<span class="nc" id="L449">    textFieldPeakFrequency.setHorizontalAlignment(SwingConstants.CENTER);</span>
+<span class="nc" id="L450">    configureReadOnlyField(textFieldPeakFrequency, 10);</span>
+<span class="nc" id="L451">    settingsPanel.add(textFieldPeakFrequency);</span>
+
+<span class="nc" id="L453">    settingsPanel.add(new JLabel(&quot;Mic spacing m&quot;));</span>
+<span class="nc" id="L454">    textFieldMicrophoneSpacing.setText(</span>
+<span class="nc" id="L455">        String.format(Locale.ROOT, &quot;%.2f&quot;, StereoDelayAnalyzer.DEFAULT_MICROPHONE_SPACING_METERS));</span>
+<span class="nc" id="L456">    textFieldMicrophoneSpacing.setColumns(5);</span>
+<span class="nc" id="L457">    textFieldMicrophoneSpacing.setToolTipText(</span>
+        &quot;Stereo microphone spacing used for direction estimate&quot;);
+<span class="nc" id="L459">    settingsPanel.add(textFieldMicrophoneSpacing);</span>
+<span class="nc" id="L460">    return settingsPanel;</span>
+  }
+
+  private JPanel createMeasurementPanel() {
+<span class="nc" id="L464">    JPanel measurementPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));</span>
+<span class="nc" id="L465">    measurementPanel.setBorder(UiTheme.createPanelBorder());</span>
+
+<span class="nc" id="L467">    measurementPanel.add(new JLabel(&quot;RMS&quot;));</span>
+<span class="nc" id="L468">    configureReadOnlyField(textFieldRms, 7);</span>
+<span class="nc" id="L469">    measurementPanel.add(textFieldRms);</span>
+
+<span class="nc" id="L471">    measurementPanel.add(new JLabel(&quot;Peak level&quot;));</span>
+<span class="nc" id="L472">    configureReadOnlyField(textFieldPeakLevel, 7);</span>
+<span class="nc" id="L473">    measurementPanel.add(textFieldPeakLevel);</span>
+
+<span class="nc" id="L475">    measurementPanel.add(new JLabel(&quot;Dominant&quot;));</span>
+<span class="nc" id="L476">    configureReadOnlyField(textFieldDominantFrequency, 9);</span>
+<span class="nc" id="L477">    measurementPanel.add(textFieldDominantFrequency);</span>
+
+<span class="nc" id="L479">    measurementPanel.add(new JLabel(&quot;Correlation&quot;));</span>
+<span class="nc" id="L480">    configureReadOnlyField(textFieldStereoCorrelation, 7);</span>
+<span class="nc" id="L481">    measurementPanel.add(textFieldStereoCorrelation);</span>
+
+<span class="nc" id="L483">    measurementPanel.add(new JLabel(&quot;Clipping&quot;));</span>
+<span class="nc" id="L484">    textFieldClipping.setHorizontalAlignment(SwingConstants.CENTER);</span>
+<span class="nc" id="L485">    textFieldClipping.setOpaque(true);</span>
+<span class="nc" id="L486">    configureReadOnlyField(textFieldClipping, 5);</span>
+<span class="nc" id="L487">    textFieldClipping.setEnabled(true);</span>
+<span class="nc" id="L488">    measurementPanel.add(textFieldClipping);</span>
+
+<span class="nc" id="L490">    measurementPanel.add(new JLabel(&quot;Delay&quot;));</span>
+<span class="nc" id="L491">    configureReadOnlyField(textFieldStereoDelay, 11);</span>
+<span class="nc" id="L492">    measurementPanel.add(textFieldStereoDelay);</span>
+
+<span class="nc" id="L494">    measurementPanel.add(new JLabel(&quot;Angle&quot;));</span>
+<span class="nc" id="L495">    configureReadOnlyField(textFieldStereoAngle, 8);</span>
+<span class="nc" id="L496">    measurementPanel.add(textFieldStereoAngle);</span>
+
+<span class="nc" id="L498">    measurementPanel.add(new JLabel(&quot;Conf&quot;));</span>
+<span class="nc" id="L499">    configureReadOnlyField(textFieldStereoConfidence, 7);</span>
+<span class="nc" id="L500">    measurementPanel.add(textFieldStereoConfidence);</span>
+<span class="nc" id="L501">    return measurementPanel;</span>
+  }
+
+  private void configureReadOnlyField(JTextField textField, int columns) {
+<span class="nc" id="L505">    textField.setEnabled(false);</span>
+<span class="nc" id="L506">    textField.setEditable(false);</span>
+<span class="nc" id="L507">    textField.setColumns(columns);</span>
+<span class="nc" id="L508">  }</span>
+
+  private void initCenterAndEast() {
+<span class="nc" id="L511">    waveformPanel.setBorder(UiTheme.createPanelBorder());</span>
+<span class="nc" id="L512">    phaseDiagramPanel.setBorder(UiTheme.createPanelBorder());</span>
+<span class="nc" id="L513">    spectrumPanel.setBorder(UiTheme.createPanelBorder());</span>
+<span class="nc" id="L514">    spectrogramPanel.setBorder(UiTheme.createPanelBorder());</span>
+<span class="nc" id="L515">    diagnosisPanel.setBorder(UiTheme.createPanelBorder());</span>
+
+<span class="nc" id="L517">    JPanel lowerPanel = new JPanel(new java.awt.GridLayout(1, 2, 8, 0));</span>
+<span class="nc" id="L518">    lowerPanel.setBorder(new EmptyBorder(8, 0, 0, 0));</span>
+<span class="nc" id="L519">    lowerPanel.add(spectrumPanel);</span>
+<span class="nc" id="L520">    lowerPanel.add(phaseDiagramPanel);</span>
+
+<span class="nc" id="L522">    JPanel spectrogramRow = new JPanel(new BorderLayout(8, 0));</span>
+<span class="nc" id="L523">    spectrogramRow.add(spectrogramPanel, BorderLayout.CENTER);</span>
+<span class="nc" id="L524">    spectrogramRow.add(diagnosisPanel, BorderLayout.EAST);</span>
+
+<span class="nc" id="L526">    JSplitPane innerSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT, lowerPanel, spectrogramRow);</span>
+<span class="nc" id="L527">    innerSplit.setResizeWeight(0.5);</span>
+<span class="nc" id="L528">    innerSplit.setDividerSize(7);</span>
+<span class="nc" id="L529">    innerSplit.setBorder(null);</span>
+<span class="nc" id="L530">    innerSplit.setContinuousLayout(true);</span>
+
+<span class="nc" id="L532">    JSplitPane splitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT, waveformPanel, innerSplit);</span>
+<span class="nc" id="L533">    splitPane.setResizeWeight(0.45);</span>
+<span class="nc" id="L534">    splitPane.setDividerSize(7);</span>
+<span class="nc" id="L535">    splitPane.setBorder(null);</span>
+<span class="nc" id="L536">    splitPane.setContinuousLayout(true);</span>
+<span class="nc" id="L537">    visualizationPanel.add(splitPane, BorderLayout.CENTER);</span>
+<span class="nc" id="L538">    contentPane.add(visualizationPanel, BorderLayout.CENTER);</span>
+<span class="nc" id="L539">  }</span>
+
+  private void initSouthSlider() {
+<span class="nc" id="L542">    JSlider slider = new JSlider();</span>
+<span class="nc" id="L543">    slider.setMinimum(1);</span>
+<span class="nc bnc" id="L544" title="All 2 branches missed.">    slider.setValue(audioCaptureService != null ? audioCaptureService.getDivisor() : 1);</span>
+<span class="nc" id="L545">    slider.setToolTipText(&quot;Adjust divisor (affects sampling / display)&quot;);</span>
+<span class="nc" id="L546">    slider.addChangeListener(</span>
+<span class="nc" id="L547">        new ChangeListener() {</span>
+          @Override
+          public void stateChanged(ChangeEvent e) {
+<span class="nc" id="L550">            int value = ((JSlider) e.getSource()).getValue();</span>
+<span class="nc bnc" id="L551" title="All 2 branches missed.">            if (audioCaptureService != null) {</span>
+<span class="nc" id="L552">              audioCaptureService.setDivisor(value);</span>
+            }
+<span class="nc" id="L554">            textFieldDivisor.setText(String.valueOf(value));</span>
+<span class="nc" id="L555">            contentPane.repaint();</span>
+<span class="nc" id="L556">          }</span>
+        });
+<span class="nc" id="L558">    contentPane.add(slider, BorderLayout.SOUTH);</span>
+<span class="nc" id="L559">  }</span>
+
+  private void populateAudioDeviceChoices() {
+<span class="nc" id="L562">    comboBoxAudioDevice.addItem(new AudioDeviceItem(null));</span>
+<span class="nc" id="L563">    AudioFormat format = defaultAudioFormat();</span>
+<span class="nc" id="L564">    DataLine.Info targetLineInfo = new DataLine.Info(TargetDataLine.class, format);</span>
+<span class="nc bnc" id="L565" title="All 2 branches missed.">    for (Mixer.Info mixerInfo : AudioSystem.getMixerInfo()) {</span>
+<span class="nc bnc" id="L566" title="All 2 branches missed.">      if (supportsTargetLine(mixerInfo, targetLineInfo)) {</span>
+<span class="nc" id="L567">        comboBoxAudioDevice.addItem(new AudioDeviceItem(mixerInfo));</span>
+      }
+    }
+<span class="nc" id="L570">  }</span>
+
+  private boolean supportsTargetLine(Mixer.Info mixerInfo, DataLine.Info targetLineInfo) {
+<span class="nc" id="L573">    try (Mixer mixer = AudioSystem.getMixer(mixerInfo)) {</span>
+<span class="nc" id="L574">      return mixer.isLineSupported(targetLineInfo);</span>
+    }
+  }
+
+  private void audioDeviceSelectionChanged(ItemEvent event) {
+<span class="nc bnc" id="L579" title="All 2 branches missed.">    if (event.getStateChange() != ItemEvent.SELECTED) {</span>
+<span class="nc" id="L580">      return;</span>
+    }
+<span class="nc bnc" id="L582" title="All 2 branches missed.">    if (inputMode == InputMode.DEMO) {</span>
+<span class="nc" id="L583">      return;</span>
+    }
+<span class="nc" id="L585">    AudioDeviceItem item = (AudioDeviceItem) event.getItem();</span>
+<span class="nc" id="L586">    switchServicePreservingRunning(item.mixerInfo());</span>
+<span class="nc" id="L587">  }</span>
+
+  private void switchInputMode(InputMode newMode) {
+<span class="nc bnc" id="L590" title="All 2 branches missed.">    if (newMode == inputMode) {</span>
+<span class="nc" id="L591">      updateModeControls();</span>
+<span class="nc" id="L592">      return;</span>
+    }
+<span class="nc" id="L594">    inputMode = newMode;</span>
+<span class="nc" id="L595">    updateModeControls();</span>
+<span class="nc" id="L596">    switchServicePreservingRunning(selectedMixerInfo());</span>
+<span class="nc" id="L597">  }</span>
+
+  private void updateModeControls() {
+<span class="nc bnc" id="L600" title="All 2 branches missed.">    boolean demoMode = inputMode == InputMode.DEMO;</span>
+<span class="nc bnc" id="L601" title="All 2 branches missed.">    radioLiveMicrophone.setSelected(!demoMode);</span>
+<span class="nc" id="L602">    radioDemoMode.setSelected(demoMode);</span>
+<span class="nc bnc" id="L603" title="All 2 branches missed.">    comboBoxAudioDevice.setEnabled(!demoMode);</span>
+<span class="nc" id="L604">    comboBoxDemoSignal.setEnabled(demoMode);</span>
+<span class="nc" id="L605">  }</span>
+
+  private void switchServicePreservingRunning(Mixer.Info mixerInfo) {
+<span class="nc bnc" id="L608" title="All 4 branches missed.">    boolean wasRunning = audioCaptureService != null &amp;&amp; audioCaptureService.isRunning();</span>
+<span class="nc" id="L609">    stopAudioIfRunning();</span>
+<span class="nc" id="L610">    mntmStart.setSelected(false);</span>
+<span class="nc" id="L611">    initializeAudioService(mixerInfo);</span>
+<span class="nc" id="L612">    updateModeControls();</span>
+<span class="nc bnc" id="L613" title="All 2 branches missed.">    if (wasRunning) {</span>
+      try {
+<span class="nc" id="L615">        audioCaptureService.start();</span>
+<span class="nc" id="L616">        mntmStart.setSelected(true);</span>
+<span class="nc" id="L617">      } catch (Exception ex) {</span>
+<span class="nc" id="L618">        LOGGER.log(Level.SEVERE, &quot;Failed to restart audio capture&quot;, ex);</span>
+<span class="nc" id="L619">        JOptionPane.showMessageDialog(</span>
+            this,
+<span class="nc" id="L621">            &quot;Failed to start selected source: &quot; + ex.getMessage(),</span>
+            ERROR_TITLE,
+            JOptionPane.ERROR_MESSAGE);
+<span class="nc" id="L624">      }</span>
+    }
+<span class="nc" id="L626">  }</span>
+
+  private Mixer.Info selectedMixerInfo() {
+<span class="nc" id="L629">    Object selectedItem = comboBoxAudioDevice.getSelectedItem();</span>
+<span class="nc bnc" id="L630" title="All 2 branches missed.">    if (selectedItem instanceof AudioDeviceItem audioDeviceItem) {</span>
+<span class="nc" id="L631">      return audioDeviceItem.mixerInfo();</span>
+    }
+<span class="nc" id="L633">    return null;</span>
+  }
+
+  private DemoSignalType selectedDemoSignal() {
+<span class="nc" id="L637">    Object selectedItem = comboBoxDemoSignal.getSelectedItem();</span>
+<span class="nc bnc" id="L638" title="All 2 branches missed.">    if (selectedItem instanceof DemoSignalType signalType) {</span>
+<span class="nc" id="L639">      return signalType;</span>
+    }
+<span class="nc" id="L641">    return DemoSignalType.SINE;</span>
+  }
+
+  private void toggleAudioStartStop(ActionEvent evt) {
+<span class="nc bnc" id="L645" title="All 2 branches missed.">    if (audioCaptureService == null) {</span>
+<span class="nc" id="L646">      LOGGER.warning(&quot;toggleAudioStartStop: audioCaptureService is null&quot;);</span>
+<span class="nc" id="L647">      JOptionPane.showMessageDialog(</span>
+          this, &quot;AudioCaptureService is not available.&quot;, ERROR_TITLE, JOptionPane.ERROR_MESSAGE);
+<span class="nc" id="L649">      return;</span>
+    }
+
+<span class="nc bnc" id="L652" title="All 2 branches missed.">    if (audioCaptureService.isRunning()) {</span>
+<span class="nc" id="L653">      LOGGER.info(&quot;Stopping audio capture&quot;);</span>
+<span class="nc" id="L654">      audioCaptureService.stop();</span>
+<span class="nc" id="L655">      mntmStart.setSelected(false);</span>
+    } else {
+<span class="nc" id="L657">      LOGGER.info(&quot;Starting audio capture&quot;);</span>
+      try {
+<span class="nc" id="L659">        audioCaptureService.start();</span>
+<span class="nc" id="L660">        mntmStart.setSelected(true);</span>
+<span class="nc" id="L661">      } catch (Exception ex) {</span>
+<span class="nc" id="L662">        LOGGER.log(Level.SEVERE, &quot;Failed to start audio capture&quot;, ex);</span>
+<span class="nc" id="L663">        JOptionPane.showMessageDialog(</span>
+            this,
+<span class="nc" id="L665">            &quot;Failed to start audio capture: &quot; + ex.getMessage(),</span>
+            ERROR_TITLE,
+            JOptionPane.ERROR_MESSAGE);
+<span class="nc" id="L668">        mntmStart.setSelected(false);</span>
+<span class="nc" id="L669">      }</span>
+    }
+<span class="nc" id="L671">  }</span>
+
+  private void stopAudioIfRunning() {
+<span class="nc bnc" id="L674" title="All 4 branches missed.">    if (audioCaptureService != null &amp;&amp; audioCaptureService.isRunning()) {</span>
+<span class="nc" id="L675">      audioCaptureService.stop();</span>
+    }
+<span class="nc" id="L677">  }</span>
+
+  private void setFrozen(boolean frozen) {
+<span class="nc" id="L680">    frozenBlock =</span>
+<span class="nc bnc" id="L681" title="All 4 branches missed.">        frozen &amp;&amp; audioCaptureService != null ? audioCaptureService.getLatestBlock() : null;</span>
+<span class="nc" id="L682">    waveformPanel.setFrozen(frozen);</span>
+<span class="nc" id="L683">    spectrumPanel.setFrozen(frozen);</span>
+<span class="nc" id="L684">    spectrogramPanel.setFrozen(frozen);</span>
+<span class="nc" id="L685">    diagnosisPanel.setFrozen(frozen);</span>
+<span class="nc" id="L686">    mntmFreeze.setSelected(frozen);</span>
+<span class="nc" id="L687">  }</span>
+
+  private void updateUIFromModel() {
+<span class="nc bnc" id="L690" title="All 2 branches missed.">    if (!SwingUtilities.isEventDispatchThread()) {</span>
+<span class="nc" id="L691">      SwingUtilities.invokeLater(this::updateUIFromModel);</span>
+<span class="nc" id="L692">      return;</span>
+    }
+
+<span class="nc bnc" id="L695" title="All 2 branches missed.">    if (audioCaptureService != null) {</span>
+<span class="nc" id="L696">      textFieldDataSize.setText(String.valueOf(audioCaptureService.getLatestModel().getDataSize()));</span>
+<span class="nc" id="L697">      textFieldDivisor.setText(String.valueOf(audioCaptureService.getDivisor()));</span>
+<span class="nc" id="L698">      textFieldAudioFormat.setText(</span>
+<span class="nc bnc" id="L699" title="All 2 branches missed.">          audioCaptureService.getFormat() != null</span>
+<span class="nc" id="L700">              ? audioCaptureService.getFormat().toString()</span>
+<span class="nc" id="L701">              : defaultAudioFormat().toString());</span>
+<span class="nc" id="L702">      double peakHz = spectrumPanel.getPeakFrequencyHz();</span>
+<span class="nc" id="L703">      textFieldPeakFrequency.setText(</span>
+<span class="nc bnc" id="L704" title="All 2 branches missed.">          Double.isNaN(peakHz) ? &quot;n/a&quot; : String.format(&quot;%.1f Hz&quot;, peakHz));</span>
+<span class="nc" id="L705">      AudioBlock measurementBlock = currentMeasurementBlock();</span>
+      StereoDelaySnapshot delaySnapshot =
+<span class="nc bnc" id="L707" title="All 4 branches missed.">          measurementBlock != null &amp;&amp; measurementBlock.channels() &gt;= 2</span>
+<span class="nc" id="L708">              ? stereoDelayAnalyzer().analyze(measurementBlock)</span>
+<span class="nc" id="L709">              : null;</span>
+<span class="nc" id="L710">      MeasurementSnapshot measurements =</span>
+<span class="nc" id="L711">          measurementCalculator.calculate(measurementBlock, spectrumPanel.getCurrentSpectrum());</span>
+<span class="nc" id="L712">      updateMeasurementFields(measurements);</span>
+<span class="nc" id="L713">      updateStereoDelayFields(delaySnapshot);</span>
+<span class="nc" id="L714">      updateDiagnosis(measurementBlock, delaySnapshot);</span>
+<span class="nc" id="L715">      mntmStart.setSelected(audioCaptureService.isRunning());</span>
+<span class="nc" id="L716">    } else {</span>
+<span class="nc" id="L717">      textFieldDataSize.setText(&quot;&quot;);</span>
+<span class="nc" id="L718">      textFieldDivisor.setText(&quot;&quot;);</span>
+<span class="nc" id="L719">      textFieldAudioFormat.setText(&quot;&quot;);</span>
+<span class="nc" id="L720">      textFieldPeakFrequency.setText(&quot;n/a&quot;);</span>
+<span class="nc" id="L721">      updateMeasurementFields(NO_MEASUREMENT);</span>
+<span class="nc" id="L722">      updateStereoDelayFields(null);</span>
+<span class="nc" id="L723">      updateDiagnosis(null, null);</span>
+<span class="nc" id="L724">      mntmStart.setSelected(false);</span>
+    }
+<span class="nc" id="L726">  }</span>
+
+  private void updateDiagnosis(AudioBlock block, StereoDelaySnapshot delay) {
+<span class="nc" id="L729">    SpectrumSnapshot spectrum = spectrumPanel.getCurrentSpectrum();</span>
+<span class="nc" id="L730">    org.hammer.audio.spectrogram.SpectrogramHistory history = spectrogramPanel.getHistory();</span>
+<span class="nc" id="L731">    lastDiagnosis = diagnosisAnalyzer.analyze(block, spectrum, history, delay);</span>
+<span class="nc" id="L732">    diagnosisPanel.setFindings(lastDiagnosis);</span>
+<span class="nc" id="L733">  }</span>
+
+  private void updateMeasurementFields(MeasurementSnapshot measurements) {
+<span class="nc" id="L736">    textFieldRms.setText(formatLevel(measurements.rms()));</span>
+<span class="nc" id="L737">    textFieldPeakLevel.setText(formatLevel(measurements.peakLevel()));</span>
+<span class="nc" id="L738">    textFieldDominantFrequency.setText(</span>
+<span class="nc bnc" id="L739" title="All 2 branches missed.">        Double.isNaN(measurements.dominantFrequencyHz())</span>
+<span class="nc" id="L740">            ? &quot;n/a&quot;</span>
+<span class="nc" id="L741">            : String.format(Locale.ROOT, &quot;%.1f Hz&quot;, measurements.dominantFrequencyHz()));</span>
+<span class="nc" id="L742">    textFieldStereoCorrelation.setText(</span>
+<span class="nc bnc" id="L743" title="All 2 branches missed.">        measurements.stereoCorrelationAvailable()</span>
+<span class="nc" id="L744">            ? String.format(Locale.ROOT, &quot;%.3f&quot;, measurements.stereoCorrelation())</span>
+<span class="nc" id="L745">            : &quot;n/a&quot;);</span>
+<span class="nc bnc" id="L746" title="All 2 branches missed.">    if (measurements.clipping()) {</span>
+<span class="nc" id="L747">      textFieldClipping.setText(&quot;YES&quot;);</span>
+<span class="nc" id="L748">      textFieldClipping.setForeground(Color.WHITE);</span>
+<span class="nc" id="L749">      textFieldClipping.setBackground(new Color(180, 0, 0));</span>
+    } else {
+<span class="nc" id="L751">      textFieldClipping.setText(&quot;no&quot;);</span>
+<span class="nc" id="L752">      textFieldClipping.setForeground(Color.BLACK);</span>
+<span class="nc" id="L753">      textFieldClipping.setBackground(new Color(225, 240, 225));</span>
+    }
+<span class="nc" id="L755">  }</span>
+
+  private static String formatLevel(double value) {
+<span class="nc bnc" id="L758" title="All 2 branches missed.">    return Double.isNaN(value) ? &quot;n/a&quot; : String.format(Locale.ROOT, &quot;%.4f&quot;, value);</span>
+  }
+
+  private void updateStereoDelayFields(StereoDelaySnapshot delay) {
+<span class="nc bnc" id="L762" title="All 2 branches missed.">    if (delay == null) {</span>
+<span class="nc" id="L763">      textFieldStereoDelay.setText(&quot;n/a&quot;);</span>
+<span class="nc" id="L764">      textFieldStereoAngle.setText(&quot;n/a&quot;);</span>
+<span class="nc" id="L765">      textFieldStereoConfidence.setText(&quot;n/a&quot;);</span>
+<span class="nc" id="L766">      return;</span>
+    }
+<span class="nc" id="L768">    textFieldStereoConfidence.setText(String.format(Locale.ROOT, &quot;%.2f&quot;, delay.confidence()));</span>
+<span class="nc bnc" id="L769" title="All 2 branches missed.">    if (delay.valid()) {</span>
+<span class="nc" id="L770">      textFieldStereoDelay.setText(</span>
+<span class="nc" id="L771">          String.format(Locale.ROOT, &quot;%+d / %+.2f ms&quot;, delay.delaySamples(), delay.delayMillis()));</span>
+<span class="nc" id="L772">      textFieldStereoAngle.setText(String.format(Locale.ROOT, &quot;%+.1f°&quot;, delay.angleDegrees()));</span>
+    } else {
+<span class="nc" id="L774">      textFieldStereoDelay.setText(delayStatusLabel(delay.status()));</span>
+<span class="nc" id="L775">      textFieldStereoAngle.setText(&quot;n/a&quot;);</span>
+    }
+<span class="nc" id="L777">  }</span>
+
+  private double microphoneSpacingMeters() {
+    try {
+<span class="nc" id="L781">      double spacing = Double.parseDouble(textFieldMicrophoneSpacing.getText().trim());</span>
+<span class="nc bnc" id="L782" title="All 4 branches missed.">      if (spacing &gt; 0.0 &amp;&amp; Double.isFinite(spacing)) {</span>
+<span class="nc" id="L783">        return spacing;</span>
+      }
+<span class="nc" id="L785">    } catch (NumberFormatException ex) {</span>
+<span class="nc" id="L786">      LOGGER.fine(() -&gt; &quot;Invalid microphone spacing: &quot; + textFieldMicrophoneSpacing.getText());</span>
+<span class="nc" id="L787">    }</span>
+<span class="nc" id="L788">    return StereoDelayAnalyzer.DEFAULT_MICROPHONE_SPACING_METERS;</span>
+  }
+
+  private StereoDelayAnalyzer stereoDelayAnalyzer() {
+<span class="nc" id="L792">    double spacingMeters = microphoneSpacingMeters();</span>
+<span class="nc bnc" id="L793" title="All 2 branches missed.">    if (stereoDelayAnalyzer == null</span>
+<span class="nc bnc" id="L794" title="All 2 branches missed.">        || !Double.isFinite(stereoDelayAnalyzerSpacingMeters)</span>
+<span class="nc bnc" id="L795" title="All 2 branches missed.">        || Double.compare(stereoDelayAnalyzerSpacingMeters, spacingMeters) != 0) {</span>
+<span class="nc" id="L796">      stereoDelayAnalyzer =</span>
+          new StereoDelayAnalyzer(
+              spacingMeters, StereoDelayAnalyzer.DEFAULT_SPEED_OF_SOUND_METERS_PER_SECOND, 0.35);
+<span class="nc" id="L799">      stereoDelayAnalyzerSpacingMeters = spacingMeters;</span>
+    }
+<span class="nc" id="L801">    return stereoDelayAnalyzer;</span>
+  }
+
+  private static String delayStatusLabel(StereoDelayStatus status) {
+<span class="nc bnc" id="L805" title="All 5 branches missed.">    return switch (status) {</span>
+<span class="nc" id="L806">      case MONO_INPUT -&gt; &quot;mono&quot;;</span>
+<span class="nc" id="L807">      case SILENCE -&gt; &quot;silence&quot;;</span>
+<span class="nc" id="L808">      case LOW_CORRELATION -&gt; &quot;low corr&quot;;</span>
+<span class="nc" id="L809">      case DELAY_OUTSIDE_PHYSICAL_RANGE -&gt; &quot;impossible&quot;;</span>
+<span class="nc" id="L810">      case VALID -&gt; &quot;valid&quot;;</span>
+    };
+  }
+
+  private void exportMeasurementCsv() {
+<span class="nc" id="L815">    AudioBlock block = currentMeasurementBlock();</span>
+<span class="nc" id="L816">    SpectrumSnapshot spectrum = spectrumPanel.getCurrentSpectrum();</span>
+<span class="nc bnc" id="L817" title="All 4 branches missed.">    if (block == null &amp;&amp; spectrum == null) {</span>
+<span class="nc" id="L818">      JOptionPane.showMessageDialog(</span>
+          this,
+          &quot;No measurement data available to export.&quot;,
+          &quot;Export CSV&quot;,
+          JOptionPane.INFORMATION_MESSAGE);
+<span class="nc" id="L823">      return;</span>
+    }
+
+<span class="nc" id="L826">    JFileChooser chooser = new JFileChooser();</span>
+<span class="nc" id="L827">    chooser.setFileFilter(new FileNameExtensionFilter(&quot;CSV files&quot;, &quot;csv&quot;));</span>
+<span class="nc" id="L828">    chooser.setSelectedFile(new java.io.File(&quot;measurement.csv&quot;));</span>
+<span class="nc bnc" id="L829" title="All 2 branches missed.">    if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) {</span>
+<span class="nc" id="L830">      return;</span>
+    }
+
+<span class="nc" id="L833">    java.io.File file = ensureExtension(chooser.getSelectedFile(), &quot;.csv&quot;);</span>
+<span class="nc" id="L834">    try (PrintWriter writer =</span>
+<span class="nc" id="L835">        new PrintWriter(Files.newBufferedWriter(file.toPath(), StandardCharsets.UTF_8))) {</span>
+<span class="nc" id="L836">      writeMeasurementCsv(writer, block, spectrum);</span>
+<span class="nc" id="L837">      JOptionPane.showMessageDialog(</span>
+          this, &quot;Measurement exported to &quot; + file, &quot;Export CSV&quot;, JOptionPane.INFORMATION_MESSAGE);
+<span class="nc" id="L839">    } catch (IOException ex) {</span>
+<span class="nc" id="L840">      LOGGER.log(Level.SEVERE, &quot;Failed to export CSV&quot;, ex);</span>
+<span class="nc" id="L841">      JOptionPane.showMessageDialog(</span>
+<span class="nc" id="L842">          this, &quot;Failed to export CSV: &quot; + ex.getMessage(), ERROR_TITLE, JOptionPane.ERROR_MESSAGE);</span>
+<span class="nc" id="L843">    }</span>
+<span class="nc" id="L844">  }</span>
+
+  private void exportMeasurementPng() {
+<span class="nc bnc" id="L847" title="All 4 branches missed.">    if (visualizationPanel.getWidth() &lt;= 0 || visualizationPanel.getHeight() &lt;= 0) {</span>
+<span class="nc" id="L848">      JOptionPane.showMessageDialog(</span>
+          this,
+          &quot;Visualization is not ready to export.&quot;,
+          &quot;Export PNG&quot;,
+          JOptionPane.INFORMATION_MESSAGE);
+<span class="nc" id="L853">      return;</span>
+    }
+
+<span class="nc" id="L856">    JFileChooser chooser = new JFileChooser();</span>
+<span class="nc" id="L857">    chooser.setFileFilter(new FileNameExtensionFilter(&quot;PNG images&quot;, &quot;png&quot;));</span>
+<span class="nc" id="L858">    chooser.setSelectedFile(new java.io.File(&quot;measurement.png&quot;));</span>
+<span class="nc bnc" id="L859" title="All 2 branches missed.">    if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) {</span>
+<span class="nc" id="L860">      return;</span>
+    }
+
+<span class="nc" id="L863">    java.io.File file = ensureExtension(chooser.getSelectedFile(), &quot;.png&quot;);</span>
+<span class="nc" id="L864">    BufferedImage image =</span>
+        new BufferedImage(
+<span class="nc" id="L866">            visualizationPanel.getWidth(),</span>
+<span class="nc" id="L867">            visualizationPanel.getHeight(),</span>
+            BufferedImage.TYPE_INT_ARGB);
+<span class="nc" id="L869">    java.awt.Graphics2D graphics = image.createGraphics();</span>
+    try {
+<span class="nc" id="L871">      visualizationPanel.paintAll(graphics);</span>
+    } finally {
+<span class="nc" id="L873">      graphics.dispose();</span>
+    }
+    try {
+<span class="nc" id="L876">      ImageIO.write(image, &quot;png&quot;, file);</span>
+<span class="nc" id="L877">      JOptionPane.showMessageDialog(</span>
+          this, &quot;Measurement exported to &quot; + file, &quot;Export PNG&quot;, JOptionPane.INFORMATION_MESSAGE);
+<span class="nc" id="L879">    } catch (IOException ex) {</span>
+<span class="nc" id="L880">      LOGGER.log(Level.SEVERE, &quot;Failed to export PNG&quot;, ex);</span>
+<span class="nc" id="L881">      JOptionPane.showMessageDialog(</span>
+<span class="nc" id="L882">          this, &quot;Failed to export PNG: &quot; + ex.getMessage(), ERROR_TITLE, JOptionPane.ERROR_MESSAGE);</span>
+<span class="nc" id="L883">    }</span>
+<span class="nc" id="L884">  }</span>
+
+  private void exportEvidenceBundle() {
+<span class="nc" id="L887">    AudioBlock block = currentMeasurementBlock();</span>
+<span class="nc" id="L888">    SpectrumSnapshot spectrum = spectrumPanel.getCurrentSpectrum();</span>
+<span class="nc" id="L889">    org.hammer.audio.spectrogram.SpectrogramHistory history = spectrogramPanel.getHistory();</span>
+<span class="nc" id="L890">    StereoDelaySnapshot delay = null;</span>
+<span class="nc bnc" id="L891" title="All 4 branches missed.">    if (block != null &amp;&amp; block.channels() &gt;= 2) {</span>
+<span class="nc" id="L892">      delay = stereoDelayAnalyzer().analyze(block);</span>
+    }
+<span class="nc" id="L894">    org.hammer.audio.diagnosis.DiagnosisSnapshot diagnosis =</span>
+<span class="nc" id="L895">        diagnosisAnalyzer.analyze(block, spectrum, history, delay);</span>
+<span class="nc" id="L896">    lastDiagnosis = diagnosis;</span>
+<span class="nc" id="L897">    diagnosisPanel.setFindings(diagnosis);</span>
+
+<span class="nc bnc" id="L899" title="All 6 branches missed.">    if (block == null</span>
+        &amp;&amp; spectrum == null
+<span class="nc bnc" id="L901" title="All 4 branches missed.">        &amp;&amp; (history == null || history.isEmpty())</span>
+        &amp;&amp; delay == null
+<span class="nc bnc" id="L903" title="All 2 branches missed.">        &amp;&amp; diagnosis.isEmpty()) {</span>
+<span class="nc" id="L904">      JOptionPane.showMessageDialog(</span>
+          this,
+          &quot;No measurement data available to export.&quot;,
+          &quot;Export evidence bundle&quot;,
+          JOptionPane.INFORMATION_MESSAGE);
+<span class="nc" id="L909">      return;</span>
+    }
+
+<span class="nc" id="L912">    JFileChooser chooser = new JFileChooser();</span>
+<span class="nc" id="L913">    chooser.setDialogTitle(&quot;Export evidence bundle&quot;);</span>
+<span class="nc" id="L914">    chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);</span>
+<span class="nc bnc" id="L915" title="All 2 branches missed.">    if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) {</span>
+<span class="nc" id="L916">      return;</span>
+    }
+<span class="nc" id="L918">    java.io.File parent = chooser.getSelectedFile();</span>
+<span class="nc bnc" id="L919" title="All 2 branches missed.">    if (parent == null) {</span>
+<span class="nc" id="L920">      return;</span>
+    }
+<span class="nc" id="L922">    BufferedImage screenshot = null;</span>
+<span class="nc bnc" id="L923" title="All 4 branches missed.">    if (visualizationPanel.getWidth() &gt; 0 &amp;&amp; visualizationPanel.getHeight() &gt; 0) {</span>
+<span class="nc" id="L924">      screenshot =</span>
+          new BufferedImage(
+<span class="nc" id="L926">              visualizationPanel.getWidth(),</span>
+<span class="nc" id="L927">              visualizationPanel.getHeight(),</span>
+              BufferedImage.TYPE_INT_ARGB);
+<span class="nc" id="L929">      java.awt.Graphics2D graphics = screenshot.createGraphics();</span>
+      try {
+<span class="nc" id="L931">        visualizationPanel.paintAll(graphics);</span>
+      } finally {
+<span class="nc" id="L933">        graphics.dispose();</span>
+      }
+    }
+    org.hammer.audio.export.EvidenceData payload =
+<span class="nc" id="L937">        org.hammer.audio.export.EvidenceData.builder()</span>
+<span class="nc" id="L938">            .timestamp(java.time.Instant.now())</span>
+<span class="nc" id="L939">            .screenshot(screenshot)</span>
+<span class="nc" id="L940">            .block(block)</span>
+<span class="nc" id="L941">            .spectrum(spectrum)</span>
+<span class="nc" id="L942">            .spectrogram(history)</span>
+<span class="nc" id="L943">            .stereoDelay(delay)</span>
+<span class="nc" id="L944">            .diagnosis(diagnosis)</span>
+<span class="nc" id="L945">            .notes(</span>
+<span class="nc bnc" id="L946" title="All 2 branches missed.">                inputMode == InputMode.DEMO ? &quot;Demo signal: &quot; + selectedDemoSignal() : &quot;Live input&quot;)</span>
+<span class="nc" id="L947">            .build();</span>
+    try {
+<span class="nc" id="L949">      java.nio.file.Path bundleDir =</span>
+<span class="nc" id="L950">          new org.hammer.audio.export.EvidenceBundleExporter().export(parent.toPath(), payload);</span>
+<span class="nc" id="L951">      JOptionPane.showMessageDialog(</span>
+          this,
+          &quot;Evidence bundle exported to &quot; + bundleDir,
+          &quot;Export evidence bundle&quot;,
+          JOptionPane.INFORMATION_MESSAGE);
+<span class="nc" id="L956">    } catch (IOException | IllegalArgumentException ex) {</span>
+<span class="nc" id="L957">      LOGGER.log(Level.SEVERE, &quot;Failed to export evidence bundle&quot;, ex);</span>
+<span class="nc" id="L958">      JOptionPane.showMessageDialog(</span>
+          this,
+<span class="nc" id="L960">          &quot;Failed to export evidence bundle: &quot; + ex.getMessage(),</span>
+          ERROR_TITLE,
+          JOptionPane.ERROR_MESSAGE);
+<span class="nc" id="L963">    }</span>
+<span class="nc" id="L964">  }</span>
+
+  private AudioBlock currentMeasurementBlock() {
+<span class="nc bnc" id="L967" title="All 2 branches missed.">    if (frozenBlock != null) {</span>
+<span class="nc" id="L968">      return frozenBlock;</span>
+    }
+<span class="nc bnc" id="L970" title="All 2 branches missed.">    return audioCaptureService != null ? audioCaptureService.getLatestBlock() : null;</span>
+  }
+
+  private void writeMeasurementCsv(
+      PrintWriter writer, AudioBlock block, SpectrumSnapshot spectrum) {
+<span class="nc" id="L975">    writer.println(&quot;section,key,value&quot;);</span>
+<span class="nc bnc" id="L976" title="All 2 branches missed.">    if (block != null) {</span>
+<span class="nc" id="L977">      writer.printf(Locale.ROOT, &quot;metadata,sampleRate,%.3f%n&quot;, block.format().sampleRate());</span>
+<span class="nc" id="L978">      writer.printf(Locale.ROOT, &quot;metadata,channels,%d%n&quot;, block.channels());</span>
+<span class="nc" id="L979">      writer.printf(Locale.ROOT, &quot;metadata,frames,%d%n&quot;, block.frames());</span>
+<span class="nc" id="L980">      writer.printf(Locale.ROOT, &quot;metadata,frameIndex,%d%n&quot;, block.frameIndex());</span>
+<span class="nc" id="L981">      writer.println();</span>
+<span class="nc" id="L982">      writer.print(&quot;sampleIndex&quot;);</span>
+<span class="nc bnc" id="L983" title="All 2 branches missed.">      for (int channel = 0; channel &lt; block.channels(); channel++) {</span>
+<span class="nc" id="L984">        writer.print(&quot;,channel&quot;);</span>
+<span class="nc" id="L985">        writer.print(channel);</span>
+      }
+<span class="nc" id="L987">      writer.println();</span>
+<span class="nc" id="L988">      float[][] samples = block.samples();</span>
+<span class="nc bnc" id="L989" title="All 2 branches missed.">      for (int frame = 0; frame &lt; block.frames(); frame++) {</span>
+<span class="nc" id="L990">        writer.print(frame);</span>
+<span class="nc bnc" id="L991" title="All 2 branches missed.">        for (int channel = 0; channel &lt; block.channels(); channel++) {</span>
+<span class="nc" id="L992">          writer.printf(Locale.ROOT, &quot;,%.9f&quot;, samples[channel][frame]);</span>
+        }
+<span class="nc" id="L994">        writer.println();</span>
+      }
+    }
+<span class="nc bnc" id="L997" title="All 2 branches missed.">    if (spectrum != null) {</span>
+<span class="nc" id="L998">      writer.println();</span>
+<span class="nc" id="L999">      writer.println(&quot;bin,frequencyHz,magnitude&quot;);</span>
+<span class="nc bnc" id="L1000" title="All 2 branches missed.">      for (int bin = 0; bin &lt; spectrum.binCount(); bin++) {</span>
+<span class="nc" id="L1001">        writer.printf(</span>
+            Locale.ROOT,
+            &quot;%d,%.6f,%.9f%n&quot;,
+<span class="nc" id="L1004">            bin,</span>
+<span class="nc" id="L1005">            spectrum.frequencyOfBin(bin),</span>
+<span class="nc" id="L1006">            spectrum.magnitude(bin));</span>
+      }
+    }
+<span class="nc" id="L1009">  }</span>
+
+  private static AudioFormat defaultAudioFormat() {
+<span class="nc" id="L1012">    return new AudioFormat(</span>
+        DEFAULT_SAMPLE_RATE,
+        DEFAULT_SAMPLE_BITS,
+        DEFAULT_CHANNELS,
+        DEFAULT_SIGNED,
+        DEFAULT_BIG_ENDIAN);
+  }
+
+  private static java.io.File ensureExtension(java.io.File file, String extension) {
+<span class="nc" id="L1021">    String name = file.getName().toLowerCase(Locale.ROOT);</span>
+<span class="nc bnc" id="L1022" title="All 2 branches missed.">    if (name.endsWith(extension)) {</span>
+<span class="nc" id="L1023">      return file;</span>
+    }
+<span class="nc" id="L1025">    return new java.io.File(file.getParentFile(), file.getName() + extension);</span>
+  }
+
+  private void startRecording() {
+<span class="nc bnc" id="L1029" title="All 4 branches missed.">    if (recordingTap != null &amp;&amp; !recordingTap.isClosed()) {</span>
+<span class="nc" id="L1030">      JOptionPane.showMessageDialog(</span>
+          this,
+<span class="nc" id="L1032">          &quot;A recording is already in progress (&quot; + recordingTap.file() + &quot;).&quot;,</span>
+          &quot;Recording&quot;,
+          JOptionPane.WARNING_MESSAGE);
+<span class="nc" id="L1035">      return;</span>
+    }
+<span class="nc bnc" id="L1037" title="All 2 branches missed.">    if (audioCaptureService == null) {</span>
+<span class="nc" id="L1038">      return;</span>
+    }
+<span class="nc" id="L1040">    JFileChooser chooser = new JFileChooser();</span>
+<span class="nc" id="L1041">    chooser.setFileFilter(new FileNameExtensionFilter(&quot;AudioAnalyzer recording (*.aar)&quot;, &quot;aar&quot;));</span>
+<span class="nc" id="L1042">    chooser.setSelectedFile(new java.io.File(&quot;recording.aar&quot;));</span>
+<span class="nc bnc" id="L1043" title="All 2 branches missed.">    if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) {</span>
+<span class="nc" id="L1044">      return;</span>
+    }
+<span class="nc" id="L1046">    java.io.File file = ensureExtension(chooser.getSelectedFile(), &quot;.aar&quot;);</span>
+    try {
+<span class="nc" id="L1048">      recordingTap =</span>
+<span class="nc" id="L1049">          org.hammer.audio.RecordingTap.start(</span>
+<span class="nc" id="L1050">              audioCaptureService, file.toPath(), UiConstants.REFRESH_INTERVAL_MS);</span>
+<span class="nc" id="L1051">      JOptionPane.showMessageDialog(</span>
+          this,
+          &quot;Recording to &quot; + file + &quot; (Stop recording when done).&quot;,
+          &quot;Recording&quot;,
+          JOptionPane.INFORMATION_MESSAGE);
+<span class="nc" id="L1056">    } catch (IOException ex) {</span>
+<span class="nc" id="L1057">      LOGGER.log(Level.SEVERE, &quot;Failed to start recording&quot;, ex);</span>
+<span class="nc" id="L1058">      JOptionPane.showMessageDialog(</span>
+          this,
+<span class="nc" id="L1060">          &quot;Failed to start recording: &quot; + ex.getMessage(),</span>
+          ERROR_TITLE,
+          JOptionPane.ERROR_MESSAGE);
+<span class="nc" id="L1063">    }</span>
+<span class="nc" id="L1064">  }</span>
+
+  private void stopRecording() {
+<span class="nc bnc" id="L1067" title="All 4 branches missed.">    if (recordingTap == null || recordingTap.isClosed()) {</span>
+<span class="nc" id="L1068">      JOptionPane.showMessageDialog(</span>
+          this, &quot;No recording is in progress.&quot;, &quot;Recording&quot;, JOptionPane.INFORMATION_MESSAGE);
+<span class="nc" id="L1070">      return;</span>
+    }
+    try {
+<span class="nc" id="L1073">      long blocks = recordingTap.blocksWritten();</span>
+<span class="nc" id="L1074">      java.nio.file.Path file = recordingTap.file();</span>
+<span class="nc" id="L1075">      recordingTap.stop();</span>
+<span class="nc" id="L1076">      JOptionPane.showMessageDialog(</span>
+          this,
+          &quot;Recording stopped (&quot; + blocks + &quot; blocks written to &quot; + file + &quot;).&quot;,
+          &quot;Recording&quot;,
+          JOptionPane.INFORMATION_MESSAGE);
+<span class="nc" id="L1081">    } catch (IOException ex) {</span>
+<span class="nc" id="L1082">      LOGGER.log(Level.SEVERE, &quot;Failed to close recording&quot;, ex);</span>
+<span class="nc" id="L1083">      JOptionPane.showMessageDialog(</span>
+          this,
+<span class="nc" id="L1085">          &quot;Failed to close recording: &quot; + ex.getMessage(),</span>
+          ERROR_TITLE,
+          JOptionPane.ERROR_MESSAGE);
+<span class="nc" id="L1088">    }</span>
+<span class="nc" id="L1089">  }</span>
+
+  private void stopActiveRecordingTapQuietly() {
+<span class="nc bnc" id="L1092" title="All 4 branches missed.">    if (recordingTap == null || recordingTap.isClosed()) {</span>
+<span class="nc" id="L1093">      return;</span>
+    }
+    try {
+<span class="nc" id="L1096">      recordingTap.stop();</span>
+<span class="nc" id="L1097">    } catch (IOException ex) {</span>
+<span class="nc" id="L1098">      LOGGER.log(Level.WARNING, &quot;Failed to stop recording tap before switching source&quot;, ex);</span>
+<span class="nc" id="L1099">    }</span>
+<span class="nc" id="L1100">  }</span>
+
+  private void openRecording() {
+<span class="nc" id="L1103">    JFileChooser chooser = new JFileChooser();</span>
+<span class="nc" id="L1104">    chooser.setFileFilter(new FileNameExtensionFilter(&quot;AudioAnalyzer recording (*.aar)&quot;, &quot;aar&quot;));</span>
+<span class="nc bnc" id="L1105" title="All 2 branches missed.">    if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) {</span>
+<span class="nc" id="L1106">      return;</span>
+    }
+<span class="nc" id="L1108">    java.io.File file = chooser.getSelectedFile();</span>
+    try {
+<span class="nc" id="L1110">      org.hammer.audio.RecordedAudioCaptureService replay =</span>
+<span class="nc" id="L1111">          org.hammer.audio.RecordedAudioCaptureService.open(file.toPath(), false);</span>
+      // Stop any in-progress recording before swapping the capture service so the tap doesn't
+      // keep polling the previous source and silently corrupt the recording.
+<span class="nc" id="L1114">      stopActiveRecordingTapQuietly();</span>
+<span class="nc" id="L1115">      stopAudioIfRunning();</span>
+<span class="nc" id="L1116">      audioCaptureService = replay;</span>
+<span class="nc" id="L1117">      waveformPanel.setAudioCaptureService(replay);</span>
+<span class="nc" id="L1118">      phaseDiagramPanel.setAudioCaptureService(replay);</span>
+<span class="nc" id="L1119">      spectrumPanel.setAudioCaptureService(replay);</span>
+<span class="nc" id="L1120">      spectrogramPanel.setAudioCaptureService(replay);</span>
+<span class="nc" id="L1121">      setFrozen(false);</span>
+<span class="nc" id="L1122">      replay.start();</span>
+<span class="nc" id="L1123">      mntmStart.setSelected(true);</span>
+<span class="nc" id="L1124">      JOptionPane.showMessageDialog(</span>
+          this,
+<span class="nc" id="L1126">          &quot;Replaying &quot; + file + &quot; (&quot; + replay.blockCount() + &quot; blocks).&quot;,</span>
+          &quot;Recording&quot;,
+          JOptionPane.INFORMATION_MESSAGE);
+<span class="nc" id="L1129">    } catch (IOException ex) {</span>
+<span class="nc" id="L1130">      LOGGER.log(Level.SEVERE, &quot;Failed to open recording&quot;, ex);</span>
+<span class="nc" id="L1131">      JOptionPane.showMessageDialog(</span>
+          this,
+<span class="nc" id="L1133">          &quot;Failed to open recording: &quot; + ex.getMessage(),</span>
+          ERROR_TITLE,
+          JOptionPane.ERROR_MESSAGE);
+<span class="nc" id="L1136">    }</span>
+<span class="nc" id="L1137">  }</span>
+
+  private void compareRecordings() {
+<span class="nc" id="L1140">    JFileChooser chooserA = new JFileChooser();</span>
+<span class="nc" id="L1141">    chooserA.setDialogTitle(&quot;Select recording A&quot;);</span>
+<span class="nc" id="L1142">    chooserA.setFileFilter(new FileNameExtensionFilter(&quot;AudioAnalyzer recording (*.aar)&quot;, &quot;aar&quot;));</span>
+<span class="nc bnc" id="L1143" title="All 2 branches missed.">    if (chooserA.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) {</span>
+<span class="nc" id="L1144">      return;</span>
+    }
+<span class="nc" id="L1146">    JFileChooser chooserB = new JFileChooser();</span>
+<span class="nc" id="L1147">    chooserB.setDialogTitle(&quot;Select recording B&quot;);</span>
+<span class="nc" id="L1148">    chooserB.setFileFilter(new FileNameExtensionFilter(&quot;AudioAnalyzer recording (*.aar)&quot;, &quot;aar&quot;));</span>
+<span class="nc bnc" id="L1149" title="All 2 branches missed.">    if (chooserB.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) {</span>
+<span class="nc" id="L1150">      return;</span>
+    }
+<span class="nc" id="L1152">    java.io.File fileA = chooserA.getSelectedFile();</span>
+<span class="nc" id="L1153">    java.io.File fileB = chooserB.getSelectedFile();</span>
+    try {
+<span class="nc" id="L1155">      org.hammer.audio.compare.ComparisonReport report =</span>
+          new org.hammer.audio.compare.RecordingComparator()
+<span class="nc" id="L1157">              .compareFiles(fileA.toPath(), fileB.toPath(), fileA.getName(), fileB.getName());</span>
+<span class="nc" id="L1158">      String markdown =</span>
+<span class="nc" id="L1159">          new org.hammer.audio.compare.MarkdownComparisonReportRenderer().render(report);</span>
+
+<span class="nc" id="L1161">      JFileChooser save = new JFileChooser();</span>
+<span class="nc" id="L1162">      save.setDialogTitle(&quot;Save A/B comparison report&quot;);</span>
+<span class="nc" id="L1163">      save.setFileFilter(new FileNameExtensionFilter(&quot;Markdown (*.md)&quot;, &quot;md&quot;));</span>
+<span class="nc" id="L1164">      save.setSelectedFile(new java.io.File(&quot;ab-report.md&quot;));</span>
+<span class="nc bnc" id="L1165" title="All 2 branches missed.">      if (save.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {</span>
+<span class="nc" id="L1166">        java.io.File out = ensureExtension(save.getSelectedFile(), &quot;.md&quot;);</span>
+<span class="nc" id="L1167">        Files.writeString(out.toPath(), markdown, StandardCharsets.UTF_8);</span>
+<span class="nc" id="L1168">        JOptionPane.showMessageDialog(</span>
+            this, &quot;Report saved to &quot; + out, &quot;A/B comparison&quot;, JOptionPane.INFORMATION_MESSAGE);
+<span class="nc" id="L1170">      } else {</span>
+        // Preview in a dialog if the user does not save.
+<span class="nc" id="L1172">        javax.swing.JTextArea area = new javax.swing.JTextArea(markdown, 24, 80);</span>
+<span class="nc" id="L1173">        area.setEditable(false);</span>
+<span class="nc" id="L1174">        area.setCaretPosition(0);</span>
+<span class="nc" id="L1175">        JOptionPane.showMessageDialog(</span>
+            this,
+            new javax.swing.JScrollPane(area),
+            &quot;A/B comparison report&quot;,
+            JOptionPane.INFORMATION_MESSAGE);
+      }
+<span class="nc" id="L1181">    } catch (IOException ex) {</span>
+<span class="nc" id="L1182">      LOGGER.log(Level.SEVERE, &quot;Failed to compare recordings&quot;, ex);</span>
+<span class="nc" id="L1183">      JOptionPane.showMessageDialog(</span>
+          this,
+<span class="nc" id="L1185">          &quot;Failed to compare recordings: &quot; + ex.getMessage(),</span>
+          ERROR_TITLE,
+          JOptionPane.ERROR_MESSAGE);
+<span class="nc" id="L1188">    }</span>
+<span class="nc" id="L1189">  }</span>
+
+<span class="nc" id="L1191">  private record AudioDeviceItem(Mixer.Info mixerInfo) {</span>
+    @Override
+    public String toString() {
+<span class="nc bnc" id="L1194" title="All 2 branches missed.">      if (mixerInfo == null) {</span>
+<span class="nc" id="L1195">        return &quot;System default input&quot;;</span>
+      }
+<span class="nc" id="L1197">      return mixerInfo.getName() + &quot; — &quot; + mixerInfo.getDescription();</span>
+    }
+  }
+
+<span class="nc" id="L1201">  private enum InputMode {</span>
+<span class="nc" id="L1202">    LIVE,</span>
+<span class="nc" id="L1203">    DEMO</span>
+  }
+
+  private class SwingAction extends AbstractAction {
+    private static final long serialVersionUID = 1L;
+
+<span class="nc" id="L1209">    SwingAction() {</span>
+<span class="nc" id="L1210">      putValue(NAME, &quot;About&quot;);</span>
+<span class="nc" id="L1211">      putValue(SHORT_DESCRIPTION, &quot;Some short description&quot;);</span>
+<span class="nc" id="L1212">    }</span>
+
+    @Override
+    public void actionPerformed(ActionEvent e) {
+<span class="nc" id="L1216">      JOptionPane.showMessageDialog(</span>
+          AudioAnalyseFrame.this, &quot;Carsten Hammer carsten.hammer@t-online.de&quot;);
+<span class="nc" id="L1218">    }</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

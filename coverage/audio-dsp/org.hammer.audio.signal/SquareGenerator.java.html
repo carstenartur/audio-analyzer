@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>SquareGenerator.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer DSP and Analysis</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.signal</a> &gt; <span class="el_source">SquareGenerator.java</span></div><h1>SquareGenerator.java</h1><pre class="source lang-java linenums">package org.hammer.audio.signal;
+
+import org.hammer.audio.core.AudioBlock;
+import org.hammer.audio.core.AudioFormatDescriptor;
+
+/**
+ * Deterministic mono square-wave generator (broadcast to all channels of {@code format}).
+ *
+ * &lt;p&gt;Produces values of {@code +amplitude} for the first half of each period and {@code -amplitude}
+ * for the second half. Useful as a known harmonics-rich test signal for spectrum verification.
+ *
+ * @author refactoring
+ */
+public final class SquareGenerator implements SignalGenerator {
+
+  private final AudioFormatDescriptor format;
+  private final double frequencyHz;
+  private final float amplitude;
+  private final double phaseStep;
+  private double phase;
+  private long frameIndex;
+
+  /**
+   * @param format output format descriptor
+   * @param frequencyHz oscillator frequency in Hz; must be {@code &gt; 0}
+   * @param amplitude peak amplitude
+   */
+<span class="fc" id="L28">  public SquareGenerator(AudioFormatDescriptor format, double frequencyHz, float amplitude) {</span>
+<span class="fc bfc" id="L29" title="All 2 branches covered.">    if (!(frequencyHz &gt; 0.0)) {</span>
+<span class="fc" id="L30">      throw new IllegalArgumentException(&quot;frequencyHz must be &gt; 0, was &quot; + frequencyHz);</span>
+    }
+<span class="fc" id="L32">    this.format = format;</span>
+<span class="fc" id="L33">    this.frequencyHz = frequencyHz;</span>
+<span class="fc" id="L34">    this.amplitude = amplitude;</span>
+<span class="fc" id="L35">    this.phaseStep = 2.0 * Math.PI * frequencyHz / format.sampleRate();</span>
+<span class="fc" id="L36">    this.phase = 0.0;</span>
+<span class="fc" id="L37">    this.frameIndex = 0L;</span>
+<span class="fc" id="L38">  }</span>
+
+  @Override
+  public AudioFormatDescriptor format() {
+<span class="nc" id="L42">    return format;</span>
+  }
+
+  @Override
+  public AudioBlock nextBlock(int frames) {
+<span class="pc bpc" id="L47" title="1 of 2 branches missed.">    if (frames &lt; 1) {</span>
+<span class="nc" id="L48">      throw new IllegalArgumentException(&quot;frames must be &gt;= 1&quot;);</span>
+    }
+<span class="fc" id="L50">    int channels = format.channels();</span>
+<span class="fc" id="L51">    float[][] samples = new float[channels][frames];</span>
+<span class="fc" id="L52">    double p = phase;</span>
+<span class="fc" id="L53">    final double twoPi = 2.0 * Math.PI;</span>
+<span class="fc bfc" id="L54" title="All 2 branches covered.">    for (int i = 0; i &lt; frames; i++) {</span>
+<span class="fc bfc" id="L55" title="All 2 branches covered.">      float v = (Math.sin(p) &gt;= 0.0) ? amplitude : -amplitude;</span>
+<span class="fc bfc" id="L56" title="All 2 branches covered.">      for (int c = 0; c &lt; channels; c++) {</span>
+<span class="fc" id="L57">        samples[c][i] = v;</span>
+      }
+<span class="fc" id="L59">      p += phaseStep;</span>
+    }
+<span class="fc" id="L61">    p = p % twoPi;</span>
+<span class="fc" id="L62">    long index = frameIndex;</span>
+<span class="fc" id="L63">    phase = p;</span>
+<span class="fc" id="L64">    frameIndex += frames;</span>
+<span class="fc" id="L65">    return AudioBlock.wrap(format, samples, index, System.nanoTime());</span>
+  }
+
+  @Override
+  public void reset() {
+<span class="nc" id="L70">    phase = 0.0;</span>
+<span class="nc" id="L71">    frameIndex = 0L;</span>
+<span class="nc" id="L72">  }</span>
+
+  /**
+   * @return frequency of the oscillator in Hz
+   */
+  public double frequencyHz() {
+<span class="nc" id="L78">    return frequencyHz;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

@@ -1,0 +1,198 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WorkbenchParameters.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.workbench</a> &gt; <span class="el_source">WorkbenchParameters.java</span></div><h1>WorkbenchParameters.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.workbench;
+
+import java.util.Objects;
+
+/**
+ * Configurable parameters for an acoustic localization workbench run.
+ *
+ * &lt;p&gt;Use {@link #defaults()} to obtain a {@link Builder} pre-populated with research-grade
+ * defaults, then customise individual fields and call {@link Builder#build()}.
+ *
+ * @param blockSize frames per processed audio block (also used as default FFT size)
+ * @param fftSize FFT size in samples (power of two)
+ * @param maxPeaks maximum peaks per channel returned by the multi-peak detector
+ * @param minSnr minimum peak-to-band-median SNR ratio for accepting a peak
+ * @param bandMinHz lower bound of the frequency search band in Hz
+ * @param bandMaxHz upper bound of the frequency search band in Hz
+ * @param clusteringToleranceHz maximum frequency distance for merging peaks into one cluster in Hz
+ * @param candidateGridSteps number of grid steps along each room axis
+ * @param tdoaEstimatorType TDOA estimator strategy
+ * @param trackerFrequencyMatchHz maximum frequency difference for matching an observation in Hz
+ * @param trackerMissingFramesToDrop consecutive missed frames after which a track is dropped
+ * @param trackerConfidenceDecay multiplicative confidence decay when a track is not observed
+ * @param trackerConfidenceGain additive confidence gain when a track is observed
+ */
+public record WorkbenchParameters(
+    int blockSize,
+    int fftSize,
+    int maxPeaks,
+    double minSnr,
+    double bandMinHz,
+    double bandMaxHz,
+    double clusteringToleranceHz,
+    int candidateGridSteps,
+    TdoaEstimatorType tdoaEstimatorType,
+    double trackerFrequencyMatchHz,
+    int trackerMissingFramesToDrop,
+    double trackerConfidenceDecay,
+    double trackerConfidenceGain) {
+
+  /** TDOA estimator strategy for the workbench pipeline. */
+<span class="fc" id="L41">  public enum TdoaEstimatorType {</span>
+    /** Integer-sample frequency-domain GCC-PHAT baseline and default. */
+<span class="fc" id="L43">    GCC_PHAT,</span>
+    /** Sixteen-times interpolated GCC-PHAT with peak diagnostics and ambiguity evidence. */
+<span class="fc" id="L45">    SUB_SAMPLE_GCC_PHAT,</span>
+    /** Time-domain normalised cross-correlation (faster, weaker under reflections). */
+<span class="fc" id="L47">    CROSS_CORRELATION</span>
+  }
+
+  // Compact constructor: validates inputs
+<span class="fc" id="L51">  public WorkbenchParameters {</span>
+<span class="fc" id="L52">    Objects.requireNonNull(tdoaEstimatorType, &quot;tdoaEstimatorType&quot;);</span>
+<span class="pc bpc" id="L53" title="1 of 2 branches missed.">    if (!Double.isFinite(minSnr)) {</span>
+<span class="nc" id="L54">      throw new IllegalArgumentException(&quot;minSnr must be finite, got &quot; + minSnr);</span>
+    }
+<span class="pc bpc" id="L56" title="2 of 4 branches missed.">    if (!Double.isFinite(bandMinHz) || !Double.isFinite(bandMaxHz)) {</span>
+<span class="nc" id="L57">      throw new IllegalArgumentException(&quot;frequency band bounds must be finite&quot;);</span>
+    }
+<span class="pc bpc" id="L59" title="1 of 2 branches missed.">    if (bandMinHz &gt;= bandMaxHz) {</span>
+<span class="nc" id="L60">      throw new IllegalArgumentException(</span>
+          &quot;bandMinHz (&quot; + bandMinHz + &quot;) must be less than bandMaxHz (&quot; + bandMaxHz + &quot;)&quot;);
+    }
+<span class="fc" id="L63">  }</span>
+
+  /** Return a builder pre-populated with defaults. */
+  public static Builder defaults() {
+<span class="fc" id="L67">    return new Builder();</span>
+  }
+
+  /** Builder for {@link WorkbenchParameters}. */
+  public static final class Builder {
+
+<span class="fc" id="L73">    private int valBlockSize = 1024;</span>
+<span class="fc" id="L74">    private int valFftSize = 1024;</span>
+<span class="fc" id="L75">    private int valMaxPeaks = 3;</span>
+<span class="fc" id="L76">    private double valMinSnr = 2.0;</span>
+<span class="fc" id="L77">    private double valBandMinHz = 150.0;</span>
+<span class="fc" id="L78">    private double valBandMaxHz = 2500.0;</span>
+<span class="fc" id="L79">    private double valClusteringToleranceHz = 25.0;</span>
+<span class="fc" id="L80">    private int valCandidateGridSteps = 8;</span>
+<span class="fc" id="L81">    private TdoaEstimatorType valTdoaEstimatorType = TdoaEstimatorType.GCC_PHAT;</span>
+<span class="fc" id="L82">    private double valTrackerFrequencyMatchHz = 35.0;</span>
+<span class="fc" id="L83">    private int valTrackerMissingFramesToDrop = 4;</span>
+<span class="fc" id="L84">    private double valTrackerConfidenceDecay = 0.85;</span>
+<span class="fc" id="L85">    private double valTrackerConfidenceGain = 0.4;</span>
+
+<span class="fc" id="L87">    private Builder() {</span>
+      // use defaults()
+<span class="fc" id="L89">    }</span>
+
+    /** Set block size (and default FFT size). */
+    public Builder blockSize(int v) {
+<span class="fc" id="L93">      this.valBlockSize = v;</span>
+      // Only adopt v as the default FFT size when it is itself a valid power of two.
+<span class="pc bpc" id="L95" title="2 of 4 branches missed.">      if (v &gt; 0 &amp;&amp; (v &amp; (v - 1)) == 0) {</span>
+<span class="fc" id="L96">        this.valFftSize = v;</span>
+      }
+<span class="fc" id="L98">      return this;</span>
+    }
+
+    /** Set FFT size explicitly (must be a positive power of two). */
+    public Builder fftSize(int v) {
+<span class="pc bpc" id="L103" title="2 of 4 branches missed.">      if (v &lt;= 0 || (v &amp; (v - 1)) != 0) {</span>
+<span class="nc" id="L104">        throw new IllegalArgumentException(&quot;fftSize must be a positive power of two, got &quot; + v);</span>
+      }
+<span class="fc" id="L106">      this.valFftSize = v;</span>
+<span class="fc" id="L107">      return this;</span>
+    }
+
+    /** Set maximum peaks per channel. */
+    public Builder maxPeaks(int v) {
+<span class="nc" id="L112">      this.valMaxPeaks = v;</span>
+<span class="nc" id="L113">      return this;</span>
+    }
+
+    /** Set minimum SNR for peak acceptance. */
+    public Builder minSnr(double v) {
+<span class="nc" id="L118">      this.valMinSnr = v;</span>
+<span class="nc" id="L119">      return this;</span>
+    }
+
+    /** Set lower frequency band boundary in Hz. */
+    public Builder bandMinHz(double v) {
+<span class="nc" id="L124">      this.valBandMinHz = v;</span>
+<span class="nc" id="L125">      return this;</span>
+    }
+
+    /** Set upper frequency band boundary in Hz. */
+    public Builder bandMaxHz(double v) {
+<span class="nc" id="L130">      this.valBandMaxHz = v;</span>
+<span class="nc" id="L131">      return this;</span>
+    }
+
+    /** Set frequency clustering tolerance in Hz. */
+    public Builder clusteringToleranceHz(double v) {
+<span class="nc" id="L136">      this.valClusteringToleranceHz = v;</span>
+<span class="nc" id="L137">      return this;</span>
+    }
+
+    /** Set number of candidate grid steps. */
+    public Builder candidateGridSteps(int v) {
+<span class="nc bnc" id="L142" title="All 2 branches missed.">      if (v &lt;= 0) {</span>
+<span class="nc" id="L143">        throw new IllegalArgumentException(&quot;candidateGridSteps must be positive, got &quot; + v);</span>
+      }
+<span class="nc" id="L145">      this.valCandidateGridSteps = v;</span>
+<span class="nc" id="L146">      return this;</span>
+    }
+
+    /** Set TDOA estimator type. */
+    public Builder tdoaEstimatorType(TdoaEstimatorType v) {
+<span class="fc" id="L151">      this.valTdoaEstimatorType = Objects.requireNonNull(v, &quot;tdoaEstimatorType&quot;);</span>
+<span class="fc" id="L152">      return this;</span>
+    }
+
+    /** Set tracker frequency match tolerance in Hz. */
+    public Builder trackerFrequencyMatchHz(double v) {
+<span class="nc" id="L157">      this.valTrackerFrequencyMatchHz = v;</span>
+<span class="nc" id="L158">      return this;</span>
+    }
+
+    /** Set number of missing frames before a track is dropped. */
+    public Builder trackerMissingFramesToDrop(int v) {
+<span class="nc" id="L163">      this.valTrackerMissingFramesToDrop = v;</span>
+<span class="nc" id="L164">      return this;</span>
+    }
+
+    /** Set tracker confidence decay factor. */
+    public Builder trackerConfidenceDecay(double v) {
+<span class="nc" id="L169">      this.valTrackerConfidenceDecay = v;</span>
+<span class="nc" id="L170">      return this;</span>
+    }
+
+    /** Set tracker confidence gain per observation. */
+    public Builder trackerConfidenceGain(double v) {
+<span class="nc" id="L175">      this.valTrackerConfidenceGain = v;</span>
+<span class="nc" id="L176">      return this;</span>
+    }
+
+    /** Build the parameter object. */
+    public WorkbenchParameters build() {
+<span class="fc" id="L181">      return new WorkbenchParameters(</span>
+          valBlockSize,
+          valFftSize,
+          valMaxPeaks,
+          valMinSnr,
+          valBandMinHz,
+          valBandMaxHz,
+          valClusteringToleranceHz,
+          valCandidateGridSteps,
+          valTdoaEstimatorType,
+          valTrackerFrequencyMatchHz,
+          valTrackerMissingFramesToDrop,
+          valTrackerConfidenceDecay,
+          valTrackerConfidenceGain);
+    }
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

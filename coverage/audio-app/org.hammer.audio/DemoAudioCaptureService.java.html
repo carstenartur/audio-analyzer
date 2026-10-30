@@ -1,0 +1,216 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>DemoAudioCaptureService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio</a> &gt; <span class="el_source">DemoAudioCaptureService.java</span></div><h1>DemoAudioCaptureService.java</h1><pre class="source lang-java linenums">package org.hammer.audio;
+
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import javax.sound.sampled.AudioFormat;
+import org.hammer.audio.buffer.AudioRingBuffer;
+import org.hammer.audio.core.AudioBlock;
+import org.hammer.audio.core.AudioFormatDescriptor;
+import org.hammer.audio.signal.ChirpGenerator;
+import org.hammer.audio.signal.DemoPresetGenerator;
+import org.hammer.audio.signal.SignalGenerator;
+import org.hammer.audio.signal.SineGenerator;
+import org.hammer.audio.signal.SquareGenerator;
+import org.hammer.audio.snapshot.WaveformSnapshot;
+import org.hammer.audio.ui.WaveformRenderer;
+
+/**
+ * Deterministic {@link AudioCaptureService} based on synthetic signal generators.
+ *
+ * &lt;p&gt;Used for UI demos and testing in environments without a microphone.
+ */
+public final class DemoAudioCaptureService implements AudioCaptureService {
+
+  private static final int RING_BUFFER_CAPACITY = 64;
+  private static final int DEFAULT_FRAMES_PER_BLOCK = 1024;
+  private static final int MIN_FRAMES_PER_BLOCK = 64;
+  private static final float DEMO_AMPLITUDE = 0.75f;
+  private static final float TICK_SECONDS = 1f / 1000f;
+
+<span class="fc" id="L32">  private final AtomicBoolean running = new AtomicBoolean(false);</span>
+  private final AudioFormatDescriptor descriptor;
+  private final SignalGenerator signalGenerator;
+<span class="fc" id="L35">  private final AudioRingBuffer&lt;AudioBlock&gt; ringBuffer =</span>
+      new AudioRingBuffer&lt;&gt;(RING_BUFFER_CAPACITY);
+<span class="fc" id="L37">  private final AudioBlockBroadcaster broadcaster = new AudioBlockBroadcaster();</span>
+  private final int tickEveryNSamples;
+  private final AudioFormat format;
+
+<span class="fc" id="L41">  private volatile WaveformModel latestModel = WaveformModel.EMPTY;</span>
+  private volatile AudioBlock latestBlock;
+  private volatile int divisor;
+<span class="fc" id="L44">  private volatile int panelWidth = 640;</span>
+<span class="fc" id="L45">  private volatile int panelHeight = 200;</span>
+
+  private ExecutorService workerExecutor;
+
+  public DemoAudioCaptureService(
+      float sampleRate,
+      int sampleSizeInBits,
+      int channels,
+      int divisor,
+<span class="fc" id="L54">      DemoSignalType signalType) {</span>
+<span class="fc bfc" id="L55" title="All 2 branches covered.">    if (divisor &lt; 1) {</span>
+<span class="fc" id="L56">      throw new IllegalArgumentException(&quot;Divisor must be &gt;= 1&quot;);</span>
+    }
+<span class="fc" id="L58">    this.descriptor =</span>
+<span class="fc" id="L59">        new AudioFormatDescriptor(sampleRate, Math.max(1, channels), sampleSizeInBits);</span>
+<span class="fc" id="L60">    this.signalGenerator = createSignalGenerator(descriptor, signalType);</span>
+<span class="fc" id="L61">    this.divisor = divisor;</span>
+<span class="fc" id="L62">    this.tickEveryNSamples = (int) (sampleRate * TICK_SECONDS);</span>
+<span class="fc" id="L63">    this.format = new AudioFormat(sampleRate, sampleSizeInBits, descriptor.channels(), true, false);</span>
+<span class="fc" id="L64">  }</span>
+
+  @Override
+  public void start() {
+<span class="pc bpc" id="L68" title="1 of 2 branches missed.">    if (running.getAndSet(true)) {</span>
+<span class="nc" id="L69">      return;</span>
+    }
+<span class="fc" id="L71">    workerExecutor =</span>
+<span class="fc" id="L72">        Executors.newSingleThreadExecutor(</span>
+            runnable -&gt; {
+<span class="fc" id="L74">              Thread worker = new Thread(runnable, &quot;DemoAudioCaptureWorker&quot;);</span>
+<span class="fc" id="L75">              worker.setDaemon(true);</span>
+<span class="fc" id="L76">              return worker;</span>
+            });
+<span class="fc" id="L78">    workerExecutor.submit(this::generateLoop);</span>
+<span class="fc" id="L79">    ActiveAudioCaptureRegistry.activate(this);</span>
+<span class="fc" id="L80">  }</span>
+
+  @Override
+  public void stop() {
+<span class="pc bpc" id="L84" title="1 of 2 branches missed.">    if (!running.getAndSet(false)) {</span>
+<span class="nc" id="L85">      return;</span>
+    }
+<span class="fc" id="L87">    ActiveAudioCaptureRegistry.deactivate(this);</span>
+<span class="pc bpc" id="L88" title="1 of 2 branches missed.">    if (workerExecutor != null) {</span>
+<span class="fc" id="L89">      workerExecutor.shutdownNow();</span>
+      try {
+<span class="pc bpc" id="L91" title="1 of 2 branches missed.">        if (!workerExecutor.awaitTermination(1, TimeUnit.SECONDS)) {</span>
+<span class="nc" id="L92">          workerExecutor.shutdownNow();</span>
+        }
+<span class="nc" id="L94">      } catch (InterruptedException interruptedException) {</span>
+<span class="nc" id="L95">        Thread.currentThread().interrupt();</span>
+<span class="fc" id="L96">      }</span>
+<span class="fc" id="L97">      workerExecutor = null;</span>
+    }
+<span class="fc" id="L99">  }</span>
+
+  @Override
+  public boolean isRunning() {
+<span class="fc" id="L103">    return running.get();</span>
+  }
+
+  @Override
+  public WaveformModel getLatestModel() {
+<span class="pc bpc" id="L108" title="1 of 2 branches missed.">    return latestModel != null ? latestModel : WaveformModel.EMPTY;</span>
+  }
+
+  @Override
+  public AudioFormat getFormat() {
+<span class="nc" id="L113">    return format;</span>
+  }
+
+  @Override
+  public AudioFormatDescriptor getDescriptor() {
+<span class="nc" id="L118">    return descriptor;</span>
+  }
+
+  @Override
+  public AudioBlock getLatestBlock() {
+<span class="fc" id="L123">    return latestBlock;</span>
+  }
+
+  @Override
+  public AudioBlockSubscription subscribe(AudioBlockListener listener) {
+<span class="nc" id="L128">    return broadcaster.subscribe(listener);</span>
+  }
+
+  @Override
+  public AudioRingBuffer&lt;AudioBlock&gt; getRingBuffer() {
+<span class="nc" id="L133">    return ringBuffer;</span>
+  }
+
+  @Override
+  public void setDivisor(int divisor) {
+<span class="nc bnc" id="L138" title="All 2 branches missed.">    if (divisor &lt; 1) {</span>
+<span class="nc" id="L139">      throw new IllegalArgumentException(&quot;Divisor must be &gt;= 1&quot;);</span>
+    }
+<span class="nc" id="L141">    this.divisor = divisor;</span>
+<span class="nc" id="L142">  }</span>
+
+  @Override
+  public int getDivisor() {
+<span class="nc" id="L146">    return divisor;</span>
+  }
+
+  @Override
+  public void recomputeLayout(int width, int height) {
+<span class="nc" id="L151">    panelWidth = width;</span>
+<span class="nc" id="L152">    panelHeight = height;</span>
+<span class="nc" id="L153">    AudioBlock block = latestBlock;</span>
+<span class="nc bnc" id="L154" title="All 2 branches missed.">    if (block != null) {</span>
+<span class="nc" id="L155">      latestModel = buildLegacyModel(block);</span>
+    }
+<span class="nc" id="L157">  }</span>
+
+  private void generateLoop() {
+<span class="pc bpc" id="L160" title="2 of 4 branches missed.">    while (running.get() &amp;&amp; !Thread.currentThread().isInterrupted()) {</span>
+<span class="fc" id="L161">      int frames = Math.max(MIN_FRAMES_PER_BLOCK, DEFAULT_FRAMES_PER_BLOCK / Math.max(1, divisor));</span>
+<span class="fc" id="L162">      AudioBlock block = signalGenerator.nextBlock(frames);</span>
+<span class="fc" id="L163">      latestBlock = block;</span>
+<span class="fc" id="L164">      ringBuffer.offer(block);</span>
+<span class="fc" id="L165">      broadcaster.publish(block);</span>
+<span class="fc" id="L166">      latestModel = buildLegacyModel(block);</span>
+<span class="fc" id="L167">      int sleepMillis =</span>
+<span class="fc" id="L168">          Math.max(10, Math.round((1000f * frames) / Math.max(1f, descriptor.sampleRate())));</span>
+      try {
+<span class="nc" id="L170">        Thread.sleep(sleepMillis);</span>
+<span class="fc" id="L171">      } catch (InterruptedException interruptedException) {</span>
+<span class="fc" id="L172">        Thread.currentThread().interrupt();</span>
+<span class="fc" id="L173">        return;</span>
+<span class="nc" id="L174">      }</span>
+<span class="nc" id="L175">    }</span>
+<span class="nc" id="L176">  }</span>
+
+  private WaveformModel buildLegacyModel(AudioBlock block) {
+<span class="fc" id="L179">    WaveformSnapshot snapshot =</span>
+<span class="fc" id="L180">        WaveformSnapshot.wrap(</span>
+<span class="fc" id="L181">            block.samples(),</span>
+<span class="fc" id="L182">            block.format().sampleRate(),</span>
+<span class="fc" id="L183">            block.frameIndex(),</span>
+<span class="fc" id="L184">            block.timestampNanos());</span>
+<span class="fc" id="L185">    int[] xPoints = WaveformRenderer.computeXPoints(snapshot.frames(), panelWidth);</span>
+    int[][] yPoints;
+<span class="pc bpc" id="L187" title="1 of 2 branches missed.">    if (panelHeight &lt;= 0) {</span>
+<span class="nc" id="L188">      yPoints = new int[snapshot.channels()][0];</span>
+    } else {
+<span class="fc" id="L190">      yPoints = WaveformRenderer.computeYPointsAllChannels(snapshot, panelHeight);</span>
+    }
+<span class="fc" id="L192">    int dataSizeBytes =</span>
+<span class="fc" id="L193">        snapshot.frames()</span>
+<span class="fc" id="L194">            * snapshot.channels()</span>
+<span class="fc" id="L195">            * Math.max(1, descriptor.sourceSampleSizeInBits() / 8);</span>
+<span class="fc" id="L196">    return new WaveformModel(xPoints, yPoints, tickEveryNSamples, dataSizeBytes);</span>
+  }
+
+  private static SignalGenerator createSignalGenerator(
+      AudioFormatDescriptor format, DemoSignalType signalType) {
+<span class="pc bpc" id="L201" title="1 of 2 branches missed.">    DemoSignalType selected = signalType == null ? DemoSignalType.SINE : signalType;</span>
+<span class="fc bfc" id="L202" title="All 4 branches covered.">    return switch (selected) {</span>
+<span class="fc" id="L203">      case SINE -&gt; new SineGenerator(format, 440.0, DEMO_AMPLITUDE);</span>
+<span class="fc" id="L204">      case SQUARE -&gt; new SquareGenerator(format, 440.0, DEMO_AMPLITUDE);</span>
+      case CHIRP -&gt; {
+<span class="fc" id="L206">        ChirpGenerator chirpGenerator =</span>
+            new ChirpGenerator(format, 120.0, 2800.0, 2.5, DEMO_AMPLITUDE);
+<span class="fc" id="L208">        chirpGenerator.setLooping(true);</span>
+<span class="fc" id="L209">        yield chirpGenerator;</span>
+      }
+      case MOSQUITO_BURST, MOVING_CHIRP, HUM_HARMONICS, CLIPPING_TEST, STEREO_DELAY_TEST -&gt;
+<span class="fc" id="L212">          new DemoPresetGenerator(format, selected);</span>
+    };
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

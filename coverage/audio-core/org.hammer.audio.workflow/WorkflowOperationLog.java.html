@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WorkflowOperationLog.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Core</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow</a> &gt; <span class="el_source">WorkflowOperationLog.java</span></div><h1>WorkflowOperationLog.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+
+/** Operation log that applies semantic workflow operations, supports replay and undo. */
+public final class WorkflowOperationLog {
+
+  private Workflow initialWorkflow;
+  private Workflow current;
+  private final List&lt;WorkflowOperation&gt; operationHistory;
+
+<span class="fc" id="L14">  public WorkflowOperationLog(Workflow initialWorkflow) {</span>
+<span class="fc" id="L15">    this.initialWorkflow = Objects.requireNonNull(initialWorkflow, &quot;initialWorkflow&quot;);</span>
+<span class="fc" id="L16">    this.current = initialWorkflow;</span>
+<span class="fc" id="L17">    this.operationHistory = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L18">  }</span>
+
+  public Workflow currentWorkflow() {
+<span class="fc" id="L21">    return current;</span>
+  }
+
+  public List&lt;WorkflowOperation&gt; operations() {
+<span class="fc" id="L25">    return List.copyOf(operationHistory);</span>
+  }
+
+  public Workflow apply(WorkflowOperation operation) {
+<span class="fc" id="L29">    Objects.requireNonNull(operation, &quot;operation&quot;);</span>
+<span class="fc" id="L30">    current = operation.apply(current);</span>
+<span class="fc" id="L31">    operationHistory.add(operation);</span>
+<span class="fc" id="L32">    return current;</span>
+  }
+
+  public Workflow replay() {
+<span class="fc" id="L36">    Workflow replayedWorkflow = initialWorkflow;</span>
+<span class="fc bfc" id="L37" title="All 2 branches covered.">    for (WorkflowOperation operation : operationHistory) {</span>
+<span class="fc" id="L38">      replayedWorkflow = operation.apply(replayedWorkflow);</span>
+<span class="fc" id="L39">    }</span>
+<span class="fc" id="L40">    return replayedWorkflow;</span>
+  }
+
+  public Workflow undoLast() {
+<span class="fc bfc" id="L44" title="All 2 branches covered.">    if (operationHistory.isEmpty()) {</span>
+<span class="fc" id="L45">      throw new IllegalStateException(&quot;No operation available to undo&quot;);</span>
+    }
+<span class="fc" id="L47">    WorkflowOperation last = operationHistory.remove(operationHistory.size() - 1);</span>
+<span class="fc" id="L48">    WorkflowOperation inverse =</span>
+<span class="fc" id="L49">        last.inverseOperation()</span>
+<span class="fc" id="L50">            .orElseThrow(</span>
+                () -&gt;
+<span class="nc" id="L52">                    new UnsupportedOperationException(</span>
+<span class="nc" id="L53">                        &quot;Operation has no inverse: &quot; + last.getClass().getSimpleName()));</span>
+<span class="fc" id="L54">    current = inverse.apply(current);</span>
+<span class="fc" id="L55">    return current;</span>
+  }
+
+  /**
+   * Replaces the log state with a new workflow baseline and clears operation history.
+   *
+   * @param workflow new current and replay baseline workflow
+   */
+  public void reset(Workflow workflow) {
+<span class="fc" id="L64">    this.initialWorkflow = Objects.requireNonNull(workflow, &quot;workflow&quot;);</span>
+<span class="fc" id="L65">    this.current = workflow;</span>
+<span class="fc" id="L66">    this.operationHistory.clear();</span>
+<span class="fc" id="L67">  }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

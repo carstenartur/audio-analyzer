@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ComparisonReport.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.compare</a> &gt; <span class="el_source">ComparisonReport.java</span></div><h1>ComparisonReport.java</h1><pre class="source lang-java linenums">package org.hammer.audio.compare;
+
+import java.util.List;
+import java.util.Objects;
+import org.hammer.audio.analysis.MeasurementSnapshot;
+import org.hammer.audio.analysis.SpectrumSnapshot;
+import org.hammer.audio.core.AudioFormatDescriptor;
+import org.hammer.audio.diagnosis.DiagnosisFinding;
+import org.hammer.audio.diagnosis.DiagnosisSnapshot;
+
+/**
+ * Immutable A/B comparison of two analyzed audio recordings (or live sessions). Each side captures
+ * the format and the three core snapshots produced by the analyzer chain.
+ *
+ * &lt;p&gt;Use {@link MarkdownComparisonReportRenderer} to format a report for diagnostics, QA notes or
+ * bug tickets.
+ */
+public final class ComparisonReport {
+
+  private final Side a;
+  private final Side b;
+
+  /** Create a report from two analyzed sides. */
+<span class="fc" id="L24">  public ComparisonReport(Side a, Side b) {</span>
+<span class="fc" id="L25">    this.a = Objects.requireNonNull(a, &quot;a&quot;);</span>
+<span class="fc" id="L26">    this.b = Objects.requireNonNull(b, &quot;b&quot;);</span>
+<span class="fc" id="L27">  }</span>
+
+  public Side a() {
+<span class="fc" id="L30">    return a;</span>
+  }
+
+  public Side b() {
+<span class="fc" id="L34">    return b;</span>
+  }
+
+  /**
+   * @return the absolute difference {@code |a - b|} treating {@link Double#NaN} as missing on
+   *     either side (returns {@link Double#NaN} in that case)
+   */
+  public static double absDelta(double aValue, double bValue) {
+<span class="pc bpc" id="L42" title="2 of 4 branches missed.">    if (Double.isNaN(aValue) || Double.isNaN(bValue)) {</span>
+<span class="nc" id="L43">      return Double.NaN;</span>
+    }
+<span class="fc" id="L45">    return Math.abs(aValue - bValue);</span>
+  }
+
+  /**
+   * One side of the comparison: label, format and the analyzed snapshots.
+   *
+   * @param label human-readable label (filename, &quot;before&quot;, &quot;after&quot;, ...)
+   * @param format audio format descriptor of the recording
+   * @param totalFrames total frame count consumed during analysis
+   * @param measurement aggregate measurement snapshot
+   * @param spectrum spectrum snapshot (may be {@code null} if not produced)
+   * @param diagnosis diagnosis snapshot
+   */
+  public record Side(
+      String label,
+      AudioFormatDescriptor format,
+      long totalFrames,
+      MeasurementSnapshot measurement,
+      SpectrumSnapshot spectrum,
+      DiagnosisSnapshot diagnosis) {
+
+    /** Compact constructor with null checks for required fields. */
+<span class="fc" id="L67">    public Side {</span>
+<span class="fc" id="L68">      Objects.requireNonNull(label, &quot;label&quot;);</span>
+<span class="fc" id="L69">      Objects.requireNonNull(format, &quot;format&quot;);</span>
+<span class="fc" id="L70">      Objects.requireNonNull(measurement, &quot;measurement&quot;);</span>
+<span class="fc" id="L71">      Objects.requireNonNull(diagnosis, &quot;diagnosis&quot;);</span>
+<span class="fc" id="L72">    }</span>
+
+    /**
+     * @return findings list (never {@code null}; possibly empty)
+     */
+    public List&lt;DiagnosisFinding&gt; findings() {
+<span class="fc" id="L78">      return diagnosis.findings();</span>
+    }
+
+    /**
+     * @return duration in seconds derived from {@code totalFrames} and the format sample rate
+     */
+    public double durationSeconds() {
+<span class="fc" id="L85">      float sampleRate = format.sampleRate();</span>
+<span class="pc bpc" id="L86" title="1 of 2 branches missed.">      if (sampleRate &lt;= 0f) {</span>
+<span class="nc" id="L87">        return Double.NaN;</span>
+      }
+<span class="fc" id="L89">      return totalFrames / (double) sampleRate;</span>
+    }
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

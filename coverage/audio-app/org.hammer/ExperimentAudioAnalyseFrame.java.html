@@ -1,0 +1,390 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ExperimentAudioAnalyseFrame.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer</a> &gt; <span class="el_source">ExperimentAudioAnalyseFrame.java</span></div><h1>ExperimentAudioAnalyseFrame.java</h1><pre class="source lang-java linenums">package org.hammer;
+
+import java.awt.BorderLayout;
+import java.awt.Component;
+import java.awt.EventQueue;
+import java.awt.event.ActionListener;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Path;
+import java.util.Locale;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import javax.swing.JFileChooser;
+import javax.swing.JMenu;
+import javax.swing.JMenuBar;
+import javax.swing.JMenuItem;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.SwingUtilities;
+import javax.swing.filechooser.FileNameExtensionFilter;
+import org.hammer.audio.ActiveAudioCaptureRegistry;
+import org.hammer.audio.AudioCaptureService;
+import org.hammer.audio.RecordingPreflight;
+import org.hammer.audio.RecordingTap;
+import org.hammer.audio.recording.AudioBlockRecordingFormat;
+import org.hammer.audio.recording.AudioBlockRecordingReader;
+import org.hammer.audio.recording.RecordingInspection;
+import org.hammer.audio.recording.RecordingIntegrity;
+import org.hammer.audio.recording.runtime.RecordingState;
+import org.hammer.audio.recording.runtime.RecordingStatus;
+import org.hammer.audio.recording.runtime.RecordingStorageLevel;
+import org.hammer.audio.recording.runtime.RecordingStorageStatus;
+import org.hammer.audio.ui.theme.UiTheme;
+
+/**
+ * Production desktop host that augments the established analyzer frame with experiment-grade
+ * recording controls and persistent recording health.
+ */
+public final class ExperimentAudioAnalyseFrame extends AudioAnalyseFrame {
+
+  private static final long serialVersionUID = 1L;
+<span class="nc" id="L44">  private static final Logger LOGGER =</span>
+<span class="nc" id="L45">      Logger.getLogger(ExperimentAudioAnalyseFrame.class.getName());</span>
+  private static final String RECORDING_DIALOG_TITLE = &quot;Experiment recording&quot;;
+
+<span class="nc" id="L48">  private final RecordingStatusPanel recordingStatusPanel = new RecordingStatusPanel();</span>
+  private transient RecordingTap recordingTap;
+
+  /** Launch the experiment-aware desktop workbench. */
+  public static void main(String[] args) {
+<span class="nc" id="L53">    EventQueue.invokeLater(</span>
+        () -&gt; {
+          try {
+<span class="nc" id="L56">            UiTheme.installDarkTheme();</span>
+<span class="nc" id="L57">            ExperimentAudioAnalyseFrame frame = new ExperimentAudioAnalyseFrame();</span>
+<span class="nc" id="L58">            frame.setVisible(true);</span>
+<span class="nc" id="L59">          } catch (RuntimeException exception) {</span>
+<span class="nc" id="L60">            LOGGER.log(Level.SEVERE, &quot;Failed to start experiment desktop workbench&quot;, exception);</span>
+<span class="nc" id="L61">          }</span>
+<span class="nc" id="L62">        });</span>
+<span class="nc" id="L63">  }</span>
+
+  /** Create the established analyzer UI and install experiment recording controls. */
+  public ExperimentAudioAnalyseFrame() {
+<span class="nc" id="L67">    super();</span>
+<span class="nc" id="L68">    setTitle(&quot;AudioAnalyzer — Experiment Workbench&quot;);</span>
+<span class="nc" id="L69">    installStatusStrip();</span>
+<span class="nc" id="L70">    replaceRecordingActions();</span>
+<span class="nc" id="L71">    addWindowListener(</span>
+<span class="nc" id="L72">        new WindowAdapter() {</span>
+          @Override
+          public void windowClosing(WindowEvent event) {
+<span class="nc" id="L75">            stopRecordingQuietly();</span>
+<span class="nc" id="L76">          }</span>
+        });
+<span class="nc" id="L78">  }</span>
+
+  private void installStatusStrip() {
+    Component existingSouth =
+<span class="nc bnc" id="L82" title="All 2 branches missed.">        getContentPane().getLayout() instanceof BorderLayout</span>
+<span class="nc" id="L83">            ? ((BorderLayout) getContentPane().getLayout()).getLayoutComponent(BorderLayout.SOUTH)</span>
+<span class="nc" id="L84">            : null;</span>
+<span class="nc" id="L85">    JPanel south = new JPanel(new BorderLayout(4, 4));</span>
+<span class="nc bnc" id="L86" title="All 2 branches missed.">    if (existingSouth != null) {</span>
+<span class="nc" id="L87">      getContentPane().remove(existingSouth);</span>
+<span class="nc" id="L88">      south.add(existingSouth, BorderLayout.NORTH);</span>
+    }
+<span class="nc" id="L90">    recordingStatusPanel.setStopAction(this::stopExperimentRecording);</span>
+<span class="nc" id="L91">    south.add(recordingStatusPanel, BorderLayout.SOUTH);</span>
+<span class="nc" id="L92">    getContentPane().add(south, BorderLayout.SOUTH);</span>
+<span class="nc" id="L93">  }</span>
+
+  private void replaceRecordingActions() {
+<span class="nc" id="L96">    JMenu fileMenu = findMenu(&quot;File&quot;);</span>
+<span class="nc bnc" id="L97" title="All 2 branches missed.">    if (fileMenu == null) {</span>
+<span class="nc" id="L98">      throw new IllegalStateException(&quot;Desktop File menu is unavailable&quot;);</span>
+    }
+<span class="nc" id="L100">    JMenuItem start = requireItem(fileMenu, &quot;Start recording...&quot;);</span>
+<span class="nc" id="L101">    replaceListeners(start, event -&gt; startExperimentRecording());</span>
+<span class="nc" id="L102">    start.setToolTipText(</span>
+        &quot;Record every produced block into an integrity-protected .&quot;
+            + AudioBlockRecordingFormat.FILE_EXTENSION
+            + &quot; file.&quot;);
+
+<span class="nc" id="L107">    JMenuItem stop = requireItem(fileMenu, &quot;Stop recording&quot;);</span>
+<span class="nc" id="L108">    replaceListeners(stop, event -&gt; stopExperimentRecording());</span>
+
+<span class="nc" id="L110">    JMenuItem inspect = new JMenuItem(&quot;Inspect or recover recording...&quot;);</span>
+<span class="nc" id="L111">    inspect.setToolTipText(</span>
+        &quot;Inspect completion, continuity and checksum evidence or recover complete blocks from a&quot;
+            + &quot; partial recording.&quot;);
+<span class="nc" id="L114">    inspect.addActionListener(event -&gt; inspectOrRecoverRecording());</span>
+<span class="nc" id="L115">    int stopIndex = stop.getParent().getComponentZOrder(stop);</span>
+<span class="nc" id="L116">    fileMenu.insert(inspect, Math.min(fileMenu.getItemCount(), stopIndex + 1));</span>
+<span class="nc" id="L117">  }</span>
+
+  private void startExperimentRecording() {
+<span class="nc bnc" id="L120" title="All 4 branches missed.">    if (recordingTap != null &amp;&amp; !recordingTap.isClosed()) {</span>
+<span class="nc" id="L121">      JOptionPane.showMessageDialog(</span>
+          this,
+<span class="nc" id="L123">          &quot;A recording is already in progress: &quot; + recordingTap.file(),</span>
+          RECORDING_DIALOG_TITLE,
+          JOptionPane.WARNING_MESSAGE);
+<span class="nc" id="L126">      return;</span>
+    }
+<span class="nc" id="L128">    AudioCaptureService service = ActiveAudioCaptureRegistry.current().orElse(null);</span>
+<span class="nc bnc" id="L129" title="All 2 branches missed.">    if (service == null) {</span>
+<span class="nc" id="L130">      JOptionPane.showMessageDialog(</span>
+          this,
+          &quot;Start a live, demo or replay source before starting the experiment recording.&quot;,
+          RECORDING_DIALOG_TITLE,
+          JOptionPane.WARNING_MESSAGE);
+<span class="nc" id="L135">      return;</span>
+    }
+
+<span class="nc" id="L138">    JFileChooser chooser = new JFileChooser();</span>
+<span class="nc" id="L139">    chooser.setDialogTitle(&quot;Start experiment recording&quot;);</span>
+<span class="nc" id="L140">    chooser.setFileFilter(</span>
+        new FileNameExtensionFilter(
+            &quot;AudioAnalyzer recording (*.&quot; + AudioBlockRecordingFormat.FILE_EXTENSION + &quot;)&quot;,
+            AudioBlockRecordingFormat.FILE_EXTENSION));
+<span class="nc" id="L144">    chooser.setSelectedFile(new File(&quot;recording.&quot; + AudioBlockRecordingFormat.FILE_EXTENSION));</span>
+<span class="nc bnc" id="L145" title="All 2 branches missed.">    if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) {</span>
+<span class="nc" id="L146">      return;</span>
+    }
+<span class="nc" id="L148">    File selected =</span>
+<span class="nc" id="L149">        ensureExtension(chooser.getSelectedFile(), &quot;.&quot; + AudioBlockRecordingFormat.FILE_EXTENSION);</span>
+    try {
+<span class="nc" id="L151">      RecordingStorageStatus preflight = RecordingPreflight.inspect(service, selected.toPath());</span>
+<span class="nc bnc" id="L152" title="All 4 branches missed.">      if (!preflight.writable() || preflight.level() == RecordingStorageLevel.CRITICAL) {</span>
+<span class="nc" id="L153">        JOptionPane.showMessageDialog(</span>
+            this,
+<span class="nc" id="L155">            storagePreflightText(preflight),</span>
+            &quot;Recording storage is not ready&quot;,
+            JOptionPane.ERROR_MESSAGE);
+<span class="nc" id="L158">        return;</span>
+      }
+<span class="nc bnc" id="L160" title="All 4 branches missed.">      if (preflight.level() == RecordingStorageLevel.WARNING &amp;&amp; !confirmStorageWarning(preflight)) {</span>
+<span class="nc" id="L161">        return;</span>
+      }
+<span class="nc" id="L163">      recordingTap = RecordingTap.start(service, selected.toPath());</span>
+<span class="nc" id="L164">      recordingTap.addStatusListener(</span>
+<span class="nc" id="L165">          status -&gt; SwingUtilities.invokeLater(() -&gt; recordingStatusPanel.updateStatus(status)));</span>
+<span class="nc" id="L166">    } catch (IOException exception) {</span>
+<span class="nc" id="L167">      LOGGER.log(Level.SEVERE, &quot;Failed to start experiment recording&quot;, exception);</span>
+<span class="nc" id="L168">      JOptionPane.showMessageDialog(</span>
+          this,
+<span class="nc" id="L170">          &quot;Recording could not start: &quot; + exception.getMessage(),</span>
+          RECORDING_DIALOG_TITLE,
+          JOptionPane.ERROR_MESSAGE);
+<span class="nc" id="L173">    }</span>
+<span class="nc" id="L174">  }</span>
+
+  private boolean confirmStorageWarning(RecordingStorageStatus preflight) {
+<span class="nc" id="L177">    int choice =</span>
+<span class="nc" id="L178">        JOptionPane.showConfirmDialog(</span>
+            this,
+<span class="nc" id="L180">            storagePreflightText(preflight) + &quot;\n\nStart recording despite this warning?&quot;,</span>
+            &quot;Recording storage warning&quot;,
+            JOptionPane.YES_NO_OPTION,
+            JOptionPane.WARNING_MESSAGE);
+<span class="nc bnc" id="L184" title="All 2 branches missed.">    return choice == JOptionPane.YES_OPTION;</span>
+  }
+
+  private static String storagePreflightText(RecordingStorageStatus preflight) {
+<span class="nc" id="L188">    return String.format(</span>
+        Locale.ROOT,
+        &quot;Destination: %s%nUsable space: %s%nEstimated safe duration: %s%nExpected write rate:&quot;
+            + &quot; %s/s%nStatus: %s%s&quot;,
+<span class="nc" id="L192">        preflight.destination(),</span>
+<span class="nc" id="L193">        formatBytes(preflight.usableBytes()),</span>
+<span class="nc" id="L194">        formatDuration(preflight.estimatedSafeSecondsRemaining()),</span>
+<span class="nc" id="L195">        formatBytes(Math.round(preflight.expectedBytesPerSecond())),</span>
+<span class="nc" id="L196">        preflight.level(),</span>
+<span class="nc bnc" id="L197" title="All 2 branches missed.">        preflight.errorMessage().isBlank() ? &quot;&quot; : &quot;%n&quot; + preflight.errorMessage());</span>
+  }
+
+  private static String formatBytes(long bytes) {
+<span class="nc bnc" id="L201" title="All 2 branches missed.">    if (bytes &lt; 0L) {</span>
+<span class="nc" id="L202">      return &quot;unknown&quot;;</span>
+    }
+<span class="nc" id="L204">    double gibibytes = bytes / (1024.0 * 1024.0 * 1024.0);</span>
+<span class="nc bnc" id="L205" title="All 2 branches missed.">    if (gibibytes &gt;= 1.0) {</span>
+<span class="nc" id="L206">      return String.format(Locale.ROOT, &quot;%.2f GiB&quot;, gibibytes);</span>
+    }
+<span class="nc" id="L208">    return String.format(Locale.ROOT, &quot;%.1f MiB&quot;, bytes / (1024.0 * 1024.0));</span>
+  }
+
+  private static String formatDuration(long seconds) {
+<span class="nc bnc" id="L212" title="All 2 branches missed.">    if (seconds &lt; 0L) {</span>
+<span class="nc" id="L213">      return &quot;unknown&quot;;</span>
+    }
+<span class="nc" id="L215">    long hours = seconds / 3600L;</span>
+<span class="nc" id="L216">    long minutes = (seconds % 3600L) / 60L;</span>
+<span class="nc" id="L217">    long remainingSeconds = seconds % 60L;</span>
+<span class="nc" id="L218">    return String.format(Locale.ROOT, &quot;%02d:%02d:%02d&quot;, hours, minutes, remainingSeconds);</span>
+  }
+
+  private void stopExperimentRecording() {
+<span class="nc" id="L222">    RecordingTap tap = recordingTap;</span>
+<span class="nc bnc" id="L223" title="All 4 branches missed.">    if (tap == null || tap.isClosed()) {</span>
+<span class="nc" id="L224">      return;</span>
+    }
+    try {
+<span class="nc" id="L227">      tap.stop();</span>
+<span class="nc" id="L228">      showCompletion(tap.status());</span>
+<span class="nc" id="L229">    } catch (IOException exception) {</span>
+<span class="nc" id="L230">      LOGGER.log(Level.SEVERE, &quot;Failed to finalize experiment recording&quot;, exception);</span>
+<span class="nc" id="L231">      JOptionPane.showMessageDialog(</span>
+          this,
+<span class="nc" id="L233">          &quot;Recording finalization failed: &quot; + exception.getMessage(),</span>
+          RECORDING_DIALOG_TITLE,
+          JOptionPane.ERROR_MESSAGE);
+<span class="nc" id="L236">    }</span>
+<span class="nc" id="L237">  }</span>
+
+  private void showCompletion(RecordingStatus status) {
+<span class="nc" id="L240">    String summary =</span>
+<span class="nc" id="L241">        String.format(</span>
+            Locale.ROOT,
+            &quot;%s%n%d of %d blocks written%n%d dropped blocks%n%d continuity gaps%n%s&quot;,
+<span class="nc" id="L244">            status.state(),</span>
+<span class="nc" id="L245">            status.writtenBlocks(),</span>
+<span class="nc" id="L246">            status.receivedBlocks(),</span>
+<span class="nc" id="L247">            status.droppedBlocks(),</span>
+<span class="nc" id="L248">            status.continuityGapCount(),</span>
+<span class="nc" id="L249">            status.destination());</span>
+<span class="nc" id="L250">    JOptionPane.showMessageDialog(</span>
+        this,
+        summary,
+        RECORDING_DIALOG_TITLE,
+<span class="nc bnc" id="L254" title="All 2 branches missed.">        status.state() == RecordingState.COMPLETED</span>
+<span class="nc" id="L255">            ? JOptionPane.INFORMATION_MESSAGE</span>
+<span class="nc" id="L256">            : JOptionPane.WARNING_MESSAGE);</span>
+<span class="nc" id="L257">  }</span>
+
+  private void inspectOrRecoverRecording() {
+<span class="nc" id="L260">    JFileChooser chooser = new JFileChooser();</span>
+<span class="nc" id="L261">    chooser.setDialogTitle(&quot;Inspect AudioAnalyzer recording&quot;);</span>
+<span class="nc" id="L262">    chooser.setFileFilter(</span>
+        new FileNameExtensionFilter(
+            &quot;AudioAnalyzer recordings (*.aarec, *.aar)&quot;,
+            AudioBlockRecordingFormat.FILE_EXTENSION,
+            AudioBlockRecordingFormat.LEGACY_FILE_EXTENSION));
+<span class="nc bnc" id="L267" title="All 2 branches missed.">    if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) {</span>
+<span class="nc" id="L268">      return;</span>
+    }
+<span class="nc" id="L270">    Path source = chooser.getSelectedFile().toPath();</span>
+    try {
+<span class="nc" id="L272">      RecordingInspection inspection = AudioBlockRecordingReader.inspect(source);</span>
+<span class="nc bnc" id="L273" title="All 2 branches missed.">      if (recoverable(inspection.integrity())) {</span>
+<span class="nc" id="L274">        offerRecovery(source, inspection);</span>
+      } else {
+<span class="nc" id="L276">        JOptionPane.showMessageDialog(</span>
+            this,
+<span class="nc" id="L278">            inspectionText(inspection),</span>
+            &quot;Recording inspection&quot;,
+<span class="nc bnc" id="L280" title="All 2 branches missed.">            inspection.complete() ? JOptionPane.INFORMATION_MESSAGE : JOptionPane.WARNING_MESSAGE);</span>
+      }
+<span class="nc" id="L282">    } catch (IOException exception) {</span>
+<span class="nc" id="L283">      LOGGER.log(Level.WARNING, &quot;Recording inspection failed&quot;, exception);</span>
+<span class="nc" id="L284">      JOptionPane.showMessageDialog(</span>
+          this,
+<span class="nc" id="L286">          &quot;Recording inspection failed: &quot; + exception.getMessage(),</span>
+          &quot;Recording inspection&quot;,
+          JOptionPane.ERROR_MESSAGE);
+<span class="nc" id="L289">    }</span>
+<span class="nc" id="L290">  }</span>
+
+  private static boolean recoverable(RecordingIntegrity integrity) {
+<span class="nc bnc" id="L293" title="All 6 branches missed.">    return integrity == RecordingIntegrity.RECOVERABLE_INCOMPLETE</span>
+        || integrity == RecordingIntegrity.TRUNCATED
+        || integrity == RecordingIntegrity.CORRUPT;
+  }
+
+  private void offerRecovery(Path source, RecordingInspection inspection) throws IOException {
+<span class="nc" id="L299">    int choice =</span>
+<span class="nc" id="L300">        JOptionPane.showConfirmDialog(</span>
+            this,
+<span class="nc" id="L302">            inspectionText(inspection)</span>
+                + &quot;\n\nRecover every complete block into a separate finalized file?&quot;,
+            &quot;Incomplete recording&quot;,
+            JOptionPane.YES_NO_OPTION,
+            JOptionPane.WARNING_MESSAGE);
+<span class="nc bnc" id="L307" title="All 2 branches missed.">    if (choice != JOptionPane.YES_OPTION) {</span>
+<span class="nc" id="L308">      return;</span>
+    }
+<span class="nc" id="L310">    JFileChooser targetChooser = new JFileChooser();</span>
+<span class="nc" id="L311">    targetChooser.setDialogTitle(&quot;Save recovered recording&quot;);</span>
+<span class="nc" id="L312">    targetChooser.setSelectedFile(new File(&quot;recovered.aarec&quot;));</span>
+<span class="nc" id="L313">    targetChooser.setFileFilter(</span>
+        new FileNameExtensionFilter(&quot;AudioAnalyzer recording (*.aarec)&quot;, &quot;aarec&quot;));
+<span class="nc bnc" id="L315" title="All 2 branches missed.">    if (targetChooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) {</span>
+<span class="nc" id="L316">      return;</span>
+    }
+<span class="nc" id="L318">    Path target = ensureExtension(targetChooser.getSelectedFile(), &quot;.aarec&quot;).toPath();</span>
+<span class="nc" id="L319">    RecordingInspection recovered = AudioBlockRecordingReader.recover(source, target);</span>
+<span class="nc" id="L320">    JOptionPane.showMessageDialog(</span>
+        this,
+<span class="nc" id="L322">        &quot;Recovered &quot; + recovered.blockCount() + &quot; blocks to &quot; + target,</span>
+        &quot;Recording recovered&quot;,
+        JOptionPane.INFORMATION_MESSAGE);
+<span class="nc" id="L325">  }</span>
+
+  private static String inspectionText(RecordingInspection inspection) {
+<span class="nc" id="L328">    return String.format(</span>
+        Locale.ROOT,
+        &quot;Integrity: %s%nFormat version: %d%nBlocks: %d%nFrames: %d%nContinuity gaps: %d%nSHA-256:&quot;
+            + &quot; %s%n%s&quot;,
+<span class="nc" id="L332">        inspection.integrity(),</span>
+<span class="nc" id="L333">        inspection.formatVersion(),</span>
+<span class="nc" id="L334">        inspection.blockCount(),</span>
+<span class="nc" id="L335">        inspection.totalFrames(),</span>
+<span class="nc" id="L336">        inspection.continuityGapCount(),</span>
+<span class="nc bnc" id="L337" title="All 2 branches missed.">        inspection.sha256().isBlank() ? &quot;not available&quot; : inspection.sha256(),</span>
+<span class="nc" id="L338">        inspection.detail());</span>
+  }
+
+  private void stopRecordingQuietly() {
+<span class="nc" id="L342">    RecordingTap tap = recordingTap;</span>
+<span class="nc bnc" id="L343" title="All 4 branches missed.">    if (tap == null || tap.isClosed()) {</span>
+<span class="nc" id="L344">      return;</span>
+    }
+    try {
+<span class="nc" id="L347">      tap.stop();</span>
+<span class="nc" id="L348">    } catch (IOException exception) {</span>
+<span class="nc" id="L349">      LOGGER.log(Level.WARNING, &quot;Failed to finalize recording while closing window&quot;, exception);</span>
+<span class="nc" id="L350">    }</span>
+<span class="nc" id="L351">  }</span>
+
+  private JMenu findMenu(String text) {
+<span class="nc" id="L354">    JMenuBar menuBar = getJMenuBar();</span>
+<span class="nc bnc" id="L355" title="All 2 branches missed.">    if (menuBar == null) {</span>
+<span class="nc" id="L356">      return null;</span>
+    }
+<span class="nc bnc" id="L358" title="All 2 branches missed.">    for (int index = 0; index &lt; menuBar.getMenuCount(); index++) {</span>
+<span class="nc" id="L359">      JMenu menu = menuBar.getMenu(index);</span>
+<span class="nc bnc" id="L360" title="All 4 branches missed.">      if (menu != null &amp;&amp; text.equals(menu.getText())) {</span>
+<span class="nc" id="L361">        return menu;</span>
+      }
+    }
+<span class="nc" id="L364">    return null;</span>
+  }
+
+  private static JMenuItem requireItem(JMenu menu, String text) {
+<span class="nc bnc" id="L368" title="All 2 branches missed.">    for (int index = 0; index &lt; menu.getItemCount(); index++) {</span>
+<span class="nc" id="L369">      JMenuItem item = menu.getItem(index);</span>
+<span class="nc bnc" id="L370" title="All 4 branches missed.">      if (item != null &amp;&amp; text.equals(item.getText())) {</span>
+<span class="nc" id="L371">        return item;</span>
+      }
+    }
+<span class="nc" id="L374">    throw new IllegalStateException(&quot;Menu item is unavailable: &quot; + text);</span>
+  }
+
+  private static void replaceListeners(JMenuItem item, ActionListener replacement) {
+<span class="nc bnc" id="L378" title="All 2 branches missed.">    for (ActionListener listener : item.getActionListeners()) {</span>
+<span class="nc" id="L379">      item.removeActionListener(listener);</span>
+    }
+<span class="nc" id="L381">    item.addActionListener(replacement);</span>
+<span class="nc" id="L382">  }</span>
+
+  private static File ensureExtension(File file, String extension) {
+<span class="nc bnc" id="L385" title="All 2 branches missed.">    return file.getName().toLowerCase(Locale.ROOT).endsWith(extension)</span>
+<span class="nc" id="L386">        ? file</span>
+<span class="nc" id="L387">        : new File(file.getParentFile(), file.getName() + extension);</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

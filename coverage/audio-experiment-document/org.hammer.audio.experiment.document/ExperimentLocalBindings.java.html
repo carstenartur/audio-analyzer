@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ExperimentLocalBindings.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experiment Document</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experiment.document</a> &gt; <span class="el_source">ExperimentLocalBindings.java</span></div><h1>ExperimentLocalBindings.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experiment.document;
+
+import java.nio.file.Path;
+import java.util.Collections;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.TreeMap;
+
+/**
+ * Local machine bindings for portable experiment requirements.
+ *
+ * &lt;p&gt;This value is deliberately not serializable into {@code .audioexp}. Absolute asset and output
+ * paths remain local application state.
+ *
+ * @param assetPaths local paths selected for portable asset identifiers
+ * @param outputDirectory optional local directory selected for requested outputs
+ */
+@SuppressWarnings(&quot;PMD.LooseCoupling&quot;)
+public record ExperimentLocalBindings(Map&lt;String, Path&gt; assetPaths, Path outputDirectory) {
+
+  /* Validate identifiers and normalize all local paths. */
+<span class="fc" id="L23">  public ExperimentLocalBindings {</span>
+<span class="fc" id="L24">    Objects.requireNonNull(assetPaths, &quot;assetPaths&quot;);</span>
+<span class="fc" id="L25">    TreeMap&lt;String, Path&gt; copy = new TreeMap&lt;&gt;();</span>
+<span class="fc" id="L26">    assetPaths.forEach(</span>
+        (assetId, path) -&gt;
+<span class="fc" id="L28">            copy.put(</span>
+<span class="fc" id="L29">                ExperimentDocument.requireIdentifier(assetId, &quot;asset binding id&quot;),</span>
+<span class="fc" id="L30">                Objects.requireNonNull(path, &quot;asset binding path&quot;).toAbsolutePath().normalize()));</span>
+<span class="fc" id="L31">    assetPaths = Collections.unmodifiableMap(copy);</span>
+<span class="fc bfc" id="L32" title="All 2 branches covered.">    outputDirectory = outputDirectory == null ? null : outputDirectory.toAbsolutePath().normalize();</span>
+<span class="fc" id="L33">  }</span>
+
+  /** Return the local path selected for one portable asset requirement. */
+  public Optional&lt;Path&gt; assetPath(String assetId) {
+<span class="fc" id="L37">    return Optional.ofNullable(assetPaths.get(assetId));</span>
+  }
+
+  /** Return the local output directory selected outside the portable document. */
+  public Optional&lt;Path&gt; selectedOutputDirectory() {
+<span class="fc" id="L42">    return Optional.ofNullable(outputDirectory);</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

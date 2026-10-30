@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>TdoaAlgorithmBenchmarkResult.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.benchmark.tdoa</a> &gt; <span class="el_source">TdoaAlgorithmBenchmarkResult.java</span></div><h1>TdoaAlgorithmBenchmarkResult.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.benchmark.tdoa;
+
+/**
+ * Aggregated accuracy and confidence metrics for one TDOA strategy.
+ *
+ * @param algorithmName registered algorithm name
+ * @param caseCount evaluated deterministic cases
+ * @param meanAbsoluteErrorSamples mean absolute known-delay error in samples
+ * @param maximumAbsoluteErrorSamples maximum absolute known-delay error in samples
+ * @param meanConfidence mean estimator confidence
+ * @param ambiguousCount cases marked ambiguous by a diagnostic estimator
+ */
+public record TdoaAlgorithmBenchmarkResult(
+    String algorithmName,
+    int caseCount,
+    double meanAbsoluteErrorSamples,
+    double maximumAbsoluteErrorSamples,
+    double meanConfidence,
+    int ambiguousCount) {
+
+  // Validate one aggregate result.
+<span class="fc" id="L22">  public TdoaAlgorithmBenchmarkResult {</span>
+<span class="pc bpc" id="L23" title="2 of 4 branches missed.">    if (algorithmName == null || algorithmName.isBlank()) {</span>
+<span class="nc" id="L24">      throw new IllegalArgumentException(&quot;algorithmName must not be blank&quot;);</span>
+    }
+<span class="pc bpc" id="L26" title="1 of 2 branches missed.">    if (caseCount &lt; 1) {</span>
+<span class="nc" id="L27">      throw new IllegalArgumentException(&quot;caseCount must be &gt;= 1&quot;);</span>
+    }
+<span class="fc" id="L29">    requireNonNegativeFinite(meanAbsoluteErrorSamples, &quot;meanAbsoluteErrorSamples&quot;);</span>
+<span class="fc" id="L30">    requireNonNegativeFinite(maximumAbsoluteErrorSamples, &quot;maximumAbsoluteErrorSamples&quot;);</span>
+<span class="pc bpc" id="L31" title="3 of 6 branches missed.">    if (!Double.isFinite(meanConfidence) || meanConfidence &lt; 0.0 || meanConfidence &gt; 1.0) {</span>
+<span class="nc" id="L32">      throw new IllegalArgumentException(&quot;meanConfidence must be finite and in [0,1]&quot;);</span>
+    }
+<span class="pc bpc" id="L34" title="2 of 4 branches missed.">    if (ambiguousCount &lt; 0 || ambiguousCount &gt; caseCount) {</span>
+<span class="nc" id="L35">      throw new IllegalArgumentException(&quot;ambiguousCount must be in [0, caseCount]&quot;);</span>
+    }
+<span class="fc" id="L37">  }</span>
+
+  private static void requireNonNegativeFinite(double value, String name) {
+<span class="pc bpc" id="L40" title="2 of 4 branches missed.">    if (Double.isFinite(value) &amp;&amp; value &gt;= 0.0) {</span>
+<span class="fc" id="L41">      return;</span>
+    }
+<span class="nc" id="L43">    throw new IllegalArgumentException(name + &quot; must be finite and &gt;= 0&quot;);</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

@@ -1,0 +1,583 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WorkflowSessionEventHub.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Core</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.collaboration</a> &gt; <span class="el_source">WorkflowSessionEventHub.java</span></div><h1>WorkflowSessionEventHub.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.collaboration;
+
+import java.time.Instant;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Deque;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Consumer;
+import org.hammer.audio.workflow.Workflow;
+import org.hammer.audio.workflow.WorkflowOperation;
+import org.hammer.audio.workflow.collaboration.store.WorkflowOperationCommandMetadata;
+
+/**
+ * Bounded, transport-neutral replay and fan-out hub for collaboration-session events.
+ *
+ * &lt;p&gt;Each session owns an independent sequence and semantic revision. Subscribers are isolated by a
+ * bounded queue and a virtual dispatch thread, so a failed or slow transport cannot block accepted
+ * workflow operations. A subscriber that throws or exhausts its queue is removed automatically.
+ */
+public final class WorkflowSessionEventHub {
+
+  private static final String ACTOR_FIELD = &quot;actor&quot;;
+
+  static final int DEFAULT_REPLAY_CAPACITY = 256;
+  static final int DEFAULT_SUBSCRIBER_QUEUE_CAPACITY = 64;
+
+  private final int replayCapacity;
+  private final int subscriberQueueCapacity;
+<span class="fc" id="L39">  private final Map&lt;String, SessionBuffer&gt; sessions = new ConcurrentHashMap&lt;&gt;();</span>
+
+  /** Creates a hub with production defaults for replay and subscriber buffering. */
+  public WorkflowSessionEventHub() {
+<span class="fc" id="L43">    this(DEFAULT_REPLAY_CAPACITY, DEFAULT_SUBSCRIBER_QUEUE_CAPACITY);</span>
+<span class="fc" id="L44">  }</span>
+
+  /** Creates a hub with explicit bounded capacities, primarily for tests and tuning. */
+<span class="fc" id="L47">  public WorkflowSessionEventHub(int replayCapacity, int subscriberQueueCapacity) {</span>
+<span class="pc bpc" id="L48" title="1 of 2 branches missed.">    if (replayCapacity &lt;= 0) {</span>
+<span class="nc" id="L49">      throw new IllegalArgumentException(&quot;replayCapacity must be &gt; 0&quot;);</span>
+    }
+<span class="pc bpc" id="L51" title="1 of 2 branches missed.">    if (subscriberQueueCapacity &lt;= 0) {</span>
+<span class="nc" id="L52">      throw new IllegalArgumentException(&quot;subscriberQueueCapacity must be &gt; 0&quot;);</span>
+    }
+<span class="fc" id="L54">    this.replayCapacity = replayCapacity;</span>
+<span class="fc" id="L55">    this.subscriberQueueCapacity = subscriberQueueCapacity;</span>
+<span class="fc" id="L56">  }</span>
+
+  /** Opens a new event stream and publishes creation plus owner-presence events. */
+  public void openSession(String sessionId, OperationActor owner, Workflow workflow) {
+<span class="fc" id="L60">    String requiredSessionId = requireNotBlank(sessionId, &quot;sessionId&quot;);</span>
+<span class="fc" id="L61">    Objects.requireNonNull(owner, &quot;owner&quot;);</span>
+<span class="fc" id="L62">    Objects.requireNonNull(workflow, &quot;workflow&quot;);</span>
+<span class="fc" id="L63">    SessionBuffer created =</span>
+        new SessionBuffer(requiredSessionId, workflow, replayCapacity, subscriberQueueCapacity);
+<span class="fc" id="L65">    installSession(requiredSessionId, created);</span>
+<span class="fc" id="L66">    created.publish(</span>
+        WorkflowSessionEvent.Type.SESSION_CREATED,
+        owner,
+        null,
+        workflow,
+<span class="fc" id="L71">        Map.of(),</span>
+        false,
+<span class="fc" id="L73">        Instant.now());</span>
+<span class="fc" id="L74">    created.publish(</span>
+        WorkflowSessionEvent.Type.PRESENCE_JOINED,
+        owner,
+        null,
+        null,
+<span class="fc" id="L79">        Map.of(),</span>
+        false,
+<span class="fc" id="L81">        Instant.now());</span>
+<span class="fc" id="L82">  }</span>
+
+  /**
+   * Restores an event stream at a durable sequence/revision without publishing historical events.
+   *
+   * &lt;p&gt;The first reconnect cursor at or before the recovery boundary receives a canonical snapshot
+   * rather than fabricated creation, presence or operation events.
+   */
+  public void restoreSession(String sessionId, Workflow workflow, long sequence, long revision) {
+<span class="fc" id="L91">    String requiredSessionId = requireNotBlank(sessionId, &quot;sessionId&quot;);</span>
+<span class="fc" id="L92">    Objects.requireNonNull(workflow, &quot;workflow&quot;);</span>
+<span class="pc bpc" id="L93" title="1 of 2 branches missed.">    if (sequence &lt; 0) {</span>
+<span class="nc" id="L94">      throw new IllegalArgumentException(&quot;sequence must be &gt;= 0&quot;);</span>
+    }
+<span class="pc bpc" id="L96" title="2 of 4 branches missed.">    if (revision &lt; 0 || revision &gt; sequence) {</span>
+<span class="nc" id="L97">      throw new IllegalArgumentException(&quot;revision must be between 0 and sequence&quot;);</span>
+    }
+<span class="fc" id="L99">    SessionBuffer restored =</span>
+<span class="fc" id="L100">        SessionBuffer.restored(</span>
+            requiredSessionId,
+            workflow,
+            replayCapacity,
+            subscriberQueueCapacity,
+            sequence,
+            revision);
+<span class="fc" id="L107">    installSession(requiredSessionId, restored);</span>
+<span class="fc" id="L108">  }</span>
+
+  /** Publishes a newly joined actor without changing the semantic revision. */
+  public void actorJoined(String sessionId, OperationActor actor) {
+<span class="fc" id="L112">    requireSession(sessionId)</span>
+<span class="fc" id="L113">        .publish(</span>
+            WorkflowSessionEvent.Type.PRESENCE_JOINED,
+<span class="fc" id="L115">            Objects.requireNonNull(actor, ACTOR_FIELD),</span>
+            null,
+            null,
+<span class="fc" id="L118">            Map.of(),</span>
+            false,
+<span class="fc" id="L120">            Instant.now());</span>
+<span class="fc" id="L121">  }</span>
+
+  /** Publishes non-semantic presence data without changing the semantic revision. */
+  public void presenceUpdated(String sessionId, OperationActor actor, PresenceState presenceState) {
+<span class="fc" id="L125">    Objects.requireNonNull(actor, ACTOR_FIELD);</span>
+<span class="fc" id="L126">    Objects.requireNonNull(presenceState, &quot;presenceState&quot;);</span>
+<span class="fc" id="L127">    requireSession(sessionId)</span>
+<span class="fc" id="L128">        .publish(</span>
+            WorkflowSessionEvent.Type.PRESENCE_UPDATED,
+            actor,
+            null,
+            null,
+<span class="fc" id="L133">            presenceState.attributes(),</span>
+            false,
+<span class="fc" id="L135">            presenceState.observedAt());</span>
+<span class="fc" id="L136">  }</span>
+
+  /** Publishes an actor departure without deleting the session stream. */
+  public void actorLeft(String sessionId, OperationActor actor) {
+<span class="fc" id="L140">    requireSession(sessionId)</span>
+<span class="fc" id="L141">        .publish(</span>
+            WorkflowSessionEvent.Type.PRESENCE_LEFT,
+<span class="fc" id="L143">            Objects.requireNonNull(actor, ACTOR_FIELD),</span>
+            null,
+            null,
+<span class="fc" id="L146">            Map.of(),</span>
+            false,
+<span class="fc" id="L148">            Instant.now());</span>
+<span class="fc" id="L149">  }</span>
+
+  /** Publishes one ordinary server-accepted semantic operation. */
+  public WorkflowSessionEvent operationAccepted(
+      String sessionId,
+      OperationActor actor,
+      WorkflowOperation operation,
+      Workflow resultingWorkflow) {
+<span class="fc" id="L157">    Objects.requireNonNull(operation, &quot;operation&quot;);</span>
+<span class="fc" id="L158">    return operationAccepted(</span>
+        sessionId,
+        actor,
+        operation,
+        resultingWorkflow,
+<span class="fc" id="L163">        WorkflowOperationCommandMetadata.normal(operation.operationId()));</span>
+  }
+
+  /** Publishes one accepted normal, undo or redo operation and advances semantic revision. */
+  public WorkflowSessionEvent operationAccepted(
+      String sessionId,
+      OperationActor actor,
+      WorkflowOperation operation,
+      Workflow resultingWorkflow,
+      WorkflowOperationCommandMetadata command) {
+<span class="fc" id="L173">    Objects.requireNonNull(operation, &quot;operation&quot;);</span>
+<span class="fc" id="L174">    Objects.requireNonNull(command, &quot;command&quot;);</span>
+<span class="fc" id="L175">    Map&lt;String, String&gt; attributes = new LinkedHashMap&lt;&gt;();</span>
+<span class="fc" id="L176">    attributes.put(&quot;operationType&quot;, operation.getClass().getSimpleName());</span>
+<span class="fc" id="L177">    attributes.put(&quot;operationAuthor&quot;, operation.author());</span>
+<span class="fc" id="L178">    attributes.put(&quot;commandKind&quot;, command.kind().name());</span>
+<span class="fc" id="L179">    attributes.put(&quot;commandId&quot;, command.commandId());</span>
+<span class="fc bfc" id="L180" title="All 2 branches covered.">    if (command.targetOperationId() != null) {</span>
+<span class="fc" id="L181">      attributes.put(&quot;targetOperationId&quot;, command.targetOperationId());</span>
+    }
+<span class="fc" id="L183">    return requireSession(sessionId)</span>
+<span class="fc" id="L184">        .publish(</span>
+            WorkflowSessionEvent.Type.OPERATION_ACCEPTED,
+<span class="fc" id="L186">            Objects.requireNonNull(actor, ACTOR_FIELD),</span>
+<span class="fc" id="L187">            operation.operationId(),</span>
+<span class="fc" id="L188">            Objects.requireNonNull(resultingWorkflow, &quot;resultingWorkflow&quot;),</span>
+<span class="fc" id="L189">            Map.copyOf(attributes),</span>
+            true,
+<span class="fc" id="L191">            Instant.now());</span>
+  }
+
+  /** Publishes closure and terminates all active transport subscriptions. */
+  public void closeSession(String sessionId, OperationActor requestedBy) {
+<span class="fc" id="L196">    SessionBuffer buffer = requireSession(sessionId);</span>
+<span class="fc" id="L197">    buffer.publish(</span>
+        WorkflowSessionEvent.Type.SESSION_CLOSED,
+<span class="fc" id="L199">        Objects.requireNonNull(requestedBy, &quot;requestedBy&quot;),</span>
+        null,
+        null,
+<span class="fc" id="L202">        Map.of(),</span>
+        false,
+<span class="fc" id="L204">        Instant.now());</span>
+<span class="fc" id="L205">    buffer.markClosed();</span>
+<span class="fc" id="L206">  }</span>
+
+  /** Returns retained events after the supplied sequence, or a canonical snapshot after a gap. */
+  public List&lt;WorkflowSessionEvent&gt; replay(String sessionId, long afterSequence) {
+<span class="pc bpc" id="L210" title="1 of 2 branches missed.">    if (afterSequence &lt; 0) {</span>
+<span class="nc" id="L211">      throw new IllegalArgumentException(&quot;afterSequence must be &gt;= 0&quot;);</span>
+    }
+<span class="fc" id="L213">    return requireSession(sessionId).replay(afterSequence);</span>
+  }
+
+  /**
+   * Subscribes to retained and future events after a sequence.
+   *
+   * &lt;p&gt;The callback executes on a dedicated virtual thread. Closing the returned handle is
+   * idempotent.
+   */
+  public Subscription subscribe(
+      String sessionId, long afterSequence, Consumer&lt;WorkflowSessionEvent&gt; callback) {
+<span class="pc bpc" id="L224" title="1 of 2 branches missed.">    if (afterSequence &lt; 0) {</span>
+<span class="nc" id="L225">      throw new IllegalArgumentException(&quot;afterSequence must be &gt;= 0&quot;);</span>
+    }
+<span class="fc" id="L227">    return requireSession(sessionId)</span>
+<span class="fc" id="L228">        .subscribe(afterSequence, Objects.requireNonNull(callback, &quot;callback&quot;));</span>
+  }
+
+  /** Returns the latest event sequence for diagnostics and reconnect cursors. */
+  public long currentSequence(String sessionId) {
+<span class="fc" id="L233">    return requireSession(sessionId).currentSequence();</span>
+  }
+
+  /** Returns the latest semantic revision for diagnostics and optimistic concurrency. */
+  public long currentRevision(String sessionId) {
+<span class="fc" id="L238">    return requireSession(sessionId).currentRevision();</span>
+  }
+
+  /** Returns the number of currently active subscribers. */
+  public int subscriberCount(String sessionId) {
+<span class="fc" id="L243">    return requireSession(sessionId).subscriberCount();</span>
+  }
+
+  private void installSession(String sessionId, SessionBuffer created) {
+<span class="fc" id="L247">    SessionBuffer previous = sessions.putIfAbsent(sessionId, created);</span>
+<span class="pc bpc" id="L248" title="1 of 2 branches missed.">    if (previous != null) {</span>
+<span class="nc bnc" id="L249" title="All 4 branches missed.">      if (!previous.isClosed() || !sessions.replace(sessionId, previous, created)) {</span>
+<span class="nc" id="L250">        throw new IllegalStateException(&quot;Event stream already exists: &quot; + sessionId);</span>
+      }
+<span class="nc" id="L252">      previous.stopSubscribers();</span>
+    }
+<span class="fc" id="L254">  }</span>
+
+  private SessionBuffer requireSession(String sessionId) {
+<span class="fc" id="L257">    String requiredSessionId = requireNotBlank(sessionId, &quot;sessionId&quot;);</span>
+<span class="fc" id="L258">    SessionBuffer buffer = sessions.get(requiredSessionId);</span>
+<span class="pc bpc" id="L259" title="1 of 2 branches missed.">    if (buffer == null) {</span>
+<span class="nc" id="L260">      throw new IllegalArgumentException(&quot;Unknown session event stream: &quot; + requiredSessionId);</span>
+    }
+<span class="fc" id="L262">    return buffer;</span>
+  }
+
+  private static String requireNotBlank(String value, String field) {
+<span class="fc" id="L266">    Objects.requireNonNull(value, field);</span>
+<span class="pc bpc" id="L267" title="1 of 2 branches missed.">    if (value.isBlank()) {</span>
+<span class="nc" id="L268">      throw new IllegalArgumentException(field + &quot; must not be blank&quot;);</span>
+    }
+<span class="fc" id="L270">    return value;</span>
+  }
+
+  /** Handle for one active event subscription. */
+  @FunctionalInterface
+  public interface Subscription extends AutoCloseable {
+    @Override
+    void close();
+  }
+
+  private static final class SessionBuffer {
+    private static final long NO_RECOVERY_BOUNDARY = -1;
+
+    private final String sessionId;
+    private final int replayCapacity;
+    private final int subscriberQueueCapacity;
+    private final long recoveryBoundary;
+<span class="fc" id="L287">    private final ReentrantLock lock = new ReentrantLock();</span>
+<span class="fc" id="L288">    private final Deque&lt;WorkflowSessionEvent&gt; retainedEvents = new ArrayDeque&lt;&gt;();</span>
+<span class="fc" id="L289">    private final Set&lt;Subscriber&gt; subscribers = new LinkedHashSet&lt;&gt;();</span>
+    private long sequence;
+    private long revision;
+    private Workflow currentWorkflow;
+    private boolean closed;
+
+    SessionBuffer(
+        String sessionId, Workflow workflow, int replayCapacity, int subscriberQueueCapacity) {
+<span class="fc" id="L297">      this(</span>
+          sessionId, workflow, replayCapacity, subscriberQueueCapacity, 0, 0, NO_RECOVERY_BOUNDARY);
+<span class="fc" id="L299">    }</span>
+
+    private SessionBuffer(
+        String sessionId,
+        Workflow workflow,
+        int replayCapacity,
+        int subscriberQueueCapacity,
+        long sequence,
+        long revision,
+<span class="fc" id="L308">        long recoveryBoundary) {</span>
+<span class="fc" id="L309">      this.sessionId = sessionId;</span>
+<span class="fc" id="L310">      this.currentWorkflow = workflow;</span>
+<span class="fc" id="L311">      this.replayCapacity = replayCapacity;</span>
+<span class="fc" id="L312">      this.subscriberQueueCapacity = subscriberQueueCapacity;</span>
+<span class="fc" id="L313">      this.sequence = sequence;</span>
+<span class="fc" id="L314">      this.revision = revision;</span>
+<span class="fc" id="L315">      this.recoveryBoundary = recoveryBoundary;</span>
+<span class="fc" id="L316">    }</span>
+
+    static SessionBuffer restored(
+        String sessionId,
+        Workflow workflow,
+        int replayCapacity,
+        int subscriberQueueCapacity,
+        long sequence,
+        long revision) {
+<span class="fc" id="L325">      return new SessionBuffer(</span>
+          sessionId,
+          workflow,
+          replayCapacity,
+          subscriberQueueCapacity,
+          sequence,
+          revision,
+          sequence);
+    }
+
+    WorkflowSessionEvent publish(
+        WorkflowSessionEvent.Type type,
+        OperationActor actor,
+        String operationId,
+        Workflow workflow,
+        Map&lt;String, String&gt; attributes,
+        boolean semantic,
+        Instant occurredAt) {
+<span class="fc" id="L343">      List&lt;Subscriber&gt; overflowed = new ArrayList&lt;&gt;();</span>
+      WorkflowSessionEvent event;
+<span class="fc" id="L345">      lock.lock();</span>
+      try {
+<span class="pc bpc" id="L347" title="1 of 2 branches missed.">        if (closed) {</span>
+<span class="nc" id="L348">          throw new IllegalStateException(&quot;Session event stream is closed: &quot; + sessionId);</span>
+        }
+<span class="fc" id="L350">        sequence++;</span>
+<span class="fc bfc" id="L351" title="All 2 branches covered.">        if (semantic) {</span>
+<span class="fc" id="L352">          revision++;</span>
+        }
+<span class="fc bfc" id="L354" title="All 2 branches covered.">        if (workflow != null) {</span>
+<span class="fc" id="L355">          currentWorkflow = workflow;</span>
+        }
+<span class="fc" id="L357">        event =</span>
+            new WorkflowSessionEvent(
+<span class="fc" id="L359">                eventId(sequence),</span>
+                sessionId,
+                sequence,
+                revision,
+                occurredAt,
+                type,
+                actor,
+                operationId,
+                workflow,
+                attributes);
+<span class="fc" id="L369">        retainedEvents.addLast(event);</span>
+<span class="fc bfc" id="L370" title="All 2 branches covered.">        while (retainedEvents.size() &gt; replayCapacity) {</span>
+<span class="fc" id="L371">          retainedEvents.removeFirst();</span>
+        }
+<span class="fc bfc" id="L373" title="All 2 branches covered.">        for (Subscriber subscriber : subscribers) {</span>
+<span class="fc bfc" id="L374" title="All 2 branches covered.">          if (!subscriber.enqueue(event)) {</span>
+<span class="fc" id="L375">            overflowed.add(subscriber);</span>
+          }
+<span class="fc" id="L377">        }</span>
+<span class="fc" id="L378">        subscribers.removeAll(overflowed);</span>
+      } finally {
+<span class="fc" id="L380">        lock.unlock();</span>
+      }
+<span class="fc" id="L382">      overflowed.forEach(Subscriber::stop);</span>
+<span class="fc" id="L383">      return event;</span>
+    }
+
+    List&lt;WorkflowSessionEvent&gt; replay(long afterSequence) {
+<span class="fc" id="L387">      lock.lock();</span>
+      try {
+<span class="fc" id="L389">        return replayLocked(afterSequence);</span>
+      } finally {
+<span class="fc" id="L391">        lock.unlock();</span>
+      }
+    }
+
+    Subscription subscribe(long afterSequence, Consumer&lt;WorkflowSessionEvent&gt; callback) {
+      Subscriber subscriber;
+<span class="fc" id="L397">      lock.lock();</span>
+      try {
+<span class="pc bpc" id="L399" title="1 of 2 branches missed.">        if (closed) {</span>
+<span class="nc" id="L400">          throw new IllegalStateException(&quot;Session event stream is closed: &quot; + sessionId);</span>
+        }
+<span class="fc" id="L402">        List&lt;WorkflowSessionEvent&gt; initialEvents = replayLocked(afterSequence);</span>
+<span class="fc" id="L403">        int queueCapacity = Math.max(subscriberQueueCapacity, initialEvents.size() + 1);</span>
+<span class="fc" id="L404">        Subscriber createdSubscriber = new Subscriber(sessionId, queueCapacity, callback);</span>
+<span class="fc" id="L405">        createdSubscriber.setRemovalCallback(() -&gt; removeSubscriber(createdSubscriber));</span>
+<span class="fc" id="L406">        subscriber = createdSubscriber;</span>
+<span class="pc bpc" id="L407" title="1 of 2 branches missed.">        if (!subscriber.enqueueAll(initialEvents)) {</span>
+<span class="nc" id="L408">          throw new IllegalStateException(&quot;Unable to queue retained session events&quot;);</span>
+        }
+<span class="fc" id="L410">        subscribers.add(subscriber);</span>
+<span class="fc" id="L411">        subscriber.start();</span>
+      } finally {
+<span class="fc" id="L413">        lock.unlock();</span>
+      }
+<span class="fc" id="L415">      return subscriber::stop;</span>
+    }
+
+    private void removeSubscriber(Subscriber subscriber) {
+<span class="fc" id="L419">      lock.lock();</span>
+      try {
+<span class="fc" id="L421">        subscribers.remove(subscriber);</span>
+      } finally {
+<span class="fc" id="L423">        lock.unlock();</span>
+      }
+<span class="fc" id="L425">    }</span>
+
+    private List&lt;WorkflowSessionEvent&gt; replayLocked(long afterSequence) {
+<span class="fc bfc" id="L428" title="All 4 branches covered.">      if (recoveryBoundary &gt;= 0 &amp;&amp; afterSequence &lt;= recoveryBoundary) {</span>
+<span class="fc" id="L429">        return List.of(snapshotEvent());</span>
+      }
+<span class="pc bpc" id="L431" title="1 of 4 branches missed.">      if (afterSequence &gt; sequence || replayGap(afterSequence)) {</span>
+<span class="fc" id="L432">        return List.of(snapshotEvent());</span>
+      }
+<span class="fc bfc" id="L434" title="All 2 branches covered.">      return retainedEvents.stream().filter(event -&gt; event.sequence() &gt; afterSequence).toList();</span>
+    }
+
+    private boolean replayGap(long afterSequence) {
+<span class="fc" id="L438">      WorkflowSessionEvent oldest = retainedEvents.peekFirst();</span>
+<span class="pc bpc" id="L439" title="1 of 4 branches missed.">      return oldest != null &amp;&amp; afterSequence &lt; oldest.sequence() - 1;</span>
+    }
+
+    private WorkflowSessionEvent snapshotEvent() {
+<span class="fc" id="L443">      return new WorkflowSessionEvent(</span>
+<span class="fc" id="L444">          eventId(sequence) + &quot;:snapshot&quot;,</span>
+          sessionId,
+          sequence,
+          revision,
+<span class="fc" id="L448">          Instant.now(),</span>
+          WorkflowSessionEvent.Type.SNAPSHOT,
+          null,
+          null,
+          currentWorkflow,
+<span class="fc" id="L453">          Map.of());</span>
+    }
+
+    long currentSequence() {
+<span class="fc" id="L457">      lock.lock();</span>
+      try {
+<span class="fc" id="L459">        return sequence;</span>
+      } finally {
+<span class="fc" id="L461">        lock.unlock();</span>
+      }
+    }
+
+    long currentRevision() {
+<span class="fc" id="L466">      lock.lock();</span>
+      try {
+<span class="fc" id="L468">        return revision;</span>
+      } finally {
+<span class="fc" id="L470">        lock.unlock();</span>
+      }
+    }
+
+    int subscriberCount() {
+<span class="fc" id="L475">      lock.lock();</span>
+      try {
+<span class="fc" id="L477">        return subscribers.size();</span>
+      } finally {
+<span class="fc" id="L479">        lock.unlock();</span>
+      }
+    }
+
+    boolean isClosed() {
+<span class="nc" id="L484">      lock.lock();</span>
+      try {
+<span class="nc" id="L486">        return closed;</span>
+      } finally {
+<span class="nc" id="L488">        lock.unlock();</span>
+      }
+    }
+
+    void markClosed() {
+<span class="fc" id="L493">      lock.lock();</span>
+      try {
+<span class="fc" id="L495">        closed = true;</span>
+      } finally {
+<span class="fc" id="L497">        lock.unlock();</span>
+      }
+<span class="fc" id="L499">    }</span>
+
+    void stopSubscribers() {
+      List&lt;Subscriber&gt; active;
+<span class="nc" id="L503">      lock.lock();</span>
+      try {
+<span class="nc" id="L505">        active = List.copyOf(subscribers);</span>
+<span class="nc" id="L506">        subscribers.clear();</span>
+<span class="nc" id="L507">        closed = true;</span>
+      } finally {
+<span class="nc" id="L509">        lock.unlock();</span>
+      }
+<span class="nc" id="L511">      active.forEach(Subscriber::stop);</span>
+<span class="nc" id="L512">    }</span>
+
+    private String eventId(long eventSequence) {
+<span class="fc" id="L515">      return sessionId + &quot;:&quot; + eventSequence;</span>
+    }
+  }
+
+  private static final class Subscriber {
+    private final BlockingQueue&lt;WorkflowSessionEvent&gt; queue;
+    private final Consumer&lt;WorkflowSessionEvent&gt; callback;
+<span class="fc" id="L522">    private final AtomicBoolean stopped = new AtomicBoolean();</span>
+    private final String threadName;
+    private volatile Thread dispatchThread;
+    private Runnable removalCallback;
+
+<span class="fc" id="L527">    Subscriber(String sessionId, int queueCapacity, Consumer&lt;WorkflowSessionEvent&gt; callback) {</span>
+<span class="fc" id="L528">      this.queue = new ArrayBlockingQueue&lt;&gt;(queueCapacity);</span>
+<span class="fc" id="L529">      this.callback = callback;</span>
+<span class="fc" id="L530">      this.threadName = &quot;workflow-session-events-&quot; + sessionId;</span>
+<span class="fc" id="L531">    }</span>
+
+    void setRemovalCallback(Runnable removalCallback) {
+<span class="fc" id="L534">      this.removalCallback = Objects.requireNonNull(removalCallback, &quot;removalCallback&quot;);</span>
+<span class="fc" id="L535">    }</span>
+
+    boolean enqueue(WorkflowSessionEvent event) {
+<span class="pc bpc" id="L538" title="1 of 4 branches missed.">      return !stopped.get() &amp;&amp; queue.offer(event);</span>
+    }
+
+    boolean enqueueAll(List&lt;WorkflowSessionEvent&gt; events) {
+<span class="pc bpc" id="L542" title="1 of 2 branches missed.">      for (WorkflowSessionEvent event : events) {</span>
+<span class="nc bnc" id="L543" title="All 2 branches missed.">        if (!enqueue(event)) {</span>
+<span class="nc" id="L544">          return false;</span>
+        }
+<span class="nc" id="L546">      }</span>
+<span class="fc" id="L547">      return true;</span>
+    }
+
+    void start() {
+<span class="fc" id="L551">      dispatchThread = Thread.ofVirtual().name(threadName).start(this::dispatch);</span>
+<span class="fc" id="L552">    }</span>
+
+    void stop() {
+<span class="pc bpc" id="L555" title="1 of 2 branches missed.">      if (stopped.compareAndSet(false, true)) {</span>
+<span class="fc" id="L556">        Thread thread = dispatchThread;</span>
+<span class="pc bpc" id="L557" title="1 of 2 branches missed.">        if (thread != null) {</span>
+<span class="fc" id="L558">          thread.interrupt();</span>
+        }
+      }
+<span class="fc" id="L561">    }</span>
+
+    private void dispatch() {
+      try {
+<span class="fc bfc" id="L565" title="All 2 branches covered.">        while (!stopped.get()) {</span>
+<span class="fc" id="L566">          WorkflowSessionEvent event = queue.take();</span>
+<span class="fc" id="L567">          callback.accept(event);</span>
+<span class="pc bpc" id="L568" title="1 of 2 branches missed.">          if (event.type() == WorkflowSessionEvent.Type.SESSION_CLOSED) {</span>
+<span class="nc" id="L569">            break;</span>
+          }
+<span class="fc" id="L571">        }</span>
+<span class="fc" id="L572">      } catch (InterruptedException exception) {</span>
+<span class="fc" id="L573">        Thread.currentThread().interrupt();</span>
+<span class="fc" id="L574">      } catch (RuntimeException ignored) {</span>
+        // A failed transport callback is isolated and removed below.
+      } finally {
+<span class="fc" id="L577">        stopped.set(true);</span>
+<span class="fc" id="L578">        removalCallback.run();</span>
+      }
+<span class="fc" id="L580">    }</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

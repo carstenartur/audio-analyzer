@@ -1,0 +1,262 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>CollaborativeWorkflowSessionService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Core</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.collaboration</a> &gt; <span class="el_source">CollaborativeWorkflowSessionService.java</span></div><h1>CollaborativeWorkflowSessionService.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.collaboration;
+
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import org.hammer.audio.workflow.Workflow;
+import org.hammer.audio.workflow.WorkflowOperation;
+import org.hammer.audio.workflow.WorkflowOperationLog;
+
+/**
+ * Collaboration/application-service adapter around {@link WorkflowOperationLog}.
+ *
+ * &lt;p&gt;Keeps semantic workflow operations as the source of truth while adding:
+ *
+ * &lt;ul&gt;
+ *   &lt;li&gt;collaboration mode handling
+ *   &lt;li&gt;personal/shared undo scopes
+ *   &lt;li&gt;actor metadata envelopes
+ *   &lt;li&gt;transactional outbox + event-bus publishing boundary
+ *   &lt;li&gt;non-semantic presence state
+ * &lt;/ul&gt;
+ */
+public final class CollaborativeWorkflowSessionService {
+
+<span class="fc" id="L31">  private static final Logger LOGGER =</span>
+<span class="fc" id="L32">      Logger.getLogger(CollaborativeWorkflowSessionService.class.getName());</span>
+
+  private final String sessionId;
+  private final CollaborationMode mode;
+  private final WorkflowOperationLog operationLog;
+  private final WorkflowEventOutbox eventOutbox;
+  private final WorkflowEventBus eventBus;
+<span class="fc" id="L39">  private final Map&lt;String, PresenceState&gt; presenceByActor = new ConcurrentHashMap&lt;&gt;();</span>
+
+  public CollaborativeWorkflowSessionService(
+      String sessionId,
+      CollaborationMode mode,
+      WorkflowOperationLog operationLog,
+      WorkflowEventOutbox eventOutbox,
+<span class="fc" id="L46">      WorkflowEventBus eventBus) {</span>
+<span class="fc" id="L47">    this.sessionId = requireNotBlank(sessionId, &quot;sessionId&quot;);</span>
+<span class="fc" id="L48">    this.mode = Objects.requireNonNull(mode, &quot;mode&quot;);</span>
+<span class="fc" id="L49">    this.operationLog = Objects.requireNonNull(operationLog, &quot;operationLog&quot;);</span>
+<span class="fc" id="L50">    this.eventOutbox = Objects.requireNonNull(eventOutbox, &quot;eventOutbox&quot;);</span>
+<span class="fc" id="L51">    this.eventBus = Objects.requireNonNull(eventBus, &quot;eventBus&quot;);</span>
+<span class="fc" id="L52">  }</span>
+
+  public Workflow currentWorkflow() {
+<span class="fc" id="L55">    return operationLog.currentWorkflow();</span>
+  }
+
+  public List&lt;WorkflowOperation&gt; operations() {
+<span class="fc" id="L59">    return operationLog.operations();</span>
+  }
+
+  public Workflow applyOperation(WorkflowOperationEnvelope envelope) {
+<span class="fc" id="L63">    Objects.requireNonNull(envelope, &quot;envelope&quot;);</span>
+<span class="fc" id="L64">    assertSessionAndMode(envelope.sessionId(), envelope.mode());</span>
+<span class="fc" id="L65">    operationLog.apply(envelope.operation());</span>
+<span class="fc" id="L66">    appendAndPublish(</span>
+<span class="fc" id="L67">        WorkflowCollaborationEvent.operationApplied(</span>
+<span class="fc" id="L68">            sessionId, envelope.actor(), envelope.operation()));</span>
+<span class="fc" id="L69">    return operationLog.currentWorkflow();</span>
+  }
+
+  public UndoResult undo(OperationActor actor) {
+<span class="fc" id="L73">    Objects.requireNonNull(actor, &quot;actor&quot;);</span>
+<span class="pc bpc" id="L74" title="1 of 2 branches missed.">    if (mode.undoScope() == UndoScope.SHARED) {</span>
+<span class="nc" id="L75">      throw new IllegalStateException(</span>
+          &quot;Shared undo mode requires explicit target operation id to avoid implicit cross-user&quot;
+              + &quot; undo&quot;);
+    }
+<span class="fc" id="L79">    WorkflowOperation target = findLatestOperationByAuthor(actor.actorId());</span>
+<span class="nc" id="L80">    assertPersonalUndoSafe(actor.actorId(), target);</span>
+<span class="nc" id="L81">    return applyUndo(actor, target, mode.undoScope());</span>
+  }
+
+  public UndoResult undo(OperationActor actor, String targetOperationId) {
+<span class="fc" id="L85">    Objects.requireNonNull(actor, &quot;actor&quot;);</span>
+<span class="fc" id="L86">    String requiredOperationId = requireNotBlank(targetOperationId, &quot;targetOperationId&quot;);</span>
+<span class="pc bpc" id="L87" title="1 of 2 branches missed.">    if (mode.undoScope() != UndoScope.SHARED) {</span>
+<span class="nc" id="L88">      throw new IllegalStateException(</span>
+          &quot;Explicit target-operation undo is only allowed in SHARED_SESSION_SHARED_UNDO mode&quot;);
+    }
+<span class="fc" id="L91">    WorkflowOperation target = findOperationById(requiredOperationId);</span>
+<span class="fc" id="L92">    return applyUndo(actor, target, UndoScope.SHARED);</span>
+  }
+
+  public void updatePresence(PresenceState state) {
+<span class="fc" id="L96">    Objects.requireNonNull(state, &quot;state&quot;);</span>
+<span class="fc" id="L97">    presenceByActor.put(state.actorId(), state);</span>
+<span class="fc" id="L98">  }</span>
+
+  public void clearPresence(String actorId) {
+<span class="nc" id="L101">    presenceByActor.remove(requireNotBlank(actorId, &quot;actorId&quot;));</span>
+<span class="nc" id="L102">  }</span>
+
+  public Map&lt;String, PresenceState&gt; presenceSnapshot() {
+<span class="fc" id="L105">    return Map.copyOf(presenceByActor);</span>
+  }
+
+  private UndoResult applyUndo(
+      OperationActor requestedBy, WorkflowOperation target, UndoScope scope) {
+<span class="fc" id="L110">    WorkflowOperation inverse =</span>
+        target
+<span class="fc" id="L112">            .inverseOperation()</span>
+<span class="fc" id="L113">            .orElseThrow(</span>
+                () -&gt;
+<span class="nc" id="L115">                    new UnsupportedOperationException(</span>
+<span class="nc" id="L116">                        &quot;Operation has no inverse: &quot; + target.getClass().getSimpleName()));</span>
+<span class="fc" id="L117">    operationLog.apply(inverse);</span>
+<span class="fc" id="L118">    appendAndPublish(</span>
+<span class="fc" id="L119">        WorkflowCollaborationEvent.undoApplied(</span>
+            sessionId,
+            requestedBy,
+            new WorkflowCollaborationEvent.UndoDetails(
+<span class="fc" id="L123">                scope, target.operationId(), target.author(), inverse.operationId())));</span>
+<span class="fc" id="L124">    return new UndoResult(</span>
+<span class="fc" id="L125">        requestedBy.actorId(), scope, target.operationId(), target.author(), inverse.operationId());</span>
+  }
+
+  private WorkflowOperation findLatestOperationByAuthor(String actorId) {
+<span class="fc" id="L129">    List&lt;WorkflowOperation&gt; history = operationLog.operations();</span>
+<span class="pc bpc" id="L130" title="1 of 2 branches missed.">    for (int i = history.size() - 1; i &gt;= 0; i--) {</span>
+<span class="fc" id="L131">      WorkflowOperation operation = history.get(i);</span>
+<span class="fc bfc" id="L132" title="All 2 branches covered.">      if (operation.author().equals(actorId)) {</span>
+<span class="fc" id="L133">        return operation;</span>
+      }
+    }
+<span class="nc" id="L136">    throw new IllegalStateException(&quot;No operation available to undo for actor: &quot; + actorId);</span>
+  }
+
+  private WorkflowOperation findOperationById(String operationId) {
+<span class="fc" id="L140">    List&lt;WorkflowOperation&gt; history = operationLog.operations();</span>
+<span class="pc bpc" id="L141" title="1 of 2 branches missed.">    for (int i = history.size() - 1; i &gt;= 0; i--) {</span>
+<span class="fc" id="L142">      WorkflowOperation operation = history.get(i);</span>
+<span class="pc bpc" id="L143" title="1 of 2 branches missed.">      if (operation.operationId().equals(operationId)) {</span>
+<span class="fc" id="L144">        return operation;</span>
+      }
+    }
+<span class="nc" id="L147">    throw new IllegalStateException(&quot;Operation not found: &quot; + operationId);</span>
+  }
+
+  private void assertPersonalUndoSafe(String actorId, WorkflowOperation target) {
+<span class="fc" id="L151">    List&lt;WorkflowOperation&gt; history = operationLog.operations();</span>
+<span class="fc" id="L152">    int targetIndex = indexOfOperation(history, target.operationId());</span>
+<span class="fc" id="L153">    Set&lt;String&gt; affected = new LinkedHashSet&lt;&gt;(target.affectedObjectIds());</span>
+<span class="pc bpc" id="L154" title="1 of 2 branches missed.">    for (int i = targetIndex + 1; i &lt; history.size(); i++) {</span>
+<span class="fc" id="L155">      WorkflowOperation later = history.get(i);</span>
+<span class="pc bpc" id="L156" title="2 of 4 branches missed.">      if (!later.author().equals(actorId) &amp;&amp; intersects(affected, later.affectedObjectIds())) {</span>
+<span class="fc" id="L157">        throw new IllegalStateException(</span>
+            &quot;Personal undo would revert operation from actor &quot;
+<span class="fc" id="L159">                + later.author()</span>
+                + &quot; touching shared object(s): &quot;
+<span class="fc" id="L161">                + intersectingIds(affected, later.affectedObjectIds()));</span>
+      }
+    }
+<span class="nc" id="L164">  }</span>
+
+  private static boolean intersects(Set&lt;String&gt; left, List&lt;String&gt; right) {
+<span class="pc bpc" id="L167" title="1 of 2 branches missed.">    for (String value : right) {</span>
+<span class="pc bpc" id="L168" title="1 of 2 branches missed.">      if (left.contains(value)) {</span>
+<span class="fc" id="L169">        return true;</span>
+      }
+<span class="nc" id="L171">    }</span>
+<span class="nc" id="L172">    return false;</span>
+  }
+
+  private static List&lt;String&gt; intersectingIds(Set&lt;String&gt; left, List&lt;String&gt; right) {
+<span class="fc" id="L176">    List&lt;String&gt; matches = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L177" title="All 2 branches covered.">    for (String value : right) {</span>
+<span class="pc bpc" id="L178" title="1 of 2 branches missed.">      if (left.contains(value)) {</span>
+<span class="fc" id="L179">        matches.add(value);</span>
+      }
+<span class="fc" id="L181">    }</span>
+<span class="fc" id="L182">    return matches;</span>
+  }
+
+  private static int indexOfOperation(List&lt;WorkflowOperation&gt; history, String operationId) {
+<span class="pc bpc" id="L186" title="1 of 2 branches missed.">    for (int i = history.size() - 1; i &gt;= 0; i--) {</span>
+<span class="fc bfc" id="L187" title="All 2 branches covered.">      if (history.get(i).operationId().equals(operationId)) {</span>
+<span class="fc" id="L188">        return i;</span>
+      }
+    }
+<span class="nc" id="L191">    throw new IllegalStateException(&quot;Operation not found in history: &quot; + operationId);</span>
+  }
+
+  private void appendAndPublish(WorkflowCollaborationEvent event) {
+<span class="fc" id="L195">    eventOutbox.append(event);</span>
+<span class="fc bfc" id="L196" title="All 2 branches covered.">    for (WorkflowEventOutbox.OutboxEntry entry : eventOutbox.pending()) {</span>
+      try {
+<span class="fc" id="L198">        eventBus.publish(entry.event());</span>
+<span class="fc" id="L199">        eventOutbox.markPublished(entry.entryId());</span>
+<span class="fc" id="L200">      } catch (RuntimeException ex) {</span>
+<span class="fc" id="L201">        LOGGER.log(</span>
+            Level.WARNING,
+            &quot;Failed to publish collaboration event for session &quot;
+                + sessionId
+                + &quot;, outboxEntryId=&quot;
+<span class="fc" id="L206">                + entry.entryId()</span>
+                + &quot;, eventType=&quot;
+<span class="fc" id="L208">                + entry.event().type(),</span>
+            ex);
+<span class="fc" id="L210">        break;</span>
+<span class="fc" id="L211">      }</span>
+<span class="fc" id="L212">    }</span>
+<span class="fc" id="L213">  }</span>
+
+  private static String requireNotBlank(String value, String name) {
+<span class="fc" id="L216">    Objects.requireNonNull(value, name);</span>
+<span class="pc bpc" id="L217" title="1 of 2 branches missed.">    if (value.isBlank()) {</span>
+<span class="nc" id="L218">      throw new IllegalArgumentException(name + &quot; must not be blank&quot;);</span>
+    }
+<span class="fc" id="L220">    return value;</span>
+  }
+
+  private void assertSessionAndMode(String envelopeSessionId, CollaborationMode envelopeMode) {
+<span class="pc bpc" id="L224" title="1 of 2 branches missed.">    if (!sessionId.equals(envelopeSessionId)) {</span>
+<span class="nc" id="L225">      throw new IllegalArgumentException(</span>
+          &quot;envelope sessionId '&quot;
+              + envelopeSessionId
+              + &quot;' does not match session '&quot;
+              + sessionId
+              + &quot;'&quot;);
+    }
+<span class="pc bpc" id="L232" title="1 of 2 branches missed.">    if (mode != envelopeMode) {</span>
+<span class="nc" id="L233">      throw new IllegalArgumentException(</span>
+          &quot;envelope mode '&quot; + envelopeMode + &quot;' does not match session mode '&quot; + mode + &quot;'&quot;);
+    }
+<span class="fc" id="L236">  }</span>
+
+  /**
+   * Result of an undo operation.
+   *
+   * @param requestedByActor actor requesting undo
+   * @param scope effective undo scope
+   * @param revertedOperationId operation id that was reverted
+   * @param revertedActorId actor whose operation was reverted
+   * @param undoOperationId semantic inverse operation id that was applied
+   */
+  public record UndoResult(
+      String requestedByActor,
+      UndoScope scope,
+      String revertedOperationId,
+      String revertedActorId,
+      String undoOperationId) {
+<span class="fc" id="L253">    public UndoResult {</span>
+<span class="fc" id="L254">      requireNotBlank(requestedByActor, &quot;requestedByActor&quot;);</span>
+<span class="fc" id="L255">      Objects.requireNonNull(scope, &quot;scope&quot;);</span>
+<span class="fc" id="L256">      requireNotBlank(revertedOperationId, &quot;revertedOperationId&quot;);</span>
+<span class="fc" id="L257">      requireNotBlank(revertedActorId, &quot;revertedActorId&quot;);</span>
+<span class="fc" id="L258">      requireNotBlank(undoOperationId, &quot;undoOperationId&quot;);</span>
+<span class="fc" id="L259">    }</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

@@ -1,0 +1,163 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>SubSampleGccPhatTdoaEstimator.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic</a> &gt; <span class="el_source">SubSampleGccPhatTdoaEstimator.java</span></div><h1>SubSampleGccPhatTdoaEstimator.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic;
+
+import java.util.Objects;
+import org.hammer.audio.acquisition.Microphone;
+import org.hammer.audio.acquisition.MicrophoneArray;
+import org.hammer.audio.core.AudioBlock;
+
+/**
+ * GCC-PHAT estimator using spectrally zero-padded correlation and explicit ambiguity diagnostics.
+ */
+public final class SubSampleGccPhatTdoaEstimator implements DiagnosticTdoaEstimator {
+
+  private static final double EPSILON = 1.0e-12;
+  private static final int DEFAULT_INTERPOLATION_FACTOR = 16;
+  private static final double DEFAULT_MINIMUM_PEAK_RATIO = 1.5;
+  private static final double DEFAULT_MINIMUM_NORMALIZED_CURVATURE = 1.5;
+
+  private final double speedOfSoundMetersPerSecond;
+  private final int interpolationFactor;
+  private final double minimumPeakRatio;
+  private final double minimumNormalizedCurvature;
+
+  /** Creates the default 16-times interpolated estimator. */
+  public SubSampleGccPhatTdoaEstimator(double speedOfSoundMetersPerSecond) {
+<span class="fc" id="L25">    this(</span>
+        speedOfSoundMetersPerSecond,
+        DEFAULT_INTERPOLATION_FACTOR,
+        DEFAULT_MINIMUM_PEAK_RATIO,
+        DEFAULT_MINIMUM_NORMALIZED_CURVATURE);
+<span class="fc" id="L30">  }</span>
+
+  /** Creates an estimator with explicit interpolation and ambiguity thresholds. */
+  public SubSampleGccPhatTdoaEstimator(
+      double speedOfSoundMetersPerSecond,
+      int interpolationFactor,
+      double minimumPeakRatio,
+<span class="fc" id="L37">      double minimumNormalizedCurvature) {</span>
+<span class="fc" id="L38">    this.speedOfSoundMetersPerSecond =</span>
+<span class="fc" id="L39">        requirePositiveFinite(speedOfSoundMetersPerSecond, &quot;speedOfSoundMetersPerSecond&quot;);</span>
+<span class="pc bpc" id="L40" title="2 of 4 branches missed.">    if (interpolationFactor &lt; 2 || Integer.bitCount(interpolationFactor) != 1) {</span>
+<span class="nc" id="L41">      throw new IllegalArgumentException(</span>
+          &quot;interpolationFactor must be a power of two greater than one&quot;);
+    }
+<span class="fc" id="L44">    this.interpolationFactor = interpolationFactor;</span>
+<span class="fc" id="L45">    this.minimumPeakRatio = requireAtLeastOne(minimumPeakRatio, &quot;minimumPeakRatio&quot;);</span>
+<span class="fc" id="L46">    this.minimumNormalizedCurvature =</span>
+<span class="fc" id="L47">        requirePositiveFinite(minimumNormalizedCurvature, &quot;minimumNormalizedCurvature&quot;);</span>
+<span class="fc" id="L48">  }</span>
+
+  @Override
+  public DiagnosticTdoaEstimate estimateDetailed(
+      AudioBlock block, MicrophoneArray array, int firstChannel, int secondChannel) {
+<span class="fc" id="L53">    Objects.requireNonNull(block, &quot;block&quot;);</span>
+<span class="fc" id="L54">    Objects.requireNonNull(array, &quot;array&quot;);</span>
+<span class="fc" id="L55">    Microphone first = array.microphone(firstChannel);</span>
+<span class="fc" id="L56">    Microphone second = array.microphone(secondChannel);</span>
+<span class="fc" id="L57">    float[] firstSamples = block.channelView(firstChannel);</span>
+<span class="fc" id="L58">    float[] secondSamples = block.channelView(secondChannel);</span>
+<span class="fc" id="L59">    int frames = Math.min(firstSamples.length, secondSamples.length);</span>
+<span class="fc" id="L60">    int maximumLagSamples = Math.min(frames - 1, maximumPhysicalLag(block, first, second));</span>
+<span class="fc" id="L61">    double[] correlation =</span>
+<span class="fc" id="L62">        GccPhatCorrelation.correlate(firstSamples, secondSamples, frames, interpolationFactor);</span>
+<span class="fc" id="L63">    PeakSelection selection = selectPeak(correlation, maximumLagSamples);</span>
+<span class="fc" id="L64">    double delaySeconds = selection.interpolatedLagSamples() / block.format().sampleRate();</span>
+<span class="fc" id="L65">    TdoaEstimate estimate =</span>
+        new TdoaEstimate(
+<span class="fc" id="L67">            first.id(),</span>
+<span class="fc" id="L68">            second.id(),</span>
+<span class="fc" id="L69">            (int) Math.round(selection.interpolatedLagSamples()),</span>
+            delaySeconds,
+            delaySeconds * speedOfSoundMetersPerSecond,
+<span class="fc" id="L72">            selection.confidence());</span>
+<span class="fc" id="L73">    return new DiagnosticTdoaEstimate(estimate, selection.diagnostics());</span>
+  }
+
+  private PeakSelection selectPeak(double[] correlation, int maximumLagSamples) {
+<span class="fc" id="L77">    int maximumLagUnits = Math.multiplyExact(maximumLagSamples, interpolationFactor);</span>
+<span class="fc" id="L78">    int bestLagUnits = 0;</span>
+<span class="fc" id="L79">    double primaryPeak = -1.0;</span>
+<span class="fc bfc" id="L80" title="All 2 branches covered.">    for (int lagUnits = -maximumLagUnits; lagUnits &lt;= maximumLagUnits; lagUnits++) {</span>
+<span class="fc" id="L81">      double score = score(correlation, lagUnits);</span>
+<span class="fc bfc" id="L82" title="All 2 branches covered.">      if (score &gt; primaryPeak) {</span>
+<span class="fc" id="L83">        primaryPeak = score;</span>
+<span class="fc" id="L84">        bestLagUnits = lagUnits;</span>
+      }
+    }
+
+<span class="fc" id="L88">    double secondaryPeak = 0.0;</span>
+<span class="fc bfc" id="L89" title="All 2 branches covered.">    for (int lagUnits = -maximumLagUnits; lagUnits &lt;= maximumLagUnits; lagUnits++) {</span>
+<span class="fc bfc" id="L90" title="All 2 branches covered.">      if (Math.abs(lagUnits - bestLagUnits) &lt;= interpolationFactor) {</span>
+<span class="fc" id="L91">        continue;</span>
+      }
+<span class="fc" id="L93">      secondaryPeak = Math.max(secondaryPeak, score(correlation, lagUnits));</span>
+    }
+
+<span class="fc" id="L96">    double left = score(correlation, bestLagUnits - 1);</span>
+<span class="fc" id="L97">    double right = score(correlation, bestLagUnits + 1);</span>
+<span class="fc" id="L98">    double fractionalUnit = parabolicOffset(left, primaryPeak, right);</span>
+<span class="fc" id="L99">    double interpolatedLagSamples = (bestLagUnits + fractionalUnit) / interpolationFactor;</span>
+<span class="pc bpc" id="L100" title="1 of 2 branches missed.">    double peakRatio = primaryPeak &gt; 0.0 ? primaryPeak / Math.max(secondaryPeak, EPSILON) : 0.0;</span>
+<span class="fc" id="L101">    double normalizedCurvature =</span>
+<span class="fc" id="L102">        Math.max(</span>
+            0.0,
+            (2.0 * primaryPeak - left - right)
+<span class="fc" id="L105">                / Math.max(primaryPeak, EPSILON)</span>
+                * interpolationFactor
+                * interpolationFactor);
+<span class="pc bpc" id="L108" title="1 of 4 branches missed.">    boolean ambiguous =</span>
+        peakRatio &lt; minimumPeakRatio || normalizedCurvature &lt; minimumNormalizedCurvature;
+<span class="fc" id="L110">    TdoaPeakDiagnostics diagnostics =</span>
+        new TdoaPeakDiagnostics(
+            interpolatedLagSamples,
+            primaryPeak,
+            secondaryPeak,
+            peakRatio,
+            normalizedCurvature,
+            ambiguous);
+<span class="fc" id="L118">    double curvatureConfidence = Math.min(1.0, normalizedCurvature / minimumNormalizedCurvature);</span>
+<span class="fc" id="L119">    double confidence = Math.sqrt(diagnostics.separation() * curvatureConfidence);</span>
+<span class="fc" id="L120">    return new PeakSelection(interpolatedLagSamples, confidence, diagnostics);</span>
+  }
+
+  private int maximumPhysicalLag(AudioBlock block, Microphone first, Microphone second) {
+<span class="fc" id="L124">    double spacing = first.positionMeters().distanceTo(second.positionMeters());</span>
+<span class="fc" id="L125">    return (int) Math.ceil(spacing * block.format().sampleRate() / speedOfSoundMetersPerSecond);</span>
+  }
+
+  private static double score(double[] correlation, int lagUnits) {
+<span class="fc bfc" id="L129" title="All 2 branches covered.">    int index = lagUnits &gt;= 0 ? lagUnits : correlation.length + lagUnits;</span>
+<span class="pc bpc" id="L130" title="2 of 4 branches missed.">    if (index &lt; 0 || index &gt;= correlation.length) {</span>
+<span class="nc" id="L131">      return 0.0;</span>
+    }
+<span class="fc" id="L133">    return Math.abs(correlation[index]);</span>
+  }
+
+  private static double parabolicOffset(double left, double center, double right) {
+<span class="fc" id="L137">    double denominator = left - 2.0 * center + right;</span>
+<span class="pc bpc" id="L138" title="1 of 2 branches missed.">    if (Math.abs(denominator) &lt;= EPSILON) {</span>
+<span class="nc" id="L139">      return 0.0;</span>
+    }
+<span class="fc" id="L141">    return Math.max(-0.5, Math.min(0.5, 0.5 * (left - right) / denominator));</span>
+  }
+
+  private static double requirePositiveFinite(double value, String name) {
+<span class="pc bpc" id="L145" title="2 of 4 branches missed.">    if (Double.isFinite(value) &amp;&amp; value &gt; 0.0) {</span>
+<span class="fc" id="L146">      return value;</span>
+    }
+<span class="nc" id="L148">    throw new IllegalArgumentException(name + &quot; must be finite and &gt; 0&quot;);</span>
+  }
+
+  private static double requireAtLeastOne(double value, String name) {
+<span class="pc bpc" id="L152" title="2 of 4 branches missed.">    if (Double.isFinite(value) &amp;&amp; value &gt;= 1.0) {</span>
+<span class="fc" id="L153">      return value;</span>
+    }
+<span class="nc" id="L155">    throw new IllegalArgumentException(name + &quot; must be finite and &gt;= 1&quot;);</span>
+  }
+
+<span class="fc" id="L158">  private record PeakSelection(</span>
+      double interpolatedLagSamples, double confidence, TdoaPeakDiagnostics diagnostics) {
+    // immutable selection tuple
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>SimpleMultiSensorDopplerEstimator.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.doppler</a> &gt; <span class="el_source">SimpleMultiSensorDopplerEstimator.java</span></div><h1>SimpleMultiSensorDopplerEstimator.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.doppler;
+
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Objects;
+import org.hammer.audio.experimental.acoustic.tracking.DetectedPeak;
+
+/** Multi-microphone Doppler estimator with median absolute-deviation outlier rejection. */
+public final class SimpleMultiSensorDopplerEstimator implements MultiSensorDopplerEstimator {
+
+  private static final double MAD_OUTLIER_MULTIPLIER = 3.0;
+<span class="fc" id="L13">  private static final double MAX_LOG_SNR_WEIGHT = Math.log1p(100.0);</span>
+
+  private final DopplerEstimator dopplerEstimator;
+  private final double outlierThresholdMetersPerSecond;
+
+  /** Create a multi-sensor estimator. */
+  public SimpleMultiSensorDopplerEstimator(
+<span class="fc" id="L20">      DopplerEstimator dopplerEstimator, double outlierThresholdMetersPerSecond) {</span>
+<span class="fc" id="L21">    this.dopplerEstimator = Objects.requireNonNull(dopplerEstimator, &quot;dopplerEstimator&quot;);</span>
+<span class="pc bpc" id="L22" title="2 of 4 branches missed.">    if (!Double.isFinite(outlierThresholdMetersPerSecond)</span>
+        || outlierThresholdMetersPerSecond &lt; 0.0) {
+<span class="nc" id="L24">      throw new IllegalArgumentException(&quot;outlierThresholdMetersPerSecond must be finite and &gt;= 0&quot;);</span>
+    }
+<span class="fc" id="L26">    this.outlierThresholdMetersPerSecond = outlierThresholdMetersPerSecond;</span>
+<span class="fc" id="L27">  }</span>
+
+  /** Default configuration for insect-scale acoustic tracking. */
+  public static SimpleMultiSensorDopplerEstimator withDefaults() {
+<span class="fc" id="L31">    return new SimpleMultiSensorDopplerEstimator(new SimpleDopplerEstimator(), 8.0);</span>
+  }
+
+  @Override
+  public List&lt;RadialVelocityEstimate&gt; estimateRadialVelocities(SourceObservation observation) {
+<span class="fc" id="L36">    Objects.requireNonNull(observation, &quot;observation&quot;);</span>
+<span class="fc" id="L37">    List&lt;RadialVelocityEstimate&gt; estimates = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L38">    List&lt;Double&gt; rawWeights = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L39" title="All 2 branches covered.">    for (DetectedPeak peak : observation.perMicrophonePeaks()) {</span>
+<span class="fc" id="L40">      double radial =</span>
+<span class="fc" id="L41">          dopplerEstimator.estimateRadialVelocity(</span>
+<span class="fc" id="L42">              peak.frequencyHz(), observation.referenceFrequencyHz());</span>
+<span class="fc" id="L43">      rawWeights.add(rawWeight(peak));</span>
+<span class="fc" id="L44">      estimates.add(</span>
+          new RadialVelocityEstimate(
+<span class="fc" id="L46">              peak.channel(), peak.frequencyHz(), observation.referenceFrequencyHz(), radial, 0.0));</span>
+<span class="fc" id="L47">    }</span>
+<span class="fc" id="L48">    estimates = normalizeWeights(estimates, rawWeights);</span>
+<span class="pc bpc" id="L49" title="1 of 4 branches missed.">    if (estimates.size() &lt; 3 || outlierThresholdMetersPerSecond == 0.0) {</span>
+<span class="fc" id="L50">      return List.copyOf(estimates);</span>
+    }
+<span class="fc" id="L52">    double median =</span>
+<span class="fc" id="L53">        median(</span>
+<span class="fc" id="L54">            estimates.stream()</span>
+<span class="fc" id="L55">                .mapToDouble(RadialVelocityEstimate::radialVelocityMetersPerSecond)</span>
+<span class="fc" id="L56">                .toArray());</span>
+<span class="fc" id="L57">    double mad =</span>
+<span class="fc" id="L58">        median(</span>
+<span class="fc" id="L59">            estimates.stream()</span>
+<span class="fc" id="L60">                .mapToDouble(e -&gt; Math.abs(e.radialVelocityMetersPerSecond() - median))</span>
+<span class="fc" id="L61">                .toArray());</span>
+<span class="fc" id="L62">    double threshold = Math.max(outlierThresholdMetersPerSecond, MAD_OUTLIER_MULTIPLIER * mad);</span>
+<span class="fc" id="L63">    List&lt;RadialVelocityEstimate&gt; filtered = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L64" title="All 2 branches covered.">    for (RadialVelocityEstimate estimate : estimates) {</span>
+<span class="fc bfc" id="L65" title="All 2 branches covered.">      if (Math.abs(estimate.radialVelocityMetersPerSecond() - median) &lt;= threshold) {</span>
+<span class="fc" id="L66">        filtered.add(estimate);</span>
+      }
+<span class="fc" id="L68">    }</span>
+<span class="fc" id="L69">    return normalizeExistingWeights(filtered);</span>
+  }
+
+  private static double rawWeight(DetectedPeak peak) {
+<span class="fc" id="L73">    double snr = Math.max(0.0, peak.signalToNoiseRatio());</span>
+<span class="fc" id="L74">    double magnitude = Math.max(0.0, peak.magnitude());</span>
+<span class="pc bpc" id="L75" title="1 of 2 branches missed.">    double raw = Math.log1p(snr &gt; 0.0 ? snr : magnitude);</span>
+<span class="fc" id="L76">    return Math.min(MAX_LOG_SNR_WEIGHT, raw);</span>
+  }
+
+  private static List&lt;RadialVelocityEstimate&gt; normalizeWeights(
+      List&lt;RadialVelocityEstimate&gt; estimates, List&lt;Double&gt; rawWeights) {
+<span class="fc" id="L81">    double total = rawWeights.stream().mapToDouble(Double::doubleValue).sum();</span>
+<span class="pc bpc" id="L82" title="1 of 2 branches missed.">    double fallback = estimates.isEmpty() ? 0.0 : 1.0 / estimates.size();</span>
+<span class="fc" id="L83">    List&lt;RadialVelocityEstimate&gt; normalized = new ArrayList&lt;&gt;(estimates.size());</span>
+<span class="fc bfc" id="L84" title="All 2 branches covered.">    for (int i = 0; i &lt; estimates.size(); i++) {</span>
+<span class="fc" id="L85">      RadialVelocityEstimate estimate = estimates.get(i);</span>
+<span class="pc bpc" id="L86" title="1 of 2 branches missed.">      double weight = total &gt; 0.0 ? rawWeights.get(i) / total : fallback;</span>
+<span class="fc" id="L87">      normalized.add(</span>
+          new RadialVelocityEstimate(
+<span class="fc" id="L89">              estimate.channel(),</span>
+<span class="fc" id="L90">              estimate.observedFrequencyHz(),</span>
+<span class="fc" id="L91">              estimate.referenceFrequencyHz(),</span>
+<span class="fc" id="L92">              estimate.radialVelocityMetersPerSecond(),</span>
+              weight));
+    }
+<span class="fc" id="L95">    return normalized;</span>
+  }
+
+  private static List&lt;RadialVelocityEstimate&gt; normalizeExistingWeights(
+      List&lt;RadialVelocityEstimate&gt; estimates) {
+<span class="fc" id="L100">    double total = estimates.stream().mapToDouble(RadialVelocityEstimate::weight).sum();</span>
+<span class="pc bpc" id="L101" title="1 of 2 branches missed.">    if (total &lt;= 0.0) {</span>
+<span class="nc" id="L102">      return List.copyOf(estimates);</span>
+    }
+<span class="fc" id="L104">    List&lt;RadialVelocityEstimate&gt; normalized = new ArrayList&lt;&gt;(estimates.size());</span>
+<span class="fc bfc" id="L105" title="All 2 branches covered.">    for (RadialVelocityEstimate estimate : estimates) {</span>
+<span class="fc" id="L106">      normalized.add(</span>
+          new RadialVelocityEstimate(
+<span class="fc" id="L108">              estimate.channel(),</span>
+<span class="fc" id="L109">              estimate.observedFrequencyHz(),</span>
+<span class="fc" id="L110">              estimate.referenceFrequencyHz(),</span>
+<span class="fc" id="L111">              estimate.radialVelocityMetersPerSecond(),</span>
+<span class="fc" id="L112">              estimate.weight() / total));</span>
+<span class="fc" id="L113">    }</span>
+<span class="fc" id="L114">    return List.copyOf(normalized);</span>
+  }
+
+  private static double median(double[] values) {
+<span class="fc" id="L118">    List&lt;Double&gt; sorted = new ArrayList&lt;&gt;(values.length);</span>
+<span class="fc bfc" id="L119" title="All 2 branches covered.">    for (double value : values) {</span>
+<span class="fc" id="L120">      sorted.add(value);</span>
+    }
+<span class="fc" id="L122">    sorted.sort(Comparator.naturalOrder());</span>
+<span class="fc" id="L123">    int middle = sorted.size() / 2;</span>
+<span class="fc bfc" id="L124" title="All 2 branches covered.">    if (sorted.size() % 2 == 1) {</span>
+<span class="fc" id="L125">      return sorted.get(middle);</span>
+    }
+<span class="fc" id="L127">    return (sorted.get(middle - 1) + sorted.get(middle)) * 0.5;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>
