@@ -8,9 +8,11 @@ outbox delivery require an explicit persistence mode.
 Audio Analyzer consumes the released migration-bearing storage library:
 
 ```text
-io.github.carstenartur:jgit-storage-hibernate-core:0.1.5
-Hibernate ORM 7.4.5.Final
-Flyway 12.8.1
+io.github.carstenartur:jgit-storage-hibernate-core:0.11.8
+io.github.carstenartur:jgit-storage-hibernate-search:0.11.8
+JGit 7.8.0.202609011348-r
+Hibernate ORM 7.4.12.Final
+Flyway 13.8.0
 ```
 
 The application creates one Spring-managed `DataSource` and one application-owned Hibernate
