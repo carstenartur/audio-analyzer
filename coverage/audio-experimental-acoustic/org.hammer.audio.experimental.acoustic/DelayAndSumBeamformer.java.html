@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>DelayAndSumBeamformer.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic</a> &gt; <span class="el_source">DelayAndSumBeamformer.java</span></div><h1>DelayAndSumBeamformer.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic;
+
+import java.util.ArrayList;
+import java.util.List;
+import org.hammer.audio.acquisition.Microphone;
+import org.hammer.audio.acquisition.MicrophoneArray;
+import org.hammer.audio.core.AudioBlock;
+import org.hammer.audio.geometry.Vector2;
+
+/** Basic delay-and-sum beamformer over a caller-supplied 2D candidate grid. */
+public final class DelayAndSumBeamformer {
+
+  private final double speedOfSoundMetersPerSecond;
+
+  /** Create a beamformer with a propagation speed. */
+<span class="fc" id="L16">  public DelayAndSumBeamformer(double speedOfSoundMetersPerSecond) {</span>
+<span class="pc bpc" id="L17" title="2 of 4 branches missed.">    if (!(speedOfSoundMetersPerSecond &gt; 0.0) || !Double.isFinite(speedOfSoundMetersPerSecond)) {</span>
+<span class="nc" id="L18">      throw new IllegalArgumentException(&quot;speedOfSoundMetersPerSecond must be finite and &gt; 0&quot;);</span>
+    }
+<span class="fc" id="L20">    this.speedOfSoundMetersPerSecond = speedOfSoundMetersPerSecond;</span>
+<span class="fc" id="L21">  }</span>
+
+  /** Score candidate positions and return a heatmap sorted in input order. */
+  public List&lt;BeamformingPoint&gt; scan(
+      AudioBlock block, MicrophoneArray array, List&lt;Vector2&gt; candidates) {
+<span class="fc" id="L26">    List&lt;BeamformingPoint&gt; points = new ArrayList&lt;&gt;(candidates.size());</span>
+<span class="fc bfc" id="L27" title="All 2 branches covered.">    for (Vector2 candidate : candidates) {</span>
+<span class="fc" id="L28">      points.add(new BeamformingPoint(candidate, scoreCandidate(block, array, candidate)));</span>
+<span class="fc" id="L29">    }</span>
+<span class="fc" id="L30">    return List.copyOf(points);</span>
+  }
+
+  /** Return the highest-energy candidate. */
+  public BeamformingPoint best(AudioBlock block, MicrophoneArray array, List&lt;Vector2&gt; candidates) {
+<span class="fc" id="L35">    return scan(block, array, candidates).stream()</span>
+<span class="fc" id="L36">        .max((left, right) -&gt; Double.compare(left.energy(), right.energy()))</span>
+<span class="pc" id="L37">        .orElseThrow(() -&gt; new IllegalArgumentException(&quot;candidates must not be empty&quot;));</span>
+  }
+
+  private double scoreCandidate(AudioBlock block, MicrophoneArray array, Vector2 candidate) {
+<span class="fc" id="L41">    List&lt;Microphone&gt; microphones = array.microphones();</span>
+<span class="fc" id="L42">    int[] relativeDelays = relativeDelaySamples(block, microphones, candidate);</span>
+<span class="fc" id="L43">    int maximumDelay = 0;</span>
+<span class="fc" id="L44">    float[][] channels = new float[microphones.size()][];</span>
+<span class="fc bfc" id="L45" title="All 2 branches covered.">    for (int index = 0; index &lt; microphones.size(); index++) {</span>
+<span class="fc" id="L46">      maximumDelay = Math.max(maximumDelay, relativeDelays[index]);</span>
+<span class="fc" id="L47">      channels[index] = block.channelView(microphones.get(index).channel());</span>
+    }
+<span class="fc" id="L49">    int commonFrames = block.frames() - maximumDelay;</span>
+<span class="pc bpc" id="L50" title="1 of 2 branches missed.">    if (commonFrames &lt;= 0) {</span>
+<span class="nc" id="L51">      return 0.0;</span>
+    }
+
+<span class="fc" id="L54">    double energy = 0.0;</span>
+<span class="fc bfc" id="L55" title="All 2 branches covered.">    for (int frame = 0; frame &lt; commonFrames; frame++) {</span>
+<span class="fc" id="L56">      double sum = 0.0;</span>
+<span class="fc bfc" id="L57" title="All 2 branches covered.">      for (int microphoneIndex = 0; microphoneIndex &lt; microphones.size(); microphoneIndex++) {</span>
+        // Captured channels already contain propagation delay. Advance each channel only by its
+        // delay relative to the earliest microphone. A common absolute delay is not observable in
+        // passive localization and must not change the score of a finite signal block.
+<span class="fc" id="L61">        sum += channels[microphoneIndex][frame + relativeDelays[microphoneIndex]];</span>
+      }
+<span class="fc" id="L63">      double average = sum / microphones.size();</span>
+<span class="fc" id="L64">      energy += average * average;</span>
+    }
+<span class="fc" id="L66">    return energy / commonFrames;</span>
+  }
+
+  private int[] relativeDelaySamples(
+      AudioBlock block, List&lt;Microphone&gt; microphones, Vector2 candidate) {
+<span class="fc" id="L71">    double[] distances = new double[microphones.size()];</span>
+<span class="fc" id="L72">    double minimumDistance = Double.POSITIVE_INFINITY;</span>
+<span class="fc bfc" id="L73" title="All 2 branches covered.">    for (int index = 0; index &lt; microphones.size(); index++) {</span>
+<span class="fc" id="L74">      distances[index] = microphones.get(index).positionMeters().distanceTo(candidate);</span>
+<span class="fc" id="L75">      minimumDistance = Math.min(minimumDistance, distances[index]);</span>
+    }
+<span class="fc" id="L77">    int[] delays = new int[microphones.size()];</span>
+<span class="fc" id="L78">    double samplesPerMeter = block.format().sampleRate() / speedOfSoundMetersPerSecond;</span>
+<span class="fc bfc" id="L79" title="All 2 branches covered.">    for (int index = 0; index &lt; delays.length; index++) {</span>
+<span class="fc" id="L80">      delays[index] = (int) Math.round((distances[index] - minimumDistance) * samplesPerMeter);</span>
+    }
+<span class="fc" id="L82">    return delays;</span>
+  }
+
+  /**
+   * Beamforming score at one candidate point.
+   *
+   * @param positionMeters candidate position in meters
+   * @param energy normalized delay-and-sum energy
+   */
+  public record BeamformingPoint(Vector2 positionMeters, double energy) {
+
+    /** Create a score point. */
+<span class="fc" id="L94">    public BeamformingPoint {</span>
+<span class="pc bpc" id="L95" title="1 of 2 branches missed.">      if (positionMeters == null) {</span>
+<span class="nc" id="L96">        throw new IllegalArgumentException(&quot;positionMeters must not be null&quot;);</span>
+      }
+<span class="pc bpc" id="L98" title="2 of 4 branches missed.">      if (!Double.isFinite(energy) || energy &lt; 0.0) {</span>
+<span class="nc" id="L99">        throw new IllegalArgumentException(&quot;energy must be finite and &gt;= 0&quot;);</span>
+      }
+<span class="fc" id="L101">    }</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

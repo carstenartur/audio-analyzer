@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WorkflowHistoryPage.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Core</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.collaboration</a> &gt; <span class="el_source">WorkflowHistoryPage.java</span></div><h1>WorkflowHistoryPage.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.collaboration;
+
+import java.util.List;
+import java.util.Objects;
+
+/**
+ * Stable newest-first page of immutable semantic history.
+ *
+ * &lt;p&gt;Passing {@link #nextBeforeRevision()} as the next request cursor cannot duplicate the final
+ * entry from this page because the cursor is exclusive.
+ *
+ * @param operations history entries ordered by descending semantic revision
+ * @param nextBeforeRevision exclusive revision cursor for the next older page, or {@code null}
+ * @param currentRevision current session revision at query time
+ */
+public record WorkflowHistoryPage(
+    List&lt;WorkflowHistoryDescriptor&gt; operations, Long nextBeforeRevision, long currentRevision) {
+
+<span class="fc" id="L19">  public WorkflowHistoryPage {</span>
+<span class="fc" id="L20">    operations = List.copyOf(Objects.requireNonNull(operations, &quot;operations&quot;));</span>
+<span class="pc bpc" id="L21" title="1 of 4 branches missed.">    if (nextBeforeRevision != null &amp;&amp; nextBeforeRevision &lt;= 0) {</span>
+<span class="nc" id="L22">      throw new IllegalArgumentException(&quot;nextBeforeRevision must be &gt; 0&quot;);</span>
+    }
+<span class="pc bpc" id="L24" title="1 of 2 branches missed.">    if (currentRevision &lt; 0) {</span>
+<span class="nc" id="L25">      throw new IllegalArgumentException(&quot;currentRevision must be &gt;= 0&quot;);</span>
+    }
+<span class="fc" id="L27">  }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

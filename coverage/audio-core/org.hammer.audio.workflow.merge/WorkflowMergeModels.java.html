@@ -1,0 +1,172 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WorkflowMergeModels.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Core</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.merge</a> &gt; <span class="el_source">WorkflowMergeModels.java</span></div><h1>WorkflowMergeModels.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.merge;
+
+import java.io.Serial;
+import java.io.Serializable;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Objects;
+import java.util.Set;
+import org.hammer.audio.workflow.Workflow;
+
+/** Framework-independent contracts for deterministic three-way workflow merge. */
+public interface WorkflowMergeModels {
+
+  /** Semantic workflow element owning a conflicted value. */
+<span class="fc" id="L15">  enum ElementKind {</span>
+<span class="fc" id="L16">    WORKFLOW,</span>
+<span class="fc" id="L17">    NODE,</span>
+<span class="fc" id="L18">    EDGE</span>
+  }
+
+  /** Typed semantic conflict classification. */
+<span class="fc" id="L22">  enum ConflictKind {</span>
+<span class="fc" id="L23">    DIVERGENT_VALUE,</span>
+<span class="fc" id="L24">    STABLE_ID_COLLISION,</span>
+<span class="fc" id="L25">    DELETE_MODIFY,</span>
+<span class="fc" id="L26">    DELETE_CONNECT,</span>
+<span class="fc" id="L27">    DIVERGENT_EDGE_ENDPOINTS</span>
+  }
+
+  /** Explicit user choice resolving one semantic conflict. */
+<span class="fc" id="L31">  enum ResolutionChoice {</span>
+<span class="fc" id="L32">    BASE,</span>
+<span class="fc" id="L33">    LOCAL,</span>
+<span class="fc" id="L34">    REMOTE,</span>
+<span class="fc" id="L35">    DELETE,</span>
+<span class="fc" id="L36">    CUSTOM</span>
+  }
+
+  /**
+   * One ordered semantic merge conflict.
+   *
+   * @param conflictId deterministic identity derived from semantic location and kind
+   * @param kind typed conflict classification
+   * @param elementKind kind of owning workflow element
+   * @param elementId stable workflow, node or edge identifier
+   * @param fieldPath stable semantic field path
+   * @param baseValue canonical base value, if present
+   * @param localValue canonical local value, if present
+   * @param remoteValue canonical remote value, if present
+   * @param allowedChoices immutable supported resolution choices
+   */
+  record Conflict(
+      String conflictId,
+      ConflictKind kind,
+      ElementKind elementKind,
+      String elementId,
+      String fieldPath,
+      String baseValue,
+      String localValue,
+      String remoteValue,
+      Set&lt;ResolutionChoice&gt; allowedChoices)
+      implements Serializable {
+
+    @Serial private static final long serialVersionUID = 1L;
+
+    /** Stable ordering used by APIs, tests and user interfaces. */
+<span class="fc" id="L67">    public static final Comparator&lt;Conflict&gt; ORDERING =</span>
+<span class="fc" id="L68">        Comparator.comparing(Conflict::elementKind)</span>
+<span class="fc" id="L69">            .thenComparing(Conflict::elementId)</span>
+<span class="fc" id="L70">            .thenComparing(Conflict::fieldPath)</span>
+<span class="fc" id="L71">            .thenComparing(Conflict::kind)</span>
+<span class="fc" id="L72">            .thenComparing(Conflict::conflictId);</span>
+
+<span class="fc" id="L74">    public Conflict {</span>
+<span class="pc bpc" id="L75" title="2 of 4 branches missed.">      if (conflictId == null || conflictId.isBlank()) {</span>
+<span class="nc" id="L76">        throw new IllegalArgumentException(&quot;conflictId must not be blank&quot;);</span>
+      }
+<span class="fc" id="L78">      Objects.requireNonNull(kind, &quot;kind&quot;);</span>
+<span class="fc" id="L79">      Objects.requireNonNull(elementKind, &quot;elementKind&quot;);</span>
+<span class="pc bpc" id="L80" title="2 of 4 branches missed.">      if (elementId == null || elementId.isBlank()) {</span>
+<span class="nc" id="L81">        throw new IllegalArgumentException(&quot;elementId must not be blank&quot;);</span>
+      }
+<span class="pc bpc" id="L83" title="2 of 4 branches missed.">      if (fieldPath == null || fieldPath.isBlank()) {</span>
+<span class="nc" id="L84">        throw new IllegalArgumentException(&quot;fieldPath must not be blank&quot;);</span>
+      }
+<span class="fc" id="L86">      allowedChoices = Set.copyOf(Objects.requireNonNull(allowedChoices, &quot;allowedChoices&quot;));</span>
+<span class="pc bpc" id="L87" title="1 of 2 branches missed.">      if (allowedChoices.isEmpty()) {</span>
+<span class="nc" id="L88">        throw new IllegalArgumentException(&quot;allowedChoices must not be empty&quot;);</span>
+      }
+<span class="fc" id="L90">    }</span>
+  }
+
+  /**
+   * One explicit conflict resolution.
+   *
+   * @param conflictId exact conflict identity returned by the preview
+   * @param choice selected resolution choice
+   * @param customValue explicit merged scalar value for {@link ResolutionChoice#CUSTOM}
+   */
+  record Resolution(String conflictId, ResolutionChoice choice, String customValue) {
+<span class="fc" id="L101">    public Resolution {</span>
+<span class="pc bpc" id="L102" title="2 of 4 branches missed.">      if (conflictId == null || conflictId.isBlank()) {</span>
+<span class="nc" id="L103">        throw new IllegalArgumentException(&quot;conflictId must not be blank&quot;);</span>
+      }
+<span class="fc" id="L105">      Objects.requireNonNull(choice, &quot;choice&quot;);</span>
+<span class="fc bfc" id="L106" title="All 2 branches covered.">      if (choice == ResolutionChoice.CUSTOM) {</span>
+<span class="fc" id="L107">        Objects.requireNonNull(customValue, &quot;customValue&quot;);</span>
+<span class="pc bpc" id="L108" title="1 of 2 branches missed.">      } else if (customValue != null) {</span>
+<span class="nc" id="L109">        throw new IllegalArgumentException(&quot;customValue is only valid for CUSTOM resolutions&quot;);</span>
+      }
+<span class="fc" id="L111">    }</span>
+
+    /** Creates a side- or delete-based resolution without a custom scalar value. */
+    public Resolution(String conflictId, ResolutionChoice choice) {
+<span class="fc" id="L115">      this(conflictId, choice, null);</span>
+<span class="fc" id="L116">    }</span>
+  }
+
+  /**
+   * Initial deterministic merge preview.
+   *
+   * @param autoMergedWorkflow workflow containing every non-conflicting automatic decision
+   * @param conflicts unresolved semantic conflicts in stable order
+   * @param validationViolations structural violations caused by the combined automatic decisions
+   */
+  record Preview(
+      Workflow autoMergedWorkflow, List&lt;Conflict&gt; conflicts, List&lt;String&gt; validationViolations) {
+<span class="fc" id="L128">    public Preview {</span>
+<span class="fc" id="L129">      Objects.requireNonNull(autoMergedWorkflow, &quot;autoMergedWorkflow&quot;);</span>
+<span class="fc" id="L130">      conflicts = List.copyOf(Objects.requireNonNull(conflicts, &quot;conflicts&quot;));</span>
+<span class="fc" id="L131">      validationViolations =</span>
+<span class="fc" id="L132">          List.copyOf(Objects.requireNonNull(validationViolations, &quot;validationViolations&quot;));</span>
+<span class="pc bpc" id="L133" title="1 of 2 branches missed.">      if (!conflicts.equals(conflicts.stream().sorted(Conflict.ORDERING).toList())) {</span>
+<span class="nc" id="L134">        throw new IllegalArgumentException(&quot;conflicts must use stable semantic ordering&quot;);</span>
+      }
+<span class="fc" id="L136">    }</span>
+
+    /** Returns whether no explicit field resolution remains. */
+    public boolean conflictFree() {
+<span class="fc" id="L140">      return conflicts.isEmpty();</span>
+    }
+
+    /** Returns whether the automatic result may be serialized and committed directly. */
+    public boolean readyToCommit() {
+<span class="pc bpc" id="L145" title="1 of 4 branches missed.">      return conflicts.isEmpty() &amp;&amp; validationViolations.isEmpty();</span>
+    }
+  }
+
+  /**
+   * Result after applying zero or more explicit resolutions.
+   *
+   * @param workflow deterministic candidate workflow
+   * @param unresolvedConflicts conflicts without a valid explicit decision
+   * @param validationViolations structural workflow validation diagnostics
+   */
+  record Result(
+      Workflow workflow, List&lt;Conflict&gt; unresolvedConflicts, List&lt;String&gt; validationViolations) {
+<span class="fc" id="L158">    public Result {</span>
+<span class="fc" id="L159">      Objects.requireNonNull(workflow, &quot;workflow&quot;);</span>
+<span class="fc" id="L160">      unresolvedConflicts =</span>
+<span class="fc" id="L161">          List.copyOf(Objects.requireNonNull(unresolvedConflicts, &quot;unresolvedConflicts&quot;));</span>
+<span class="fc" id="L162">      validationViolations =</span>
+<span class="fc" id="L163">          List.copyOf(Objects.requireNonNull(validationViolations, &quot;validationViolations&quot;));</span>
+<span class="fc" id="L164">    }</span>
+
+    /** Returns whether the candidate may be serialized and committed. */
+    public boolean readyToCommit() {
+<span class="fc bfc" id="L168" title="All 4 branches covered.">      return unresolvedConflicts.isEmpty() &amp;&amp; validationViolations.isEmpty();</span>
+    }
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

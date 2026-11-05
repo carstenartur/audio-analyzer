@@ -1,0 +1,165 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>DeterministicAudioParameters.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer DSP and Analysis</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.dsp.workflow</a> &gt; <span class="el_source">DeterministicAudioParameters.java</span></div><h1>DeterministicAudioParameters.java</h1><pre class="source lang-java linenums">package org.hammer.audio.dsp.workflow;
+
+import java.util.Map;
+import java.util.Objects;
+import org.hammer.audio.dsp.GainProcessor;
+import org.hammer.audio.workflow.Metadata;
+import org.hammer.audio.workflow.Node;
+import org.hammer.audio.workflow.catalog.ExperimentNodeParameters;
+
+/** Parses and bounds executable node metadata for the deterministic audio slice. */
+final class DeterministicAudioParameters {
+
+  static final float MIN_SAMPLE_RATE_HZ = 8_000.0f;
+  static final float MAX_SAMPLE_RATE_HZ = 384_000.0f;
+  static final int MAX_CHANNELS = 32;
+  static final int MAX_TOTAL_SAMPLES = 16_777_216;
+
+<span class="nc" id="L18">  private DeterministicAudioParameters() {</span>
+<span class="nc" id="L19">    throw new UnsupportedOperationException(&quot;Utility class&quot;);</span>
+  }
+
+  static SyntheticSignal parseSyntheticSignal(Node node) {
+<span class="fc" id="L23">    Map&lt;String, String&gt; entries = metadataEntries(node);</span>
+<span class="fc" id="L24">    String waveform = required(entries, ExperimentNodeParameters.SIGNAL_WAVEFORM);</span>
+<span class="pc bpc" id="L25" title="1 of 2 branches missed.">    if (!ExperimentNodeParameters.WAVEFORM_SINE.equals(waveform)) {</span>
+<span class="nc" id="L26">      throw invalid(</span>
+          ExperimentNodeParameters.SIGNAL_WAVEFORM,
+          &quot;must be '&quot; + ExperimentNodeParameters.WAVEFORM_SINE + &quot;', was '&quot; + waveform + &quot;'&quot;);
+    }
+<span class="fc" id="L30">    float sampleRate = finiteFloat(entries, ExperimentNodeParameters.SIGNAL_SAMPLE_RATE_HZ);</span>
+<span class="pc bpc" id="L31" title="2 of 4 branches missed.">    if (sampleRate &lt; MIN_SAMPLE_RATE_HZ || sampleRate &gt; MAX_SAMPLE_RATE_HZ) {</span>
+<span class="nc" id="L32">      throw invalid(</span>
+          ExperimentNodeParameters.SIGNAL_SAMPLE_RATE_HZ,
+          &quot;must be in [8000, 384000], was &quot; + sampleRate);
+    }
+<span class="fc" id="L36">    int channels = positiveInt(entries, ExperimentNodeParameters.SIGNAL_CHANNELS);</span>
+<span class="pc bpc" id="L37" title="1 of 2 branches missed.">    if (channels &gt; MAX_CHANNELS) {</span>
+<span class="nc" id="L38">      throw invalid(</span>
+          ExperimentNodeParameters.SIGNAL_CHANNELS,
+          &quot;must be &lt;= &quot; + MAX_CHANNELS + &quot;, was &quot; + channels);
+    }
+<span class="fc" id="L42">    int frameCount = positiveInt(entries, ExperimentNodeParameters.SIGNAL_FRAME_COUNT);</span>
+<span class="fc" id="L43">    long sampleCount = (long) channels * frameCount;</span>
+<span class="fc bfc" id="L44" title="All 2 branches covered.">    if (sampleCount &gt; MAX_TOTAL_SAMPLES) {</span>
+<span class="fc" id="L45">      throw invalid(</span>
+          ExperimentNodeParameters.SIGNAL_FRAME_COUNT,
+          &quot;channels * frame-count must be &lt;= &quot; + MAX_TOTAL_SAMPLES + &quot;, was &quot; + sampleCount);
+    }
+<span class="fc" id="L49">    float frequency = finiteFloat(entries, ExperimentNodeParameters.SIGNAL_FREQUENCY_HZ);</span>
+<span class="pc bpc" id="L50" title="1 of 4 branches missed.">    if (frequency &lt;= 0.0f || frequency &gt;= sampleRate / 2.0f) {</span>
+<span class="fc" id="L51">      throw invalid(</span>
+          ExperimentNodeParameters.SIGNAL_FREQUENCY_HZ,
+          &quot;must be &gt; 0 and below Nyquist &quot; + (sampleRate / 2.0f) + &quot;, was &quot; + frequency);
+    }
+<span class="fc" id="L55">    double phase = finiteDouble(entries, ExperimentNodeParameters.SIGNAL_PHASE_RADIANS);</span>
+<span class="fc" id="L56">    float amplitude = finiteFloat(entries, ExperimentNodeParameters.SIGNAL_AMPLITUDE);</span>
+<span class="pc bpc" id="L57" title="2 of 4 branches missed.">    if (amplitude &lt; 0.0f || amplitude &gt; 1.0f) {</span>
+<span class="nc" id="L58">      throw invalid(</span>
+          ExperimentNodeParameters.SIGNAL_AMPLITUDE, &quot;must be in [0, 1], was &quot; + amplitude);
+    }
+<span class="fc" id="L61">    return new SyntheticSignal(</span>
+        waveform, frequency, phase, amplitude, sampleRate, channels, frameCount);
+  }
+
+  static Gain parseGain(Node node) {
+<span class="fc" id="L66">    float factor = finiteFloat(metadataEntries(node), ExperimentNodeParameters.GAIN_FACTOR);</span>
+<span class="pc bpc" id="L67" title="2 of 4 branches missed.">    if (factor &lt; 0.0f || factor &gt; GainProcessor.MAX_GAIN) {</span>
+<span class="nc" id="L68">      throw invalid(</span>
+          ExperimentNodeParameters.GAIN_FACTOR,
+          &quot;must be in [0, &quot; + GainProcessor.MAX_GAIN + &quot;], was &quot; + factor);
+    }
+<span class="fc" id="L72">    return new Gain(factor);</span>
+  }
+
+  private static Map&lt;String, String&gt; metadataEntries(Node node) {
+<span class="fc" id="L76">    Metadata metadata = node.metadata();</span>
+<span class="pc bpc" id="L77" title="1 of 2 branches missed.">    return metadata == null ? Map.of() : metadata.entries();</span>
+  }
+
+  private static String required(Map&lt;String, String&gt; entries, String key) {
+<span class="fc" id="L81">    String value = entries.get(key);</span>
+<span class="pc bpc" id="L82" title="1 of 4 branches missed.">    if (value == null || value.isBlank()) {</span>
+<span class="fc" id="L83">      throw invalid(key, &quot;is required and must not be blank&quot;);</span>
+    }
+<span class="fc" id="L85">    return value;</span>
+  }
+
+  private static float finiteFloat(Map&lt;String, String&gt; entries, String key) {
+<span class="fc" id="L89">    String value = required(entries, key);</span>
+    try {
+<span class="fc" id="L91">      float parsed = Float.parseFloat(value);</span>
+<span class="pc bpc" id="L92" title="1 of 2 branches missed.">      if (!Float.isFinite(parsed)) {</span>
+<span class="nc" id="L93">        throw invalid(key, &quot;must be finite, was &quot; + value);</span>
+      }
+<span class="fc" id="L95">      return parsed;</span>
+<span class="nc" id="L96">    } catch (NumberFormatException exception) {</span>
+<span class="nc" id="L97">      throw invalid(key, &quot;must be a floating-point number, was '&quot; + value + &quot;'&quot;, exception);</span>
+    }
+  }
+
+  private static double finiteDouble(Map&lt;String, String&gt; entries, String key) {
+<span class="fc" id="L102">    String value = required(entries, key);</span>
+    try {
+<span class="fc" id="L104">      double parsed = Double.parseDouble(value);</span>
+<span class="pc bpc" id="L105" title="1 of 2 branches missed.">      if (!Double.isFinite(parsed)) {</span>
+<span class="nc" id="L106">        throw invalid(key, &quot;must be finite, was &quot; + value);</span>
+      }
+<span class="fc" id="L108">      return parsed;</span>
+<span class="nc" id="L109">    } catch (NumberFormatException exception) {</span>
+<span class="nc" id="L110">      throw invalid(key, &quot;must be a floating-point number, was '&quot; + value + &quot;'&quot;, exception);</span>
+    }
+  }
+
+  private static int positiveInt(Map&lt;String, String&gt; entries, String key) {
+<span class="fc" id="L115">    String value = required(entries, key);</span>
+    try {
+<span class="fc" id="L117">      int parsed = Integer.parseInt(value);</span>
+<span class="pc bpc" id="L118" title="1 of 2 branches missed.">      if (parsed &lt; 1) {</span>
+<span class="nc" id="L119">        throw invalid(key, &quot;must be &gt;= 1, was &quot; + parsed);</span>
+      }
+<span class="fc" id="L121">      return parsed;</span>
+<span class="nc" id="L122">    } catch (NumberFormatException exception) {</span>
+<span class="nc" id="L123">      throw invalid(key, &quot;must be an integer, was '&quot; + value + &quot;'&quot;, exception);</span>
+    }
+  }
+
+  private static IllegalArgumentException invalid(String key, String detail) {
+<span class="fc" id="L128">    return new IllegalArgumentException(&quot;Parameter '&quot; + key + &quot;' &quot; + detail);</span>
+  }
+
+  private static IllegalArgumentException invalid(
+      String key, String detail, NumberFormatException cause) {
+<span class="nc" id="L133">    return new IllegalArgumentException(&quot;Parameter '&quot; + key + &quot;' &quot; + detail, cause);</span>
+  }
+
+  record SyntheticSignal(
+      String waveform,
+      float frequencyHz,
+      double phaseRadians,
+      float amplitude,
+      float sampleRateHz,
+      int channels,
+      int frameCount) {
+<span class="fc" id="L144">    SyntheticSignal {</span>
+<span class="fc" id="L145">      Objects.requireNonNull(waveform, &quot;waveform&quot;);</span>
+<span class="pc bpc" id="L146" title="1 of 2 branches missed.">      if (!Float.isFinite(frequencyHz)</span>
+<span class="pc bpc" id="L147" title="1 of 2 branches missed.">          || !Double.isFinite(phaseRadians)</span>
+<span class="pc bpc" id="L148" title="1 of 2 branches missed.">          || !Float.isFinite(amplitude)</span>
+<span class="pc bpc" id="L149" title="3 of 6 branches missed.">          || !Float.isFinite(sampleRateHz)</span>
+          || channels &lt; 1
+          || frameCount &lt; 1) {
+<span class="nc" id="L152">        throw new IllegalArgumentException(&quot;Synthetic signal parameters must remain valid&quot;);</span>
+      }
+<span class="fc" id="L154">    }</span>
+  }
+
+  record Gain(float factor) {
+<span class="fc" id="L158">    Gain {</span>
+<span class="pc bpc" id="L159" title="3 of 6 branches missed.">      if (!Float.isFinite(factor) || factor &lt; 0.0f || factor &gt; GainProcessor.MAX_GAIN) {</span>
+<span class="nc" id="L160">        throw new IllegalArgumentException(&quot;Gain factor must remain within the supported range&quot;);</span>
+      }
+<span class="fc" id="L162">    }</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

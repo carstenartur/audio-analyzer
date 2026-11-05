@@ -1,0 +1,423 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WaveformTrigger.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer DSP and Analysis</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.analysis</a> &gt; <span class="el_source">WaveformTrigger.java</span></div><h1>WaveformTrigger.java</h1><pre class="source lang-java linenums">package org.hammer.audio.analysis;
+
+import java.util.Objects;
+import java.util.Optional;
+import org.hammer.audio.core.AudioBlock;
+
+/**
+ * Oscilloscope-style trigger that aligns repeated displays of a periodic or transient signal so
+ * each frame begins at a stable reference (e.g. a rising zero crossing).
+ *
+ * &lt;p&gt;The trigger maintains a small rolling history of recent samples for one selected channel.
+ * Every {@link #process(AudioBlock, int)} call appends the new samples to that history and then:
+ *
+ * &lt;ol&gt;
+ *   &lt;li&gt;Scans forward (respecting {@link #holdoffFrames() holdoff}) for the first sample crossing
+ *       the configured {@link #level() level} with the configured {@link Slope slope}.
+ *   &lt;li&gt;If a trigger is found &lt;em&gt;and&lt;/em&gt; at least {@link #viewFrames() viewFrames} samples are
+ *       available after it, publishes a {@link TriggeredView snapshot} starting at the trigger
+ *       sample and returns it.
+ *   &lt;li&gt;If {@link Mode#AUTO} is selected and no trigger has fired for more than {@link
+ *       #autoTimeoutFrames() autoTimeoutFrames}, publishes the most recent {@code viewFrames}
+ *       samples instead (so non-periodic signals still produce a display).
+ * &lt;/ol&gt;
+ *
+ * &lt;p&gt;The published snapshot is independent of pixel space: it carries normalized {@code float}
+ * samples plus the originating frame index/timestamp. UI code is responsible for any rendering.
+ *
+ * &lt;p&gt;Instances are &lt;strong&gt;not thread-safe&lt;/strong&gt;; intended to be driven from a single consumer
+ * thread (typically the UI refresh thread or a DSP worker).
+ */
+public final class WaveformTrigger {
+
+  /** Trigger slope. */
+<span class="fc" id="L34">  public enum Slope {</span>
+    /** Trigger when the signal rises through {@link #level()}. */
+<span class="fc" id="L36">    RISING,</span>
+    /** Trigger when the signal falls through {@link #level()}. */
+<span class="fc" id="L38">    FALLING</span>
+  }
+
+  /** Trigger mode. */
+<span class="fc" id="L42">  public enum Mode {</span>
+    /**
+     * Only publish a snapshot when a trigger event is actually found within the configured holdoff
+     * window. Silence or non-periodic signals produce no output.
+     */
+<span class="fc" id="L47">    NORMAL,</span>
+    /**
+     * Like {@link #NORMAL}, but if no trigger fires for {@link #autoTimeoutFrames()} samples
+     * publish the latest {@link #viewFrames()} samples anyway so the display does not freeze.
+     */
+<span class="fc" id="L52">    AUTO</span>
+  }
+
+  /** Default view length used when the caller does not supply one. */
+  public static final int DEFAULT_VIEW_FRAMES = 1024;
+
+  /** Default holdoff used when the caller does not supply one. */
+  public static final int DEFAULT_HOLDOFF_FRAMES = 64;
+
+  private static final int MIN_HISTORY_FRAMES = 4 * 1024;
+
+  private final int viewFrames;
+  private final int historyCapacity;
+  private final float[] history;
+
+  private int historySize;
+  private long firstSampleFrameIndex;
+  private long firstSampleTimestampNanos;
+  private float sampleRate;
+
+  private float level;
+  private Slope slope;
+  private Mode mode;
+  private int holdoffFrames;
+  private int autoTimeoutFrames;
+
+  private long framesSinceLastTrigger;
+  private float prevSample;
+  private boolean prevSampleValid;
+
+  /** Create a trigger with sensible defaults: level 0, rising slope, AUTO mode. */
+  public WaveformTrigger() {
+<span class="fc" id="L84">    this(DEFAULT_VIEW_FRAMES);</span>
+<span class="fc" id="L85">  }</span>
+
+  /**
+   * Create a trigger with the supplied view length and default parameters.
+   *
+   * @param viewFrames number of samples published per triggered snapshot; must be {@code &gt; 0}
+   */
+<span class="fc" id="L92">  public WaveformTrigger(int viewFrames) {</span>
+<span class="fc bfc" id="L93" title="All 2 branches covered.">    if (viewFrames &lt;= 0) {</span>
+<span class="fc" id="L94">      throw new IllegalArgumentException(&quot;viewFrames must be &gt; 0, was &quot; + viewFrames);</span>
+    }
+<span class="fc" id="L96">    this.viewFrames = viewFrames;</span>
+<span class="fc" id="L97">    this.historyCapacity = Math.max(MIN_HISTORY_FRAMES, viewFrames * 4);</span>
+<span class="fc" id="L98">    this.history = new float[historyCapacity];</span>
+<span class="fc" id="L99">    this.historySize = 0;</span>
+<span class="fc" id="L100">    this.firstSampleFrameIndex = 0L;</span>
+<span class="fc" id="L101">    this.firstSampleTimestampNanos = 0L;</span>
+<span class="fc" id="L102">    this.level = 0f;</span>
+<span class="fc" id="L103">    this.slope = Slope.RISING;</span>
+<span class="fc" id="L104">    this.mode = Mode.AUTO;</span>
+<span class="fc" id="L105">    this.holdoffFrames = DEFAULT_HOLDOFF_FRAMES;</span>
+<span class="fc" id="L106">    this.autoTimeoutFrames = Math.max(viewFrames, MIN_HISTORY_FRAMES / 2);</span>
+<span class="fc" id="L107">    this.framesSinceLastTrigger = Long.MAX_VALUE / 2;</span>
+<span class="fc" id="L108">    this.prevSample = 0f;</span>
+<span class="fc" id="L109">    this.prevSampleValid = false;</span>
+<span class="fc" id="L110">  }</span>
+
+  /**
+   * @return number of samples published per snapshot
+   */
+  public int viewFrames() {
+<span class="nc" id="L116">    return viewFrames;</span>
+  }
+
+  /**
+   * @return current trigger level in {@code [-1, 1]}
+   */
+  public float level() {
+<span class="nc" id="L123">    return level;</span>
+  }
+
+  /**
+   * Set the trigger level. Must be a finite value in {@code [-1, 1]}.
+   *
+   * @param level new trigger level
+   */
+  public void setLevel(float level) {
+<span class="pc bpc" id="L132" title="2 of 8 branches missed.">    if (Float.isNaN(level) || Float.isInfinite(level) || level &lt; -1f || level &gt; 1f) {</span>
+<span class="fc" id="L133">      throw new IllegalArgumentException(&quot;level must be a finite value in [-1, 1], was &quot; + level);</span>
+    }
+<span class="fc" id="L135">    this.level = level;</span>
+<span class="fc" id="L136">  }</span>
+
+  /**
+   * @return current trigger slope (rising or falling)
+   */
+  public Slope slope() {
+<span class="nc" id="L142">    return slope;</span>
+  }
+
+  /**
+   * Set the trigger slope.
+   *
+   * @param slope rising or falling; must not be {@code null}
+   */
+  public void setSlope(Slope slope) {
+<span class="fc" id="L151">    this.slope = Objects.requireNonNull(slope, &quot;slope&quot;);</span>
+<span class="fc" id="L152">  }</span>
+
+  /**
+   * @return current trigger mode
+   */
+  public Mode mode() {
+<span class="nc" id="L158">    return mode;</span>
+  }
+
+  /**
+   * Set the trigger mode.
+   *
+   * @param mode {@link Mode#NORMAL} or {@link Mode#AUTO}; must not be {@code null}
+   */
+  public void setMode(Mode mode) {
+<span class="fc" id="L167">    this.mode = Objects.requireNonNull(mode, &quot;mode&quot;);</span>
+<span class="fc" id="L168">  }</span>
+
+  /**
+   * @return current holdoff in samples (minimum spacing between triggers)
+   */
+  public int holdoffFrames() {
+<span class="nc" id="L174">    return holdoffFrames;</span>
+  }
+
+  /**
+   * Set the holdoff: minimum number of samples between two triggers. Useful to skip multiple
+   * crossings within a single waveform period.
+   *
+   * @param holdoffFrames non-negative number of samples
+   */
+  public void setHoldoffFrames(int holdoffFrames) {
+<span class="pc bpc" id="L184" title="1 of 2 branches missed.">    if (holdoffFrames &lt; 0) {</span>
+<span class="nc" id="L185">      throw new IllegalArgumentException(&quot;holdoffFrames must be &gt;= 0, was &quot; + holdoffFrames);</span>
+    }
+<span class="fc" id="L187">    this.holdoffFrames = holdoffFrames;</span>
+<span class="fc" id="L188">  }</span>
+
+  /**
+   * @return number of samples after which AUTO mode publishes an untriggered view
+   */
+  public int autoTimeoutFrames() {
+<span class="nc" id="L194">    return autoTimeoutFrames;</span>
+  }
+
+  /**
+   * Set the AUTO-mode timeout in samples.
+   *
+   * @param autoTimeoutFrames number of samples without a trigger before AUTO publishes anyway; must
+   *     be {@code &gt;= viewFrames}
+   */
+  public void setAutoTimeoutFrames(int autoTimeoutFrames) {
+<span class="pc bpc" id="L204" title="1 of 2 branches missed.">    if (autoTimeoutFrames &lt; viewFrames) {</span>
+<span class="nc" id="L205">      throw new IllegalArgumentException(</span>
+          &quot;autoTimeoutFrames must be &gt;= viewFrames (&quot; + viewFrames + &quot;), was &quot; + autoTimeoutFrames);
+    }
+<span class="fc" id="L208">    this.autoTimeoutFrames = autoTimeoutFrames;</span>
+<span class="fc" id="L209">  }</span>
+
+  /** Clear the rolling history and prior-sample state. */
+  public void reset() {
+<span class="fc" id="L213">    historySize = 0;</span>
+<span class="fc" id="L214">    firstSampleFrameIndex = 0L;</span>
+<span class="fc" id="L215">    firstSampleTimestampNanos = 0L;</span>
+<span class="fc" id="L216">    sampleRate = 0f;</span>
+<span class="fc" id="L217">    framesSinceLastTrigger = Long.MAX_VALUE / 2;</span>
+<span class="fc" id="L218">    prevSample = 0f;</span>
+<span class="fc" id="L219">    prevSampleValid = false;</span>
+<span class="fc" id="L220">  }</span>
+
+  /**
+   * Feed an {@link AudioBlock} into the trigger.
+   *
+   * @param block the audio block; must not be {@code null}
+   * @param channel zero-based channel index to trigger on
+   * @return a triggered snapshot if a trigger fired (or AUTO mode timed out), otherwise {@link
+   *     Optional#empty()}
+   */
+  public Optional&lt;TriggeredView&gt; process(AudioBlock block, int channel) {
+<span class="fc" id="L231">    Objects.requireNonNull(block, &quot;block&quot;);</span>
+<span class="pc bpc" id="L232" title="2 of 4 branches missed.">    if (channel &lt; 0 || channel &gt;= block.channels()) {</span>
+<span class="nc" id="L233">      throw new IllegalArgumentException(</span>
+<span class="nc" id="L234">          &quot;channel &quot; + channel + &quot; out of range [0, &quot; + block.channels() + &quot;)&quot;);</span>
+    }
+<span class="fc" id="L236">    float[] in = block.channelView(channel);</span>
+<span class="fc" id="L237">    int frames = block.frames();</span>
+<span class="pc bpc" id="L238" title="1 of 2 branches missed.">    if (frames &lt;= 0) {</span>
+<span class="nc" id="L239">      return Optional.empty();</span>
+    }
+<span class="fc" id="L241">    sampleRate = block.format().sampleRate();</span>
+<span class="fc" id="L242">    int firstNewIndex = appendToHistory(in, frames, block.frameIndex(), block.timestampNanos());</span>
+<span class="fc" id="L243">    return findAndPublish(firstNewIndex, block);</span>
+  }
+
+  /** Append samples into the rolling history; returns the history index of the first new sample. */
+  private int appendToHistory(float[] in, int frames, long blockFrameIndex, long blockTimestamp) {
+<span class="pc bpc" id="L248" title="1 of 2 branches missed.">    if (frames &gt;= historyCapacity) {</span>
+      // Block bigger than capacity: keep only the tail.
+<span class="nc" id="L250">      int tail = historyCapacity;</span>
+<span class="nc" id="L251">      System.arraycopy(in, frames - tail, history, 0, tail);</span>
+<span class="nc" id="L252">      historySize = tail;</span>
+<span class="nc" id="L253">      long droppedFrames = (long) frames - tail;</span>
+<span class="nc" id="L254">      firstSampleFrameIndex = blockFrameIndex + droppedFrames;</span>
+<span class="nc" id="L255">      firstSampleTimestampNanos =</span>
+<span class="nc" id="L256">          blockTimestamp + (long) (droppedFrames * 1_000_000_000.0d / Math.max(1.0d, sampleRate));</span>
+      // The previous sample crossing the boundary is the sample right before the kept tail.
+<span class="nc bnc" id="L258" title="All 2 branches missed.">      prevSample = in[frames - tail - 1 &lt; 0 ? 0 : frames - tail - 1];</span>
+<span class="nc bnc" id="L259" title="All 2 branches missed.">      prevSampleValid = tail &gt; 0;</span>
+<span class="nc" id="L260">      return 0;</span>
+    }
+<span class="fc" id="L262">    int free = historyCapacity - historySize;</span>
+<span class="pc bpc" id="L263" title="1 of 2 branches missed.">    if (frames &gt; free) {</span>
+      // Shift old data out, advance frame-index/timestamp accordingly.
+<span class="nc" id="L265">      int shift = frames - free;</span>
+<span class="nc" id="L266">      System.arraycopy(history, shift, history, 0, historySize - shift);</span>
+<span class="nc" id="L267">      historySize -= shift;</span>
+<span class="nc" id="L268">      firstSampleFrameIndex += shift;</span>
+<span class="nc" id="L269">      firstSampleTimestampNanos += (long) (shift * 1_000_000_000.0d / Math.max(1.0d, sampleRate));</span>
+    }
+<span class="fc" id="L271">    int firstNewIndex = historySize;</span>
+<span class="fc bfc" id="L272" title="All 2 branches covered.">    if (historySize == 0) {</span>
+<span class="fc" id="L273">      firstSampleFrameIndex = blockFrameIndex;</span>
+<span class="fc" id="L274">      firstSampleTimestampNanos = blockTimestamp;</span>
+    }
+<span class="fc" id="L276">    System.arraycopy(in, 0, history, historySize, frames);</span>
+<span class="fc" id="L277">    historySize += frames;</span>
+<span class="fc" id="L278">    return firstNewIndex;</span>
+  }
+
+  private Optional&lt;TriggeredView&gt; findAndPublish(int firstNewIndex, AudioBlock source) {
+<span class="fc" id="L282">    int triggerIndex = findTrigger(firstNewIndex);</span>
+<span class="fc" id="L283">    int newFrames = historySize - firstNewIndex;</span>
+<span class="fc bfc" id="L284" title="All 4 branches covered.">    if (triggerIndex &gt;= 0 &amp;&amp; historySize - triggerIndex &gt;= viewFrames) {</span>
+<span class="fc" id="L285">      framesSinceLastTrigger = 0L;</span>
+<span class="fc" id="L286">      return Optional.of(buildSnapshot(triggerIndex, true, source));</span>
+    }
+<span class="fc" id="L288">    framesSinceLastTrigger = saturatedAdd(framesSinceLastTrigger, newFrames);</span>
+<span class="pc bpc" id="L289" title="2 of 6 branches missed.">    if (mode == Mode.AUTO</span>
+        &amp;&amp; framesSinceLastTrigger &gt;= autoTimeoutFrames
+        &amp;&amp; historySize &gt;= viewFrames) {
+<span class="fc" id="L292">      framesSinceLastTrigger = 0L;</span>
+<span class="fc" id="L293">      int start = historySize - viewFrames;</span>
+<span class="fc" id="L294">      return Optional.of(buildSnapshot(start, false, source));</span>
+    }
+<span class="fc" id="L296">    return Optional.empty();</span>
+  }
+
+  private int findTrigger(int firstNewIndex) {
+<span class="fc" id="L300">    int searchStart = firstNewIndex;</span>
+<span class="fc" id="L301">    int holdoffStart = computeHoldoffSearchStart();</span>
+<span class="pc bpc" id="L302" title="1 of 2 branches missed.">    if (holdoffStart &gt; searchStart) {</span>
+<span class="nc" id="L303">      searchStart = holdoffStart;</span>
+    }
+<span class="fc bfc" id="L305" title="All 2 branches covered.">    if (searchStart &lt; 1) {</span>
+      // Need at least one earlier sample for slope detection. Use prevSample seeded from last call.
+<span class="pc bpc" id="L307" title="1 of 2 branches missed.">      if (!prevSampleValid) {</span>
+<span class="fc" id="L308">        searchStart = 1;</span>
+      }
+    }
+<span class="fc bfc" id="L311" title="All 2 branches covered.">    for (int i = Math.max(searchStart, 0); i &lt; historySize; i++) {</span>
+<span class="fc" id="L312">      float curr = history[i];</span>
+      float prev;
+<span class="pc bpc" id="L314" title="1 of 2 branches missed.">      if (i == 0) {</span>
+<span class="nc bnc" id="L315" title="All 2 branches missed.">        if (!prevSampleValid) {</span>
+<span class="nc" id="L316">          continue;</span>
+        }
+<span class="nc" id="L318">        prev = prevSample;</span>
+      } else {
+<span class="fc" id="L320">        prev = history[i - 1];</span>
+      }
+      boolean fired =
+<span class="pc bpc" id="L323" title="2 of 10 branches missed.">          slope == Slope.RISING ? (prev &lt; level &amp;&amp; curr &gt;= level) : (prev &gt; level &amp;&amp; curr &lt;= level);</span>
+<span class="fc bfc" id="L324" title="All 2 branches covered.">      if (fired) {</span>
+        // Remember the last sample for next call before this position is overwritten.
+<span class="fc" id="L326">        prevSample = history[historySize - 1];</span>
+<span class="fc" id="L327">        prevSampleValid = true;</span>
+<span class="fc" id="L328">        return i;</span>
+      }
+    }
+    // Update prev sample for next call.
+<span class="pc bpc" id="L332" title="1 of 2 branches missed.">    if (historySize &gt; 0) {</span>
+<span class="fc" id="L333">      prevSample = history[historySize - 1];</span>
+<span class="fc" id="L334">      prevSampleValid = true;</span>
+    }
+<span class="fc" id="L336">    return -1;</span>
+  }
+
+  private int computeHoldoffSearchStart() {
+<span class="fc bfc" id="L340" title="All 2 branches covered.">    if (framesSinceLastTrigger &gt;= holdoffFrames) {</span>
+<span class="fc" id="L341">      return 0;</span>
+    }
+<span class="fc" id="L343">    long need = holdoffFrames - framesSinceLastTrigger;</span>
+<span class="fc" id="L344">    long start = historySize - need;</span>
+<span class="pc bpc" id="L345" title="1 of 2 branches missed.">    return start &lt; 0 ? 0 : (int) start;</span>
+  }
+
+  private TriggeredView buildSnapshot(int start, boolean triggered, AudioBlock source) {
+<span class="fc" id="L349">    float[] view = new float[viewFrames];</span>
+<span class="fc" id="L350">    System.arraycopy(history, start, view, 0, viewFrames);</span>
+<span class="fc" id="L351">    long sourceOffsetFrames = (long) start;</span>
+<span class="fc" id="L352">    long viewFrameIndex = firstSampleFrameIndex + sourceOffsetFrames;</span>
+<span class="fc" id="L353">    long viewTimestamp =</span>
+        firstSampleTimestampNanos
+<span class="fc" id="L355">            + (long) (sourceOffsetFrames * 1_000_000_000.0d / Math.max(1.0d, sampleRate));</span>
+<span class="fc" id="L356">    return new TriggeredView(</span>
+        view,
+        sampleRate,
+        triggered,
+        level,
+        slope,
+        viewFrameIndex,
+        viewTimestamp,
+<span class="fc" id="L364">        source.frameIndex(),</span>
+<span class="fc" id="L365">        source.timestampNanos());</span>
+  }
+
+  private static long saturatedAdd(long a, long b) {
+<span class="fc" id="L369">    long r = a + b;</span>
+<span class="pc bpc" id="L370" title="1 of 2 branches missed.">    if (((a ^ r) &amp; (b ^ r)) &lt; 0L) {</span>
+<span class="nc" id="L371">      return Long.MAX_VALUE;</span>
+    }
+<span class="fc" id="L373">    return r;</span>
+  }
+
+  /**
+   * Immutable triggered waveform view returned by {@link WaveformTrigger#process(AudioBlock, int)}.
+   *
+   * @param samples view samples starting at the trigger position (length = {@link #viewFrames()})
+   * @param sampleRate sample rate in Hz
+   * @param triggered {@code true} if a real trigger event fired; {@code false} if AUTO timeout
+   * @param level trigger level used to produce this view
+   * @param slope trigger slope used to produce this view
+   * @param viewFrameIndex frame index of the first sample in {@link #samples()}
+   * @param viewTimestampNanos timestamp of the first sample in {@link #samples()}
+   * @param sourceFrameIndex frame index of the {@link AudioBlock} that produced this view
+   * @param sourceTimestampNanos timestamp of the {@link AudioBlock} that produced this view
+   */
+  public record TriggeredView(
+      float[] samples,
+      float sampleRate,
+      boolean triggered,
+      float level,
+      Slope slope,
+      long viewFrameIndex,
+      long viewTimestampNanos,
+      long sourceFrameIndex,
+      long sourceTimestampNanos) {
+
+    /** Compact constructor that defensively clones {@code samples}. */
+<span class="fc" id="L401">    public TriggeredView {</span>
+<span class="fc" id="L402">      Objects.requireNonNull(samples, &quot;samples&quot;);</span>
+<span class="fc" id="L403">      Objects.requireNonNull(slope, &quot;slope&quot;);</span>
+<span class="fc" id="L404">      samples = samples.clone();</span>
+<span class="fc" id="L405">    }</span>
+
+    /**
+     * @return a defensive copy of the view samples
+     */
+    @Override
+    public float[] samples() {
+<span class="fc" id="L412">      return samples.clone();</span>
+    }
+
+    /**
+     * @return read-only access to the internal samples array (do not mutate)
+     */
+    public float[] samplesView() {
+<span class="fc" id="L419">      return samples;</span>
+    }
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

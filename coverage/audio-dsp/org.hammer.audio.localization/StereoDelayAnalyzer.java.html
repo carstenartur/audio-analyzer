@@ -1,0 +1,184 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>StereoDelayAnalyzer.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer DSP and Analysis</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.localization</a> &gt; <span class="el_source">StereoDelayAnalyzer.java</span></div><h1>StereoDelayAnalyzer.java</h1><pre class="source lang-java linenums">package org.hammer.audio.localization;
+
+import org.hammer.audio.analysis.AnalysisModule;
+import org.hammer.audio.core.AudioBlock;
+
+/** Estimates inter-channel delay in stereo audio using normalized cross-correlation. */
+public final class StereoDelayAnalyzer implements AnalysisModule&lt;StereoDelaySnapshot&gt; {
+
+  public static final double DEFAULT_MICROPHONE_SPACING_METERS = 0.20;
+  public static final double DEFAULT_SPEED_OF_SOUND_METERS_PER_SECOND = 343.0;
+  private static final double DEFAULT_MIN_CONFIDENCE = 0.35;
+  private static final double SILENCE_RMS_THRESHOLD = 1.0e-4;
+
+  private final double microphoneSpacingMeters;
+  private final double speedOfSoundMetersPerSecond;
+  private final double minimumConfidence;
+
+  public StereoDelayAnalyzer() {
+<span class="fc" id="L19">    this(</span>
+        DEFAULT_MICROPHONE_SPACING_METERS,
+        DEFAULT_SPEED_OF_SOUND_METERS_PER_SECOND,
+        DEFAULT_MIN_CONFIDENCE);
+<span class="fc" id="L23">  }</span>
+
+  public StereoDelayAnalyzer(
+      double microphoneSpacingMeters,
+      double speedOfSoundMetersPerSecond,
+<span class="fc" id="L28">      double minimumConfidence) {</span>
+<span class="pc bpc" id="L29" title="1 of 4 branches missed.">    if (!(microphoneSpacingMeters &gt; 0.0) || !Double.isFinite(microphoneSpacingMeters)) {</span>
+<span class="fc" id="L30">      throw new IllegalArgumentException(</span>
+          &quot;microphoneSpacingMeters must be finite and &gt; 0, was &quot; + microphoneSpacingMeters);
+    }
+<span class="pc bpc" id="L33" title="1 of 4 branches missed.">    if (!(speedOfSoundMetersPerSecond &gt; 0.0) || !Double.isFinite(speedOfSoundMetersPerSecond)) {</span>
+<span class="fc" id="L34">      throw new IllegalArgumentException(</span>
+          &quot;speedOfSoundMetersPerSecond must be finite and &gt; 0, was &quot; + speedOfSoundMetersPerSecond);
+    }
+<span class="pc bpc" id="L37" title="2 of 6 branches missed.">    if (minimumConfidence &lt; 0.0 || minimumConfidence &gt; 1.0 || !Double.isFinite(minimumConfidence)) {</span>
+<span class="fc" id="L38">      throw new IllegalArgumentException(&quot;minimumConfidence must be finite and in [0,1]&quot;);</span>
+    }
+<span class="fc" id="L40">    this.microphoneSpacingMeters = microphoneSpacingMeters;</span>
+<span class="fc" id="L41">    this.speedOfSoundMetersPerSecond = speedOfSoundMetersPerSecond;</span>
+<span class="fc" id="L42">    this.minimumConfidence = minimumConfidence;</span>
+<span class="fc" id="L43">  }</span>
+
+  @Override
+  public StereoDelaySnapshot analyze(AudioBlock block) {
+<span class="fc bfc" id="L47" title="All 2 branches covered.">    if (block.channels() &lt; 2) {</span>
+<span class="fc" id="L48">      return invalid(block, StereoDelayStatus.MONO_INPUT, 0, 0.0, new float[0], 0);</span>
+    }
+
+<span class="fc" id="L51">    float[] left = block.channelView(0);</span>
+<span class="fc" id="L52">    float[] right = block.channelView(1);</span>
+<span class="fc" id="L53">    int frames = Math.min(left.length, right.length);</span>
+<span class="pc bpc" id="L54" title="1 of 2 branches missed.">    if (frames == 0</span>
+<span class="fc bfc" id="L55" title="All 2 branches covered.">        || rms(left, frames) &lt; SILENCE_RMS_THRESHOLD</span>
+<span class="pc bpc" id="L56" title="1 of 2 branches missed.">        || rms(right, frames) &lt; SILENCE_RMS_THRESHOLD) {</span>
+<span class="fc" id="L57">      return invalid(block, StereoDelayStatus.SILENCE, 0, 0.0, new float[0], 0);</span>
+    }
+
+<span class="fc" id="L60">    int maxLag = physicallyPossibleLagSamples(block.format().sampleRate(), frames);</span>
+<span class="fc" id="L61">    int minLag = -maxLag;</span>
+<span class="fc" id="L62">    float[] correlations = new float[maxLag - minLag + 1];</span>
+<span class="fc" id="L63">    int bestLag = 0;</span>
+<span class="fc" id="L64">    double bestCorrelation = 0.0;</span>
+<span class="fc bfc" id="L65" title="All 2 branches covered.">    for (int lag = minLag; lag &lt;= maxLag; lag++) {</span>
+<span class="fc" id="L66">      double correlation = normalizedCorrelation(left, right, frames, lag);</span>
+<span class="fc" id="L67">      correlations[lag - minLag] = (float) correlation;</span>
+<span class="fc bfc" id="L68" title="All 2 branches covered.">      if (Math.abs(correlation) &gt; Math.abs(bestCorrelation)) {</span>
+<span class="fc" id="L69">        bestCorrelation = correlation;</span>
+<span class="fc" id="L70">        bestLag = lag;</span>
+      }
+    }
+
+<span class="fc" id="L74">    double confidence = Math.abs(bestCorrelation);</span>
+<span class="fc" id="L75">    double delayMillis = samplesToMillis(bestLag, block.format().sampleRate());</span>
+<span class="fc" id="L76">    double pathDifference = samplesToPathDifference(bestLag, block.format().sampleRate());</span>
+<span class="fc bfc" id="L77" title="All 2 branches covered.">    if (confidence &lt; minimumConfidence) {</span>
+<span class="fc" id="L78">      return invalid(</span>
+          block, StereoDelayStatus.LOW_CORRELATION, bestLag, confidence, correlations, minLag);
+    }
+<span class="pc bpc" id="L81" title="1 of 2 branches missed.">    if (Math.abs(pathDifference) &gt; microphoneSpacingMeters) {</span>
+<span class="nc" id="L82">      return invalid(</span>
+          block,
+          StereoDelayStatus.DELAY_OUTSIDE_PHYSICAL_RANGE,
+          bestLag,
+          confidence,
+          correlations,
+          minLag);
+    }
+<span class="fc" id="L90">    double ratio = clamp(pathDifference / microphoneSpacingMeters, -1.0, 1.0);</span>
+<span class="fc" id="L91">    double angleDegrees = Math.toDegrees(Math.asin(ratio));</span>
+<span class="fc" id="L92">    return new StereoDelaySnapshot(</span>
+<span class="fc" id="L93">        block.frameIndex(),</span>
+<span class="fc" id="L94">        block.timestampNanos(),</span>
+        StereoDelayStatus.VALID,
+        bestLag,
+        delayMillis,
+        pathDifference,
+        angleDegrees,
+        confidence,
+        microphoneSpacingMeters,
+        speedOfSoundMetersPerSecond,
+        minLag,
+        correlations);
+  }
+
+  public double microphoneSpacingMeters() {
+<span class="nc" id="L108">    return microphoneSpacingMeters;</span>
+  }
+
+  public double speedOfSoundMetersPerSecond() {
+<span class="nc" id="L112">    return speedOfSoundMetersPerSecond;</span>
+  }
+
+  private StereoDelaySnapshot invalid(
+      AudioBlock block,
+      StereoDelayStatus status,
+      int delaySamples,
+      double confidence,
+      float[] correlations,
+      int minLag) {
+<span class="fc" id="L122">    return new StereoDelaySnapshot(</span>
+<span class="fc" id="L123">        block.frameIndex(),</span>
+<span class="fc" id="L124">        block.timestampNanos(),</span>
+        status,
+        delaySamples,
+<span class="fc" id="L127">        samplesToMillis(delaySamples, block.format().sampleRate()),</span>
+<span class="fc" id="L128">        samplesToPathDifference(delaySamples, block.format().sampleRate()),</span>
+        Double.NaN,
+        confidence,
+        microphoneSpacingMeters,
+        speedOfSoundMetersPerSecond,
+        minLag,
+        correlations);
+  }
+
+  private static double rms(float[] samples, int frames) {
+<span class="fc" id="L138">    double sumSquares = 0.0;</span>
+<span class="fc bfc" id="L139" title="All 2 branches covered.">    for (int i = 0; i &lt; frames; i++) {</span>
+<span class="fc" id="L140">      sumSquares += samples[i] * samples[i];</span>
+    }
+<span class="fc" id="L142">    return Math.sqrt(sumSquares / Math.max(1, frames));</span>
+  }
+
+  private int physicallyPossibleLagSamples(float sampleRate, int frames) {
+<span class="fc" id="L146">    double maxDelaySeconds = microphoneSpacingMeters / speedOfSoundMetersPerSecond;</span>
+<span class="fc" id="L147">    int physicalLag = (int) Math.ceil(maxDelaySeconds * sampleRate);</span>
+<span class="fc" id="L148">    return Math.min(physicalLag, frames - 1);</span>
+  }
+
+  private static double normalizedCorrelation(float[] left, float[] right, int frames, int lag) {
+<span class="fc" id="L152">    int leftStart = Math.max(0, -lag);</span>
+<span class="fc" id="L153">    int rightStart = Math.max(0, lag);</span>
+<span class="fc" id="L154">    int overlap = frames - Math.abs(lag);</span>
+<span class="pc bpc" id="L155" title="1 of 2 branches missed.">    if (overlap &lt;= 1) {</span>
+<span class="nc" id="L156">      return 0.0;</span>
+    }
+<span class="fc" id="L158">    double sum = 0.0;</span>
+<span class="fc" id="L159">    double leftEnergy = 0.0;</span>
+<span class="fc" id="L160">    double rightEnergy = 0.0;</span>
+<span class="fc bfc" id="L161" title="All 2 branches covered.">    for (int i = 0; i &lt; overlap; i++) {</span>
+<span class="fc" id="L162">      double leftSample = left[leftStart + i];</span>
+<span class="fc" id="L163">      double rightSample = right[rightStart + i];</span>
+<span class="fc" id="L164">      sum += leftSample * rightSample;</span>
+<span class="fc" id="L165">      leftEnergy += leftSample * leftSample;</span>
+<span class="fc" id="L166">      rightEnergy += rightSample * rightSample;</span>
+    }
+<span class="fc" id="L168">    double denominator = Math.sqrt(leftEnergy * rightEnergy);</span>
+<span class="pc bpc" id="L169" title="1 of 2 branches missed.">    return denominator &gt; 0.0 ? sum / denominator : 0.0;</span>
+  }
+
+  private double samplesToMillis(int samples, float sampleRate) {
+<span class="fc" id="L173">    return 1000.0 * samples / sampleRate;</span>
+  }
+
+  private double samplesToPathDifference(int samples, float sampleRate) {
+<span class="fc" id="L177">    return speedOfSoundMetersPerSecond * samples / sampleRate;</span>
+  }
+
+  private static double clamp(double value, double min, double max) {
+<span class="fc" id="L181">    return Math.max(min, Math.min(max, value));</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

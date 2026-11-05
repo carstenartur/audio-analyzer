@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WorkflowRunException.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Core</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.execution</a> &gt; <span class="el_source">WorkflowRunException.java</span></div><h1>WorkflowRunException.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.execution;
+
+import java.io.Serial;
+import java.util.List;
+import org.hammer.audio.workflow.execution.WorkflowRunModels.Violation;
+
+/** Typed workflow-run failure suitable for stable HTTP problem mapping. */
+public final class WorkflowRunException extends RuntimeException {
+
+  @Serial private static final long serialVersionUID = 1L;
+
+  /** Stable machine-readable failure code. */
+<span class="fc" id="L13">  public enum Code {</span>
+<span class="fc" id="L14">    DUPLICATE_START_COMMAND,</span>
+<span class="fc" id="L15">    SOURCE_UNAVAILABLE,</span>
+<span class="fc" id="L16">    UNKNOWN_RUN,</span>
+<span class="fc" id="L17">    VALIDATION_FAILED,</span>
+<span class="fc" id="L18">    UNSUPPORTED_NODE,</span>
+<span class="fc" id="L19">    RESULT_NOT_AVAILABLE,</span>
+<span class="fc" id="L20">    ILLEGAL_TRANSITION,</span>
+<span class="fc" id="L21">    BACKEND_FAILURE</span>
+  }
+
+  private final Code errorCode;
+  private final String affectedRunId;
+  private final String commandId;
+  private final Violation[] violationDetails;
+
+  /** Creates a typed failure without nested cause. */
+  public WorkflowRunException(
+      Code code, String message, String runId, String startCommandId, List&lt;Violation&gt; violations) {
+<span class="fc" id="L32">    this(code, message, runId, startCommandId, violations, null);</span>
+<span class="fc" id="L33">  }</span>
+
+  /** Creates a typed failure preserving a backend or source cause. */
+  public WorkflowRunException(
+      Code code,
+      String message,
+      String runId,
+      String startCommandId,
+      List&lt;Violation&gt; violations,
+      Throwable cause) {
+<span class="fc" id="L43">    super(message, cause);</span>
+<span class="fc" id="L44">    this.errorCode = java.util.Objects.requireNonNull(code, &quot;code&quot;);</span>
+<span class="fc" id="L45">    this.affectedRunId = runId;</span>
+<span class="fc" id="L46">    this.commandId = startCommandId;</span>
+<span class="fc" id="L47">    this.violationDetails =</span>
+<span class="pc bpc" id="L48" title="1 of 2 branches missed.">        (violations == null ? List.&lt;Violation&gt;of() : violations).toArray(Violation[]::new);</span>
+<span class="fc" id="L49">  }</span>
+
+  public Code code() {
+<span class="fc" id="L52">    return errorCode;</span>
+  }
+
+  public String runId() {
+<span class="nc" id="L56">    return affectedRunId;</span>
+  }
+
+  public String startCommandId() {
+<span class="nc" id="L60">    return commandId;</span>
+  }
+
+  public List&lt;Violation&gt; violations() {
+<span class="nc" id="L64">    return List.of(violationDetails.clone());</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

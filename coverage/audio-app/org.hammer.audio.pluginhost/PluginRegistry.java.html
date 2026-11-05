@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>PluginRegistry.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.pluginhost</a> &gt; <span class="el_source">PluginRegistry.java</span></div><h1>PluginRegistry.java</h1><pre class="source lang-java linenums">package org.hammer.audio.pluginhost;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Objects;
+import org.hammer.audio.plugin.AudioAnalyzerPlugin;
+
+/**
+ * Read-only view over the plugins discovered by {@link PluginManager}.
+ *
+ * &lt;p&gt;Holds both successful loads and isolated failures so the host UI and log can report a complete
+ * picture of the plugin environment.
+ */
+public final class PluginRegistry {
+
+  private final List&lt;PluginLoadResult&gt; results;
+
+  /** Create a registry from the supplied load results. The list is defensively copied. */
+<span class="fc" id="L20">  public PluginRegistry(List&lt;PluginLoadResult&gt; results) {</span>
+<span class="fc" id="L21">    Objects.requireNonNull(results, &quot;results&quot;);</span>
+<span class="fc" id="L22">    this.results = Collections.unmodifiableList(new ArrayList&lt;&gt;(results));</span>
+<span class="fc" id="L23">  }</span>
+
+  /** All load results in discovery order. */
+  public List&lt;PluginLoadResult&gt; results() {
+<span class="fc" id="L27">    return results;</span>
+  }
+
+  /** Successfully loaded plugins. */
+  public List&lt;AudioAnalyzerPlugin&gt; plugins() {
+<span class="fc" id="L32">    List&lt;AudioAnalyzerPlugin&gt; plugins = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L33" title="All 2 branches covered.">    for (PluginLoadResult result : results) {</span>
+<span class="fc" id="L34">      result.plugin().ifPresent(plugins::add);</span>
+<span class="fc" id="L35">    }</span>
+<span class="fc" id="L36">    return Collections.unmodifiableList(plugins);</span>
+  }
+
+  /** Failures isolated during loading. */
+  public List&lt;PluginLoadResult&gt; failures() {
+<span class="fc" id="L41">    List&lt;PluginLoadResult&gt; failed = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L42" title="All 2 branches covered.">    for (PluginLoadResult result : results) {</span>
+<span class="fc bfc" id="L43" title="All 2 branches covered.">      if (!result.isSuccess()) {</span>
+<span class="fc" id="L44">        failed.add(result);</span>
+      }
+<span class="fc" id="L46">    }</span>
+<span class="fc" id="L47">    return Collections.unmodifiableList(failed);</span>
+  }
+
+  /** {@code true} if no plugin (successful or failed) was discovered. */
+  public boolean isEmpty() {
+<span class="fc" id="L52">    return results.isEmpty();</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

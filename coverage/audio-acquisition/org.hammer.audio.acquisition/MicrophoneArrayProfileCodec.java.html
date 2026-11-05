@@ -1,0 +1,245 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>MicrophoneArrayProfileCodec.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Acquisition</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.acquisition</a> &gt; <span class="el_source">MicrophoneArrayProfileCodec.java</span></div><h1>MicrophoneArrayProfileCodec.java</h1><pre class="source lang-java linenums">package org.hammer.audio.acquisition;
+
+import java.io.IOException;
+import java.io.StringReader;
+import java.net.URLDecoder;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.EnumSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
+import org.hammer.audio.core.AudioFormatDescriptor;
+import org.hammer.audio.geometry.Vector2;
+
+/** Deterministic text codec for reusable microphone-array profiles. */
+<span class="fc" id="L22">public final class MicrophoneArrayProfileCodec {</span>
+
+  private static final String SCHEMA_VERSION = &quot;1&quot;;
+
+  /** Encode a profile without timestamps or platform-dependent ordering. */
+  public String encode(MicrophoneArrayProfile profile) {
+<span class="fc" id="L28">    Map&lt;String, String&gt; values = new ConcurrentHashMap&lt;&gt;();</span>
+<span class="fc" id="L29">    put(values, &quot;schema&quot;, SCHEMA_VERSION);</span>
+<span class="fc" id="L30">    put(values, &quot;profile.id&quot;, profile.profileId());</span>
+<span class="fc" id="L31">    put(values, &quot;profile.name&quot;, profile.displayName());</span>
+<span class="fc" id="L32">    put(values, &quot;profile.layout&quot;, profile.layout().name());</span>
+<span class="fc" id="L33">    put(</span>
+        values,
+        &quot;profile.modes&quot;,
+<span class="fc" id="L36">        profile.supportedModes().stream()</span>
+<span class="fc" id="L37">            .map(Enum::name)</span>
+<span class="fc" id="L38">            .sorted()</span>
+<span class="fc" id="L39">            .collect(Collectors.joining(&quot;,&quot;)));</span>
+<span class="fc" id="L40">    writeArray(values, profile.array());</span>
+<span class="fc" id="L41">    writeCapture(values, profile.liveCapture());</span>
+<span class="fc" id="L42">    writeCalibration(values, profile.calibration());</span>
+<span class="fc" id="L43">    return values.entrySet().stream()</span>
+<span class="fc" id="L44">        .sorted(Map.Entry.comparingByKey())</span>
+<span class="fc" id="L45">        .map(entry -&gt; entry.getKey() + '=' + entry.getValue())</span>
+<span class="fc" id="L46">        .collect(Collectors.joining(&quot;\n&quot;, &quot;&quot;, &quot;\n&quot;));</span>
+  }
+
+  /** Decode one profile produced by {@link #encode(MicrophoneArrayProfile)}. */
+  public MicrophoneArrayProfile decode(String encoded) {
+<span class="pc bpc" id="L51" title="2 of 4 branches missed.">    if (encoded == null || encoded.isBlank()) {</span>
+<span class="nc" id="L52">      throw new IllegalArgumentException(&quot;encoded profile must not be blank&quot;);</span>
+    }
+<span class="fc" id="L54">    Properties properties = new Properties();</span>
+    try {
+<span class="fc" id="L56">      properties.load(new StringReader(encoded));</span>
+<span class="nc" id="L57">    } catch (IOException exception) {</span>
+<span class="nc" id="L58">      throw new IllegalArgumentException(&quot;profile text could not be read&quot;, exception);</span>
+<span class="fc" id="L59">    }</span>
+<span class="fc" id="L60">    requireValue(properties, &quot;schema&quot;, SCHEMA_VERSION);</span>
+<span class="fc" id="L61">    MicrophoneArray array = readArray(properties);</span>
+<span class="fc" id="L62">    CaptureDeviceConfiguration capture = readCapture(properties);</span>
+<span class="fc" id="L63">    MicrophoneArrayCalibration calibration = readCalibration(properties, array);</span>
+<span class="fc" id="L64">    return new MicrophoneArrayProfile(</span>
+<span class="fc" id="L65">        value(properties, &quot;profile.id&quot;),</span>
+<span class="fc" id="L66">        value(properties, &quot;profile.name&quot;),</span>
+<span class="fc" id="L67">        MicrophoneArrayLayout.valueOf(value(properties, &quot;profile.layout&quot;)),</span>
+        array,
+<span class="fc" id="L69">        readModes(properties),</span>
+        capture,
+        calibration);
+  }
+
+  private static void writeArray(Map&lt;String, String&gt; values, MicrophoneArray array) {
+<span class="fc" id="L75">    put(values, &quot;array.channels&quot;, Integer.toString(array.channels()));</span>
+<span class="fc bfc" id="L76" title="All 2 branches covered.">    for (int index = 0; index &lt; array.channels(); index++) {</span>
+<span class="fc" id="L77">      Microphone microphone = array.microphone(index);</span>
+<span class="fc" id="L78">      String prefix = &quot;array.microphone.&quot; + index + '.';</span>
+<span class="fc" id="L79">      put(values, prefix + &quot;id&quot;, microphone.id());</span>
+<span class="fc" id="L80">      put(values, prefix + &quot;channel&quot;, Integer.toString(microphone.channel()));</span>
+<span class="fc" id="L81">      put(values, prefix + &quot;x&quot;, Double.toString(microphone.positionMeters().x()));</span>
+<span class="fc" id="L82">      put(values, prefix + &quot;y&quot;, Double.toString(microphone.positionMeters().y()));</span>
+    }
+<span class="fc" id="L84">  }</span>
+
+  private static MicrophoneArray readArray(Properties properties) {
+<span class="fc" id="L87">    int channels = integer(properties, &quot;array.channels&quot;);</span>
+<span class="fc" id="L88">    List&lt;Microphone&gt; microphones = new ArrayList&lt;&gt;(channels);</span>
+<span class="fc bfc" id="L89" title="All 2 branches covered.">    for (int index = 0; index &lt; channels; index++) {</span>
+<span class="fc" id="L90">      String prefix = &quot;array.microphone.&quot; + index + '.';</span>
+<span class="fc" id="L91">      microphones.add(</span>
+          new Microphone(
+<span class="fc" id="L93">              value(properties, prefix + &quot;id&quot;),</span>
+<span class="fc" id="L94">              new Vector2(decimal(properties, prefix + &quot;x&quot;), decimal(properties, prefix + &quot;y&quot;)),</span>
+<span class="fc" id="L95">              integer(properties, prefix + &quot;channel&quot;)));</span>
+    }
+<span class="fc" id="L97">    return new MicrophoneArray(microphones);</span>
+  }
+
+  private static void writeCapture(
+      Map&lt;String, String&gt; values, CaptureDeviceConfiguration configuration) {
+<span class="fc bfc" id="L102" title="All 2 branches covered.">    put(values, &quot;capture.present&quot;, Boolean.toString(configuration != null));</span>
+<span class="fc bfc" id="L103" title="All 2 branches covered.">    if (configuration == null) {</span>
+<span class="fc" id="L104">      return;</span>
+    }
+<span class="fc" id="L106">    CaptureDeviceDescriptor device = configuration.device();</span>
+<span class="fc" id="L107">    put(values, &quot;capture.device.id&quot;, device.deviceId());</span>
+<span class="fc" id="L108">    put(values, &quot;capture.device.name&quot;, device.name());</span>
+<span class="fc" id="L109">    put(values, &quot;capture.device.vendor&quot;, device.vendor());</span>
+<span class="fc" id="L110">    put(values, &quot;capture.device.description&quot;, device.description());</span>
+<span class="fc" id="L111">    put(values, &quot;capture.device.version&quot;, device.version());</span>
+<span class="fc" id="L112">    put(values, &quot;capture.sampleRate&quot;, Float.toString(configuration.format().sampleRate()));</span>
+<span class="fc" id="L113">    put(values, &quot;capture.channels&quot;, Integer.toString(configuration.format().channels()));</span>
+<span class="fc" id="L114">    put(</span>
+        values,
+        &quot;capture.sampleBits&quot;,
+<span class="fc" id="L117">        Integer.toString(configuration.format().sourceSampleSizeInBits()));</span>
+<span class="fc" id="L118">    put(values, &quot;capture.signed&quot;, Boolean.toString(configuration.signed()));</span>
+<span class="fc" id="L119">    put(values, &quot;capture.bigEndian&quot;, Boolean.toString(configuration.bigEndian()));</span>
+<span class="fc" id="L120">  }</span>
+
+  private static CaptureDeviceConfiguration readCapture(Properties properties) {
+<span class="fc bfc" id="L123" title="All 2 branches covered.">    if (!flag(properties, &quot;capture.present&quot;)) {</span>
+<span class="fc" id="L124">      return null;</span>
+    }
+<span class="fc" id="L126">    CaptureDeviceDescriptor device =</span>
+        new CaptureDeviceDescriptor(
+<span class="fc" id="L128">            value(properties, &quot;capture.device.id&quot;),</span>
+<span class="fc" id="L129">            value(properties, &quot;capture.device.name&quot;),</span>
+<span class="fc" id="L130">            value(properties, &quot;capture.device.vendor&quot;),</span>
+<span class="fc" id="L131">            value(properties, &quot;capture.device.description&quot;),</span>
+<span class="fc" id="L132">            value(properties, &quot;capture.device.version&quot;));</span>
+<span class="fc" id="L133">    AudioFormatDescriptor format =</span>
+        new AudioFormatDescriptor(
+<span class="fc" id="L135">            floating(properties, &quot;capture.sampleRate&quot;),</span>
+<span class="fc" id="L136">            integer(properties, &quot;capture.channels&quot;),</span>
+<span class="fc" id="L137">            integer(properties, &quot;capture.sampleBits&quot;));</span>
+<span class="fc" id="L138">    return new CaptureDeviceConfiguration(</span>
+<span class="fc" id="L139">        device, format, flag(properties, &quot;capture.signed&quot;), flag(properties, &quot;capture.bigEndian&quot;));</span>
+  }
+
+  private static void writeCalibration(
+      Map&lt;String, String&gt; values, MicrophoneArrayCalibration calibration) {
+<span class="pc bpc" id="L144" title="1 of 2 branches missed.">    put(values, &quot;calibration.present&quot;, Boolean.toString(calibration != null));</span>
+<span class="pc bpc" id="L145" title="1 of 2 branches missed.">    if (calibration == null) {</span>
+<span class="nc" id="L146">      return;</span>
+    }
+<span class="fc" id="L148">    put(values, &quot;calibration.id&quot;, calibration.profileId());</span>
+<span class="fc" id="L149">    put(values, &quot;calibration.referenceChannel&quot;, Integer.toString(calibration.referenceChannel()));</span>
+<span class="fc" id="L150">    put(values, &quot;calibration.calibratedAt&quot;, calibration.calibratedAt().toString());</span>
+<span class="fc" id="L151">    put(values, &quot;calibration.validUntil&quot;, calibration.validUntil().toString());</span>
+<span class="fc bfc" id="L152" title="All 2 branches covered.">    for (ChannelTimingCalibration channel : calibration.channels()) {</span>
+<span class="fc" id="L153">      String prefix = &quot;calibration.channel.&quot; + channel.channel() + '.';</span>
+<span class="fc" id="L154">      put(values, prefix + &quot;referenceFrame&quot;, Long.toString(channel.referenceFrame()));</span>
+<span class="fc" id="L155">      put(values, prefix + &quot;offsetSamples&quot;, Double.toString(channel.offsetSamples()));</span>
+<span class="fc" id="L156">      put(values, prefix + &quot;driftPpm&quot;, Double.toString(channel.driftPpm()));</span>
+<span class="fc" id="L157">      put(values, prefix + &quot;residualRmsSamples&quot;, Double.toString(channel.residualRmsSamples()));</span>
+<span class="fc" id="L158">      put(values, prefix + &quot;jitterRmsSamples&quot;, Double.toString(channel.jitterRmsSamples()));</span>
+<span class="fc" id="L159">      put(values, prefix + &quot;gainLinear&quot;, Double.toString(channel.gainLinear()));</span>
+<span class="fc" id="L160">      put(values, prefix + &quot;invertedPolarity&quot;, Boolean.toString(channel.invertedPolarity()));</span>
+<span class="fc" id="L161">    }</span>
+<span class="fc" id="L162">  }</span>
+
+  private static MicrophoneArrayCalibration readCalibration(
+      Properties properties, MicrophoneArray array) {
+<span class="pc bpc" id="L166" title="1 of 2 branches missed.">    if (!flag(properties, &quot;calibration.present&quot;)) {</span>
+<span class="nc" id="L167">      return null;</span>
+    }
+<span class="fc" id="L169">    List&lt;ChannelTimingCalibration&gt; channels = new ArrayList&lt;&gt;(array.channels());</span>
+<span class="fc bfc" id="L170" title="All 2 branches covered.">    for (int channel = 0; channel &lt; array.channels(); channel++) {</span>
+<span class="fc" id="L171">      String prefix = &quot;calibration.channel.&quot; + channel + '.';</span>
+<span class="fc" id="L172">      channels.add(</span>
+          new ChannelTimingCalibration(
+              channel,
+<span class="fc" id="L175">              longValue(properties, prefix + &quot;referenceFrame&quot;),</span>
+<span class="fc" id="L176">              decimal(properties, prefix + &quot;offsetSamples&quot;),</span>
+<span class="fc" id="L177">              decimal(properties, prefix + &quot;driftPpm&quot;),</span>
+<span class="fc" id="L178">              decimal(properties, prefix + &quot;residualRmsSamples&quot;),</span>
+<span class="fc" id="L179">              decimal(properties, prefix + &quot;jitterRmsSamples&quot;),</span>
+<span class="fc" id="L180">              decimal(properties, prefix + &quot;gainLinear&quot;),</span>
+<span class="fc" id="L181">              flag(properties, prefix + &quot;invertedPolarity&quot;)));</span>
+    }
+<span class="fc" id="L183">    return new MicrophoneArrayCalibration(</span>
+<span class="fc" id="L184">        value(properties, &quot;calibration.id&quot;),</span>
+        array,
+<span class="fc" id="L186">        integer(properties, &quot;calibration.referenceChannel&quot;),</span>
+        channels,
+<span class="fc" id="L188">        Instant.parse(value(properties, &quot;calibration.calibratedAt&quot;)),</span>
+<span class="fc" id="L189">        Instant.parse(value(properties, &quot;calibration.validUntil&quot;)));</span>
+  }
+
+  private static Set&lt;LocalizationInputMode&gt; readModes(Properties properties) {
+<span class="fc" id="L193">    String encodedModes = value(properties, &quot;profile.modes&quot;);</span>
+<span class="fc" id="L194">    Set&lt;LocalizationInputMode&gt; modes = EnumSet.noneOf(LocalizationInputMode.class);</span>
+<span class="fc" id="L195">    Arrays.stream(encodedModes.split(&quot;,&quot;))</span>
+<span class="pc bpc" id="L196" title="1 of 2 branches missed.">        .filter(mode -&gt; !mode.isBlank())</span>
+<span class="fc" id="L197">        .map(LocalizationInputMode::valueOf)</span>
+<span class="fc" id="L198">        .forEach(modes::add);</span>
+<span class="pc bpc" id="L199" title="1 of 2 branches missed.">    if (modes.isEmpty()) {</span>
+<span class="nc" id="L200">      throw new IllegalArgumentException(&quot;profile.modes must not be empty&quot;);</span>
+    }
+<span class="fc" id="L202">    return modes;</span>
+  }
+
+  private static void put(Map&lt;String, String&gt; values, String key, String value) {
+<span class="fc" id="L206">    values.put(key, URLEncoder.encode(value, StandardCharsets.UTF_8));</span>
+<span class="fc" id="L207">  }</span>
+
+  private static String value(Properties properties, String key) {
+<span class="fc" id="L210">    String value = properties.getProperty(key);</span>
+<span class="pc bpc" id="L211" title="1 of 2 branches missed.">    if (value == null) {</span>
+<span class="nc" id="L212">      throw new IllegalArgumentException(&quot;missing profile property: &quot; + key);</span>
+    }
+<span class="fc" id="L214">    return URLDecoder.decode(value, StandardCharsets.UTF_8);</span>
+  }
+
+  private static void requireValue(Properties properties, String key, String expected) {
+<span class="fc" id="L218">    String actual = value(properties, key);</span>
+<span class="pc bpc" id="L219" title="1 of 2 branches missed.">    if (!expected.equals(actual)) {</span>
+<span class="nc" id="L220">      throw new IllegalArgumentException(</span>
+          &quot;unsupported &quot; + key + &quot;: expected &quot; + expected + &quot; but was &quot; + actual);
+    }
+<span class="fc" id="L223">  }</span>
+
+  private static boolean flag(Properties properties, String key) {
+<span class="fc" id="L226">    return Boolean.parseBoolean(value(properties, key));</span>
+  }
+
+  private static int integer(Properties properties, String key) {
+<span class="fc" id="L230">    return Integer.parseInt(value(properties, key));</span>
+  }
+
+  private static long longValue(Properties properties, String key) {
+<span class="fc" id="L234">    return Long.parseLong(value(properties, key));</span>
+  }
+
+  private static float floating(Properties properties, String key) {
+<span class="fc" id="L238">    return Float.parseFloat(value(properties, key));</span>
+  }
+
+  private static double decimal(Properties properties, String key) {
+<span class="fc" id="L242">    return Double.parseDouble(value(properties, key));</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

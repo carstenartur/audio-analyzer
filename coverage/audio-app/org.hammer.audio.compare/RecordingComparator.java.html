@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>RecordingComparator.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.compare</a> &gt; <span class="el_source">RecordingComparator.java</span></div><h1>RecordingComparator.java</h1><pre class="source lang-java linenums">package org.hammer.audio.compare;
+
+import java.io.IOException;
+import java.nio.file.Path;
+import java.util.List;
+import java.util.Objects;
+import org.hammer.audio.analysis.MeasurementCalculator;
+import org.hammer.audio.analysis.MeasurementSnapshot;
+import org.hammer.audio.analysis.SpectrumAnalyzer;
+import org.hammer.audio.analysis.SpectrumSnapshot;
+import org.hammer.audio.core.AudioBlock;
+import org.hammer.audio.core.AudioFormatDescriptor;
+import org.hammer.audio.diagnosis.DiagnosisAnalyzer;
+import org.hammer.audio.diagnosis.DiagnosisSnapshot;
+import org.hammer.audio.recording.AudioBlockRecordingReader;
+import org.hammer.audio.spectrogram.SpectrogramAnalyzer;
+
+/**
+ * Replays two {@code .aar} recordings (or two in-memory block lists), runs the standard analyzer
+ * stack on each, and returns a {@link ComparisonReport}.
+ *
+ * &lt;p&gt;The recording is analyzed block-by-block exactly as the live UI would, so the resulting
+ * snapshots reflect the end state at the last block (matching the &quot;freeze and inspect&quot; workflow).
+ */
+public final class RecordingComparator {
+
+  private static final int DEFAULT_FFT_SIZE = 1024;
+  private static final int DEFAULT_SPECTROGRAM_FRAMES = 128;
+
+  private final int fftSize;
+
+  /** Create a comparator with the default {@value #DEFAULT_FFT_SIZE} FFT size. */
+  public RecordingComparator() {
+<span class="fc" id="L34">    this(DEFAULT_FFT_SIZE);</span>
+<span class="fc" id="L35">  }</span>
+
+  /**
+   * @param fftSize FFT size used by the spectrum / spectrogram analyzers
+   */
+<span class="fc" id="L40">  public RecordingComparator(int fftSize) {</span>
+<span class="fc bfc" id="L41" title="All 4 branches covered.">    if (fftSize &lt;= 0 || Integer.bitCount(fftSize) != 1) {</span>
+<span class="fc" id="L42">      throw new IllegalArgumentException(&quot;fftSize must be a positive power of two, was &quot; + fftSize);</span>
+    }
+<span class="fc" id="L44">    this.fftSize = fftSize;</span>
+<span class="fc" id="L45">  }</span>
+
+  /**
+   * Compare two recordings on disk.
+   *
+   * @param fileA recording A
+   * @param fileB recording B
+   * @param labelA human-readable label for A (e.g. the filename)
+   * @param labelB human-readable label for B
+   */
+  public ComparisonReport compareFiles(Path fileA, Path fileB, String labelA, String labelB)
+      throws IOException {
+<span class="nc" id="L57">    Objects.requireNonNull(fileA, &quot;fileA&quot;);</span>
+<span class="nc" id="L58">    Objects.requireNonNull(fileB, &quot;fileB&quot;);</span>
+<span class="nc" id="L59">    List&lt;AudioBlock&gt; blocksA = AudioBlockRecordingReader.readAll(fileA);</span>
+<span class="nc" id="L60">    List&lt;AudioBlock&gt; blocksB = AudioBlockRecordingReader.readAll(fileB);</span>
+<span class="nc" id="L61">    return compareBlocks(blocksA, blocksB, labelA, labelB);</span>
+  }
+
+  /** Compare two pre-loaded block sequences. */
+  public ComparisonReport compareBlocks(
+      List&lt;AudioBlock&gt; blocksA, List&lt;AudioBlock&gt; blocksB, String labelA, String labelB) {
+<span class="fc" id="L67">    Objects.requireNonNull(blocksA, &quot;blocksA&quot;);</span>
+<span class="fc" id="L68">    Objects.requireNonNull(blocksB, &quot;blocksB&quot;);</span>
+<span class="fc bfc" id="L69" title="All 2 branches covered.">    if (blocksA.isEmpty()) {</span>
+<span class="fc" id="L70">      throw new IllegalArgumentException(&quot;blocksA must be non-empty&quot;);</span>
+    }
+<span class="fc bfc" id="L72" title="All 2 branches covered.">    if (blocksB.isEmpty()) {</span>
+<span class="fc" id="L73">      throw new IllegalArgumentException(&quot;blocksB must be non-empty&quot;);</span>
+    }
+<span class="fc" id="L75">    return new ComparisonReport(analyze(blocksA, labelA), analyze(blocksB, labelB));</span>
+  }
+
+  private ComparisonReport.Side analyze(List&lt;AudioBlock&gt; blocks, String label) {
+<span class="fc" id="L79">    AudioFormatDescriptor format = blocks.get(0).format();</span>
+<span class="fc" id="L80">    SpectrumAnalyzer spectrumAnalyzer = new SpectrumAnalyzer(fftSize, 0, format.sampleRate());</span>
+<span class="fc" id="L81">    MeasurementCalculator measurementCalculator = new MeasurementCalculator();</span>
+<span class="fc" id="L82">    SpectrogramAnalyzer spectrogramAnalyzer =</span>
+<span class="fc" id="L83">        new SpectrogramAnalyzer(fftSize, 0, format.sampleRate(), DEFAULT_SPECTROGRAM_FRAMES);</span>
+<span class="fc" id="L84">    DiagnosisAnalyzer diagnosisAnalyzer = new DiagnosisAnalyzer();</span>
+
+<span class="fc" id="L86">    SpectrumSnapshot lastSpectrum = null;</span>
+<span class="fc" id="L87">    AudioBlock lastBlock = null;</span>
+<span class="fc" id="L88">    long totalFrames = 0L;</span>
+<span class="fc bfc" id="L89" title="All 2 branches covered.">    for (AudioBlock block : blocks) {</span>
+<span class="pc bpc" id="L90" title="1 of 2 branches missed.">      if (block.frames() &lt;= 0) {</span>
+<span class="nc" id="L91">        continue;</span>
+      }
+<span class="fc" id="L93">      lastBlock = block;</span>
+<span class="fc" id="L94">      totalFrames += block.frames();</span>
+<span class="pc bpc" id="L95" title="2 of 4 branches missed.">      if (block.channels() &gt; 0 &amp;&amp; block.frames() &gt;= fftSize) {</span>
+<span class="fc" id="L96">        lastSpectrum = spectrumAnalyzer.analyze(block);</span>
+<span class="fc" id="L97">        spectrogramAnalyzer.analyze(block);</span>
+      }
+<span class="fc" id="L99">    }</span>
+<span class="fc" id="L100">    MeasurementSnapshot measurement = measurementCalculator.calculate(lastBlock, lastSpectrum);</span>
+<span class="fc" id="L101">    DiagnosisSnapshot diagnosis =</span>
+<span class="fc" id="L102">        diagnosisAnalyzer.analyze(lastBlock, lastSpectrum, spectrogramAnalyzer.history(), null);</span>
+<span class="fc" id="L103">    return new ComparisonReport.Side(</span>
+        label, format, totalFrames, measurement, lastSpectrum, diagnosis);
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

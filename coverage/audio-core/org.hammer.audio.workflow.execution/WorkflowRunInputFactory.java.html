@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WorkflowRunInputFactory.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Core</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.execution</a> &gt; <span class="el_source">WorkflowRunInputFactory.java</span></div><h1>WorkflowRunInputFactory.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.execution;
+
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.Clock;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+import java.util.function.Supplier;
+import org.hammer.audio.workflow.Workflow;
+import org.hammer.audio.workflow.WorkflowValidator;
+import org.hammer.audio.workflow.execution.WorkflowRunException.Code;
+import org.hammer.audio.workflow.execution.WorkflowRunModels.Command;
+import org.hammer.audio.workflow.execution.WorkflowRunModels.Input;
+import org.hammer.audio.workflow.execution.WorkflowRunModels.Violation;
+import org.hammer.audio.workflow.execution.WorkflowRunSourceResolver.ResolvedWorkflow;
+
+/**
+ * Compiles a resolved immutable workflow source into validated snapshot and execution plan input.
+ */
+final class WorkflowRunInputFactory {
+
+  private static final String VALIDATION_CODE = &quot;WORKFLOW_VALIDATION&quot;;
+  private static final String CYCLE_CODE = &quot;CYCLIC_WORKFLOW&quot;;
+
+  private final WorkflowRunSourceResolver sourceResolver;
+<span class="fc" id="L29">  private final WorkflowValidator workflowValidator = new WorkflowValidator();</span>
+  private final Clock wallClock;
+  private final Supplier&lt;String&gt; identifierSupplier;
+
+  WorkflowRunInputFactory(
+      WorkflowRunSourceResolver sourceResolver,
+      Clock wallClock,
+<span class="fc" id="L36">      Supplier&lt;String&gt; identifierSupplier) {</span>
+<span class="fc" id="L37">    this.sourceResolver = Objects.requireNonNull(sourceResolver, &quot;sourceResolver&quot;);</span>
+<span class="fc" id="L38">    this.wallClock = Objects.requireNonNull(wallClock, &quot;wallClock&quot;);</span>
+<span class="fc" id="L39">    this.identifierSupplier = Objects.requireNonNull(identifierSupplier, &quot;identifierSupplier&quot;);</span>
+<span class="fc" id="L40">  }</span>
+
+  Input capture(Command command) {
+<span class="fc" id="L43">    Objects.requireNonNull(command, &quot;command&quot;);</span>
+<span class="fc" id="L44">    String runId = requireGeneratedRunId(identifierSupplier.get());</span>
+<span class="fc" id="L45">    Instant capturedAt = wallClock.instant();</span>
+<span class="fc" id="L46">    ResolvedWorkflow resolved = sourceResolver.resolve(command.source());</span>
+<span class="fc" id="L47">    List&lt;Violation&gt; violations = validateWorkflow(resolved.workflow(), resolved.workflowId());</span>
+<span class="pc bpc" id="L48" title="1 of 2 branches missed.">    if (!violations.isEmpty()) {</span>
+<span class="nc" id="L49">      throw validationFailure(runId, command.startCommandId(), violations, null);</span>
+    }
+<span class="fc" id="L51">    ExecutionSnapshot snapshot =</span>
+<span class="fc" id="L52">        ExecutionSnapshot.of(runId + &quot;:snapshot&quot;, resolved.workflow(), capturedAt);</span>
+<span class="fc" id="L53">    ExecutionPlan plan = createPlan(runId, command.startCommandId(), snapshot);</span>
+<span class="fc" id="L54">    return new Input(</span>
+        runId,
+<span class="fc" id="L56">        command.startCommandId(),</span>
+<span class="fc" id="L57">        command.source(),</span>
+<span class="fc" id="L58">        resolved.dslText(),</span>
+<span class="fc" id="L59">        fingerprint(resolved.dslText()),</span>
+        snapshot,
+        plan,
+<span class="fc" id="L62">        resolved.semanticRevision(),</span>
+<span class="fc" id="L63">        resolved.commitId(),</span>
+        capturedAt);
+  }
+
+  private ExecutionPlan createPlan(
+      String runId, String startCommandId, ExecutionSnapshot snapshot) {
+    try {
+<span class="fc" id="L70">      return ExecutionPlan.of(runId + &quot;:plan&quot;, snapshot);</span>
+<span class="nc" id="L71">    } catch (IllegalArgumentException exception) {</span>
+<span class="nc" id="L72">      throw validationFailure(</span>
+          runId,
+          startCommandId,
+<span class="nc" id="L75">          List.of(new Violation(CYCLE_CODE, exception.getMessage(), null)),</span>
+          exception);
+    }
+  }
+
+  private List&lt;Violation&gt; validateWorkflow(Workflow workflow, String expectedWorkflowId) {
+<span class="fc" id="L81">    List&lt;Violation&gt; violations = new ArrayList&lt;&gt;();</span>
+<span class="pc bpc" id="L82" title="1 of 2 branches missed.">    if (!workflow.id().equals(expectedWorkflowId)) {</span>
+<span class="nc" id="L83">      violations.add(</span>
+          new Violation(
+              VALIDATION_CODE,
+              &quot;Stored workflow id &quot;
+                  + expectedWorkflowId
+                  + &quot; does not match DSL workflow id &quot;
+<span class="nc" id="L89">                  + workflow.id(),</span>
+              null));
+    }
+<span class="pc bpc" id="L92" title="1 of 2 branches missed.">    for (String message : workflowValidator.validate(workflow)) {</span>
+<span class="nc" id="L93">      violations.add(new Violation(VALIDATION_CODE, message, null));</span>
+<span class="nc" id="L94">    }</span>
+<span class="fc" id="L95">    return List.copyOf(violations);</span>
+  }
+
+  private static WorkflowRunException validationFailure(
+      String runId,
+      String startCommandId,
+      List&lt;Violation&gt; violations,
+      IllegalArgumentException cause) {
+<span class="nc" id="L103">    return new WorkflowRunException(</span>
+        Code.VALIDATION_FAILED,
+<span class="nc" id="L105">        &quot;Workflow run preflight rejected &quot; + violations.size() + &quot; violation(s)&quot;,</span>
+        runId,
+        startCommandId,
+        violations,
+        cause);
+  }
+
+  private static String requireGeneratedRunId(String runId) {
+<span class="fc" id="L113">    StableExecutionIds.requireStable(runId, &quot;runId&quot;);</span>
+<span class="fc" id="L114">    return runId;</span>
+  }
+
+  private static String fingerprint(String dslText) {
+    try {
+<span class="fc" id="L119">      byte[] digest =</span>
+<span class="fc" id="L120">          MessageDigest.getInstance(&quot;SHA-256&quot;).digest(dslText.getBytes(StandardCharsets.UTF_8));</span>
+<span class="fc" id="L121">      StringBuilder result = new StringBuilder(digest.length * 2);</span>
+<span class="fc bfc" id="L122" title="All 2 branches covered.">      for (byte value : digest) {</span>
+<span class="fc" id="L123">        result</span>
+<span class="fc" id="L124">            .append(Character.forDigit((value &gt;&gt;&gt; 4) &amp; 0x0f, 16))</span>
+<span class="fc" id="L125">            .append(Character.forDigit(value &amp; 0x0f, 16));</span>
+      }
+<span class="fc" id="L127">      return result.toString();</span>
+<span class="nc" id="L128">    } catch (NoSuchAlgorithmException exception) {</span>
+<span class="nc" id="L129">      throw new IllegalStateException(&quot;SHA-256 is unavailable&quot;, exception);</span>
+    }
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

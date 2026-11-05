@@ -1,0 +1,230 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WorkflowDiff.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Core</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.history</a> &gt; <span class="el_source">WorkflowDiff.java</span></div><h1>WorkflowDiff.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.history;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.TreeSet;
+import org.hammer.audio.workflow.Edge;
+import org.hammer.audio.workflow.Metadata;
+import org.hammer.audio.workflow.Node;
+import org.hammer.audio.workflow.Workflow;
+import org.hammer.audio.workflow.WorkflowSemanticValueFormatter;
+import org.hammer.audio.workflow.history.WorkflowChange.ElementKind;
+
+/**
+ * Semantic diff between two {@link Workflow} snapshots.
+ *
+ * &lt;p&gt;A {@code WorkflowDiff} holds the ordered list of {@link WorkflowChange} atoms that represent
+ * the domain-level difference between a &lt;em&gt;before&lt;/em&gt; and an &lt;em&gt;after&lt;/em&gt; snapshot. Changes are
+ * based on stable workflow, node and edge identifiers rather than serialized line positions.
+ *
+ * &lt;p&gt;Owned by the semantic-analysis/history-projection layer. Must not depend on UI, JGit or
+ * execution internals.
+ *
+ * @param changes ordered, immutable list of semantic changes; empty when the two snapshots are
+ *     semantically equivalent
+ */
+public record WorkflowDiff(List&lt;WorkflowChange&gt; changes) {
+
+<span class="fc" id="L32">  public WorkflowDiff {</span>
+<span class="fc" id="L33">    changes = List.copyOf(Objects.requireNonNull(changes, &quot;changes&quot;));</span>
+<span class="fc" id="L34">  }</span>
+
+  /** Returns {@code true} when the two snapshots were semantically equivalent. */
+  public boolean isEmpty() {
+<span class="fc" id="L38">    return changes.isEmpty();</span>
+  }
+
+  /**
+   * Computes the complete semantic diff between two workflow snapshots.
+   *
+   * &lt;p&gt;Whole-object additions/removals retain the established change variants. Metadata changes on
+   * existing nodes and edges retain {@link WorkflowChange.ParameterChanged} for transport
+   * compatibility. Workflow name/metadata, node type/label/ports and edge endpoints use {@link
+   * WorkflowChange.FieldChanged} with canonical values.
+   *
+   * @param before workflow snapshot before the change
+   * @param after workflow snapshot after the change
+   * @return deterministic domain-level changes
+   */
+  public static WorkflowDiff compute(Workflow before, Workflow after) {
+<span class="fc" id="L54">    Objects.requireNonNull(before, &quot;before&quot;);</span>
+<span class="fc" id="L55">    Objects.requireNonNull(after, &quot;after&quot;);</span>
+
+<span class="fc" id="L57">    Map&lt;String, Node&gt; beforeNodes = indexNodes(before);</span>
+<span class="fc" id="L58">    Map&lt;String, Node&gt; afterNodes = indexNodes(after);</span>
+<span class="fc" id="L59">    Map&lt;String, Edge&gt; beforeEdges = indexEdges(before);</span>
+<span class="fc" id="L60">    Map&lt;String, Edge&gt; afterEdges = indexEdges(after);</span>
+
+<span class="fc" id="L62">    List&lt;WorkflowChange&gt; changes = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L63">    collectRemovedEdges(beforeEdges, afterEdges, changes);</span>
+<span class="fc" id="L64">    collectRemovedNodes(beforeNodes, afterNodes, changes);</span>
+<span class="fc" id="L65">    collectAddedNodes(beforeNodes, afterNodes, changes);</span>
+<span class="fc" id="L66">    collectAddedEdges(beforeEdges, afterEdges, changes);</span>
+<span class="fc" id="L67">    collectWorkflowFieldChanges(before, after, changes);</span>
+<span class="fc" id="L68">    collectNodeFieldChanges(beforeNodes, afterNodes, changes);</span>
+<span class="fc" id="L69">    collectEdgeFieldChanges(beforeEdges, afterEdges, changes);</span>
+<span class="fc" id="L70">    return new WorkflowDiff(changes);</span>
+  }
+
+  private static void collectRemovedEdges(
+      Map&lt;String, Edge&gt; beforeEdges, Map&lt;String, Edge&gt; afterEdges, List&lt;WorkflowChange&gt; changes) {
+<span class="fc bfc" id="L75" title="All 2 branches covered.">    for (Map.Entry&lt;String, Edge&gt; entry : beforeEdges.entrySet()) {</span>
+<span class="fc bfc" id="L76" title="All 2 branches covered.">      if (!afterEdges.containsKey(entry.getKey())) {</span>
+<span class="fc" id="L77">        changes.add(new WorkflowChange.EdgeRemoved(entry.getValue()));</span>
+      }
+<span class="fc" id="L79">    }</span>
+<span class="fc" id="L80">  }</span>
+
+  private static void collectRemovedNodes(
+      Map&lt;String, Node&gt; beforeNodes, Map&lt;String, Node&gt; afterNodes, List&lt;WorkflowChange&gt; changes) {
+<span class="fc bfc" id="L84" title="All 2 branches covered.">    for (Map.Entry&lt;String, Node&gt; entry : beforeNodes.entrySet()) {</span>
+<span class="fc bfc" id="L85" title="All 2 branches covered.">      if (!afterNodes.containsKey(entry.getKey())) {</span>
+<span class="fc" id="L86">        changes.add(new WorkflowChange.NodeRemoved(entry.getValue()));</span>
+      }
+<span class="fc" id="L88">    }</span>
+<span class="fc" id="L89">  }</span>
+
+  private static void collectAddedNodes(
+      Map&lt;String, Node&gt; beforeNodes, Map&lt;String, Node&gt; afterNodes, List&lt;WorkflowChange&gt; changes) {
+<span class="fc bfc" id="L93" title="All 2 branches covered.">    for (Map.Entry&lt;String, Node&gt; entry : afterNodes.entrySet()) {</span>
+<span class="fc bfc" id="L94" title="All 2 branches covered.">      if (!beforeNodes.containsKey(entry.getKey())) {</span>
+<span class="fc" id="L95">        changes.add(new WorkflowChange.NodeAdded(entry.getValue()));</span>
+      }
+<span class="fc" id="L97">    }</span>
+<span class="fc" id="L98">  }</span>
+
+  private static void collectAddedEdges(
+      Map&lt;String, Edge&gt; beforeEdges, Map&lt;String, Edge&gt; afterEdges, List&lt;WorkflowChange&gt; changes) {
+<span class="fc bfc" id="L102" title="All 2 branches covered.">    for (Map.Entry&lt;String, Edge&gt; entry : afterEdges.entrySet()) {</span>
+<span class="fc bfc" id="L103" title="All 2 branches covered.">      if (!beforeEdges.containsKey(entry.getKey())) {</span>
+<span class="fc" id="L104">        changes.add(new WorkflowChange.EdgeAdded(entry.getValue()));</span>
+      }
+<span class="fc" id="L106">    }</span>
+<span class="fc" id="L107">  }</span>
+
+  private static void collectWorkflowFieldChanges(
+      Workflow before, Workflow after, List&lt;WorkflowChange&gt; changes) {
+<span class="fc" id="L111">    addFieldChange(changes, ElementKind.WORKFLOW, before.id(), &quot;name&quot;, before.name(), after.name());</span>
+<span class="fc" id="L112">    diffWorkflowMetadata(before.id(), before.metadata(), after.metadata(), changes);</span>
+<span class="fc" id="L113">  }</span>
+
+  private static void collectNodeFieldChanges(
+      Map&lt;String, Node&gt; beforeNodes, Map&lt;String, Node&gt; afterNodes, List&lt;WorkflowChange&gt; changes) {
+<span class="fc bfc" id="L117" title="All 2 branches covered.">    for (Map.Entry&lt;String, Node&gt; entry : afterNodes.entrySet()) {</span>
+<span class="fc" id="L118">      Node before = beforeNodes.get(entry.getKey());</span>
+<span class="fc bfc" id="L119" title="All 2 branches covered.">      if (before == null) {</span>
+<span class="fc" id="L120">        continue;</span>
+      }
+<span class="fc" id="L122">      Node after = entry.getValue();</span>
+<span class="fc" id="L123">      addFieldChange(changes, ElementKind.NODE, before.id(), &quot;type&quot;, before.type(), after.type());</span>
+<span class="fc" id="L124">      addFieldChange(</span>
+<span class="fc" id="L125">          changes, ElementKind.NODE, before.id(), &quot;label&quot;, before.label(), after.label());</span>
+<span class="fc" id="L126">      addFieldChange(</span>
+          changes,
+          ElementKind.NODE,
+<span class="fc" id="L129">          before.id(),</span>
+          &quot;inputPorts&quot;,
+<span class="fc" id="L131">          WorkflowSemanticValueFormatter.ports(before.inputPorts()),</span>
+<span class="fc" id="L132">          WorkflowSemanticValueFormatter.ports(after.inputPorts()));</span>
+<span class="fc" id="L133">      addFieldChange(</span>
+          changes,
+          ElementKind.NODE,
+<span class="fc" id="L136">          before.id(),</span>
+          &quot;outputPorts&quot;,
+<span class="fc" id="L138">          WorkflowSemanticValueFormatter.ports(before.outputPorts()),</span>
+<span class="fc" id="L139">          WorkflowSemanticValueFormatter.ports(after.outputPorts()));</span>
+<span class="fc" id="L140">      diffLegacyMetadata(</span>
+<span class="fc" id="L141">          before.id(), before.metadata().entries(), after.metadata().entries(), changes);</span>
+<span class="fc" id="L142">    }</span>
+<span class="fc" id="L143">  }</span>
+
+  private static void collectEdgeFieldChanges(
+      Map&lt;String, Edge&gt; beforeEdges, Map&lt;String, Edge&gt; afterEdges, List&lt;WorkflowChange&gt; changes) {
+<span class="fc bfc" id="L147" title="All 2 branches covered.">    for (Map.Entry&lt;String, Edge&gt; entry : afterEdges.entrySet()) {</span>
+<span class="fc" id="L148">      Edge before = beforeEdges.get(entry.getKey());</span>
+<span class="fc bfc" id="L149" title="All 2 branches covered.">      if (before == null) {</span>
+<span class="fc" id="L150">        continue;</span>
+      }
+<span class="fc" id="L152">      Edge after = entry.getValue();</span>
+<span class="fc" id="L153">      addFieldChange(</span>
+          changes,
+          ElementKind.EDGE,
+<span class="fc" id="L156">          before.id(),</span>
+          &quot;endpoints&quot;,
+<span class="fc" id="L158">          WorkflowSemanticValueFormatter.endpoints(before),</span>
+<span class="fc" id="L159">          WorkflowSemanticValueFormatter.endpoints(after));</span>
+<span class="fc" id="L160">      diffLegacyMetadata(</span>
+<span class="fc" id="L161">          before.id(), before.metadata().entries(), after.metadata().entries(), changes);</span>
+<span class="fc" id="L162">    }</span>
+<span class="fc" id="L163">  }</span>
+
+  private static void diffWorkflowMetadata(
+      String workflowId, Metadata before, Metadata after, List&lt;WorkflowChange&gt; changes) {
+<span class="fc bfc" id="L167" title="All 2 branches covered.">    for (String key : sortedKeys(before.entries(), after.entries())) {</span>
+<span class="fc" id="L168">      addFieldChange(</span>
+          changes,
+          ElementKind.WORKFLOW,
+          workflowId,
+          &quot;metadata.&quot; + key,
+<span class="fc" id="L173">          before.entries().get(key),</span>
+<span class="fc" id="L174">          after.entries().get(key));</span>
+<span class="fc" id="L175">    }</span>
+<span class="fc" id="L176">  }</span>
+
+  private static void diffLegacyMetadata(
+      String targetId,
+      Map&lt;String, String&gt; before,
+      Map&lt;String, String&gt; after,
+      List&lt;WorkflowChange&gt; changes) {
+<span class="fc bfc" id="L183" title="All 2 branches covered.">    for (String key : sortedKeys(before, after)) {</span>
+<span class="fc" id="L184">      String beforeValue = before.get(key);</span>
+<span class="fc" id="L185">      String afterValue = after.get(key);</span>
+<span class="pc bpc" id="L186" title="1 of 2 branches missed.">      if (!Objects.equals(beforeValue, afterValue)) {</span>
+<span class="fc" id="L187">        changes.add(new WorkflowChange.ParameterChanged(targetId, key, beforeValue, afterValue));</span>
+      }
+<span class="fc" id="L189">    }</span>
+<span class="fc" id="L190">  }</span>
+
+  private static void addFieldChange(
+      List&lt;WorkflowChange&gt; changes,
+      ElementKind kind,
+      String targetId,
+      String fieldPath,
+      String before,
+      String after) {
+<span class="fc bfc" id="L199" title="All 2 branches covered.">    if (!Objects.equals(before, after)) {</span>
+<span class="fc" id="L200">      changes.add(new WorkflowChange.FieldChanged(kind, targetId, fieldPath, before, after));</span>
+    }
+<span class="fc" id="L202">  }</span>
+
+  private static List&lt;String&gt; sortedKeys(Map&lt;String, String&gt; before, Map&lt;String, String&gt; after) {
+<span class="fc" id="L205">    Set&lt;String&gt; keys = new TreeSet&lt;&gt;(before.keySet());</span>
+<span class="fc" id="L206">    keys.addAll(after.keySet());</span>
+<span class="fc" id="L207">    return List.copyOf(keys);</span>
+  }
+
+  private static Map&lt;String, Node&gt; indexNodes(Workflow workflow) {
+<span class="fc" id="L211">    Map&lt;String, Node&gt; index = new TreeMap&lt;&gt;();</span>
+<span class="fc bfc" id="L212" title="All 2 branches covered.">    for (Node node : workflow.nodes()) {</span>
+<span class="pc bpc" id="L213" title="1 of 2 branches missed.">      if (index.putIfAbsent(node.id(), node) != null) {</span>
+<span class="nc" id="L214">        throw new IllegalArgumentException(&quot;Duplicate node id: &quot; + node.id());</span>
+      }
+<span class="fc" id="L216">    }</span>
+<span class="fc" id="L217">    return index;</span>
+  }
+
+  private static Map&lt;String, Edge&gt; indexEdges(Workflow workflow) {
+<span class="fc" id="L221">    Map&lt;String, Edge&gt; index = new TreeMap&lt;&gt;();</span>
+<span class="fc bfc" id="L222" title="All 2 branches covered.">    for (Edge edge : workflow.edges()) {</span>
+<span class="pc bpc" id="L223" title="1 of 2 branches missed.">      if (index.putIfAbsent(edge.id(), edge) != null) {</span>
+<span class="nc" id="L224">        throw new IllegalArgumentException(&quot;Duplicate edge id: &quot; + edge.id());</span>
+      }
+<span class="fc" id="L226">    }</span>
+<span class="fc" id="L227">    return index;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

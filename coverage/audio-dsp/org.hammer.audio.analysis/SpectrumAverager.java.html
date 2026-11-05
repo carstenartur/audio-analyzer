@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>SpectrumAverager.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer DSP and Analysis</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.analysis</a> &gt; <span class="el_source">SpectrumAverager.java</span></div><h1>SpectrumAverager.java</h1><pre class="source lang-java linenums">package org.hammer.audio.analysis;
+
+import java.util.Objects;
+
+/**
+ * Exponential moving average over a one-sided FFT magnitude spectrum.
+ *
+ * &lt;p&gt;For each bin the displayed value is updated with {@code avg' = (1 - alpha) * avg + alpha * x}.
+ * Smaller alpha values yield slower averaging and more flicker suppression; alpha {@code = 1.0}
+ * disables averaging.
+ *
+ * &lt;p&gt;Instances are &lt;strong&gt;not thread-safe&lt;/strong&gt;; callers must synchronize externally if shared.
+ */
+public final class SpectrumAverager {
+
+  /** Default smoothing factor (moderate). */
+  public static final float DEFAULT_ALPHA = 0.3f;
+
+<span class="fc" id="L19">  private static final float[] EMPTY = new float[0];</span>
+
+  private float[] average;
+  private float alpha;
+  private int updates;
+
+  /** Create an averager with the {@link #DEFAULT_ALPHA default alpha}. */
+  public SpectrumAverager() {
+<span class="nc" id="L27">    this(DEFAULT_ALPHA);</span>
+<span class="nc" id="L28">  }</span>
+
+  /**
+   * Create an averager with the given smoothing factor.
+   *
+   * @param alpha smoothing factor in {@code (0, 1]}, where larger values track the input faster
+   */
+<span class="fc" id="L35">  public SpectrumAverager(float alpha) {</span>
+<span class="fc" id="L36">    setAlpha(alpha);</span>
+<span class="fc" id="L37">  }</span>
+
+  /**
+   * @return current smoothing factor in {@code (0, 1]}
+   */
+  public float alpha() {
+<span class="nc" id="L43">    return alpha;</span>
+  }
+
+  /**
+   * Update the smoothing factor.
+   *
+   * @param alpha in {@code (0, 1]}; {@code 1.0} disables averaging
+   */
+  public void setAlpha(float alpha) {
+<span class="pc bpc" id="L52" title="3 of 6 branches missed.">    if (!(alpha &gt; 0f) || !(alpha &lt;= 1f) || Float.isNaN(alpha)) {</span>
+<span class="nc" id="L53">      throw new IllegalArgumentException(&quot;alpha must be in (0,1], was &quot; + alpha);</span>
+    }
+<span class="fc" id="L55">    this.alpha = alpha;</span>
+<span class="fc" id="L56">  }</span>
+
+  /**
+   * @return number of bins currently tracked, or {@code 0} if empty
+   */
+  public int binCount() {
+<span class="nc bnc" id="L62" title="All 2 branches missed.">    return average == null ? 0 : average.length;</span>
+  }
+
+  /**
+   * @return number of accepted updates since the last {@link #reset()}
+   */
+  public int updates() {
+<span class="nc" id="L69">    return updates;</span>
+  }
+
+  /**
+   * @return defensive copy of the current averaged spectrum, or an empty array if no updates yet
+   */
+  public float[] average() {
+<span class="pc bpc" id="L76" title="1 of 2 branches missed.">    return average == null ? EMPTY : average.clone();</span>
+  }
+
+  /**
+   * Read-only access to the internal averaged spectrum. Callers must not mutate the returned array.
+   * Intended for hot rendering paths that need to avoid per-frame allocations.
+   *
+   * @return the internal averaged spectrum (do not mutate), or an empty array if no updates yet
+   */
+  public float[] averageView() {
+<span class="nc bnc" id="L86" title="All 2 branches missed.">    return average == null ? EMPTY : average;</span>
+  }
+
+  /**
+   * Update the averaged spectrum with a new measurement. The first measurement initializes the
+   * state. If the bin count changes (e.g. FFT size changed), the state is reset.
+   *
+   * @param magnitudes new one-sided magnitude spectrum; must not be {@code null}
+   */
+  public void update(float[] magnitudes) {
+<span class="fc" id="L96">    Objects.requireNonNull(magnitudes, &quot;magnitudes&quot;);</span>
+<span class="pc bpc" id="L97" title="1 of 4 branches missed.">    if (average == null || average.length != magnitudes.length) {</span>
+<span class="fc" id="L98">      average = magnitudes.clone();</span>
+<span class="fc" id="L99">      updates = 1;</span>
+<span class="fc" id="L100">      return;</span>
+    }
+<span class="fc" id="L102">    float oneMinusAlpha = 1f - alpha;</span>
+<span class="fc bfc" id="L103" title="All 2 branches covered.">    for (int i = 0; i &lt; average.length; i++) {</span>
+<span class="fc" id="L104">      average[i] = oneMinusAlpha * average[i] + alpha * magnitudes[i];</span>
+    }
+<span class="fc" id="L106">    updates++;</span>
+<span class="fc" id="L107">  }</span>
+
+  /**
+   * Reset the averaged spectrum, discarding all accumulated state. The next {@link
+   * #update(float[])} call will re-seed the average from the new measurement.
+   */
+  public void reset() {
+<span class="fc" id="L114">    average = null;</span>
+<span class="fc" id="L115">    updates = 0;</span>
+<span class="fc" id="L116">  }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

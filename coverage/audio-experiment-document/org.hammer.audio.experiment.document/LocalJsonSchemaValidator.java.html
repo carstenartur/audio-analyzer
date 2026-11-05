@@ -1,0 +1,262 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>LocalJsonSchemaValidator.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experiment Document</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experiment.document</a> &gt; <span class="el_source">LocalJsonSchemaValidator.java</span></div><h1>LocalJsonSchemaValidator.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experiment.document;
+
+import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.core.StreamReadFeature;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import java.io.IOException;
+import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import org.hammer.audio.plugin.document.DocumentDiagnostic;
+import org.hammer.audio.plugin.document.DocumentValue;
+
+/**
+ * Small deterministic validator for the safe JSON Schema subset used by plugin parameter sections.
+ *
+ * &lt;p&gt;Supported keywords are {@code type}, {@code required}, {@code properties}, {@code
+ * additionalProperties}, {@code enum}, {@code minimum}, {@code maximum}, {@code minLength}, {@code
+ * maxLength}, {@code minItems} and {@code maxItems}. Network and implementation references are not
+ * supported.
+ */
+@SuppressWarnings({
+  &quot;PMD.LooseCoupling&quot;,
+  &quot;PMD.AvoidDuplicateLiterals&quot;,
+  &quot;PMD.LiteralsFirstInComparisons&quot;,
+  &quot;PMD.ConfusingTernary&quot;
+})
+final class LocalJsonSchemaValidator {
+
+  private static final int MAX_SCHEMA_BYTES = 256 * 1024;
+<span class="fc" id="L38">  private static final Set&lt;String&gt; ALLOWED_KEYWORDS =</span>
+<span class="fc" id="L39">      Set.of(</span>
+          &quot;$id&quot;,
+          &quot;$schema&quot;,
+          &quot;title&quot;,
+          &quot;description&quot;,
+          &quot;type&quot;,
+          &quot;required&quot;,
+          &quot;properties&quot;,
+          &quot;additionalProperties&quot;,
+          &quot;enum&quot;,
+          &quot;minimum&quot;,
+          &quot;maximum&quot;,
+          &quot;minLength&quot;,
+          &quot;maxLength&quot;,
+          &quot;minItems&quot;,
+          &quot;maxItems&quot;);
+
+  private final ObjectMapper mapper;
+
+<span class="fc" id="L58">  LocalJsonSchemaValidator() {</span>
+    JsonFactory factory =
+<span class="fc" id="L60">        JsonFactory.builder().enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION).build();</span>
+<span class="fc" id="L61">    mapper = new ObjectMapper(factory);</span>
+<span class="fc" id="L62">  }</span>
+
+  List&lt;DocumentDiagnostic&gt; validate(
+      String schemaJson, String expectedSha256, DocumentValue value, String pointer) {
+<span class="fc" id="L66">    ArrayList&lt;DocumentDiagnostic&gt; diagnostics = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L67">    byte[] schemaBytes = schemaJson.getBytes(StandardCharsets.UTF_8);</span>
+<span class="pc bpc" id="L68" title="1 of 2 branches missed.">    if (schemaBytes.length &gt; MAX_SCHEMA_BYTES) {</span>
+<span class="nc" id="L69">      diagnostics.add(error(pointer, &quot;schema-too-large&quot;, &quot;Plugin schema exceeds 256 KiB&quot;));</span>
+<span class="nc" id="L70">      return diagnostics;</span>
+    }
+<span class="pc bpc" id="L72" title="1 of 2 branches missed.">    if (!DocumentHashes.sha256(schemaBytes).equals(expectedSha256)) {</span>
+<span class="nc" id="L73">      diagnostics.add(</span>
+<span class="nc" id="L74">          error(pointer, &quot;schema-digest&quot;, &quot;Bundled plugin schema digest does not match&quot;));</span>
+<span class="nc" id="L75">      return diagnostics;</span>
+    }
+    JsonNode parsed;
+    try {
+<span class="fc" id="L79">      parsed = mapper.readTree(schemaBytes);</span>
+<span class="nc" id="L80">    } catch (IOException exception) {</span>
+<span class="nc" id="L81">      diagnostics.add(error(pointer, &quot;invalid-schema&quot;, &quot;Bundled plugin schema is not strict JSON&quot;));</span>
+<span class="nc" id="L82">      return diagnostics;</span>
+<span class="fc" id="L83">    }</span>
+<span class="pc bpc" id="L84" title="1 of 2 branches missed.">    if (!(parsed instanceof ObjectNode root)) {</span>
+<span class="nc" id="L85">      diagnostics.add(error(pointer, &quot;invalid-schema&quot;, &quot;Plugin schema root must be an object&quot;));</span>
+<span class="nc" id="L86">      return diagnostics;</span>
+    }
+<span class="fc" id="L88">    validateSchemaNode(root, value, pointer, diagnostics, 0);</span>
+<span class="fc" id="L89">    return diagnostics;</span>
+  }
+
+  private void validateSchemaNode(
+      ObjectNode schema,
+      DocumentValue value,
+      String pointer,
+      List&lt;DocumentDiagnostic&gt; diagnostics,
+      int depth) {
+<span class="pc bpc" id="L98" title="1 of 2 branches missed.">    if (depth &gt; ExperimentDocumentFormat.MAX_NESTING_DEPTH) {</span>
+<span class="nc" id="L99">      diagnostics.add(error(pointer, &quot;schema-depth&quot;, &quot;Plugin schema nesting exceeds the limit&quot;));</span>
+<span class="nc" id="L100">      return;</span>
+    }
+<span class="fc" id="L102">    Iterator&lt;String&gt; names = schema.fieldNames();</span>
+<span class="fc bfc" id="L103" title="All 2 branches covered.">    while (names.hasNext()) {</span>
+<span class="fc" id="L104">      String name = names.next();</span>
+<span class="pc bpc" id="L105" title="1 of 2 branches missed.">      if (name.equals(&quot;$ref&quot;)) {</span>
+<span class="nc" id="L106">        diagnostics.add(error(pointer, &quot;schema-ref&quot;, &quot;Plugin schemas must not contain $ref&quot;));</span>
+<span class="pc bpc" id="L107" title="1 of 2 branches missed.">      } else if (!ALLOWED_KEYWORDS.contains(name)) {</span>
+<span class="nc" id="L108">        diagnostics.add(</span>
+<span class="nc" id="L109">            error(pointer, &quot;schema-keyword&quot;, &quot;Unsupported plugin schema keyword: &quot; + name));</span>
+      }
+<span class="fc" id="L111">    }</span>
+<span class="pc bpc" id="L112" title="1 of 2 branches missed.">    String type = schema.path(&quot;type&quot;).isTextual() ? schema.path(&quot;type&quot;).textValue() : &quot;&quot;;</span>
+<span class="pc bpc" id="L113" title="2 of 4 branches missed.">    if (!type.isBlank() &amp;&amp; !matchesType(type, value)) {</span>
+<span class="nc" id="L114">      diagnostics.add(error(pointer, &quot;schema-type&quot;, &quot;Expected plugin data type &quot; + type));</span>
+<span class="nc" id="L115">      return;</span>
+    }
+<span class="fc" id="L117">    validateEnum(schema.get(&quot;enum&quot;), value, pointer, diagnostics);</span>
+<span class="pc bpc" id="L118" title="4 of 6 branches missed.">    switch (value) {</span>
+<span class="fc" id="L119">      case DocumentValue.ObjectValue objectValue -&gt;</span>
+<span class="fc" id="L120">          validateObject(schema, objectValue, pointer, diagnostics, depth);</span>
+<span class="nc" id="L121">      case DocumentValue.ArrayValue arrayValue -&gt;</span>
+<span class="nc" id="L122">          validateArray(schema, arrayValue, pointer, diagnostics);</span>
+<span class="nc" id="L123">      case DocumentValue.StringValue stringValue -&gt;</span>
+<span class="nc" id="L124">          validateString(schema, stringValue, pointer, diagnostics);</span>
+<span class="fc" id="L125">      case DocumentValue.NumberValue numberValue -&gt;</span>
+<span class="fc" id="L126">          validateNumber(schema, numberValue, pointer, diagnostics);</span>
+<span class="nc" id="L127">      case DocumentValue.BooleanValue ignored -&gt; {</span>
+        // Type and enum checks are sufficient.
+      }
+<span class="nc" id="L130">      case DocumentValue.NullValue ignored -&gt; {</span>
+        // Type and enum checks are sufficient.
+      }
+    }
+<span class="fc" id="L134">  }</span>
+
+  private void validateObject(
+      ObjectNode schema,
+      DocumentValue.ObjectValue value,
+      String pointer,
+      List&lt;DocumentDiagnostic&gt; diagnostics,
+      int depth) {
+<span class="fc" id="L142">    Set&lt;String&gt; required = textSet(schema.get(&quot;required&quot;), pointer, diagnostics);</span>
+<span class="fc bfc" id="L143" title="All 2 branches covered.">    for (String requiredField : required) {</span>
+<span class="pc bpc" id="L144" title="1 of 2 branches missed.">      if (!value.fields().containsKey(requiredField)) {</span>
+<span class="nc" id="L145">        diagnostics.add(</span>
+<span class="nc" id="L146">            error(</span>
+<span class="nc" id="L147">                DocumentValueJson.pointer(pointer, requiredField),</span>
+                &quot;schema-required&quot;,
+                &quot;Missing required plugin field&quot;));
+      }
+<span class="fc" id="L151">    }</span>
+<span class="fc" id="L152">    JsonNode propertiesNode = schema.get(&quot;properties&quot;);</span>
+<span class="pc bpc" id="L153" title="1 of 2 branches missed.">    ObjectNode properties = propertiesNode instanceof ObjectNode objectNode ? objectNode : null;</span>
+<span class="fc" id="L154">    boolean additional =</span>
+<span class="pc bpc" id="L155" title="2 of 4 branches missed.">        !schema.has(&quot;additionalProperties&quot;) || schema.path(&quot;additionalProperties&quot;).asBoolean(true);</span>
+<span class="fc bfc" id="L156" title="All 2 branches covered.">    for (Map.Entry&lt;String, DocumentValue&gt; entry : value.fields().entrySet()) {</span>
+<span class="fc" id="L157">      String childPointer = DocumentValueJson.pointer(pointer, entry.getKey());</span>
+<span class="pc bpc" id="L158" title="1 of 2 branches missed.">      JsonNode propertySchema = properties == null ? null : properties.get(entry.getKey());</span>
+<span class="pc bpc" id="L159" title="1 of 2 branches missed.">      if (propertySchema instanceof ObjectNode objectSchema) {</span>
+<span class="fc" id="L160">        validateSchemaNode(objectSchema, entry.getValue(), childPointer, diagnostics, depth + 1);</span>
+<span class="nc bnc" id="L161" title="All 2 branches missed.">      } else if (!additional) {</span>
+<span class="nc" id="L162">        diagnostics.add(error(childPointer, &quot;schema-additional&quot;, &quot;Unknown plugin field&quot;));</span>
+      }
+<span class="fc" id="L164">    }</span>
+<span class="fc" id="L165">  }</span>
+
+  private static void validateArray(
+      ObjectNode schema,
+      DocumentValue.ArrayValue value,
+      String pointer,
+      List&lt;DocumentDiagnostic&gt; diagnostics) {
+<span class="nc" id="L172">    int size = value.values().size();</span>
+<span class="nc bnc" id="L173" title="All 4 branches missed.">    if (schema.has(&quot;minItems&quot;) &amp;&amp; size &lt; schema.path(&quot;minItems&quot;).asInt()) {</span>
+<span class="nc" id="L174">      diagnostics.add(error(pointer, &quot;schema-min-items&quot;, &quot;Plugin array has too few items&quot;));</span>
+    }
+<span class="nc bnc" id="L176" title="All 4 branches missed.">    if (schema.has(&quot;maxItems&quot;) &amp;&amp; size &gt; schema.path(&quot;maxItems&quot;).asInt()) {</span>
+<span class="nc" id="L177">      diagnostics.add(error(pointer, &quot;schema-max-items&quot;, &quot;Plugin array has too many items&quot;));</span>
+    }
+<span class="nc" id="L179">  }</span>
+
+  private static void validateString(
+      ObjectNode schema,
+      DocumentValue.StringValue value,
+      String pointer,
+      List&lt;DocumentDiagnostic&gt; diagnostics) {
+<span class="nc" id="L186">    int length = value.value().length();</span>
+<span class="nc bnc" id="L187" title="All 4 branches missed.">    if (schema.has(&quot;minLength&quot;) &amp;&amp; length &lt; schema.path(&quot;minLength&quot;).asInt()) {</span>
+<span class="nc" id="L188">      diagnostics.add(error(pointer, &quot;schema-min-length&quot;, &quot;Plugin string is too short&quot;));</span>
+    }
+<span class="nc bnc" id="L190" title="All 4 branches missed.">    if (schema.has(&quot;maxLength&quot;) &amp;&amp; length &gt; schema.path(&quot;maxLength&quot;).asInt()) {</span>
+<span class="nc" id="L191">      diagnostics.add(error(pointer, &quot;schema-max-length&quot;, &quot;Plugin string is too long&quot;));</span>
+    }
+<span class="nc" id="L193">  }</span>
+
+  private static void validateNumber(
+      ObjectNode schema,
+      DocumentValue.NumberValue value,
+      String pointer,
+      List&lt;DocumentDiagnostic&gt; diagnostics) {
+<span class="fc" id="L200">    BigDecimal number = value.value();</span>
+<span class="pc bpc" id="L201" title="2 of 4 branches missed.">    if (schema.has(&quot;minimum&quot;) &amp;&amp; number.compareTo(schema.path(&quot;minimum&quot;).decimalValue()) &lt; 0) {</span>
+<span class="nc" id="L202">      diagnostics.add(error(pointer, &quot;schema-minimum&quot;, &quot;Plugin number is below minimum&quot;));</span>
+    }
+<span class="pc bpc" id="L204" title="3 of 4 branches missed.">    if (schema.has(&quot;maximum&quot;) &amp;&amp; number.compareTo(schema.path(&quot;maximum&quot;).decimalValue()) &gt; 0) {</span>
+<span class="nc" id="L205">      diagnostics.add(error(pointer, &quot;schema-maximum&quot;, &quot;Plugin number is above maximum&quot;));</span>
+    }
+<span class="fc" id="L207">  }</span>
+
+  private static void validateEnum(
+      JsonNode enumNode,
+      DocumentValue value,
+      String pointer,
+      List&lt;DocumentDiagnostic&gt; diagnostics) {
+<span class="pc bpc" id="L214" title="1 of 2 branches missed.">    if (!(enumNode instanceof ArrayNode values)) {</span>
+<span class="fc" id="L215">      return;</span>
+    }
+<span class="nc" id="L217">    JsonNode actual = DocumentValueJson.toJson(value);</span>
+<span class="nc bnc" id="L218" title="All 2 branches missed.">    for (JsonNode candidate : values) {</span>
+<span class="nc bnc" id="L219" title="All 2 branches missed.">      if (candidate.equals(actual)) {</span>
+<span class="nc" id="L220">        return;</span>
+      }
+<span class="nc" id="L222">    }</span>
+<span class="nc" id="L223">    diagnostics.add(error(pointer, &quot;schema-enum&quot;, &quot;Plugin value is not in the allowed set&quot;));</span>
+<span class="nc" id="L224">  }</span>
+
+  private static Set&lt;String&gt; textSet(
+      JsonNode node, String pointer, List&lt;DocumentDiagnostic&gt; diagnostics) {
+<span class="pc bpc" id="L228" title="1 of 2 branches missed.">    if (node == null) {</span>
+<span class="nc" id="L229">      return Set.of();</span>
+    }
+<span class="pc bpc" id="L231" title="1 of 2 branches missed.">    if (!(node instanceof ArrayNode array)) {</span>
+<span class="nc" id="L232">      diagnostics.add(error(pointer, &quot;invalid-schema&quot;, &quot;Schema required must be an array&quot;));</span>
+<span class="nc" id="L233">      return Set.of();</span>
+    }
+<span class="fc" id="L235">    HashSet&lt;String&gt; result = new HashSet&lt;&gt;();</span>
+<span class="fc bfc" id="L236" title="All 2 branches covered.">    for (JsonNode item : array) {</span>
+<span class="pc bpc" id="L237" title="1 of 2 branches missed.">      if (!item.isTextual()) {</span>
+<span class="nc" id="L238">        diagnostics.add(error(pointer, &quot;invalid-schema&quot;, &quot;Schema required items must be strings&quot;));</span>
+      } else {
+<span class="fc" id="L240">        result.add(item.textValue());</span>
+      }
+<span class="fc" id="L242">    }</span>
+<span class="fc" id="L243">    return result;</span>
+  }
+
+  private static boolean matchesType(String type, DocumentValue value) {
+<span class="pc bpc" id="L247" title="5 of 7 branches missed.">    return switch (type) {</span>
+<span class="fc" id="L248">      case &quot;object&quot; -&gt; value instanceof DocumentValue.ObjectValue;</span>
+<span class="nc" id="L249">      case &quot;array&quot; -&gt; value instanceof DocumentValue.ArrayValue;</span>
+<span class="nc" id="L250">      case &quot;string&quot; -&gt; value instanceof DocumentValue.StringValue;</span>
+<span class="fc" id="L251">      case &quot;number&quot;, &quot;integer&quot; -&gt; value instanceof DocumentValue.NumberValue;</span>
+<span class="nc" id="L252">      case &quot;boolean&quot; -&gt; value instanceof DocumentValue.BooleanValue;</span>
+<span class="nc" id="L253">      case &quot;null&quot; -&gt; value instanceof DocumentValue.NullValue;</span>
+<span class="nc" id="L254">      default -&gt; false;</span>
+    };
+  }
+
+  private static DocumentDiagnostic error(String pointer, String code, String message) {
+<span class="nc" id="L259">    return new DocumentDiagnostic(DocumentDiagnostic.Severity.ERROR, pointer, code, message);</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

@@ -1,0 +1,21 @@
+GROUP,PACKAGE,CLASS,INSTRUCTION_MISSED,INSTRUCTION_COVERED,BRANCH_MISSED,BRANCH_COVERED,LINE_MISSED,LINE_COVERED,COMPLEXITY_MISSED,COMPLEXITY_COVERED,METHOD_MISSED,METHOD_COVERED
+Audio Analyzer Acquisition,org.hammer.audio.acquisition,DirectoryMicrophoneArrayProfileStore,32,165,5,7,8,37,5,11,0,10
+Audio Analyzer Acquisition,org.hammer.audio.acquisition,SynchronizationAssessment,7,67,3,3,1,12,3,4,0,4
+Audio Analyzer Acquisition,org.hammer.audio.acquisition,MultiChannelAudioSource,1,0,0,0,1,0,1,0,1,0
+Audio Analyzer Acquisition,org.hammer.audio.acquisition,LocalizationInputMode,0,21,0,0,0,4,0,1,0,1
+Audio Analyzer Acquisition,org.hammer.audio.acquisition,MicrophoneArrayProfile,30,91,6,12,6,17,7,7,1,4
+Audio Analyzer Acquisition,org.hammer.audio.acquisition,SampleClock,46,0,8,0,7,0,6,0,2,0
+Audio Analyzer Acquisition,org.hammer.audio.acquisition,MicrophoneArrayProfileCodec,36,606,9,23,8,134,9,27,0,20
+Audio Analyzer Acquisition,org.hammer.audio.acquisition,CaptureDeviceConfiguration,0,23,0,0,0,4,0,1,0,1
+Audio Analyzer Acquisition,org.hammer.audio.acquisition,LocalizationExperimentStage,0,39,0,0,0,7,0,1,0,1
+Audio Analyzer Acquisition,org.hammer.audio.acquisition,MicrophoneArrayLayout,0,27,0,0,0,5,0,1,0,1
+Audio Analyzer Acquisition,org.hammer.audio.acquisition,CaptureDeviceDescriptor,8,44,3,3,1,10,3,3,0,3
+Audio Analyzer Acquisition,org.hammer.audio.acquisition,ChannelTimingCalibration,33,92,8,8,6,18,8,6,0,6
+Audio Analyzer Acquisition,org.hammer.audio.acquisition,SynchronizationStatus,0,21,0,0,0,4,0,1,0,1
+Audio Analyzer Acquisition,org.hammer.audio.acquisition,MicrophoneArray,17,70,4,8,3,14,4,6,0,4
+Audio Analyzer Acquisition,org.hammer.audio.acquisition,SynchronizationMode,0,21,0,0,0,4,0,1,0,1
+Audio Analyzer Acquisition,org.hammer.audio.acquisition,LocalizationExperiment,43,193,6,6,7,31,6,7,1,6
+Audio Analyzer Acquisition,org.hammer.audio.acquisition,LocalizationExperimentCodec,26,246,4,8,5,58,4,10,0,8
+Audio Analyzer Acquisition,org.hammer.audio.acquisition,MicrophoneArrayCalibration,32,258,11,29,7,56,11,17,0,8
+Audio Analyzer Acquisition,org.hammer.audio.acquisition,MicrophoneArrayReadiness,51,89,5,7,12,20,5,3,0,2
+Audio Analyzer Acquisition,org.hammer.audio.acquisition,Microphone,15,21,4,4,3,5,4,1,0,1

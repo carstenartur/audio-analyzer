@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WorkflowProjection.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Core</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.editor</a> &gt; <span class="el_source">WorkflowProjection.java</span></div><h1>WorkflowProjection.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.editor;
+
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import org.hammer.audio.workflow.Workflow;
+
+/**
+ * React Flow–ready read model derived from a {@link Workflow}.
+ *
+ * &lt;p&gt;Each {@link NodeProjection} carries typed-port handle descriptors ({@link HandleProjection})
+ * so the React Flow client can render typed {@code Handle} components without parsing domain
+ * objects directly. Each {@link EdgeProjection} maps directly to a React Flow edge.
+ *
+ * &lt;p&gt;Instances are immutable and created via {@link #fromWorkflow(Workflow)}.
+ *
+ * @param workflowId stable workflow identifier
+ * @param workflowName human-readable workflow name
+ * @param nodes projected nodes with typed-port handle lists
+ * @param edges projected edges with source and target handle identifiers
+ */
+public record WorkflowProjection(
+    String workflowId,
+    String workflowName,
+    List&lt;NodeProjection&gt; nodes,
+    List&lt;EdgeProjection&gt; edges) {
+
+<span class="fc" id="L28">  public WorkflowProjection {</span>
+<span class="fc" id="L29">    Objects.requireNonNull(workflowId, &quot;workflowId&quot;);</span>
+<span class="fc" id="L30">    Objects.requireNonNull(workflowName, &quot;workflowName&quot;);</span>
+<span class="fc" id="L31">    nodes = List.copyOf(Objects.requireNonNull(nodes, &quot;nodes&quot;));</span>
+<span class="fc" id="L32">    edges = List.copyOf(Objects.requireNonNull(edges, &quot;edges&quot;));</span>
+<span class="fc" id="L33">  }</span>
+
+  /**
+   * Projects a {@link Workflow} into the React Flow–ready read model.
+   *
+   * @param workflow source workflow
+   * @return projection ready for serialisation to the browser
+   */
+  public static WorkflowProjection fromWorkflow(Workflow workflow) {
+<span class="fc" id="L42">    Objects.requireNonNull(workflow, &quot;workflow&quot;);</span>
+<span class="fc" id="L43">    List&lt;NodeProjection&gt; nodeProjections =</span>
+<span class="fc" id="L44">        workflow.nodes().stream()</span>
+<span class="fc" id="L45">            .map(</span>
+                node -&gt;
+<span class="fc" id="L47">                    new NodeProjection(</span>
+<span class="fc" id="L48">                        node.id(),</span>
+<span class="fc" id="L49">                        node.type(),</span>
+<span class="fc" id="L50">                        node.label(),</span>
+<span class="fc" id="L51">                        node.inputPorts().stream()</span>
+<span class="fc" id="L52">                            .map(p -&gt; new HandleProjection(p.id(), p.name(), p.dataType().id()))</span>
+<span class="fc" id="L53">                            .toList(),</span>
+<span class="fc" id="L54">                        node.outputPorts().stream()</span>
+<span class="fc" id="L55">                            .map(p -&gt; new HandleProjection(p.id(), p.name(), p.dataType().id()))</span>
+<span class="fc" id="L56">                            .toList(),</span>
+<span class="fc" id="L57">                        Map.copyOf(node.metadata().entries())))</span>
+<span class="fc" id="L58">            .toList();</span>
+<span class="fc" id="L59">    List&lt;EdgeProjection&gt; edgeProjections =</span>
+<span class="fc" id="L60">        workflow.edges().stream()</span>
+<span class="fc" id="L61">            .map(</span>
+                edge -&gt;
+<span class="fc" id="L63">                    new EdgeProjection(</span>
+<span class="fc" id="L64">                        edge.id(),</span>
+<span class="fc" id="L65">                        edge.sourceNodeId(),</span>
+<span class="fc" id="L66">                        edge.sourcePortId(),</span>
+<span class="fc" id="L67">                        edge.targetNodeId(),</span>
+<span class="fc" id="L68">                        edge.targetPortId()))</span>
+<span class="fc" id="L69">            .toList();</span>
+<span class="fc" id="L70">    return new WorkflowProjection(workflow.id(), workflow.name(), nodeProjections, edgeProjections);</span>
+  }
+
+  /**
+   * Projection of a single workflow node with typed-port handle lists and property values.
+   *
+   * @param id stable node identifier (maps to React Flow {@code node.id})
+   * @param type node type string (maps to React Flow {@code node.type})
+   * @param label human-readable label (maps to React Flow {@code node.data.label})
+   * @param inputHandles typed input port descriptors (source of React Flow target {@code Handle}s)
+   * @param outputHandles typed output port descriptors (source of React Flow source {@code
+   *     Handle}s)
+   * @param properties metadata properties set on the node (e.g. parameter values updated via {@code
+   *     UpdateProperty})
+   */
+  public record NodeProjection(
+      String id,
+      String type,
+      String label,
+      List&lt;HandleProjection&gt; inputHandles,
+      List&lt;HandleProjection&gt; outputHandles,
+      Map&lt;String, String&gt; properties) {
+
+<span class="fc" id="L93">    public NodeProjection {</span>
+<span class="fc" id="L94">      Objects.requireNonNull(id, &quot;id&quot;);</span>
+<span class="fc" id="L95">      Objects.requireNonNull(type, &quot;type&quot;);</span>
+<span class="fc" id="L96">      Objects.requireNonNull(label, &quot;label&quot;);</span>
+<span class="fc" id="L97">      inputHandles = List.copyOf(Objects.requireNonNull(inputHandles, &quot;inputHandles&quot;));</span>
+<span class="fc" id="L98">      outputHandles = List.copyOf(Objects.requireNonNull(outputHandles, &quot;outputHandles&quot;));</span>
+<span class="fc" id="L99">      properties = Map.copyOf(Objects.requireNonNull(properties, &quot;properties&quot;));</span>
+<span class="fc" id="L100">    }</span>
+  }
+
+  /**
+   * Typed port descriptor used by the React Flow client to render a {@code Handle} component.
+   *
+   * @param id stable port identifier (React Flow {@code Handle id})
+   * @param name human-readable port name
+   * @param dataType workflow data type identifier (used for visual type colouring and tooltip)
+   */
+  public record HandleProjection(String id, String name, String dataType) {
+
+<span class="fc" id="L112">    public HandleProjection {</span>
+<span class="fc" id="L113">      Objects.requireNonNull(id, &quot;id&quot;);</span>
+<span class="fc" id="L114">      Objects.requireNonNull(name, &quot;name&quot;);</span>
+<span class="fc" id="L115">      Objects.requireNonNull(dataType, &quot;dataType&quot;);</span>
+<span class="fc" id="L116">    }</span>
+  }
+
+  /**
+   * Projection of a workflow edge.
+   *
+   * @param id stable edge identifier (maps to React Flow {@code edge.id})
+   * @param source source node identifier (maps to React Flow {@code edge.source})
+   * @param sourceHandle source port identifier (maps to React Flow {@code edge.sourceHandle})
+   * @param target target node identifier (maps to React Flow {@code edge.target})
+   * @param targetHandle target port identifier (maps to React Flow {@code edge.targetHandle})
+   */
+  public record EdgeProjection(
+      String id, String source, String sourceHandle, String target, String targetHandle) {
+
+<span class="fc" id="L131">    public EdgeProjection {</span>
+<span class="fc" id="L132">      Objects.requireNonNull(id, &quot;id&quot;);</span>
+<span class="fc" id="L133">      Objects.requireNonNull(source, &quot;source&quot;);</span>
+<span class="fc" id="L134">      Objects.requireNonNull(sourceHandle, &quot;sourceHandle&quot;);</span>
+<span class="fc" id="L135">      Objects.requireNonNull(target, &quot;target&quot;);</span>
+<span class="fc" id="L136">      Objects.requireNonNull(targetHandle, &quot;targetHandle&quot;);</span>
+<span class="fc" id="L137">    }</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

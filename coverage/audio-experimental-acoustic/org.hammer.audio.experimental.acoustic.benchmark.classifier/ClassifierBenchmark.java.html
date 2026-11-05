@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ClassifierBenchmark.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.benchmark.classifier</a> &gt; <span class="el_source">ClassifierBenchmark.java</span></div><h1>ClassifierBenchmark.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.benchmark.classifier;
+
+import java.util.List;
+import org.hammer.audio.experimental.acoustic.wingbeat.WingbeatFeatureVector;
+
+/**
+ * Contract for classifier benchmarks.
+ *
+ * &lt;p&gt;Implementations receive a labelled collection of {@link WingbeatFeatureVector}s and return a
+ * {@link ClassifierBenchmarkResult} containing precision, recall, F1 and a confusion matrix.
+ *
+ * &lt;p&gt;Adding a new classifier to the benchmark framework requires only implementing this interface
+ * and registering the implementation with a {@link ClassifierBenchmarkRunner}.
+ */
+@FunctionalInterface
+public interface ClassifierBenchmark {
+
+  /**
+   * Run the benchmark over the given labelled dataset.
+   *
+   * @param vectors feature vectors; must not be {@code null} or empty
+   * @param labels ground-truth labels, one per vector; must not be {@code null}; must have the same
+   *     size as {@code vectors}
+   * @return benchmark result; never {@code null}
+   */
+  ClassifierBenchmarkResult run(List&lt;WingbeatFeatureVector&gt; vectors, List&lt;String&gt; labels);
+
+  /**
+   * Human-readable benchmark name used as a key in {@link ClassifierBenchmarkRunner} output.
+   *
+   * &lt;p&gt;Defaults to the simple class name.
+   *
+   * @return benchmark name; never blank
+   */
+  default String name() {
+<span class="fc" id="L36">    return getClass().getSimpleName();</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

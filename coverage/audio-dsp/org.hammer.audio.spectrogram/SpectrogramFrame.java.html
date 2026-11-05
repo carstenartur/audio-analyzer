@@ -1,0 +1,169 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>SpectrogramFrame.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer DSP and Analysis</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.spectrogram</a> &gt; <span class="el_source">SpectrogramFrame.java</span></div><h1>SpectrogramFrame.java</h1><pre class="source lang-java linenums">package org.hammer.audio.spectrogram;
+
+import java.util.Objects;
+import org.hammer.audio.analysis.AnalysisSnapshot;
+
+/**
+ * Immutable single frame of a spectrogram / waterfall: the one-sided magnitude spectrum captured at
+ * a specific {@link #sourceTimestampNanos()} / {@link #sourceFrameIndex()}, together with the
+ * sample-rate and FFT size required to interpret it.
+ *
+ * &lt;p&gt;The magnitude array is defensively copied on construction. {@link #magnitudes()} returns a
+ * defensive copy; {@link #magnitudesView()} returns the internal array directly for hot rendering
+ * paths and must not be mutated.
+ */
+public final class SpectrogramFrame implements AnalysisSnapshot {
+
+  private final long sourceFrameIndex;
+  private final long sourceTimestampNanos;
+  private final float sampleRate;
+  private final int fftSize;
+  private final float[] magnitudes;
+
+  /**
+   * Create a new spectrogram frame. The magnitude array is defensively copied.
+   *
+   * @param sourceFrameIndex frame index of the originating audio block
+   * @param sourceTimestampNanos timestamp of the originating audio block in nanoseconds
+   * @param sampleRate sample rate of the source audio in Hz; must be {@code &gt; 0}
+   * @param fftSize FFT size that produced the magnitudes; must be a positive even number
+   * @param magnitudes one-sided magnitude spectrum of length {@code fftSize/2 + 1}; must not be
+   *     {@code null}
+   * @throws IllegalArgumentException if any parameter is invalid
+   */
+  public SpectrogramFrame(
+      long sourceFrameIndex,
+      long sourceTimestampNanos,
+      float sampleRate,
+      int fftSize,
+<span class="fc" id="L39">      float[] magnitudes) {</span>
+<span class="pc bpc" id="L40" title="1 of 2 branches missed.">    if (!(sampleRate &gt; 0f)) {</span>
+<span class="nc" id="L41">      throw new IllegalArgumentException(&quot;sampleRate must be &gt; 0, was &quot; + sampleRate);</span>
+    }
+<span class="pc bpc" id="L43" title="2 of 4 branches missed.">    if (fftSize &lt; 2 || (fftSize &amp; 1) != 0) {</span>
+<span class="nc" id="L44">      throw new IllegalArgumentException(&quot;fftSize must be a positive even number, was &quot; + fftSize);</span>
+    }
+<span class="fc" id="L46">    Objects.requireNonNull(magnitudes, &quot;magnitudes&quot;);</span>
+<span class="fc" id="L47">    int expected = fftSize / 2 + 1;</span>
+<span class="pc bpc" id="L48" title="1 of 2 branches missed.">    if (magnitudes.length != expected) {</span>
+<span class="nc" id="L49">      throw new IllegalArgumentException(</span>
+          &quot;magnitudes.length must be fftSize/2+1=&quot; + expected + &quot;, was &quot; + magnitudes.length);
+    }
+<span class="fc" id="L52">    this.sourceFrameIndex = sourceFrameIndex;</span>
+<span class="fc" id="L53">    this.sourceTimestampNanos = sourceTimestampNanos;</span>
+<span class="fc" id="L54">    this.sampleRate = sampleRate;</span>
+<span class="fc" id="L55">    this.fftSize = fftSize;</span>
+<span class="fc" id="L56">    this.magnitudes = magnitudes.clone();</span>
+<span class="fc" id="L57">  }</span>
+
+  /**
+   * Internal constructor used by {@link org.hammer.audio.spectrogram.SpectrogramAnalyzer} to adopt
+   * an already-validated magnitudes array without copying. The supplied array becomes the frame's
+   * backing buffer and must not be mutated by the caller after the call.
+   */
+  static SpectrogramFrame adopting(
+      long sourceFrameIndex,
+      long sourceTimestampNanos,
+      float sampleRate,
+      int fftSize,
+      float[] magnitudes) {
+<span class="fc" id="L70">    SpectrogramFrame frame =</span>
+        new SpectrogramFrame(sourceFrameIndex, sourceTimestampNanos, sampleRate, fftSize);
+<span class="fc" id="L72">    frame.adoptMagnitudes(magnitudes);</span>
+<span class="fc" id="L73">    return frame;</span>
+  }
+
+  private SpectrogramFrame(
+<span class="fc" id="L77">      long sourceFrameIndex, long sourceTimestampNanos, float sampleRate, int fftSize) {</span>
+<span class="fc" id="L78">    this.sourceFrameIndex = sourceFrameIndex;</span>
+<span class="fc" id="L79">    this.sourceTimestampNanos = sourceTimestampNanos;</span>
+<span class="fc" id="L80">    this.sampleRate = sampleRate;</span>
+<span class="fc" id="L81">    this.fftSize = fftSize;</span>
+<span class="fc" id="L82">    this.magnitudes = new float[fftSize / 2 + 1];</span>
+<span class="fc" id="L83">  }</span>
+
+  private void adoptMagnitudes(float[] source) {
+    // The constructor has already allocated the backing array; a single arraycopy here avoids
+    // the second full-array allocation that the public constructor's defensive clone would do
+    // on top of the clone SpectrumSnapshot already performed.
+<span class="fc" id="L89">    System.arraycopy(source, 0, this.magnitudes, 0, this.magnitudes.length);</span>
+<span class="fc" id="L90">  }</span>
+
+  /**
+   * @return frame index of the originating audio block
+   */
+  @Override
+  public long sourceFrameIndex() {
+<span class="fc" id="L97">    return sourceFrameIndex;</span>
+  }
+
+  /**
+   * @return timestamp of the originating audio block in nanoseconds
+   */
+  @Override
+  public long sourceTimestampNanos() {
+<span class="nc" id="L105">    return sourceTimestampNanos;</span>
+  }
+
+  /**
+   * @return sample rate of the source audio in Hz
+   */
+  public float sampleRate() {
+<span class="fc" id="L112">    return sampleRate;</span>
+  }
+
+  /**
+   * @return FFT size that produced the magnitudes
+   */
+  public int fftSize() {
+<span class="fc" id="L119">    return fftSize;</span>
+  }
+
+  /**
+   * @return number of one-sided frequency bins (DC ... Nyquist)
+   */
+  public int binCount() {
+<span class="fc" id="L126">    return magnitudes.length;</span>
+  }
+
+  /**
+   * @return bin width in Hz, i.e. {@code sampleRate / fftSize}
+   */
+  public float binWidthHz() {
+<span class="fc" id="L133">    return sampleRate / fftSize;</span>
+  }
+
+  /**
+   * @param bin bin index in {@code [0, binCount())}
+   * @return centre frequency of the bin in Hz
+   */
+  public float frequencyOfBin(int bin) {
+<span class="fc" id="L141">    return bin * binWidthHz();</span>
+  }
+
+  /**
+   * @param bin bin index in {@code [0, binCount())}
+   * @return magnitude at the bin
+   */
+  public float magnitude(int bin) {
+<span class="nc" id="L149">    return magnitudes[bin];</span>
+  }
+
+  /**
+   * @return defensive copy of the magnitude spectrum
+   */
+  public float[] magnitudes() {
+<span class="nc" id="L156">    return magnitudes.clone();</span>
+  }
+
+  /**
+   * Read-only access to the internal magnitudes array. Callers must not mutate the returned array.
+   * Intended for hot rendering paths that need to avoid per-frame allocations.
+   *
+   * @return the internal magnitudes array (do not mutate)
+   */
+  public float[] magnitudesView() {
+<span class="fc" id="L166">    return magnitudes;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

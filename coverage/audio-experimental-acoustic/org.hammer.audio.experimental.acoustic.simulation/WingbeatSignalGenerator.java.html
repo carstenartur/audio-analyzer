@@ -1,0 +1,373 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WingbeatSignalGenerator.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.simulation</a> &gt; <span class="el_source">WingbeatSignalGenerator.java</span></div><h1>WingbeatSignalGenerator.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.simulation;
+
+import java.util.List;
+import org.hammer.audio.core.AudioBlock;
+import org.hammer.audio.core.AudioFormatDescriptor;
+import org.hammer.audio.signal.SignalGenerator;
+
+/**
+ * Deterministic synthetic wingbeat signal generator.
+ *
+ * &lt;p&gt;Produces a mono (or broadcast-stereo) audio stream whose tonal structure is controlled by a
+ * {@link WingbeatSignalParameters} instance and whose noise and jitter sequences are seeded by a
+ * caller-supplied {@code randomSeed}. Two instances constructed with the same parameters and seed
+ * always produce bit-identical output.
+ *
+ * &lt;h2&gt;Signal model&lt;/h2&gt;
+ *
+ * &lt;p&gt;At sample index {@code n} (time {@code t = n / sampleRate}):
+ *
+ * &lt;pre&gt;
+ *   f(t)   = f₀  +  driftHzPerSecond × t  +  jitterHz × noise_j(n)
+ *   φ      ← φ + 2π × f(t) / sampleRate          (phase accumulator)
+ *   am(t)  = 1  +  modulationDepth × sin(2π × modulationHz × t)
+ *   signal = am(t) × Σ_{k=0}^{harmonicCount-1} A_k × sin((k+1) × φ)
+ *            +  noiseAmplitude × noise_w(n)
+ * &lt;/pre&gt;
+ *
+ * &lt;p&gt;where {@code noise_j} and {@code noise_w} are deterministic hash sequences derived from the
+ * sample index and {@code randomSeed}. The phase accumulator is wrapped modulo {@code 2π} each
+ * sample, even for arbitrarily large phase increments, to preserve floating-point precision over
+ * long runs.
+ *
+ * &lt;p&gt;The generated signal does not model real mosquito aerodynamics. It is intended solely as a
+ * controlled test fixture for algorithm development and CI verification.
+ *
+ * @see WingbeatSignalParameters
+ */
+public final class WingbeatSignalGenerator implements SignalGenerator {
+
+  private static final double TWO_PI = 2.0 * Math.PI;
+  private static final long ADDITIVE_NOISE_HASH_LANE = 0xA5A5A5A5L;
+
+  private final AudioFormatDescriptor audioFormat;
+  private final WingbeatSignalParameters signalParameters;
+  private final List&lt;Double&gt; harmonicAmplitudes;
+  private final long randomSeed;
+
+  private double fundamentalPhase;
+  private long frameIndex;
+
+  /**
+   * Create a generator.
+   *
+   * @param format output format; must not be {@code null}
+   * @param params signal-model parameters; must not be {@code null}
+   * @param randomSeed deterministic seed for jitter and noise sequences; the same seed always
+   *     produces the same output for a given {@code params} and {@code format}
+   */
+  public WingbeatSignalGenerator(
+<span class="fc" id="L60">      AudioFormatDescriptor format, WingbeatSignalParameters params, long randomSeed) {</span>
+<span class="fc bfc" id="L61" title="All 2 branches covered.">    if (format == null) {</span>
+<span class="fc" id="L62">      throw new IllegalArgumentException(&quot;format must not be null&quot;);</span>
+    }
+<span class="fc bfc" id="L64" title="All 2 branches covered.">    if (params == null) {</span>
+<span class="fc" id="L65">      throw new IllegalArgumentException(&quot;params must not be null&quot;);</span>
+    }
+<span class="fc" id="L67">    this.audioFormat = format;</span>
+<span class="fc" id="L68">    this.signalParameters = params;</span>
+<span class="fc" id="L69">    this.harmonicAmplitudes = params.resolvedHarmonicAmplitudes();</span>
+<span class="fc" id="L70">    this.randomSeed = randomSeed;</span>
+<span class="fc" id="L71">    this.fundamentalPhase = 0.0;</span>
+<span class="fc" id="L72">    this.frameIndex = 0L;</span>
+<span class="fc" id="L73">  }</span>
+
+  @Override
+  public AudioFormatDescriptor format() {
+<span class="nc" id="L77">    return audioFormat;</span>
+  }
+
+  @Override
+  public AudioBlock nextBlock(int frames) {
+<span class="fc bfc" id="L82" title="All 2 branches covered.">    if (frames &lt; 1) {</span>
+<span class="fc" id="L83">      throw new IllegalArgumentException(&quot;frames must be &gt;= 1&quot;);</span>
+    }
+<span class="fc" id="L85">    int channels = audioFormat.channels();</span>
+<span class="fc" id="L86">    double sampleRate = audioFormat.sampleRate();</span>
+<span class="fc" id="L87">    float[][] samples = new float[channels][frames];</span>
+
+<span class="fc bfc" id="L89" title="All 2 branches covered.">    for (int i = 0; i &lt; frames; i++) {</span>
+<span class="fc" id="L90">      long absoluteFrame = frameIndex + i;</span>
+<span class="fc" id="L91">      double t = absoluteFrame / sampleRate;</span>
+
+      // Instantaneous frequency with drift and jitter.
+<span class="fc" id="L94">      double instFreq =</span>
+<span class="fc" id="L95">          instantaneousFrequency(signalParameters, absoluteFrame, sampleRate, randomSeed);</span>
+
+      // Advance the fundamental phase accumulator and keep it in [0, 2π).
+<span class="fc" id="L98">      fundamentalPhase = wrapPhaseIfNeeded(fundamentalPhase + phaseIncrement(instFreq, sampleRate));</span>
+
+      // Amplitude modulation envelope.
+<span class="fc" id="L101">      double am = modulationEnvelope(signalParameters, t);</span>
+
+      // Sum harmonics.
+<span class="fc" id="L104">      double signal = 0.0;</span>
+<span class="fc" id="L105">      int harmonicCount = signalParameters.harmonicCount();</span>
+<span class="fc bfc" id="L106" title="All 2 branches covered.">      for (int k = 0; k &lt; harmonicCount; k++) {</span>
+<span class="fc" id="L107">        signal += harmonicAmplitude(k) * Math.sin((k + 1) * fundamentalPhase);</span>
+      }
+<span class="fc" id="L109">      signal *= am;</span>
+
+      // Additive noise (use a different hash lane from jitter).
+<span class="fc bfc" id="L112" title="All 2 branches covered.">      if (signalParameters.noiseAmplitude() &gt; 0.0) {</span>
+<span class="fc" id="L113">        signal +=</span>
+<span class="fc" id="L114">            signalParameters.noiseAmplitude()</span>
+<span class="fc" id="L115">                * hashNoise(absoluteFrame ^ ADDITIVE_NOISE_HASH_LANE, randomSeed);</span>
+      }
+
+<span class="fc" id="L118">      float sample = (float) Math.max(-1.0, Math.min(1.0, signal));</span>
+<span class="fc bfc" id="L119" title="All 2 branches covered.">      for (int c = 0; c &lt; channels; c++) {</span>
+<span class="fc" id="L120">        samples[c][i] = sample;</span>
+      }
+    }
+
+<span class="fc" id="L124">    AudioBlock block = AudioBlock.wrap(audioFormat, samples, frameIndex, System.nanoTime());</span>
+<span class="fc" id="L125">    frameIndex += frames;</span>
+<span class="fc" id="L126">    return block;</span>
+  }
+
+  @Override
+  public void reset() {
+<span class="fc" id="L131">    fundamentalPhase = 0.0;</span>
+<span class="fc" id="L132">    frameIndex = 0L;</span>
+<span class="fc" id="L133">  }</span>
+
+  /**
+   * Return the {@link WingbeatSignalParameters} used by this generator.
+   *
+   * @return signal-model parameters
+   */
+  public WingbeatSignalParameters params() {
+<span class="nc" id="L141">    return signalParameters;</span>
+  }
+
+  double currentFundamentalPhase() {
+<span class="fc" id="L145">    return fundamentalPhase;</span>
+  }
+
+  private double harmonicAmplitude(int harmonicIndex) {
+<span class="fc" id="L149">    return harmonicAmplitudes.get(harmonicIndex);</span>
+  }
+
+  static double sampleAtTime(
+      WingbeatSignalParameters params, long randomSeed, double sampleRate, double seconds) {
+<span class="nc" id="L154">    return sampleAtTime(params, randomSeed, sampleRate, seconds, 1.0);</span>
+  }
+
+  static double sampleAtTime(
+      WingbeatSignalParameters params,
+      long randomSeed,
+      double sampleRate,
+      double seconds,
+      double frequencyScale) {
+<span class="nc" id="L163">    return sampleAtTime(params, randomSeed, sampleRate, seconds, frequencyScale, null);</span>
+  }
+
+  static double sampleAtTime(
+      WingbeatSignalParameters params,
+      long randomSeed,
+      double sampleRate,
+      double seconds,
+      double frequencyScale,
+      PhaseAccumulatorCache phaseCache) {
+<span class="pc bpc" id="L173" title="1 of 2 branches missed.">    if (params == null) {</span>
+<span class="nc" id="L174">      throw new IllegalArgumentException(&quot;params must not be null&quot;);</span>
+    }
+<span class="pc bpc" id="L176" title="2 of 4 branches missed.">    if (sampleRate &lt;= 0.0 || !Double.isFinite(sampleRate)) {</span>
+<span class="nc" id="L177">      throw new IllegalArgumentException(&quot;sampleRate must be finite and &gt; 0&quot;);</span>
+    }
+<span class="pc bpc" id="L179" title="1 of 2 branches missed.">    if (!Double.isFinite(seconds)) {</span>
+<span class="nc" id="L180">      throw new IllegalArgumentException(&quot;seconds must be finite&quot;);</span>
+    }
+<span class="pc bpc" id="L182" title="2 of 4 branches missed.">    if (frequencyScale &lt;= 0.0 || !Double.isFinite(frequencyScale)) {</span>
+<span class="nc" id="L183">      throw new IllegalArgumentException(&quot;frequencyScale must be finite and &gt; 0&quot;);</span>
+    }
+
+<span class="fc" id="L186">    double samplePosition = seconds * sampleRate;</span>
+<span class="fc" id="L187">    long wholeFrames = (long) Math.floor(samplePosition);</span>
+<span class="fc" id="L188">    double fractionalFrame = samplePosition - wholeFrames;</span>
+<span class="fc" id="L189">    double phase =</span>
+<span class="fc" id="L190">        phaseAtFrame(params, randomSeed, sampleRate, wholeFrames, frequencyScale, phaseCache);</span>
+<span class="pc bpc" id="L191" title="1 of 2 branches missed.">    if (fractionalFrame &gt; 0.0) {</span>
+<span class="fc" id="L192">      double instFreqAtTime =</span>
+<span class="fc" id="L193">          instantaneousFrequencyAtTime(params, seconds, wholeFrames, randomSeed) * frequencyScale;</span>
+<span class="fc" id="L194">      phase =</span>
+<span class="fc" id="L195">          wrapPhaseIfNeeded(phase + fractionalFrame * phaseIncrement(instFreqAtTime, sampleRate));</span>
+    }
+
+<span class="fc" id="L198">    double signal = 0.0;</span>
+<span class="fc" id="L199">    List&lt;Double&gt; harmonicAmplitudes = params.resolvedHarmonicAmplitudes();</span>
+<span class="fc bfc" id="L200" title="All 2 branches covered.">    for (int k = 0; k &lt; params.harmonicCount(); k++) {</span>
+<span class="fc" id="L201">      signal += harmonicAmplitudes.get(k) * Math.sin((k + 1) * phase);</span>
+    }
+<span class="fc" id="L203">    signal *= modulationEnvelope(params, seconds);</span>
+<span class="pc bpc" id="L204" title="1 of 2 branches missed.">    if (params.noiseAmplitude() &gt; 0.0) {</span>
+<span class="fc" id="L205">      signal +=</span>
+<span class="fc" id="L206">          params.noiseAmplitude() * hashNoise(wholeFrames ^ ADDITIVE_NOISE_HASH_LANE, randomSeed);</span>
+    }
+<span class="fc" id="L208">    return Math.max(-1.0, Math.min(1.0, signal));</span>
+  }
+
+  static PhaseAccumulatorCache newPhaseAccumulatorCache(
+      WingbeatSignalParameters params, long randomSeed, double sampleRate) {
+<span class="fc" id="L213">    return new PhaseAccumulatorCache(params, randomSeed, sampleRate);</span>
+  }
+
+  private static double phaseAtFrame(
+      WingbeatSignalParameters params,
+      long randomSeed,
+      double sampleRate,
+      long frameIndex,
+      double frequencyScale,
+      PhaseAccumulatorCache phaseCache) {
+<span class="pc bpc" id="L223" title="2 of 4 branches missed.">    if (phaseCache != null &amp;&amp; Double.compare(frequencyScale, 1.0) == 0) {</span>
+<span class="fc" id="L224">      return phaseCache.phaseAt(frameIndex);</span>
+    }
+<span class="nc" id="L226">    return uncachedPhaseAtFrame(params, randomSeed, sampleRate, frameIndex, frequencyScale);</span>
+  }
+
+  private static double uncachedPhaseAtFrame(
+      WingbeatSignalParameters params,
+      long randomSeed,
+      double sampleRate,
+      long frameIndex,
+      double frequencyScale) {
+<span class="fc" id="L235">    double phase = 0.0;</span>
+<span class="fc bfc" id="L236" title="All 2 branches covered.">    if (frameIndex &gt;= 0L) {</span>
+<span class="fc bfc" id="L237" title="All 2 branches covered.">      for (long frame = 0L; frame &lt;= frameIndex; frame++) {</span>
+<span class="fc" id="L238">        phase =</span>
+<span class="fc" id="L239">            wrapPhaseIfNeeded(</span>
+                phase
+<span class="fc" id="L241">                    + phaseIncrement(</span>
+<span class="fc" id="L242">                        instantaneousFrequency(params, frame, sampleRate, randomSeed)</span>
+                            * frequencyScale,
+                        sampleRate));
+      }
+<span class="fc" id="L246">      return phase;</span>
+    }
+<span class="fc bfc" id="L248" title="All 2 branches covered.">    for (long frame = -1L; frame &gt;= frameIndex; frame--) {</span>
+<span class="fc" id="L249">      phase =</span>
+<span class="fc" id="L250">          wrapPhaseIfNeeded(</span>
+              phase
+<span class="fc" id="L252">                  - phaseIncrement(</span>
+<span class="fc" id="L253">                      instantaneousFrequency(params, frame, sampleRate, randomSeed)</span>
+                          * frequencyScale,
+                      sampleRate));
+    }
+<span class="fc" id="L257">    return phase;</span>
+  }
+
+  private static double instantaneousFrequency(
+      WingbeatSignalParameters params, long frameIndex, double sampleRate, long randomSeed) {
+<span class="fc" id="L262">    return instantaneousFrequencyAtTime(params, frameIndex / sampleRate, frameIndex, randomSeed);</span>
+  }
+
+  private static double instantaneousFrequencyAtTime(
+      WingbeatSignalParameters params, double seconds, long noiseFrameIndex, long randomSeed) {
+<span class="fc" id="L267">    double instFreq = params.fundamentalFrequencyHz() + params.driftHzPerSecond() * seconds;</span>
+<span class="fc bfc" id="L268" title="All 2 branches covered.">    if (params.jitterHz() &gt; 0.0) {</span>
+<span class="fc" id="L269">      instFreq += params.jitterHz() * hashNoise(noiseFrameIndex, randomSeed);</span>
+    }
+<span class="fc" id="L271">    return Math.max(1.0, instFreq);</span>
+  }
+
+  private static double phaseIncrement(double instantaneousFrequencyHz, double sampleRate) {
+<span class="fc" id="L275">    return TWO_PI * instantaneousFrequencyHz / sampleRate;</span>
+  }
+
+  private static double modulationEnvelope(WingbeatSignalParameters params, double seconds) {
+<span class="pc bpc" id="L279" title="1 of 4 branches missed.">    if (params.modulationHz() &lt;= 0.0 || params.modulationDepth() &lt;= 0.0) {</span>
+<span class="fc" id="L280">      return 1.0;</span>
+    }
+<span class="fc" id="L282">    return 1.0 + params.modulationDepth() * Math.sin(TWO_PI * params.modulationHz() * seconds);</span>
+  }
+
+  private static double wrapPhase(double phase) {
+<span class="fc" id="L286">    double wrapped = phase % TWO_PI;</span>
+<span class="fc bfc" id="L287" title="All 2 branches covered.">    return wrapped &gt;= 0.0 ? wrapped : wrapped + TWO_PI;</span>
+  }
+
+  private static double wrapPhaseIfNeeded(double phase) {
+<span class="fc bfc" id="L291" title="All 4 branches covered.">    return phase &gt;= 0.0 &amp;&amp; phase &lt; TWO_PI ? phase : wrapPhase(phase);</span>
+  }
+
+  static final class PhaseAccumulatorCache {
+
+    private final WingbeatSignalParameters params;
+    private final long randomSeed;
+    private final double sampleRate;
+
+<span class="fc" id="L300">    private long maxComputedPositiveFrame = -1L;</span>
+    private double phaseAtMaxComputedPositiveFrame;
+    private long minComputedNegativeFrame;
+    private double phaseAtMinComputedNegativeFrame;
+<span class="fc" id="L304">    private final Object phaseLock = new Object();</span>
+
+    private PhaseAccumulatorCache(
+<span class="fc" id="L307">        WingbeatSignalParameters params, long randomSeed, double sampleRate) {</span>
+<span class="fc" id="L308">      this.params = params;</span>
+<span class="fc" id="L309">      this.randomSeed = randomSeed;</span>
+<span class="fc" id="L310">      this.sampleRate = sampleRate;</span>
+<span class="fc" id="L311">    }</span>
+
+    private double phaseAt(long frameIndex) {
+<span class="fc" id="L314">      synchronized (phaseLock) {</span>
+<span class="fc bfc" id="L315" title="All 2 branches covered.">        if (frameIndex &gt;= 0L) {</span>
+<span class="fc" id="L316">          return extendPositive(frameIndex);</span>
+        }
+<span class="fc" id="L318">        return extendNegative(frameIndex);</span>
+      }
+    }
+
+    private double extendPositive(long targetFrame) {
+<span class="fc bfc" id="L323" title="All 2 branches covered.">      if (targetFrame &lt;= maxComputedPositiveFrame) {</span>
+<span class="fc" id="L324">        return uncachedPhaseAtFrame(params, randomSeed, sampleRate, targetFrame, 1.0);</span>
+      }
+<span class="fc" id="L326">      double phase = 0.0;</span>
+<span class="fc bfc" id="L327" title="All 2 branches covered.">      if (maxComputedPositiveFrame &gt;= 0L) {</span>
+<span class="fc" id="L328">        phase = phaseAtMaxComputedPositiveFrame;</span>
+      }
+<span class="fc bfc" id="L330" title="All 2 branches covered.">      for (long frame = maxComputedPositiveFrame + 1L; frame &lt;= targetFrame; frame++) {</span>
+<span class="fc" id="L331">        phase =</span>
+<span class="fc" id="L332">            wrapPhaseIfNeeded(</span>
+                phase
+<span class="fc" id="L334">                    + phaseIncrement(</span>
+<span class="fc" id="L335">                        instantaneousFrequency(params, frame, sampleRate, randomSeed), sampleRate));</span>
+      }
+<span class="fc" id="L337">      maxComputedPositiveFrame = targetFrame;</span>
+<span class="fc" id="L338">      phaseAtMaxComputedPositiveFrame = phase;</span>
+<span class="fc" id="L339">      return phase;</span>
+    }
+
+    private double extendNegative(long targetFrame) {
+<span class="fc bfc" id="L343" title="All 2 branches covered.">      if (targetFrame &gt;= minComputedNegativeFrame) {</span>
+<span class="fc" id="L344">        return uncachedPhaseAtFrame(params, randomSeed, sampleRate, targetFrame, 1.0);</span>
+      }
+<span class="fc" id="L346">      double phase = phaseAtMinComputedNegativeFrame;</span>
+<span class="fc bfc" id="L347" title="All 2 branches covered.">      for (long frame = minComputedNegativeFrame - 1L; frame &gt;= targetFrame; frame--) {</span>
+<span class="fc" id="L348">        phase =</span>
+<span class="fc" id="L349">            wrapPhaseIfNeeded(</span>
+                phase
+<span class="fc" id="L351">                    - phaseIncrement(</span>
+<span class="fc" id="L352">                        instantaneousFrequency(params, frame, sampleRate, randomSeed), sampleRate));</span>
+      }
+<span class="fc" id="L354">      minComputedNegativeFrame = targetFrame;</span>
+<span class="fc" id="L355">      phaseAtMinComputedNegativeFrame = phase;</span>
+<span class="fc" id="L356">      return phase;</span>
+    }
+  }
+
+  /**
+   * Deterministic pseudo-random value in {@code [-1, 1]} derived from a frame index and a seed.
+   *
+   * &lt;p&gt;Uses a single LCG mix (same scheme as {@code DemoPresetGenerator}) so that every sample maps
+   * to a stable, reproducible value with no shared state between lanes.
+   */
+  private static double hashNoise(long frame, long seed) {
+<span class="fc" id="L367">    long v = frame ^ (seed * 6_364_136_223_846_793_005L + 1_442_695_040_888_963_407L);</span>
+<span class="fc" id="L368">    v *= 6_364_136_223_846_793_005L;</span>
+<span class="fc" id="L369">    v ^= v &gt;&gt;&gt; 33;</span>
+<span class="fc" id="L370">    return ((v &amp; 0xffffL) / 32767.5) - 1.0;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

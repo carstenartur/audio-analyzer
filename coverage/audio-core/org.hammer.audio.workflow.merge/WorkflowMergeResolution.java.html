@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WorkflowMergeResolution.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Core</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.merge</a> &gt; <span class="el_source">WorkflowMergeResolution.java</span></div><h1>WorkflowMergeResolution.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.merge;
+
+import java.util.Objects;
+import org.hammer.audio.workflow.merge.WorkflowMergeModels.Resolution;
+import org.hammer.audio.workflow.merge.WorkflowMergeModels.ResolutionChoice;
+
+/**
+ * Framework-independent auditable decision for one semantic workflow merge conflict.
+ *
+ * @param conflictId exact deterministic conflict identity returned by the preview
+ * @param choice selected base/local/remote/delete/custom decision
+ * @param customValue explicit merged scalar value when {@code choice == CUSTOM}
+ */
+public record WorkflowMergeResolution(
+    String conflictId, ResolutionChoice choice, String customValue) {
+
+<span class="fc" id="L17">  public WorkflowMergeResolution {</span>
+<span class="pc bpc" id="L18" title="2 of 4 branches missed.">    if (conflictId == null || conflictId.isBlank()) {</span>
+<span class="nc" id="L19">      throw new IllegalArgumentException(&quot;conflictId must not be blank&quot;);</span>
+    }
+<span class="fc" id="L21">    Objects.requireNonNull(choice, &quot;choice&quot;);</span>
+<span class="pc bpc" id="L22" title="1 of 2 branches missed.">    if (choice == ResolutionChoice.CUSTOM) {</span>
+<span class="fc" id="L23">      Objects.requireNonNull(customValue, &quot;customValue&quot;);</span>
+<span class="nc bnc" id="L24" title="All 2 branches missed.">    } else if (customValue != null) {</span>
+<span class="nc" id="L25">      throw new IllegalArgumentException(&quot;customValue is only valid for CUSTOM resolutions&quot;);</span>
+    }
+<span class="fc" id="L27">  }</span>
+
+  /** Creates a decision without a custom scalar value. */
+  public WorkflowMergeResolution(String conflictId, ResolutionChoice choice) {
+<span class="nc" id="L31">    this(conflictId, choice, null);</span>
+<span class="nc" id="L32">  }</span>
+
+  Resolution toDomainResolution() {
+<span class="nc" id="L35">    return new Resolution(conflictId, choice, customValue);</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

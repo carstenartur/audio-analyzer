@@ -1,0 +1,190 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>PluginMenuBuilder.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.pluginhost</a> &gt; <span class="el_source">PluginMenuBuilder.java</span></div><h1>PluginMenuBuilder.java</h1><pre class="source lang-java linenums">package org.hammer.audio.pluginhost;
+
+import java.awt.BorderLayout;
+import java.awt.Dimension;
+import java.awt.Frame;
+import java.util.List;
+import java.util.Objects;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import javax.swing.JComponent;
+import javax.swing.JDialog;
+import javax.swing.JLabel;
+import javax.swing.JMenu;
+import javax.swing.JMenuItem;
+import javax.swing.JOptionPane;
+import javax.swing.JScrollPane;
+import javax.swing.JTextArea;
+import javax.swing.SwingUtilities;
+import javax.swing.WindowConstants;
+import org.hammer.audio.plugin.AudioAnalyzerPlugin;
+import org.hammer.audio.plugin.MenuContribution;
+import org.hammer.audio.plugin.PluginDescriptor;
+import org.hammer.audio.plugin.ViewContribution;
+
+/**
+ * Builds a Swing &lt;i&gt;Plugins&lt;/i&gt; {@link JMenu} from a {@link PluginRegistry}.
+ *
+ * &lt;p&gt;The host application uses this helper to surface plugin contributions in its menu bar without
+ * referencing concrete plugin classes. Each plugin gets its own submenu containing its view
+ * contributions (rendered as plain dialogs), its menu contributions (rendered as menu items) and a
+ * descriptor/info entry. Failed plugins are listed under a disabled &quot;Failed plugins&quot; submenu.
+ */
+public final class PluginMenuBuilder {
+
+<span class="nc" id="L35">  private static final Logger LOGGER = Logger.getLogger(PluginMenuBuilder.class.getName());</span>
+
+  private final PluginRegistry registry;
+
+  /** Wrap the given registry for menu construction. */
+<span class="nc" id="L40">  public PluginMenuBuilder(PluginRegistry registry) {</span>
+<span class="nc" id="L41">    this.registry = Objects.requireNonNull(registry, &quot;registry&quot;);</span>
+<span class="nc" id="L42">  }</span>
+
+  /**
+   * Build a &lt;i&gt;Plugins&lt;/i&gt; menu. The menu always exists (even if empty) so the UI consistently
+   * exposes a plugin integration surface; an empty placeholder item is shown when no plugins are
+   * available.
+   *
+   * @param parent parent frame for plugin view dialogs (may be {@code null})
+   */
+  public JMenu buildMenu(Frame parent) {
+<span class="nc" id="L52">    JMenu menu = new JMenu(&quot;Plugins&quot;);</span>
+<span class="nc" id="L53">    List&lt;AudioAnalyzerPlugin&gt; plugins = registry.plugins();</span>
+<span class="nc bnc" id="L54" title="All 4 branches missed.">    if (plugins.isEmpty() &amp;&amp; registry.failures().isEmpty()) {</span>
+<span class="nc" id="L55">      JMenuItem none = new JMenuItem(&quot;(no plugins installed)&quot;);</span>
+<span class="nc" id="L56">      none.setEnabled(false);</span>
+<span class="nc" id="L57">      menu.add(none);</span>
+<span class="nc" id="L58">      return menu;</span>
+    }
+<span class="nc bnc" id="L60" title="All 2 branches missed.">    for (AudioAnalyzerPlugin plugin : plugins) {</span>
+<span class="nc" id="L61">      menu.add(safeBuildPluginSubmenu(parent, plugin));</span>
+<span class="nc" id="L62">    }</span>
+<span class="nc bnc" id="L63" title="All 2 branches missed.">    if (!registry.failures().isEmpty()) {</span>
+<span class="nc" id="L64">      menu.addSeparator();</span>
+<span class="nc" id="L65">      JMenu failed = new JMenu(&quot;Failed plugins&quot;);</span>
+<span class="nc bnc" id="L66" title="All 2 branches missed.">      for (PluginLoadResult result : registry.failures()) {</span>
+<span class="nc" id="L67">        JMenuItem item = new JMenuItem(result.descriptor().name());</span>
+<span class="nc" id="L68">        item.setEnabled(false);</span>
+<span class="nc" id="L69">        item.setToolTipText(result.failure().map(Throwable::toString).orElse(&quot;unknown error&quot;));</span>
+<span class="nc" id="L70">        failed.add(item);</span>
+<span class="nc" id="L71">      }</span>
+<span class="nc" id="L72">      menu.add(failed);</span>
+    }
+<span class="nc" id="L74">    return menu;</span>
+  }
+
+  private JMenu safeBuildPluginSubmenu(Frame parent, AudioAnalyzerPlugin plugin) {
+    try {
+<span class="nc" id="L79">      return buildPluginSubmenu(parent, plugin);</span>
+<span class="nc" id="L80">    } catch (RuntimeException ex) {</span>
+<span class="nc" id="L81">      String label = safePluginLabel(plugin);</span>
+<span class="nc" id="L82">      LOGGER.log(Level.WARNING, &quot;Plugin submenu for &quot; + label + &quot; failed to build&quot;, ex);</span>
+<span class="nc" id="L83">      JMenu fallback = new JMenu(label + &quot; (unavailable)&quot;);</span>
+<span class="nc" id="L84">      JMenuItem error = new JMenuItem(&quot;Plugin failed to initialize&quot;);</span>
+<span class="nc" id="L85">      error.setEnabled(false);</span>
+<span class="nc" id="L86">      error.setToolTipText(ex.toString());</span>
+<span class="nc" id="L87">      fallback.add(error);</span>
+<span class="nc" id="L88">      return fallback;</span>
+    }
+  }
+
+  private static String safePluginLabel(AudioAnalyzerPlugin plugin) {
+    try {
+<span class="nc" id="L94">      PluginDescriptor descriptor = plugin.descriptor();</span>
+<span class="nc bnc" id="L95" title="All 2 branches missed.">      if (descriptor != null) {</span>
+<span class="nc" id="L96">        return descriptor.name();</span>
+      }
+<span class="nc" id="L98">    } catch (RuntimeException ignored) {</span>
+      // fall through to class-name based label
+<span class="nc" id="L100">    }</span>
+<span class="nc" id="L101">    return plugin.getClass().getSimpleName();</span>
+  }
+
+  private JMenu buildPluginSubmenu(Frame parent, AudioAnalyzerPlugin plugin) {
+<span class="nc" id="L105">    PluginDescriptor d = plugin.descriptor();</span>
+<span class="nc bnc" id="L106" title="All 2 branches missed.">    String title = d.experimental() ? d.name() + &quot; (experimental)&quot; : d.name();</span>
+<span class="nc" id="L107">    JMenu submenu = new JMenu(title);</span>
+<span class="nc bnc" id="L108" title="All 2 branches missed.">    for (ViewContribution view : plugin.viewContributions()) {</span>
+<span class="nc" id="L109">      submenu.add(buildViewItem(parent, d, view));</span>
+<span class="nc" id="L110">    }</span>
+<span class="nc bnc" id="L111" title="All 2 branches missed.">    for (MenuContribution menu : plugin.menuContributions()) {</span>
+<span class="nc" id="L112">      submenu.add(buildMenuItem(menu));</span>
+<span class="nc" id="L113">    }</span>
+<span class="nc" id="L114">    JMenuItem info = new JMenuItem(&quot;About \u2026&quot;);</span>
+<span class="nc" id="L115">    info.addActionListener(e -&gt; showDescriptorDialog(parent, d));</span>
+<span class="nc" id="L116">    submenu.add(info);</span>
+<span class="nc" id="L117">    return submenu;</span>
+  }
+
+  private JMenuItem buildViewItem(Frame parent, PluginDescriptor d, ViewContribution view) {
+<span class="nc" id="L121">    JMenuItem item = new JMenuItem(&quot;Open: &quot; + view.title());</span>
+<span class="nc" id="L122">    item.addActionListener(</span>
+        e -&gt; {
+          try {
+<span class="nc" id="L125">            JComponent component = view.componentFactory().get();</span>
+<span class="nc bnc" id="L126" title="All 2 branches missed.">            if (component == null) {</span>
+<span class="nc" id="L127">              throw new IllegalStateException(</span>
+<span class="nc" id="L128">                  &quot;View contribution &quot; + view.id() + &quot; returned null component&quot;);</span>
+            }
+<span class="nc" id="L130">            JDialog dialog = new JDialog(parent, d.name() + &quot; - &quot; + view.title(), false);</span>
+<span class="nc" id="L131">            dialog.getContentPane().add(component, BorderLayout.CENTER);</span>
+<span class="nc" id="L132">            dialog.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);</span>
+<span class="nc" id="L133">            dialog.setSize(new Dimension(640, 420));</span>
+<span class="nc" id="L134">            dialog.setLocationRelativeTo(parent);</span>
+<span class="nc" id="L135">            dialog.setVisible(true);</span>
+<span class="nc" id="L136">          } catch (RuntimeException ex) {</span>
+<span class="nc" id="L137">            LOGGER.log(Level.WARNING, &quot;Plugin view &quot; + d.id() + &quot;/&quot; + view.id() + &quot; failed&quot;, ex);</span>
+<span class="nc" id="L138">            JOptionPane.showMessageDialog(</span>
+                parent,
+<span class="nc" id="L140">                &quot;Plugin view failed: &quot; + ex.getMessage(),</span>
+<span class="nc" id="L141">                d.name(),</span>
+                JOptionPane.ERROR_MESSAGE);
+<span class="nc" id="L143">          }</span>
+<span class="nc" id="L144">        });</span>
+<span class="nc" id="L145">    return item;</span>
+  }
+
+  private JMenuItem buildMenuItem(MenuContribution contribution) {
+<span class="nc" id="L149">    JMenuItem item = new JMenuItem(contribution.label());</span>
+<span class="nc" id="L150">    item.addActionListener(</span>
+        e -&gt;
+<span class="nc" id="L152">            SwingUtilities.invokeLater(</span>
+                () -&gt; {
+                  try {
+<span class="nc" id="L155">                    contribution.action().run();</span>
+<span class="nc" id="L156">                  } catch (RuntimeException ex) {</span>
+<span class="nc" id="L157">                    LOGGER.log(</span>
+<span class="nc" id="L158">                        Level.WARNING, &quot;Plugin menu action &quot; + contribution.id() + &quot; failed&quot;, ex);</span>
+<span class="nc" id="L159">                  }</span>
+<span class="nc" id="L160">                }));</span>
+<span class="nc" id="L161">    return item;</span>
+  }
+
+  private void showDescriptorDialog(Frame parent, PluginDescriptor d) {
+<span class="nc" id="L165">    JTextArea text = new JTextArea();</span>
+<span class="nc" id="L166">    text.setEditable(false);</span>
+<span class="nc" id="L167">    text.setLineWrap(true);</span>
+<span class="nc" id="L168">    text.setWrapStyleWord(true);</span>
+<span class="nc" id="L169">    StringBuilder sb = new StringBuilder();</span>
+<span class="nc" id="L170">    sb.append(&quot;Id: &quot;).append(d.id()).append('\n');</span>
+<span class="nc" id="L171">    sb.append(&quot;Name: &quot;).append(d.name()).append('\n');</span>
+<span class="nc" id="L172">    sb.append(&quot;Version: &quot;).append(d.version()).append('\n');</span>
+<span class="nc" id="L173">    sb.append(&quot;Experimental: &quot;).append(d.experimental()).append('\n');</span>
+<span class="nc bnc" id="L174" title="All 2 branches missed.">    if (d.documentationPath() != null) {</span>
+<span class="nc" id="L175">      sb.append(&quot;Documentation: &quot;).append(d.documentationPath()).append('\n');</span>
+    }
+<span class="nc" id="L177">    sb.append('\n').append(d.description());</span>
+<span class="nc" id="L178">    text.setText(sb.toString());</span>
+<span class="nc" id="L179">    JScrollPane scroll = new JScrollPane(text);</span>
+<span class="nc" id="L180">    scroll.setPreferredSize(new Dimension(480, 240));</span>
+<span class="nc" id="L181">    JDialog dialog = new JDialog(parent, d.name(), false);</span>
+<span class="nc" id="L182">    dialog.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);</span>
+<span class="nc" id="L183">    dialog.getContentPane().add(new JLabel(&quot;Plugin information&quot;), BorderLayout.NORTH);</span>
+<span class="nc" id="L184">    dialog.getContentPane().add(scroll, BorderLayout.CENTER);</span>
+<span class="nc" id="L185">    dialog.pack();</span>
+<span class="nc" id="L186">    dialog.setLocationRelativeTo(parent);</span>
+<span class="nc" id="L187">    dialog.setVisible(true);</span>
+<span class="nc" id="L188">  }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

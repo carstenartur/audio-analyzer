@@ -1,0 +1,349 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ExperimentNodeCatalog.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Core</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.catalog</a> &gt; <span class="el_source">ExperimentNodeCatalog.java</span></div><h1>ExperimentNodeCatalog.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.catalog;
+
+import java.util.List;
+import org.hammer.audio.workflow.DataTypes;
+import org.hammer.audio.workflow.Node;
+import org.hammer.audio.workflow.Port;
+import org.hammer.audio.workflow.PortDirection;
+import org.hammer.audio.workflow.PortMultiplicity;
+
+/**
+ * Factory methods for the first experiment node catalog.
+ *
+ * &lt;p&gt;Each method returns a fresh {@link Node} prototype that represents one experiment component.
+ * The nodes are compatible with the existing {@code audio-core} workflow model.
+ *
+ * &lt;p&gt;&lt;b&gt;Allowed callers&lt;/b&gt;: application services and tests. Must not depend on UI, execution
+ * runtime, persistence or JGit. The catalog lives in the workflow domain layer.
+ *
+ * &lt;p&gt;See {@code docs/architecture/experiment-node-catalog.md} for the full catalog specification
+ * including valid and invalid connection examples.
+ */
+public final class ExperimentNodeCatalog {
+
+  // Shared port identifiers used across multiple node types
+  private static final String PORT_AUDIO_IN = &quot;audio-in&quot;;
+  private static final String PORT_AUDIO_OUT = &quot;audio-out&quot;;
+  private static final String PORT_NAME_AUDIO_IN = &quot;Audio In&quot;;
+  private static final String PORT_NAME_AUDIO_OUT = &quot;Audio Out&quot;;
+
+  private ExperimentNodeCatalog() {
+    // utility class
+  }
+
+  // -------------------------------------------------------------------------
+  // Input nodes
+  // -------------------------------------------------------------------------
+
+  /**
+   * Creates a {@code RecordingInput} node that supplies a recorded audio dataset.
+   *
+   * &lt;p&gt;Output: one {@code Dataset} port.
+   *
+   * @param nodeId stable node identifier
+   * @return prototype node
+   */
+  public static Node recordingInput(String nodeId) {
+<span class="fc" id="L47">    return new Node(</span>
+        nodeId,
+        &quot;recording-input&quot;,
+        &quot;Recording Input&quot;,
+<span class="fc" id="L51">        List.of(),</span>
+<span class="fc" id="L52">        List.of(</span>
+<span class="fc" id="L53">            output(</span>
+<span class="fc" id="L54">                PORT_AUDIO_OUT, &quot;Audio Dataset&quot;, DataTypes.DATASET.id(), PortMultiplicity.SINGLE)));</span>
+  }
+
+  /**
+   * Creates a {@code SyntheticSignalGenerator} node that generates a synthetic audio signal.
+   *
+   * &lt;p&gt;Output: one {@code AudioBlock} port.
+   *
+   * @param nodeId stable node identifier
+   * @return prototype node
+   */
+  public static Node syntheticSignalGenerator(String nodeId) {
+<span class="fc" id="L66">    return new Node(</span>
+        nodeId,
+        &quot;synthetic-signal-generator&quot;,
+        &quot;Synthetic Signal Generator&quot;,
+<span class="fc" id="L70">        List.of(),</span>
+<span class="fc" id="L71">        List.of(</span>
+<span class="fc" id="L72">            output(</span>
+                &quot;signal-out&quot;,
+                &quot;Synthetic Signal&quot;,
+<span class="fc" id="L75">                DataTypes.AUDIO_BLOCK.id(),</span>
+                PortMultiplicity.SINGLE)));
+  }
+
+  /**
+   * Creates a {@code HumBugDbImport} node that imports recordings from the HumBugDB dataset.
+   *
+   * &lt;p&gt;Output: one {@code Dataset} port.
+   *
+   * @param nodeId stable node identifier
+   * @return prototype node
+   */
+  public static Node humBugDbImport(String nodeId) {
+<span class="fc" id="L88">    return new Node(</span>
+        nodeId,
+        &quot;humbug-db-import&quot;,
+        &quot;HumBugDB Import&quot;,
+<span class="fc" id="L92">        List.of(),</span>
+<span class="fc" id="L93">        List.of(</span>
+<span class="fc" id="L94">            output(</span>
+<span class="fc" id="L95">                &quot;dataset-out&quot;, &quot;HumBug Dataset&quot;, DataTypes.DATASET.id(), PortMultiplicity.SINGLE)));</span>
+  }
+
+  // -------------------------------------------------------------------------
+  // DSP nodes
+  // -------------------------------------------------------------------------
+
+  /**
+   * Creates a {@code Gain} node that applies a gain factor to an audio block.
+   *
+   * &lt;p&gt;Input: one {@code AudioBlock} port. Output: one {@code AudioBlock} port.
+   *
+   * @param nodeId stable node identifier
+   * @return prototype node
+   */
+  public static Node gain(String nodeId) {
+<span class="fc" id="L111">    return new Node(</span>
+        nodeId,
+        &quot;gain&quot;,
+        &quot;Gain&quot;,
+<span class="fc" id="L115">        List.of(</span>
+<span class="fc" id="L116">            input(</span>
+                PORT_AUDIO_IN,
+                PORT_NAME_AUDIO_IN,
+<span class="fc" id="L119">                DataTypes.AUDIO_BLOCK.id(),</span>
+                PortMultiplicity.SINGLE)),
+<span class="fc" id="L121">        List.of(</span>
+<span class="fc" id="L122">            output(</span>
+                PORT_AUDIO_OUT,
+                PORT_NAME_AUDIO_OUT,
+<span class="fc" id="L125">                DataTypes.AUDIO_BLOCK.id(),</span>
+                PortMultiplicity.SINGLE)));
+  }
+
+  /**
+   * Creates a {@code BandpassFilter} node.
+   *
+   * &lt;p&gt;Input: one {@code AudioBlock}. Output: one {@code AudioBlock}.
+   *
+   * @param nodeId stable node identifier
+   * @return prototype node
+   */
+  public static Node bandpassFilter(String nodeId) {
+<span class="fc" id="L138">    return new Node(</span>
+        nodeId,
+        &quot;bandpass-filter&quot;,
+        &quot;Bandpass Filter&quot;,
+<span class="fc" id="L142">        List.of(</span>
+<span class="fc" id="L143">            input(</span>
+                PORT_AUDIO_IN,
+                PORT_NAME_AUDIO_IN,
+<span class="fc" id="L146">                DataTypes.AUDIO_BLOCK.id(),</span>
+                PortMultiplicity.SINGLE)),
+<span class="fc" id="L148">        List.of(</span>
+<span class="fc" id="L149">            output(</span>
+                PORT_AUDIO_OUT,
+                &quot;Filtered Audio&quot;,
+<span class="fc" id="L152">                DataTypes.AUDIO_BLOCK.id(),</span>
+                PortMultiplicity.SINGLE)));
+  }
+
+  /**
+   * Creates an {@code FFT} node that transforms an audio block to a spectrum.
+   *
+   * &lt;p&gt;Input: one {@code AudioBlock}. Output: one {@code Spectrum}.
+   *
+   * @param nodeId stable node identifier
+   * @return prototype node
+   */
+  public static Node fft(String nodeId) {
+<span class="fc" id="L165">    return new Node(</span>
+        nodeId,
+        &quot;fft&quot;,
+        &quot;FFT&quot;,
+<span class="fc" id="L169">        List.of(</span>
+<span class="fc" id="L170">            input(</span>
+                PORT_AUDIO_IN,
+                PORT_NAME_AUDIO_IN,
+<span class="fc" id="L173">                DataTypes.AUDIO_BLOCK.id(),</span>
+                PortMultiplicity.SINGLE)),
+<span class="fc" id="L175">        List.of(</span>
+<span class="fc" id="L176">            output(&quot;spectrum-out&quot;, &quot;Spectrum&quot;, DataTypes.SPECTRUM.id(), PortMultiplicity.SINGLE)));</span>
+  }
+
+  // -------------------------------------------------------------------------
+  // Analysis nodes
+  // -------------------------------------------------------------------------
+
+  /**
+   * Creates a {@code WingbeatFeatureExtraction} node.
+   *
+   * &lt;p&gt;Input: one {@code Spectrum}. Output: one {@code FeatureSet}.
+   *
+   * @param nodeId stable node identifier
+   * @return prototype node
+   */
+  public static Node wingbeatFeatureExtraction(String nodeId) {
+<span class="fc" id="L192">    return new Node(</span>
+        nodeId,
+        &quot;wingbeat-feature-extraction&quot;,
+        &quot;Wingbeat Feature Extraction&quot;,
+<span class="fc" id="L196">        List.of(input(&quot;spectrum-in&quot;, &quot;Spectrum&quot;, DataTypes.SPECTRUM.id(), PortMultiplicity.SINGLE)),</span>
+<span class="fc" id="L197">        List.of(</span>
+<span class="fc" id="L198">            output(</span>
+                &quot;features-out&quot;,
+                &quot;Feature Set&quot;,
+<span class="fc" id="L201">                DataTypes.FEATURE_SET.id(),</span>
+                PortMultiplicity.SINGLE)));
+  }
+
+  /**
+   * Creates a {@code Classifier} node.
+   *
+   * &lt;p&gt;Input: one {@code FeatureSet}. Output: one {@code ClassificationResult}.
+   *
+   * @param nodeId stable node identifier
+   * @return prototype node
+   */
+  public static Node classifier(String nodeId) {
+<span class="fc" id="L214">    return new Node(</span>
+        nodeId,
+        &quot;classifier&quot;,
+        &quot;Classifier&quot;,
+<span class="fc" id="L218">        List.of(</span>
+<span class="fc" id="L219">            input(</span>
+<span class="fc" id="L220">                &quot;features-in&quot;, &quot;Feature Set&quot;, DataTypes.FEATURE_SET.id(), PortMultiplicity.SINGLE)),</span>
+<span class="fc" id="L221">        List.of(</span>
+<span class="fc" id="L222">            output(</span>
+                &quot;result-out&quot;,
+                &quot;Classification Result&quot;,
+<span class="fc" id="L225">                DataTypes.CLASSIFICATION_RESULT.id(),</span>
+                PortMultiplicity.SINGLE)));
+  }
+
+  /**
+   * Creates a {@code Localization} node.
+   *
+   * &lt;p&gt;Input: one {@code AudioBlock}. Output: one {@code LocalizationResult}.
+   *
+   * @param nodeId stable node identifier
+   * @return prototype node
+   */
+  public static Node localization(String nodeId) {
+<span class="fc" id="L238">    return new Node(</span>
+        nodeId,
+        &quot;localization&quot;,
+        &quot;Localization&quot;,
+<span class="fc" id="L242">        List.of(</span>
+<span class="fc" id="L243">            input(</span>
+                PORT_AUDIO_IN,
+                PORT_NAME_AUDIO_IN,
+<span class="fc" id="L246">                DataTypes.AUDIO_BLOCK.id(),</span>
+                PortMultiplicity.SINGLE)),
+<span class="fc" id="L248">        List.of(</span>
+<span class="fc" id="L249">            output(</span>
+                &quot;location-out&quot;,
+                &quot;Localization Result&quot;,
+<span class="fc" id="L252">                DataTypes.LOCALIZATION_RESULT.id(),</span>
+                PortMultiplicity.SINGLE)));
+  }
+
+  /**
+   * Creates a {@code Benchmark} node.
+   *
+   * &lt;p&gt;Input: one {@code ClassificationResult}. Output: one {@code BenchmarkResult}.
+   *
+   * @param nodeId stable node identifier
+   * @return prototype node
+   */
+  public static Node benchmark(String nodeId) {
+<span class="fc" id="L265">    return new Node(</span>
+        nodeId,
+        &quot;benchmark&quot;,
+        &quot;Benchmark&quot;,
+<span class="fc" id="L269">        List.of(</span>
+<span class="fc" id="L270">            input(</span>
+                &quot;result-in&quot;,
+                &quot;Classification Result&quot;,
+<span class="fc" id="L273">                DataTypes.CLASSIFICATION_RESULT.id(),</span>
+                PortMultiplicity.SINGLE)),
+<span class="fc" id="L275">        List.of(</span>
+<span class="fc" id="L276">            output(</span>
+                &quot;benchmark-out&quot;,
+                &quot;Benchmark Result&quot;,
+<span class="fc" id="L279">                DataTypes.BENCHMARK_RESULT.id(),</span>
+                PortMultiplicity.SINGLE)));
+  }
+
+  // -------------------------------------------------------------------------
+  // Output nodes
+  // -------------------------------------------------------------------------
+
+  /**
+   * Creates a {@code Report} node that collects results and emits a human-readable report.
+   *
+   * &lt;p&gt;Input: one {@code BenchmarkResult}. Output: one {@code Report}.
+   *
+   * @param nodeId stable node identifier
+   * @return prototype node
+   */
+  public static Node report(String nodeId) {
+<span class="fc" id="L296">    return new Node(</span>
+        nodeId,
+        &quot;report&quot;,
+        &quot;Report&quot;,
+<span class="fc" id="L300">        List.of(</span>
+<span class="fc" id="L301">            input(</span>
+                &quot;benchmark-in&quot;,
+                &quot;Benchmark Result&quot;,
+<span class="fc" id="L304">                DataTypes.BENCHMARK_RESULT.id(),</span>
+                PortMultiplicity.SINGLE)),
+<span class="fc" id="L306">        List.of(output(&quot;report-out&quot;, &quot;Report&quot;, DataTypes.REPORT.id(), PortMultiplicity.SINGLE)));</span>
+  }
+
+  /**
+   * Creates an {@code EvidenceExport} node that exports structured evidence data.
+   *
+   * &lt;p&gt;Input: one {@code ClassificationResult}. Output: none (terminal sink).
+   *
+   * @param nodeId stable node identifier
+   * @return prototype node
+   */
+  public static Node evidenceExport(String nodeId) {
+<span class="fc" id="L318">    return new Node(</span>
+        nodeId,
+        &quot;evidence-export&quot;,
+        &quot;Evidence Export&quot;,
+<span class="fc" id="L322">        List.of(</span>
+<span class="fc" id="L323">            input(</span>
+                &quot;result-in&quot;,
+                &quot;Classification Result&quot;,
+<span class="fc" id="L326">                DataTypes.CLASSIFICATION_RESULT.id(),</span>
+                PortMultiplicity.SINGLE)),
+<span class="fc" id="L328">        List.of());</span>
+  }
+
+  // -------------------------------------------------------------------------
+  // Helpers
+  // -------------------------------------------------------------------------
+
+  /**
+   * Creates a required input port. All catalog input ports are required by design: catalog nodes
+   * define standard experiment components whose inputs must be connected before execution.
+   */
+  private static Port input(
+      String id, String name, String dataType, PortMultiplicity multiplicity) {
+<span class="fc" id="L341">    return new Port(id, name, PortDirection.INPUT, dataType, true, multiplicity);</span>
+  }
+
+  private static Port output(
+      String id, String name, String dataType, PortMultiplicity multiplicity) {
+<span class="fc" id="L346">    return new Port(id, name, PortDirection.OUTPUT, dataType, false, multiplicity);</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

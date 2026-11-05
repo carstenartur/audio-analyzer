@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ClassificationResult.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.wingbeat</a> &gt; <span class="el_source">ClassificationResult.java</span></div><h1>ClassificationResult.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.wingbeat;
+
+import java.util.Objects;
+
+/**
+ * Result of a wingbeat classification.
+ *
+ * &lt;p&gt;Every result carries a label string (one of the constants defined in {@link WingbeatLabel})
+ * and a confidence value in {@code [0,1]}. An optional reference to the feature vector used for
+ * classification is included for traceability and debugging.
+ *
+ * &lt;p&gt;Callers should not treat the {@link #confidence()} as a calibrated probability without
+ * empirical validation against a labelled dataset. It is a heuristic score.
+ *
+ * @param label classification label; must not be blank
+ * @param confidence classification confidence in {@code [0,1]}
+ * @param featureVector the feature vector that produced this result, or {@code null} if not
+ *     retained
+ */
+public record ClassificationResult(
+    String label, double confidence, WingbeatFeatureVector featureVector) {
+
+  /* Validate fields. */
+<span class="fc" id="L24">  public ClassificationResult {</span>
+<span class="fc" id="L25">    Objects.requireNonNull(label, &quot;label&quot;);</span>
+<span class="pc bpc" id="L26" title="1 of 2 branches missed.">    if (label.isBlank()) {</span>
+<span class="nc" id="L27">      throw new IllegalArgumentException(&quot;label must not be blank&quot;);</span>
+    }
+<span class="pc bpc" id="L29" title="3 of 6 branches missed.">    if (!Double.isFinite(confidence) || confidence &lt; 0.0 || confidence &gt; 1.0) {</span>
+<span class="nc" id="L30">      throw new IllegalArgumentException(&quot;confidence must be finite and in [0,1]&quot;);</span>
+    }
+<span class="fc" id="L32">  }</span>
+
+  /**
+   * Create a result without retaining the feature vector.
+   *
+   * @param label classification label; must not be blank
+   * @param confidence classification confidence in {@code [0,1]}
+   */
+  public ClassificationResult(String label, double confidence) {
+<span class="fc" id="L41">    this(label, confidence, null);</span>
+<span class="fc" id="L42">  }</span>
+
+  /**
+   * Create an unknown result with zero confidence and no feature vector.
+   *
+   * @return unknown classification result
+   */
+  public static ClassificationResult unknown() {
+<span class="fc" id="L50">    return new ClassificationResult(WingbeatLabel.UNKNOWN, 0.0, null);</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

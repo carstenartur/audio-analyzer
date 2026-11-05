@@ -1,0 +1,393 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WaveformPanel.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer</a> &gt; <span class="el_source">WaveformPanel.java</span></div><h1>WaveformPanel.java</h1><pre class="source lang-java linenums">package org.hammer;
+
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.Rectangle;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
+import java.util.logging.Logger;
+import javax.swing.JPanel;
+import org.hammer.audio.AudioCaptureService;
+import org.hammer.audio.WaveformModel;
+import org.hammer.audio.analysis.WaveformTrigger;
+import org.hammer.audio.core.AudioBlock;
+import org.hammer.audio.ui.theme.PlotRenderTheme;
+
+/**
+ * Panel for displaying audio waveform visualization.
+ *
+ * &lt;p&gt;Refactored to use AudioCaptureService and WaveformModel instead of direct singleton access.
+ * The panel now receives the service via setter and uses thread-safe model snapshots for rendering.
+ *
+ * @author chammer
+ */
+public final class WaveformPanel extends JPanel {
+
+<span class="fc" id="L26">  private static final Logger LOGGER = Logger.getLogger(WaveformPanel.class.getName());</span>
+  private static final int LEFT_MARGIN = 48;
+  private static final int RIGHT_MARGIN = 12;
+  private static final int TOP_MARGIN = 20;
+  private static final int BOTTOM_MARGIN = 34;
+
+  private AudioCaptureService audioCaptureService;
+  private transient WaveformModel frozenModel;
+  private transient AudioBlock frozenBlock;
+  private boolean frozen;
+
+<span class="fc" id="L37">  private final transient WaveformTrigger trigger = new WaveformTrigger();</span>
+  private transient WaveformTrigger.TriggeredView lastTriggeredView;
+<span class="fc" id="L39">  private transient long lastTriggeredBlockFrameIndex = Long.MIN_VALUE;</span>
+<span class="fc" id="L40">  private transient int[] triggerXs = new int[0];</span>
+<span class="fc" id="L41">  private transient int[] triggerYs = new int[0];</span>
+  private boolean triggerEnabled;
+
+  /**
+   * Create a new WaveformPanel.
+   *
+   * &lt;p&gt;Note: The audio capture service must be set via {@link #setAudioCaptureService} before the
+   * panel can display waveforms.
+   */
+  public WaveformPanel() {
+<span class="fc" id="L51">    super(true);</span>
+<span class="fc" id="L52">    LOGGER.info(&quot;WaveformPanel created&quot;);</span>
+
+    // Timer to periodically repaint at consistent interval for smooth display updates
+<span class="fc" id="L55">    javax.swing.Timer t = new javax.swing.Timer(UiConstants.REFRESH_INTERVAL_MS, e -&gt; repaint());</span>
+<span class="fc" id="L56">    t.start();</span>
+
+    // Notify service when panel is resized
+<span class="fc" id="L59">    addComponentListener(</span>
+<span class="fc" id="L60">        new ComponentAdapter() {</span>
+          @Override
+          public void componentResized(ComponentEvent e) {
+<span class="pc bpc" id="L63" title="1 of 2 branches missed.">            if (LOGGER.isLoggable(java.util.logging.Level.FINE)) {</span>
+<span class="nc" id="L64">              LOGGER.fine(String.format(&quot;WaveformPanel resized to %dx%d&quot;, getWidth(), getHeight()));</span>
+            }
+<span class="fc bfc" id="L66" title="All 2 branches covered.">            if (audioCaptureService != null) {</span>
+<span class="fc" id="L67">              LOGGER.fine(</span>
+<span class="fc" id="L68">                  String.format(</span>
+<span class="fc" id="L69">                      &quot;Panel resized to %dx%d, recomputing layout&quot;, getWidth(), getHeight()));</span>
+<span class="fc" id="L70">              audioCaptureService.recomputeLayout(getWidth(), getHeight());</span>
+            }
+<span class="fc" id="L72">          }</span>
+        });
+<span class="fc" id="L74">  }</span>
+
+  /**
+   * Set the audio capture service to use for waveform data.
+   *
+   * @param service the AudioCaptureService
+   */
+  public void setAudioCaptureService(AudioCaptureService service) {
+<span class="fc" id="L82">    this.audioCaptureService = service;</span>
+<span class="fc" id="L83">    this.frozenModel = null;</span>
+<span class="fc" id="L84">    this.frozenBlock = null;</span>
+<span class="fc" id="L85">    this.frozen = false;</span>
+<span class="pc bpc" id="L86" title="1 of 2 branches missed.">    LOGGER.info(&quot;AudioCaptureService set: &quot; + (service != null));</span>
+<span class="pc bpc" id="L87" title="1 of 2 branches missed.">    if (service != null) {</span>
+      // Initial layout computation
+<span class="fc" id="L89">      service.recomputeLayout(getWidth(), getHeight());</span>
+    }
+<span class="fc" id="L91">  }</span>
+
+  /**
+   * Enable or disable oscilloscope-style triggering. When enabled, the panel uses the configured
+   * {@link WaveformTrigger} to align each refresh to a stable trigger event (e.g. rising
+   * zero-crossing).
+   *
+   * @param enabled true to enable triggering, false to display raw blocks
+   */
+  public void setTriggerEnabled(boolean enabled) {
+<span class="nc" id="L101">    this.triggerEnabled = enabled;</span>
+<span class="nc bnc" id="L102" title="All 2 branches missed.">    if (!enabled) {</span>
+<span class="nc" id="L103">      lastTriggeredView = null;</span>
+<span class="nc" id="L104">      trigger.reset();</span>
+    }
+<span class="nc" id="L106">    repaint();</span>
+<span class="nc" id="L107">  }</span>
+
+  /**
+   * @return true if oscilloscope-style triggering is currently enabled
+   */
+  public boolean isTriggerEnabled() {
+<span class="nc" id="L113">    return triggerEnabled;</span>
+  }
+
+  /**
+   * @return the underlying {@link WaveformTrigger}; safe to reconfigure from the EDT
+   */
+  @SuppressWarnings(&quot;PMD.AvoidProtectedFieldInFinalClass&quot;)
+  public WaveformTrigger getTrigger() {
+<span class="nc" id="L121">    return trigger;</span>
+  }
+
+  /**
+   * Freeze or unfreeze the displayed waveform.
+   *
+   * @param frozen true to hold the current waveform snapshot
+   */
+  public void setFrozen(boolean frozen) {
+<span class="nc bnc" id="L130" title="All 4 branches missed.">    if (frozen &amp;&amp; !this.frozen) {</span>
+<span class="nc" id="L131">      frozenModel = getCurrentModel();</span>
+<span class="nc" id="L132">      frozenBlock = getCurrentBlock();</span>
+<span class="nc bnc" id="L133" title="All 2 branches missed.">    } else if (!frozen) {</span>
+<span class="nc" id="L134">      frozenModel = null;</span>
+<span class="nc" id="L135">      frozenBlock = null;</span>
+    }
+<span class="nc" id="L137">    this.frozen = frozen;</span>
+<span class="nc" id="L138">    repaint();</span>
+<span class="nc" id="L139">  }</span>
+
+  /**
+   * @return current waveform model, respecting frozen display state
+   */
+  public WaveformModel getCurrentModel() {
+<span class="nc bnc" id="L145" title="All 4 branches missed.">    if (frozen &amp;&amp; frozenModel != null) {</span>
+<span class="nc" id="L146">      return frozenModel;</span>
+    }
+<span class="nc bnc" id="L148" title="All 2 branches missed.">    if (audioCaptureService == null) {</span>
+<span class="nc" id="L149">      return WaveformModel.EMPTY;</span>
+    }
+<span class="nc" id="L151">    return audioCaptureService.getLatestModel();</span>
+  }
+
+  private AudioBlock getCurrentBlock() {
+<span class="nc bnc" id="L155" title="All 4 branches missed.">    if (frozen &amp;&amp; frozenBlock != null) {</span>
+<span class="nc" id="L156">      return frozenBlock;</span>
+    }
+<span class="nc bnc" id="L158" title="All 2 branches missed.">    if (audioCaptureService == null) {</span>
+<span class="nc" id="L159">      return null;</span>
+    }
+<span class="nc" id="L161">    return audioCaptureService.getLatestBlock();</span>
+  }
+
+  @Override
+  protected void paintComponent(Graphics g) {
+<span class="nc" id="L166">    super.paintComponent(g);</span>
+<span class="nc" id="L167">    Graphics2D g2 = (Graphics2D) g.create();</span>
+    try {
+<span class="nc" id="L169">      PlotRenderTheme.applyQualityRendering(g2);</span>
+<span class="nc" id="L170">      paintWaveform(g2);</span>
+    } finally {
+<span class="nc" id="L172">      g2.dispose();</span>
+    }
+<span class="nc" id="L174">  }</span>
+
+  private void paintWaveform(Graphics2D g2) {
+<span class="nc bnc" id="L177" title="All 2 branches missed.">    if (LOGGER.isLoggable(java.util.logging.Level.FINE)) {</span>
+<span class="nc" id="L178">      LOGGER.fine(&quot;paintComponent called&quot;);</span>
+    }
+<span class="nc" id="L180">    int width = Math.max(1, getWidth());</span>
+<span class="nc" id="L181">    int height = Math.max(1, getHeight());</span>
+<span class="nc" id="L182">    Rectangle plotBounds =</span>
+        new Rectangle(
+            LEFT_MARGIN,
+            TOP_MARGIN,
+<span class="nc" id="L186">            Math.max(1, width - LEFT_MARGIN - RIGHT_MARGIN),</span>
+<span class="nc" id="L187">            Math.max(1, height - TOP_MARGIN - BOTTOM_MARGIN));</span>
+<span class="nc" id="L188">    PlotRenderTheme.drawPlotBackground(g2, getWidth(), getHeight(), plotBounds);</span>
+<span class="nc" id="L189">    PlotRenderTheme.drawGrid(g2, plotBounds, 10, 8);</span>
+<span class="nc bnc" id="L190" title="All 2 branches missed.">    PlotRenderTheme.drawTitle(g2, 10, 16, triggerEnabled ? &quot;Waveform (triggered)&quot; : &quot;Waveform&quot;);</span>
+<span class="nc" id="L191">    PlotRenderTheme.drawXAxisLabel(g2, plotBounds, &quot;Sample index&quot;);</span>
+<span class="nc" id="L192">    PlotRenderTheme.drawYAxisLabel(g2, plotBounds, &quot;Amplitude [-1..1]&quot;);</span>
+<span class="nc" id="L193">    PlotRenderTheme.drawYTicks(</span>
+        g2, plotBounds, new double[] {0.0d, 0.5d, 1.0d}, new String[] {&quot;+1&quot;, &quot;0&quot;, &quot;-1&quot;});
+
+<span class="nc bnc" id="L196" title="All 2 branches missed.">    if (audioCaptureService == null) {</span>
+<span class="nc" id="L197">      LOGGER.warning(&quot;paintComponent: audioCaptureService is null&quot;);</span>
+<span class="nc" id="L198">      PlotRenderTheme.drawEmptyState(g2, plotBounds, &quot;No audio service connected&quot;);</span>
+<span class="nc" id="L199">      return;</span>
+    }
+
+<span class="nc bnc" id="L202" title="All 2 branches missed.">    if (triggerEnabled) {</span>
+<span class="nc bnc" id="L203" title="All 2 branches missed.">      if (paintTriggeredWaveform(g2, plotBounds)) {</span>
+<span class="nc" id="L204">        drawLevelOverlay(g2, plotBounds);</span>
+<span class="nc" id="L205">        return;</span>
+      }
+      // Fall through to free-running mode if trigger cannot produce a view yet.
+    }
+
+<span class="nc" id="L210">    WaveformModel model = getCurrentModel();</span>
+<span class="nc" id="L211">    final int points = model.getNumberOfPoints();</span>
+<span class="nc bnc" id="L212" title="All 2 branches missed.">    if (points == 0) {</span>
+<span class="nc" id="L213">      PlotRenderTheme.drawEmptyState(g2, plotBounds, &quot;Waiting for waveform data...&quot;);</span>
+<span class="nc" id="L214">      return;</span>
+    }
+
+<span class="nc" id="L217">    int[] xPoints = model.getXPoints();</span>
+<span class="nc" id="L218">    int[][] yPoints = model.getYPoints();</span>
+<span class="nc bnc" id="L219" title="All 2 branches missed.">    int channel0Points = yPoints.length &gt; 0 ? Math.min(points, yPoints[0].length) : 0;</span>
+<span class="nc bnc" id="L220" title="All 2 branches missed.">    int channel1Points = yPoints.length &gt; 1 ? Math.min(points, yPoints[1].length) : 0;</span>
+<span class="nc" id="L221">    int xCount = xPoints.length;</span>
+<span class="nc" id="L222">    int leftRenderPoints = Math.min(xCount, channel0Points);</span>
+<span class="nc" id="L223">    int rightRenderPoints = Math.min(xCount, channel1Points);</span>
+
+<span class="nc bnc" id="L225" title="All 4 branches missed.">    if (channel0Points &gt; 1 &amp;&amp; xCount &gt; 1) {</span>
+<span class="nc" id="L226">      int[] scaledX = scaleXPoints(xPoints, leftRenderPoints, plotBounds);</span>
+<span class="nc" id="L227">      int[] scaledY = scaleYPoints(yPoints[0], leftRenderPoints, plotBounds);</span>
+<span class="nc" id="L228">      g2.setColor(PlotRenderTheme.WAVEFORM_LEFT);</span>
+<span class="nc" id="L229">      g2.setStroke(PlotRenderTheme.TRACE_STROKE);</span>
+<span class="nc" id="L230">      g2.drawPolyline(scaledX, scaledY, leftRenderPoints);</span>
+    }
+
+<span class="nc bnc" id="L233" title="All 4 branches missed.">    if (channel1Points &gt; 1 &amp;&amp; xCount &gt; 1) {</span>
+<span class="nc" id="L234">      int[] scaledX = scaleXPoints(xPoints, rightRenderPoints, plotBounds);</span>
+<span class="nc" id="L235">      int[] scaledY = scaleYPoints(yPoints[1], rightRenderPoints, plotBounds);</span>
+<span class="nc" id="L236">      g2.setColor(PlotRenderTheme.WAVEFORM_RIGHT);</span>
+<span class="nc" id="L237">      g2.setStroke(PlotRenderTheme.THIN_TRACE_STROKE);</span>
+<span class="nc" id="L238">      g2.drawPolyline(scaledX, scaledY, rightRenderPoints);</span>
+    }
+
+<span class="nc" id="L241">    int centerY = plotBounds.y + plotBounds.height / 2;</span>
+<span class="nc" id="L242">    g2.setColor(PlotRenderTheme.CENTER_LINE);</span>
+<span class="nc" id="L243">    g2.setStroke(PlotRenderTheme.AXIS_STROKE);</span>
+<span class="nc" id="L244">    g2.drawLine(plotBounds.x, centerY, plotBounds.x + plotBounds.width - 1, centerY);</span>
+
+<span class="nc" id="L246">    PlotRenderTheme.drawXTicks(</span>
+        g2,
+        plotBounds,
+        new double[] {0.0d, 0.5d, 1.0d},
+        new String[] {
+<span class="nc" id="L251">          &quot;0&quot;, Integer.toString(Math.max(0, points / 2)), Integer.toString(points - 1)</span>
+        });
+
+<span class="nc" id="L254">    drawLevelOverlay(g2, plotBounds);</span>
+<span class="nc" id="L255">  }</span>
+
+  /**
+   * Maps legacy full-panel X coordinates into the current plot bounds.
+   *
+   * @param source full-panel X coordinates from {@link WaveformModel}
+   * @param count number of coordinates to transform
+   * @param plotBounds target plot area
+   * @return scaled X coordinates inside {@code plotBounds}
+   */
+  private int[] scaleXPoints(int[] source, int count, Rectangle plotBounds) {
+<span class="nc" id="L266">    int[] scaled = new int[count];</span>
+<span class="nc" id="L267">    int sourceWidth = Math.max(1, getWidth() - 1);</span>
+<span class="nc bnc" id="L268" title="All 2 branches missed.">    for (int i = 0; i &lt; count; i++) {</span>
+<span class="nc" id="L269">      double normalized = Math.max(0.0d, Math.min(1.0d, source[i] / (double) sourceWidth));</span>
+<span class="nc" id="L270">      scaled[i] = plotBounds.x + (int) Math.round(normalized * (plotBounds.width - 1));</span>
+    }
+<span class="nc" id="L272">    return scaled;</span>
+  }
+
+  /**
+   * Maps legacy full-panel Y coordinates into the current plot bounds.
+   *
+   * @param source full-panel Y coordinates from {@link WaveformModel}
+   * @param count number of coordinates to transform
+   * @param plotBounds target plot area
+   * @return scaled Y coordinates inside {@code plotBounds}
+   */
+  private int[] scaleYPoints(int[] source, int count, Rectangle plotBounds) {
+<span class="nc" id="L284">    int[] scaled = new int[count];</span>
+<span class="nc" id="L285">    int sourceHeight = Math.max(1, getHeight() - 1);</span>
+<span class="nc bnc" id="L286" title="All 2 branches missed.">    for (int i = 0; i &lt; count; i++) {</span>
+<span class="nc" id="L287">      double normalized = Math.max(0.0d, Math.min(1.0d, source[i] / (double) sourceHeight));</span>
+<span class="nc" id="L288">      scaled[i] = plotBounds.y + (int) Math.round(normalized * (plotBounds.height - 1));</span>
+    }
+<span class="nc" id="L290">    return scaled;</span>
+  }
+
+  /**
+   * Render the latest triggered view. Returns {@code true} if a view was drawn (so the caller can
+   * skip the free-running model path).
+   */
+  private boolean paintTriggeredWaveform(Graphics2D g2, Rectangle plotBounds) {
+<span class="nc" id="L298">    AudioBlock block = getCurrentBlock();</span>
+<span class="nc bnc" id="L299" title="All 2 branches missed.">    if (block != null</span>
+<span class="nc bnc" id="L300" title="All 2 branches missed.">        &amp;&amp; block.channels() &gt; 0</span>
+<span class="nc bnc" id="L301" title="All 2 branches missed.">        &amp;&amp; block.frames() &gt; 0</span>
+<span class="nc bnc" id="L302" title="All 2 branches missed.">        &amp;&amp; block.frameIndex() != lastTriggeredBlockFrameIndex) {</span>
+<span class="nc" id="L303">      trigger.process(block, 0).ifPresent(v -&gt; lastTriggeredView = v);</span>
+<span class="nc" id="L304">      lastTriggeredBlockFrameIndex = block.frameIndex();</span>
+    }
+<span class="nc" id="L306">    WaveformTrigger.TriggeredView view = lastTriggeredView;</span>
+<span class="nc bnc" id="L307" title="All 4 branches missed.">    if (view == null || view.samplesView().length == 0) {</span>
+<span class="nc" id="L308">      PlotRenderTheme.drawEmptyState(g2, plotBounds, &quot;Waiting for trigger...&quot;);</span>
+<span class="nc" id="L309">      return true;</span>
+    }
+<span class="nc" id="L311">    float[] samples = view.samplesView();</span>
+<span class="nc" id="L312">    int n = samples.length;</span>
+<span class="nc" id="L313">    int width = Math.max(1, plotBounds.width);</span>
+<span class="nc" id="L314">    int height = Math.max(1, plotBounds.height);</span>
+<span class="nc" id="L315">    int centerY = plotBounds.y + height / 2;</span>
+<span class="nc" id="L316">    int amplitude = Math.max(1, height / 2 - 4);</span>
+
+<span class="nc bnc" id="L318" title="All 2 branches missed.">    if (triggerXs.length != n) {</span>
+<span class="nc" id="L319">      triggerXs = new int[n];</span>
+<span class="nc" id="L320">      triggerYs = new int[n];</span>
+    }
+<span class="nc" id="L322">    int[] xs = triggerXs;</span>
+<span class="nc" id="L323">    int[] ys = triggerYs;</span>
+<span class="nc bnc" id="L324" title="All 2 branches missed.">    for (int i = 0; i &lt; n; i++) {</span>
+<span class="nc" id="L325">      xs[i] = plotBounds.x + (int) ((long) i * (width - 1) / Math.max(1, n - 1));</span>
+<span class="nc" id="L326">      float clamped = Math.max(-1f, Math.min(1f, samples[i]));</span>
+<span class="nc" id="L327">      ys[i] = centerY - (int) (clamped * amplitude);</span>
+    }
+
+    // Trigger level indicator.
+<span class="nc" id="L331">    int levelY = centerY - (int) (Math.max(-1f, Math.min(1f, view.level())) * amplitude);</span>
+<span class="nc" id="L332">    g2.setColor(PlotRenderTheme.CENTER_LINE);</span>
+<span class="nc" id="L333">    g2.setStroke(PlotRenderTheme.AXIS_STROKE);</span>
+<span class="nc" id="L334">    g2.drawLine(plotBounds.x, levelY, plotBounds.x + width - 1, levelY);</span>
+
+    // Center line.
+<span class="nc" id="L337">    g2.drawLine(plotBounds.x, centerY, plotBounds.x + width - 1, centerY);</span>
+
+    // Trace.
+<span class="nc" id="L340">    g2.setColor(PlotRenderTheme.WAVEFORM_LEFT);</span>
+<span class="nc" id="L341">    g2.setStroke(PlotRenderTheme.TRACE_STROKE);</span>
+<span class="nc" id="L342">    g2.drawPolyline(xs, ys, n);</span>
+
+    // Status text.
+<span class="nc" id="L345">    String status =</span>
+<span class="nc" id="L346">        String.format(</span>
+            &quot;Trig: %s  Slope: %s  Level: %+.2f  %s&quot;,
+<span class="nc bnc" id="L348" title="All 2 branches missed.">            view.triggered() ? &quot;FIRED&quot; : &quot;AUTO&quot;,</span>
+<span class="nc bnc" id="L349" title="All 2 branches missed.">            view.slope() == WaveformTrigger.Slope.RISING ? &quot;↑&quot; : &quot;↓&quot;,</span>
+<span class="nc" id="L350">            view.level(),</span>
+<span class="nc bnc" id="L351" title="All 2 branches missed.">            view.triggered() ? &quot;&quot; : &quot;(timeout)&quot;);</span>
+<span class="nc" id="L352">    g2.setFont(PlotRenderTheme.LABEL_FONT);</span>
+<span class="nc" id="L353">    g2.setColor(PlotRenderTheme.TEXT_MUTED);</span>
+<span class="nc" id="L354">    g2.drawString(status, plotBounds.x + 10, plotBounds.y + 32);</span>
+<span class="nc" id="L355">    PlotRenderTheme.drawXTicks(</span>
+        g2,
+        plotBounds,
+        new double[] {0.0d, 0.5d, 1.0d},
+<span class="nc" id="L359">        new String[] {&quot;0&quot;, Integer.toString(n / 2), Integer.toString(n - 1)});</span>
+<span class="nc" id="L360">    return true;</span>
+  }
+
+  private void drawLevelOverlay(Graphics2D g2, Rectangle plotBounds) {
+<span class="nc" id="L364">    AudioBlock block = getCurrentBlock();</span>
+<span class="nc bnc" id="L365" title="All 4 branches missed.">    if (block == null || block.frames() == 0) {</span>
+<span class="nc" id="L366">      return;</span>
+    }
+<span class="nc" id="L368">    double sumSquares = 0.0d;</span>
+<span class="nc" id="L369">    double peak = 0.0d;</span>
+<span class="nc" id="L370">    long sampleCount = 0L;</span>
+<span class="nc bnc" id="L371" title="All 2 branches missed.">    for (int channel = 0; channel &lt; block.channels(); channel++) {</span>
+<span class="nc" id="L372">      float[] samples = block.channelView(channel);</span>
+<span class="nc bnc" id="L373" title="All 2 branches missed.">      for (float sample : samples) {</span>
+<span class="nc" id="L374">        double abs = Math.abs(sample);</span>
+<span class="nc" id="L375">        peak = Math.max(peak, abs);</span>
+<span class="nc" id="L376">        sumSquares += sample * sample;</span>
+<span class="nc" id="L377">        sampleCount++;</span>
+      }
+    }
+<span class="nc bnc" id="L380" title="All 2 branches missed.">    if (sampleCount == 0L) {</span>
+<span class="nc" id="L381">      return;</span>
+    }
+<span class="nc" id="L383">    double rms = Math.sqrt(sumSquares / sampleCount);</span>
+<span class="nc" id="L384">    String overlay = String.format(&quot;RMS %.3f  Peak %.3f&quot;, rms, peak);</span>
+<span class="nc" id="L385">    int textWidth = g2.getFontMetrics(PlotRenderTheme.LABEL_FONT).stringWidth(overlay);</span>
+<span class="nc" id="L386">    int x = plotBounds.x + Math.max(8, plotBounds.width - textWidth - 12);</span>
+<span class="nc" id="L387">    int y = plotBounds.y + 18;</span>
+<span class="nc" id="L388">    g2.setFont(PlotRenderTheme.LABEL_FONT);</span>
+<span class="nc" id="L389">    g2.setColor(PlotRenderTheme.TEXT_MUTED);</span>
+<span class="nc" id="L390">    g2.drawString(overlay, x, y);</span>
+<span class="nc" id="L391">  }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

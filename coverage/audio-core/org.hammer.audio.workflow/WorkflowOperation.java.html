@@ -1,0 +1,953 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WorkflowOperation.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Core</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow</a> &gt; <span class="el_source">WorkflowOperation.java</span></div><h1>WorkflowOperation.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow;
+
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+
+/** Semantic workflow operation with deterministic apply and optional inverse operation. */
+public sealed interface WorkflowOperation
+    permits WorkflowOperation.CreateNode,
+        WorkflowOperation.DeleteNode,
+        WorkflowOperation.MoveNode,
+        WorkflowOperation.RenameNode,
+        WorkflowOperation.ConnectPorts,
+        WorkflowOperation.DisconnectPorts,
+        WorkflowOperation.UpdateProperty,
+        WorkflowOperation.GroupNodes,
+        WorkflowOperation.UngroupNodes,
+        WorkflowOperation.RestoreNode {
+
+  String NO_GROUP = &quot;__none__&quot;;
+  String UNDO_SUFFIX = &quot;:undo&quot;;
+  String NODE_ID = &quot;nodeId&quot;;
+  String WORKFLOW_FIELD = &quot;workflow&quot;;
+  String SOURCE = &quot;source&quot;;
+  String TARGET = &quot;target&quot;;
+  String CONNECT_PORTS = &quot;ConnectPorts&quot;;
+
+  String operationId();
+
+  Instant timestamp();
+
+  String author();
+
+  List&lt;String&gt; affectedObjectIds();
+
+  Map&lt;String, String&gt; payload();
+
+  Optional&lt;WorkflowOperation&gt; inverseOperation();
+
+  Workflow apply(Workflow workflow);
+
+  static void requireOperationMetadata(
+      String operationId, Instant timestamp, String author, String fieldName) {
+<span class="fc" id="L50">    StableIds.requireStable(operationId, fieldName + &quot;.operationId&quot;);</span>
+<span class="fc" id="L51">    Objects.requireNonNull(timestamp, fieldName + &quot;.timestamp&quot;);</span>
+<span class="pc bpc" id="L52" title="2 of 4 branches missed.">    if (author == null || author.isBlank()) {</span>
+<span class="nc" id="L53">      throw new IllegalArgumentException(fieldName + &quot;.author must not be blank&quot;);</span>
+    }
+<span class="fc" id="L55">  }</span>
+
+  static Node requireNode(Workflow workflow, String nodeId, String fieldName) {
+<span class="fc" id="L58">    return workflow.nodes().stream()</span>
+<span class="fc" id="L59">        .filter(node -&gt; node.id().equals(nodeId))</span>
+<span class="fc" id="L60">        .findFirst()</span>
+<span class="fc" id="L61">        .orElseThrow(() -&gt; new IllegalArgumentException(fieldName + &quot; node not found: &quot; + nodeId));</span>
+  }
+
+  static Edge requireEdge(Workflow workflow, String edgeId, String fieldName) {
+<span class="fc" id="L65">    return workflow.edges().stream()</span>
+<span class="fc" id="L66">        .filter(edge -&gt; edge.id().equals(edgeId))</span>
+<span class="fc" id="L67">        .findFirst()</span>
+<span class="pc" id="L68">        .orElseThrow(() -&gt; new IllegalArgumentException(fieldName + &quot; edge not found: &quot; + edgeId));</span>
+  }
+
+  static void requireNodeSnapshot(Workflow workflow, Node expectedNode, String fieldName) {
+<span class="fc" id="L72">    Node actualNode = requireNode(workflow, expectedNode.id(), fieldName);</span>
+<span class="pc bpc" id="L73" title="1 of 2 branches missed.">    if (!actualNode.equals(expectedNode)) {</span>
+<span class="nc" id="L74">      throw new IllegalStateException(</span>
+<span class="nc" id="L75">          fieldName + &quot; expected node snapshot to match workflow: &quot; + expectedNode.id());</span>
+    }
+<span class="fc" id="L77">  }</span>
+
+  static void requireEdgeSnapshot(Workflow workflow, Edge expectedEdge, String fieldName) {
+<span class="fc" id="L80">    Edge actualEdge = requireEdge(workflow, expectedEdge.id(), fieldName);</span>
+<span class="fc bfc" id="L81" title="All 2 branches covered.">    if (!actualEdge.equals(expectedEdge)) {</span>
+<span class="fc" id="L82">      throw new IllegalStateException(</span>
+<span class="fc" id="L83">          fieldName + &quot; expected edge snapshot to match workflow: &quot; + expectedEdge.id());</span>
+    }
+<span class="fc" id="L85">  }</span>
+
+  static void requirePort(Node node, String portId, boolean inputPort, String fieldName) {
+<span class="fc bfc" id="L88" title="All 2 branches covered.">    List&lt;Port&gt; ports = inputPort ? node.inputPorts() : node.outputPorts();</span>
+<span class="fc" id="L89">    boolean exists = ports.stream().anyMatch(port -&gt; port.id().equals(portId));</span>
+<span class="fc bfc" id="L90" title="All 2 branches covered.">    if (!exists) {</span>
+<span class="pc bpc" id="L91" title="1 of 2 branches missed.">      String endpoint = inputPort ? TARGET : SOURCE;</span>
+<span class="fc" id="L92">      throw new IllegalArgumentException(</span>
+<span class="fc" id="L93">          fieldName + &quot; missing &quot; + endpoint + &quot; port: &quot; + node.id() + &quot;:&quot; + portId);</span>
+    }
+<span class="fc" id="L95">  }</span>
+
+  static void requireNodeIds(Workflow workflow, List&lt;String&gt; nodeIds, String fieldName) {
+<span class="fc bfc" id="L98" title="All 2 branches covered.">    for (String nodeId : nodeIds) {</span>
+<span class="fc" id="L99">      requireNode(workflow, nodeId, fieldName);</span>
+<span class="fc" id="L100">    }</span>
+<span class="fc" id="L101">  }</span>
+
+  static void requireConnectedEdges(
+      Workflow workflow, String nodeId, List&lt;Edge&gt; expectedEdges, String fieldName) {
+<span class="fc" id="L105">    Set&lt;String&gt; actualEdgeIds = new LinkedHashSet&lt;&gt;();</span>
+<span class="fc bfc" id="L106" title="All 2 branches covered.">    for (Edge edge : workflow.edges()) {</span>
+<span class="pc bpc" id="L107" title="1 of 4 branches missed.">      if (edge.sourceNodeId().equals(nodeId) || edge.targetNodeId().equals(nodeId)) {</span>
+<span class="fc" id="L108">        actualEdgeIds.add(edge.id());</span>
+      }
+<span class="fc" id="L110">    }</span>
+<span class="fc" id="L111">    Set&lt;String&gt; expectedEdgeIds = new LinkedHashSet&lt;&gt;();</span>
+<span class="fc bfc" id="L112" title="All 2 branches covered.">    for (Edge edge : expectedEdges) {</span>
+<span class="fc" id="L113">      expectedEdgeIds.add(edge.id());</span>
+<span class="fc" id="L114">    }</span>
+<span class="fc bfc" id="L115" title="All 2 branches covered.">    if (!actualEdgeIds.equals(expectedEdgeIds)) {</span>
+<span class="fc" id="L116">      throw new IllegalStateException(</span>
+          fieldName + &quot; deletedEdges must match connected edges for node &quot; + nodeId);
+    }
+<span class="fc bfc" id="L119" title="All 2 branches covered.">    for (Edge edge : expectedEdges) {</span>
+<span class="fc" id="L120">      requireEdgeSnapshot(workflow, edge, fieldName);</span>
+<span class="fc" id="L121">    }</span>
+<span class="fc" id="L122">  }</span>
+
+  static Metadata updateMetadata(Metadata metadata, String key, String value) {
+<span class="fc" id="L125">    StableIds.requireStable(key, &quot;property key&quot;);</span>
+<span class="fc" id="L126">    Map&lt;String, String&gt; entries = new ConcurrentHashMap&lt;&gt;(metadata.entries());</span>
+<span class="fc bfc" id="L127" title="All 2 branches covered.">    if (value == null) {</span>
+<span class="fc" id="L128">      entries.remove(key);</span>
+    } else {
+<span class="fc" id="L130">      entries.put(key, value);</span>
+    }
+<span class="fc bfc" id="L132" title="All 2 branches covered.">    return entries.isEmpty() ? Metadata.empty() : new Metadata(entries);</span>
+  }
+
+  static Workflow replaceNode(Workflow workflow, Node replacementNode) {
+<span class="fc" id="L136">    List&lt;Node&gt; nodes = new ArrayList&lt;&gt;(workflow.nodes().size());</span>
+<span class="fc" id="L137">    boolean replaced = false;</span>
+<span class="fc bfc" id="L138" title="All 2 branches covered.">    for (Node node : workflow.nodes()) {</span>
+<span class="fc bfc" id="L139" title="All 2 branches covered.">      if (node.id().equals(replacementNode.id())) {</span>
+<span class="fc" id="L140">        nodes.add(replacementNode);</span>
+<span class="fc" id="L141">        replaced = true;</span>
+      } else {
+<span class="fc" id="L143">        nodes.add(node);</span>
+      }
+<span class="fc" id="L145">    }</span>
+<span class="pc bpc" id="L146" title="1 of 2 branches missed.">    if (!replaced) {</span>
+<span class="nc" id="L147">      throw new IllegalArgumentException(&quot;node not found: &quot; + replacementNode.id());</span>
+    }
+<span class="fc" id="L149">    return new Workflow(</span>
+<span class="fc" id="L150">        workflow.id(), workflow.name(), nodes, workflow.edges(), workflow.metadata());</span>
+  }
+
+  static Map&lt;String, String&gt; requiredPreviousGroups(
+      List&lt;String&gt; nodeIds, Map&lt;String, String&gt; previousGroupIds, String fieldName) {
+<span class="fc" id="L155">    Objects.requireNonNull(previousGroupIds, fieldName + &quot;.previousGroupIds&quot;);</span>
+<span class="fc" id="L156">    Map&lt;String, String&gt; normalizedGroups = new ConcurrentHashMap&lt;&gt;();</span>
+<span class="fc bfc" id="L157" title="All 2 branches covered.">    for (String nodeId : nodeIds) {</span>
+<span class="pc bpc" id="L158" title="1 of 2 branches missed.">      if (!previousGroupIds.containsKey(nodeId)) {</span>
+<span class="nc" id="L159">        throw new IllegalArgumentException(</span>
+            fieldName + &quot;.previousGroupIds must contain node id &quot; + nodeId);
+      }
+<span class="fc" id="L162">      String previousGroupId = previousGroupIds.get(nodeId);</span>
+<span class="fc bfc" id="L163" title="All 2 branches covered.">      normalizedGroups.put(nodeId, previousGroupId == null ? NO_GROUP : previousGroupId);</span>
+<span class="fc" id="L164">    }</span>
+<span class="fc" id="L165">    return Map.copyOf(normalizedGroups);</span>
+  }
+
+  static List&lt;String&gt; affectedIdsForDelete(Node deletedNode, List&lt;Edge&gt; deletedEdges) {
+<span class="fc" id="L169">    List&lt;String&gt; affectedIds = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L170">    affectedIds.add(deletedNode.id());</span>
+<span class="fc bfc" id="L171" title="All 2 branches covered.">    for (Edge deletedEdge : deletedEdges) {</span>
+<span class="fc" id="L172">      affectedIds.add(deletedEdge.id());</span>
+<span class="fc" id="L173">    }</span>
+<span class="fc" id="L174">    return List.copyOf(affectedIds);</span>
+  }
+
+  /**
+   * Operation that adds a new node to the workflow.
+   *
+   * @param operationId unique operation id
+   * @param timestamp operation timestamp
+   * @param author operation author
+   * @param node node to add
+   */
+  record CreateNode(String operationId, Instant timestamp, String author, Node node)
+      implements WorkflowOperation {
+
+<span class="fc" id="L188">    public CreateNode {</span>
+<span class="fc" id="L189">      requireOperationMetadata(operationId, timestamp, author, &quot;CreateNode&quot;);</span>
+<span class="fc" id="L190">      Objects.requireNonNull(node, &quot;node&quot;);</span>
+<span class="fc" id="L191">    }</span>
+
+    @Override
+    public List&lt;String&gt; affectedObjectIds() {
+<span class="fc" id="L195">      return List.of(node.id());</span>
+    }
+
+    @Override
+    public Map&lt;String, String&gt; payload() {
+<span class="fc" id="L200">      return Map.of(NODE_ID, node.id(), &quot;nodeType&quot;, node.type(), &quot;label&quot;, node.label());</span>
+    }
+
+    @Override
+    public Optional&lt;WorkflowOperation&gt; inverseOperation() {
+<span class="fc" id="L205">      return Optional.of(</span>
+          new DeleteNode(
+<span class="fc" id="L207">              operationId + UNDO_SUFFIX, timestamp, author, node, List.of(), List.of(node.id())));</span>
+    }
+
+    @Override
+    public Workflow apply(Workflow workflow) {
+<span class="fc" id="L212">      Objects.requireNonNull(workflow, WORKFLOW_FIELD);</span>
+<span class="fc" id="L213">      Set&lt;String&gt; nodeIds = new LinkedHashSet&lt;&gt;();</span>
+<span class="fc bfc" id="L214" title="All 2 branches covered.">      for (Node existingNode : workflow.nodes()) {</span>
+<span class="fc" id="L215">        nodeIds.add(existingNode.id());</span>
+<span class="fc" id="L216">      }</span>
+<span class="pc bpc" id="L217" title="1 of 2 branches missed.">      if (nodeIds.contains(node.id())) {</span>
+<span class="nc" id="L218">        throw new IllegalArgumentException(&quot;node already exists: &quot; + node.id());</span>
+      }
+<span class="fc" id="L220">      List&lt;Node&gt; nodes = new ArrayList&lt;&gt;(workflow.nodes());</span>
+<span class="fc" id="L221">      nodes.add(node);</span>
+<span class="fc" id="L222">      return new Workflow(</span>
+<span class="fc" id="L223">          workflow.id(), workflow.name(), nodes, workflow.edges(), workflow.metadata());</span>
+    }
+  }
+
+  /**
+   * Operation that removes a node and its related edges from the workflow.
+   *
+   * @param operationId unique operation id
+   * @param timestamp operation timestamp
+   * @param author operation author
+   * @param deletedNode node snapshot to remove
+   * @param deletedEdges edge snapshots to remove
+   * @param affectedObjectIds affected node and edge ids
+   */
+  record DeleteNode(
+      String operationId,
+      Instant timestamp,
+      String author,
+      Node deletedNode,
+      List&lt;Edge&gt; deletedEdges,
+      List&lt;String&gt; affectedObjectIds)
+      implements WorkflowOperation {
+
+<span class="fc" id="L246">    public DeleteNode {</span>
+<span class="fc" id="L247">      requireOperationMetadata(operationId, timestamp, author, &quot;DeleteNode&quot;);</span>
+<span class="fc" id="L248">      Objects.requireNonNull(deletedNode, &quot;deletedNode&quot;);</span>
+<span class="fc" id="L249">      Objects.requireNonNull(deletedEdges, &quot;deletedEdges&quot;);</span>
+<span class="fc" id="L250">      deletedEdges = List.copyOf(deletedEdges);</span>
+<span class="fc" id="L251">      List&lt;String&gt; derivedAffectedObjectIds = affectedIdsForDelete(deletedNode, deletedEdges);</span>
+<span class="fc bfc" id="L252" title="All 2 branches covered.">      if (derivedAffectedObjectIds.equals(affectedObjectIds)) {</span>
+<span class="fc" id="L253">        affectedObjectIds = List.copyOf(affectedObjectIds);</span>
+      } else {
+<span class="fc" id="L255">        affectedObjectIds = derivedAffectedObjectIds;</span>
+      }
+<span class="fc" id="L257">    }</span>
+
+    @Override
+    public List&lt;String&gt; affectedObjectIds() {
+<span class="fc" id="L261">      return List.copyOf(affectedObjectIds);</span>
+    }
+
+    @Override
+    public Map&lt;String, String&gt; payload() {
+<span class="fc" id="L266">      return Map.of(</span>
+<span class="fc" id="L267">          NODE_ID, deletedNode.id(), &quot;deletedEdgeCount&quot;, String.valueOf(deletedEdges.size()));</span>
+    }
+
+    @Override
+    public Optional&lt;WorkflowOperation&gt; inverseOperation() {
+<span class="fc" id="L272">      return Optional.of(</span>
+          new RestoreNode(operationId + UNDO_SUFFIX, timestamp, author, deletedNode, deletedEdges));
+    }
+
+    @Override
+    public Workflow apply(Workflow workflow) {
+<span class="fc" id="L278">      Objects.requireNonNull(workflow, WORKFLOW_FIELD);</span>
+<span class="fc" id="L279">      requireNodeSnapshot(workflow, deletedNode, &quot;DeleteNode&quot;);</span>
+<span class="fc" id="L280">      requireConnectedEdges(workflow, deletedNode.id(), deletedEdges, &quot;DeleteNode&quot;);</span>
+
+<span class="fc" id="L282">      List&lt;Node&gt; nodes =</span>
+<span class="fc bfc" id="L283" title="All 2 branches covered.">          workflow.nodes().stream().filter(node -&gt; !node.id().equals(deletedNode.id())).toList();</span>
+<span class="fc" id="L284">      Set&lt;String&gt; deletedEdgeIds = new LinkedHashSet&lt;&gt;();</span>
+<span class="fc bfc" id="L285" title="All 2 branches covered.">      for (Edge edge : deletedEdges) {</span>
+<span class="fc" id="L286">        deletedEdgeIds.add(edge.id());</span>
+<span class="fc" id="L287">      }</span>
+<span class="fc" id="L288">      List&lt;Edge&gt; edges =</span>
+<span class="fc bfc" id="L289" title="All 2 branches covered.">          workflow.edges().stream().filter(edge -&gt; !deletedEdgeIds.contains(edge.id())).toList();</span>
+<span class="fc" id="L290">      return new Workflow(workflow.id(), workflow.name(), nodes, edges, workflow.metadata());</span>
+    }
+  }
+
+  /**
+   * Operation that updates node layout coordinates in metadata.
+   *
+   * @param operationId unique operation id
+   * @param timestamp operation timestamp
+   * @param author operation author
+   * @param nodeId target node id
+   * @param fromX previous x coordinate
+   * @param fromY previous y coordinate
+   * @param toX new x coordinate
+   * @param toY new y coordinate
+   */
+  record MoveNode(
+      String operationId,
+      Instant timestamp,
+      String author,
+      String nodeId,
+      double fromX,
+      double fromY,
+      double toX,
+      double toY)
+      implements WorkflowOperation {
+
+    private static final String X_KEY = &quot;layout.x&quot;;
+    private static final String Y_KEY = &quot;layout.y&quot;;
+
+<span class="fc" id="L320">    public MoveNode {</span>
+<span class="fc" id="L321">      requireOperationMetadata(operationId, timestamp, author, &quot;MoveNode&quot;);</span>
+<span class="fc" id="L322">      StableIds.requireStable(nodeId, &quot;MoveNode.nodeId&quot;);</span>
+<span class="fc" id="L323">    }</span>
+
+    @Override
+    public List&lt;String&gt; affectedObjectIds() {
+<span class="fc" id="L327">      return List.of(nodeId);</span>
+    }
+
+    @Override
+    public Map&lt;String, String&gt; payload() {
+<span class="fc" id="L332">      return Map.of(</span>
+          NODE_ID,
+          nodeId,
+          &quot;fromX&quot;,
+<span class="fc" id="L336">          String.valueOf(fromX),</span>
+          &quot;fromY&quot;,
+<span class="fc" id="L338">          String.valueOf(fromY),</span>
+          &quot;toX&quot;,
+<span class="fc" id="L340">          String.valueOf(toX),</span>
+          &quot;toY&quot;,
+<span class="fc" id="L342">          String.valueOf(toY));</span>
+    }
+
+    @Override
+    public Optional&lt;WorkflowOperation&gt; inverseOperation() {
+<span class="fc" id="L347">      return Optional.of(</span>
+          new MoveNode(
+              operationId + UNDO_SUFFIX, timestamp, author, nodeId, toX, toY, fromX, fromY));
+    }
+
+    @Override
+    public Workflow apply(Workflow workflow) {
+<span class="fc" id="L354">      Objects.requireNonNull(workflow, WORKFLOW_FIELD);</span>
+<span class="fc" id="L355">      Node node = requireNode(workflow, nodeId, &quot;MoveNode&quot;);</span>
+<span class="fc" id="L356">      Metadata movedMetadata =</span>
+<span class="fc" id="L357">          updateMetadata(</span>
+<span class="fc" id="L358">              updateMetadata(node.metadata(), X_KEY, String.valueOf(toX)),</span>
+              Y_KEY,
+<span class="fc" id="L360">              String.valueOf(toY));</span>
+<span class="fc" id="L361">      return replaceNode(</span>
+          workflow,
+          new Node(
+<span class="fc" id="L364">              node.id(),</span>
+<span class="fc" id="L365">              node.type(),</span>
+<span class="fc" id="L366">              node.label(),</span>
+<span class="fc" id="L367">              node.inputPorts(),</span>
+<span class="fc" id="L368">              node.outputPorts(),</span>
+              movedMetadata));
+    }
+  }
+
+  /**
+   * Operation that renames a node label.
+   *
+   * @param operationId unique operation id
+   * @param timestamp operation timestamp
+   * @param author operation author
+   * @param nodeId target node id
+   * @param previousLabel expected previous label
+   * @param newLabel new label
+   */
+  record RenameNode(
+      String operationId,
+      Instant timestamp,
+      String author,
+      String nodeId,
+      String previousLabel,
+      String newLabel)
+      implements WorkflowOperation {
+
+<span class="fc" id="L392">    public RenameNode {</span>
+<span class="fc" id="L393">      requireOperationMetadata(operationId, timestamp, author, &quot;RenameNode&quot;);</span>
+<span class="fc" id="L394">      StableIds.requireStable(nodeId, &quot;RenameNode.nodeId&quot;);</span>
+<span class="pc bpc" id="L395" title="2 of 4 branches missed.">      if (previousLabel == null || previousLabel.isBlank()) {</span>
+<span class="nc" id="L396">        throw new IllegalArgumentException(&quot;RenameNode.previousLabel must not be blank&quot;);</span>
+      }
+<span class="pc bpc" id="L398" title="2 of 4 branches missed.">      if (newLabel == null || newLabel.isBlank()) {</span>
+<span class="nc" id="L399">        throw new IllegalArgumentException(&quot;RenameNode.newLabel must not be blank&quot;);</span>
+      }
+<span class="fc" id="L401">    }</span>
+
+    @Override
+    public List&lt;String&gt; affectedObjectIds() {
+<span class="fc" id="L405">      return List.of(nodeId);</span>
+    }
+
+    @Override
+    public Map&lt;String, String&gt; payload() {
+<span class="fc" id="L410">      return Map.of(NODE_ID, nodeId, &quot;from&quot;, previousLabel, &quot;to&quot;, newLabel);</span>
+    }
+
+    @Override
+    public Optional&lt;WorkflowOperation&gt; inverseOperation() {
+<span class="fc" id="L415">      return Optional.of(</span>
+          new RenameNode(
+              operationId + UNDO_SUFFIX, timestamp, author, nodeId, newLabel, previousLabel));
+    }
+
+    @Override
+    public Workflow apply(Workflow workflow) {
+<span class="fc" id="L422">      Objects.requireNonNull(workflow, WORKFLOW_FIELD);</span>
+<span class="fc" id="L423">      Node node = requireNode(workflow, nodeId, &quot;RenameNode&quot;);</span>
+<span class="pc bpc" id="L424" title="1 of 2 branches missed.">      if (!node.label().equals(previousLabel)) {</span>
+<span class="nc" id="L425">        throw new IllegalStateException(</span>
+<span class="nc" id="L426">            &quot;RenameNode expected label &quot; + previousLabel + &quot; but was &quot; + node.label());</span>
+      }
+<span class="fc" id="L428">      return replaceNode(</span>
+          workflow,
+          new Node(
+<span class="fc" id="L431">              node.id(),</span>
+<span class="fc" id="L432">              node.type(),</span>
+              newLabel,
+<span class="fc" id="L434">              node.inputPorts(),</span>
+<span class="fc" id="L435">              node.outputPorts(),</span>
+<span class="fc" id="L436">              node.metadata()));</span>
+    }
+  }
+
+  /**
+   * Operation that creates an edge connection between ports.
+   *
+   * @param operationId unique operation id
+   * @param timestamp operation timestamp
+   * @param author operation author
+   * @param edge edge to create
+   */
+  record ConnectPorts(String operationId, Instant timestamp, String author, Edge edge)
+      implements WorkflowOperation {
+
+<span class="fc" id="L451">    public ConnectPorts {</span>
+<span class="fc" id="L452">      requireOperationMetadata(operationId, timestamp, author, CONNECT_PORTS);</span>
+<span class="fc" id="L453">      Objects.requireNonNull(edge, &quot;edge&quot;);</span>
+<span class="fc" id="L454">    }</span>
+
+    @Override
+    public List&lt;String&gt; affectedObjectIds() {
+<span class="fc" id="L458">      return List.of(edge.sourceNodeId(), edge.targetNodeId(), edge.id());</span>
+    }
+
+    @Override
+    public Map&lt;String, String&gt; payload() {
+<span class="fc" id="L463">      return Map.of(</span>
+          &quot;edgeId&quot;,
+<span class="fc" id="L465">          edge.id(),</span>
+          SOURCE,
+<span class="fc" id="L467">          edge.sourceNodeId() + &quot;:&quot; + edge.sourcePortId(),</span>
+          TARGET,
+<span class="fc" id="L469">          edge.targetNodeId() + &quot;:&quot; + edge.targetPortId());</span>
+    }
+
+    @Override
+    public Optional&lt;WorkflowOperation&gt; inverseOperation() {
+<span class="fc" id="L474">      return Optional.of(</span>
+<span class="fc" id="L475">          new DisconnectPorts(operationId + UNDO_SUFFIX, timestamp, author, edge.id(), edge));</span>
+    }
+
+    @Override
+    public Workflow apply(Workflow workflow) {
+<span class="fc" id="L480">      Objects.requireNonNull(workflow, WORKFLOW_FIELD);</span>
+<span class="fc" id="L481">      Node sourceNode = requireNode(workflow, edge.sourceNodeId(), CONNECT_PORTS);</span>
+<span class="fc" id="L482">      Node targetNode = requireNode(workflow, edge.targetNodeId(), CONNECT_PORTS);</span>
+<span class="fc" id="L483">      requirePort(sourceNode, edge.sourcePortId(), false, CONNECT_PORTS);</span>
+<span class="fc" id="L484">      requirePort(targetNode, edge.targetPortId(), true, CONNECT_PORTS);</span>
+<span class="fc" id="L485">      boolean edgeExists =</span>
+<span class="fc" id="L486">          workflow.edges().stream().anyMatch(existingEdge -&gt; existingEdge.id().equals(edge.id()));</span>
+<span class="pc bpc" id="L487" title="1 of 2 branches missed.">      if (edgeExists) {</span>
+<span class="nc" id="L488">        throw new IllegalArgumentException(&quot;edge already exists: &quot; + edge.id());</span>
+      }
+<span class="fc" id="L490">      List&lt;Edge&gt; edges = new ArrayList&lt;&gt;(workflow.edges());</span>
+<span class="fc" id="L491">      edges.add(edge);</span>
+<span class="fc" id="L492">      return new Workflow(</span>
+<span class="fc" id="L493">          workflow.id(), workflow.name(), workflow.nodes(), edges, workflow.metadata());</span>
+    }
+  }
+
+  /**
+   * Operation that removes an existing edge connection.
+   *
+   * @param operationId unique operation id
+   * @param timestamp operation timestamp
+   * @param author operation author
+   * @param edgeId edge id to remove
+   * @param disconnectedEdge edge snapshot used for undo
+   */
+  record DisconnectPorts(
+      String operationId, Instant timestamp, String author, String edgeId, Edge disconnectedEdge)
+      implements WorkflowOperation {
+
+<span class="fc" id="L510">    public DisconnectPorts {</span>
+<span class="fc" id="L511">      requireOperationMetadata(operationId, timestamp, author, &quot;DisconnectPorts&quot;);</span>
+<span class="fc" id="L512">      StableIds.requireStable(edgeId, &quot;DisconnectPorts.edgeId&quot;);</span>
+<span class="fc" id="L513">      Objects.requireNonNull(disconnectedEdge, &quot;disconnectedEdge&quot;);</span>
+<span class="pc bpc" id="L514" title="1 of 2 branches missed.">      if (!edgeId.equals(disconnectedEdge.id())) {</span>
+<span class="nc" id="L515">        throw new IllegalArgumentException(&quot;DisconnectPorts.edgeId must match disconnectedEdge.id&quot;);</span>
+      }
+<span class="fc" id="L517">    }</span>
+
+    @Override
+    public List&lt;String&gt; affectedObjectIds() {
+<span class="fc" id="L521">      return List.of(disconnectedEdge.sourceNodeId(), disconnectedEdge.targetNodeId(), edgeId);</span>
+    }
+
+    @Override
+    public Map&lt;String, String&gt; payload() {
+<span class="fc" id="L526">      return Map.of(&quot;edgeId&quot;, edgeId);</span>
+    }
+
+    @Override
+    public Optional&lt;WorkflowOperation&gt; inverseOperation() {
+<span class="fc" id="L531">      return Optional.of(</span>
+          new ConnectPorts(operationId + UNDO_SUFFIX, timestamp, author, disconnectedEdge));
+    }
+
+    @Override
+    public Workflow apply(Workflow workflow) {
+<span class="fc" id="L537">      Objects.requireNonNull(workflow, WORKFLOW_FIELD);</span>
+<span class="fc" id="L538">      requireEdgeSnapshot(workflow, disconnectedEdge, &quot;DisconnectPorts&quot;);</span>
+<span class="fc" id="L539">      List&lt;Edge&gt; edges =</span>
+<span class="fc bfc" id="L540" title="All 2 branches covered.">          workflow.edges().stream().filter(edge -&gt; !edge.id().equals(edgeId)).toList();</span>
+<span class="fc" id="L541">      return new Workflow(</span>
+<span class="fc" id="L542">          workflow.id(), workflow.name(), workflow.nodes(), edges, workflow.metadata());</span>
+    }
+  }
+
+  /**
+   * Operation that updates metadata properties on workflow, node or edge targets.
+   *
+   * @param operationId unique operation id
+   * @param timestamp operation timestamp
+   * @param author operation author
+   * @param target target object type
+   * @param targetId target object id
+   * @param propertyKey metadata key
+   * @param previousValue previous property value
+   * @param newValue new property value
+   */
+  record UpdateProperty(
+      String operationId,
+      Instant timestamp,
+      String author,
+      PropertyTarget target,
+      String targetId,
+      String propertyKey,
+      String previousValue,
+      String newValue)
+      implements WorkflowOperation {
+
+<span class="fc" id="L569">    public UpdateProperty {</span>
+<span class="fc" id="L570">      requireOperationMetadata(operationId, timestamp, author, &quot;UpdateProperty&quot;);</span>
+<span class="fc" id="L571">      Objects.requireNonNull(target, TARGET);</span>
+<span class="fc" id="L572">      StableIds.requireStable(targetId, &quot;UpdateProperty.targetId&quot;);</span>
+<span class="fc" id="L573">      StableIds.requireStable(propertyKey, &quot;UpdateProperty.propertyKey&quot;);</span>
+<span class="fc" id="L574">    }</span>
+
+    @Override
+    public List&lt;String&gt; affectedObjectIds() {
+<span class="fc" id="L578">      return List.of(targetId);</span>
+    }
+
+    @Override
+    public Map&lt;String, String&gt; payload() {
+<span class="fc" id="L583">      Map&lt;String, String&gt; payload = new ConcurrentHashMap&lt;&gt;();</span>
+<span class="fc" id="L584">      payload.put(TARGET, target.name());</span>
+<span class="fc" id="L585">      payload.put(&quot;targetId&quot;, targetId);</span>
+<span class="fc" id="L586">      payload.put(&quot;propertyKey&quot;, propertyKey);</span>
+<span class="fc" id="L587">      payload.put(&quot;newValue&quot;, String.valueOf(newValue));</span>
+<span class="fc" id="L588">      payload.put(&quot;previousValue&quot;, String.valueOf(previousValue));</span>
+<span class="fc" id="L589">      return Map.copyOf(payload);</span>
+    }
+
+    @Override
+    public Optional&lt;WorkflowOperation&gt; inverseOperation() {
+<span class="fc" id="L594">      return Optional.of(</span>
+          new UpdateProperty(
+              operationId + UNDO_SUFFIX,
+              timestamp,
+              author,
+              target,
+              targetId,
+              propertyKey,
+              newValue,
+              previousValue));
+    }
+
+    @Override
+    public Workflow apply(Workflow workflow) {
+<span class="fc" id="L608">      Objects.requireNonNull(workflow, WORKFLOW_FIELD);</span>
+<span class="pc bpc" id="L609" title="2 of 3 branches missed.">      return switch (target) {</span>
+        case WORKFLOW -&gt; {
+<span class="nc bnc" id="L611" title="All 2 branches missed.">          if (!workflow.id().equals(targetId)) {</span>
+<span class="nc" id="L612">            throw new IllegalArgumentException(</span>
+                &quot;workflow id mismatch for UpdateProperty: &quot; + targetId);
+          }
+<span class="nc" id="L615">          Metadata metadata = updateMetadata(workflow.metadata(), propertyKey, newValue);</span>
+<span class="nc" id="L616">          yield new Workflow(</span>
+<span class="nc" id="L617">              workflow.id(), workflow.name(), workflow.nodes(), workflow.edges(), metadata);</span>
+        }
+        case NODE -&gt; {
+<span class="fc" id="L620">          Node node = requireNode(workflow, targetId, &quot;UpdateProperty&quot;);</span>
+<span class="fc" id="L621">          Metadata metadata = updateMetadata(node.metadata(), propertyKey, newValue);</span>
+<span class="fc" id="L622">          yield replaceNode(</span>
+              workflow,
+              new Node(
+<span class="fc" id="L625">                  node.id(),</span>
+<span class="fc" id="L626">                  node.type(),</span>
+<span class="fc" id="L627">                  node.label(),</span>
+<span class="fc" id="L628">                  node.inputPorts(),</span>
+<span class="fc" id="L629">                  node.outputPorts(),</span>
+                  metadata));
+        }
+        case EDGE -&gt; {
+<span class="nc" id="L633">          Edge edge = requireEdge(workflow, targetId, &quot;UpdateProperty&quot;);</span>
+<span class="nc" id="L634">          Metadata metadata = updateMetadata(edge.metadata(), propertyKey, newValue);</span>
+<span class="nc" id="L635">          List&lt;Edge&gt; edges = new ArrayList&lt;&gt;(workflow.edges().size());</span>
+<span class="nc bnc" id="L636" title="All 2 branches missed.">          for (Edge existingEdge : workflow.edges()) {</span>
+<span class="nc bnc" id="L637" title="All 2 branches missed.">            if (existingEdge.id().equals(edge.id())) {</span>
+<span class="nc" id="L638">              edges.add(</span>
+                  new Edge(
+<span class="nc" id="L640">                      edge.id(),</span>
+<span class="nc" id="L641">                      edge.sourceNodeId(),</span>
+<span class="nc" id="L642">                      edge.sourcePortId(),</span>
+<span class="nc" id="L643">                      edge.targetNodeId(),</span>
+<span class="nc" id="L644">                      edge.targetPortId(),</span>
+                      metadata));
+            } else {
+<span class="nc" id="L647">              edges.add(existingEdge);</span>
+            }
+<span class="nc" id="L649">          }</span>
+<span class="nc" id="L650">          yield new Workflow(</span>
+<span class="nc" id="L651">              workflow.id(), workflow.name(), workflow.nodes(), edges, workflow.metadata());</span>
+        }
+      };
+    }
+  }
+
+  /** Target object type for {@link UpdateProperty}. */
+<span class="fc" id="L658">  enum PropertyTarget {</span>
+<span class="fc" id="L659">    WORKFLOW,</span>
+<span class="fc" id="L660">    NODE,</span>
+<span class="fc" id="L661">    EDGE</span>
+  }
+
+  /**
+   * Operation that assigns nodes to a semantic group.
+   *
+   * @param operationId unique operation id
+   * @param timestamp operation timestamp
+   * @param author operation author
+   * @param groupId target group id
+   * @param groupLabel human-readable group label
+   * @param nodeIds grouped node ids
+   * @param previousGroupIds previous group id per node
+   */
+  record GroupNodes(
+      String operationId,
+      Instant timestamp,
+      String author,
+      String groupId,
+      String groupLabel,
+      List&lt;String&gt; nodeIds,
+      Map&lt;String, String&gt; previousGroupIds)
+      implements WorkflowOperation {
+
+    private static final String GROUP_KEY = &quot;group.id&quot;;
+    private static final String GROUP_LABEL_PREFIX = &quot;group.&quot;;
+
+<span class="fc" id="L688">    public GroupNodes {</span>
+<span class="fc" id="L689">      requireOperationMetadata(operationId, timestamp, author, &quot;GroupNodes&quot;);</span>
+<span class="fc" id="L690">      StableIds.requireStable(groupId, &quot;GroupNodes.groupId&quot;);</span>
+<span class="pc bpc" id="L691" title="2 of 4 branches missed.">      if (groupLabel == null || groupLabel.isBlank()) {</span>
+<span class="nc" id="L692">        throw new IllegalArgumentException(&quot;GroupNodes.groupLabel must not be blank&quot;);</span>
+      }
+<span class="fc" id="L694">      Objects.requireNonNull(nodeIds, &quot;nodeIds&quot;);</span>
+<span class="pc bpc" id="L695" title="1 of 2 branches missed.">      if (nodeIds.isEmpty()) {</span>
+<span class="nc" id="L696">        throw new IllegalArgumentException(&quot;GroupNodes.nodeIds must not be empty&quot;);</span>
+      }
+<span class="fc" id="L698">      nodeIds = List.copyOf(nodeIds);</span>
+<span class="fc" id="L699">      previousGroupIds = requiredPreviousGroups(nodeIds, previousGroupIds, &quot;GroupNodes&quot;);</span>
+<span class="fc" id="L700">    }</span>
+
+    @Override
+    public Map&lt;String, String&gt; previousGroupIds() {
+<span class="fc" id="L704">      return Map.copyOf(previousGroupIds);</span>
+    }
+
+    @Override
+    public List&lt;String&gt; affectedObjectIds() {
+<span class="fc" id="L709">      return nodeIds;</span>
+    }
+
+    @Override
+    public Map&lt;String, String&gt; payload() {
+<span class="fc" id="L714">      return Map.of(</span>
+          &quot;groupId&quot;,
+          groupId,
+          &quot;groupLabel&quot;,
+          groupLabel,
+          &quot;nodeCount&quot;,
+<span class="fc" id="L720">          String.valueOf(nodeIds.size()));</span>
+    }
+
+    @Override
+    public Optional&lt;WorkflowOperation&gt; inverseOperation() {
+<span class="fc" id="L725">      return Optional.of(</span>
+          new UngroupNodes(
+              operationId + UNDO_SUFFIX,
+              timestamp,
+              author,
+              groupId,
+              groupLabel,
+              nodeIds,
+              previousGroupIds));
+    }
+
+    @Override
+    public Workflow apply(Workflow workflow) {
+<span class="fc" id="L738">      Objects.requireNonNull(workflow, WORKFLOW_FIELD);</span>
+<span class="fc" id="L739">      requireNodeIds(workflow, nodeIds, &quot;GroupNodes&quot;);</span>
+<span class="fc" id="L740">      Set&lt;String&gt; nodeSet = new LinkedHashSet&lt;&gt;(nodeIds);</span>
+<span class="fc" id="L741">      List&lt;Node&gt; nodes = new ArrayList&lt;&gt;(workflow.nodes().size());</span>
+<span class="fc bfc" id="L742" title="All 2 branches covered.">      for (Node node : workflow.nodes()) {</span>
+<span class="fc bfc" id="L743" title="All 2 branches covered.">        if (nodeSet.contains(node.id())) {</span>
+<span class="fc" id="L744">          Metadata metadata = updateMetadata(node.metadata(), GROUP_KEY, groupId);</span>
+<span class="fc" id="L745">          nodes.add(</span>
+              new Node(
+<span class="fc" id="L747">                  node.id(),</span>
+<span class="fc" id="L748">                  node.type(),</span>
+<span class="fc" id="L749">                  node.label(),</span>
+<span class="fc" id="L750">                  node.inputPorts(),</span>
+<span class="fc" id="L751">                  node.outputPorts(),</span>
+                  metadata));
+<span class="fc" id="L753">        } else {</span>
+<span class="fc" id="L754">          nodes.add(node);</span>
+        }
+<span class="fc" id="L756">      }</span>
+<span class="fc" id="L757">      String groupLabelKey = GROUP_LABEL_PREFIX + groupId + &quot;.label&quot;;</span>
+<span class="fc" id="L758">      Metadata workflowMetadata = updateMetadata(workflow.metadata(), groupLabelKey, groupLabel);</span>
+<span class="fc" id="L759">      return new Workflow(</span>
+<span class="fc" id="L760">          workflow.id(), workflow.name(), nodes, workflow.edges(), workflowMetadata);</span>
+    }
+  }
+
+  /**
+   * Operation that removes nodes from a semantic group.
+   *
+   * @param operationId unique operation id
+   * @param timestamp operation timestamp
+   * @param author operation author
+   * @param groupId group id being removed
+   * @param groupLabel group label to preserve for undo
+   * @param nodeIds node ids to ungroup
+   * @param previousGroupIds previous group id per node
+   */
+  record UngroupNodes(
+      String operationId,
+      Instant timestamp,
+      String author,
+      String groupId,
+      String groupLabel,
+      List&lt;String&gt; nodeIds,
+      Map&lt;String, String&gt; previousGroupIds)
+      implements WorkflowOperation {
+
+    private static final String GROUP_KEY = &quot;group.id&quot;;
+    private static final String GROUP_LABEL_PREFIX = &quot;group.&quot;;
+
+<span class="fc" id="L788">    public UngroupNodes {</span>
+<span class="fc" id="L789">      requireOperationMetadata(operationId, timestamp, author, &quot;UngroupNodes&quot;);</span>
+<span class="fc" id="L790">      StableIds.requireStable(groupId, &quot;UngroupNodes.groupId&quot;);</span>
+<span class="pc bpc" id="L791" title="2 of 4 branches missed.">      if (groupLabel == null || groupLabel.isBlank()) {</span>
+<span class="nc" id="L792">        throw new IllegalArgumentException(&quot;UngroupNodes.groupLabel must not be blank&quot;);</span>
+      }
+<span class="fc" id="L794">      Objects.requireNonNull(nodeIds, &quot;nodeIds&quot;);</span>
+<span class="pc bpc" id="L795" title="1 of 2 branches missed.">      if (nodeIds.isEmpty()) {</span>
+<span class="nc" id="L796">        throw new IllegalArgumentException(&quot;UngroupNodes.nodeIds must not be empty&quot;);</span>
+      }
+<span class="fc" id="L798">      nodeIds = List.copyOf(nodeIds);</span>
+<span class="fc" id="L799">      previousGroupIds = requiredPreviousGroups(nodeIds, previousGroupIds, &quot;UngroupNodes&quot;);</span>
+<span class="fc" id="L800">    }</span>
+
+    @Override
+    public Map&lt;String, String&gt; previousGroupIds() {
+<span class="fc" id="L804">      return Map.copyOf(previousGroupIds);</span>
+    }
+
+    @Override
+    public List&lt;String&gt; affectedObjectIds() {
+<span class="fc" id="L809">      return nodeIds;</span>
+    }
+
+    @Override
+    public Map&lt;String, String&gt; payload() {
+<span class="fc" id="L814">      return Map.of(</span>
+          &quot;groupId&quot;,
+          groupId,
+          &quot;groupLabel&quot;,
+          groupLabel,
+          &quot;nodeCount&quot;,
+<span class="fc" id="L820">          String.valueOf(nodeIds.size()));</span>
+    }
+
+    @Override
+    public Optional&lt;WorkflowOperation&gt; inverseOperation() {
+<span class="fc" id="L825">      return Optional.of(</span>
+          new GroupNodes(
+              operationId + UNDO_SUFFIX,
+              timestamp,
+              author,
+              groupId,
+              groupLabel,
+              nodeIds,
+              previousGroupIds));
+    }
+
+    @Override
+    public Workflow apply(Workflow workflow) {
+<span class="fc" id="L838">      Objects.requireNonNull(workflow, WORKFLOW_FIELD);</span>
+<span class="fc" id="L839">      requireNodeIds(workflow, nodeIds, &quot;UngroupNodes&quot;);</span>
+<span class="fc" id="L840">      Set&lt;String&gt; nodeSet = new LinkedHashSet&lt;&gt;(nodeIds);</span>
+<span class="fc" id="L841">      List&lt;Node&gt; nodes = new ArrayList&lt;&gt;(workflow.nodes().size());</span>
+<span class="fc bfc" id="L842" title="All 2 branches covered.">      for (Node node : workflow.nodes()) {</span>
+<span class="fc bfc" id="L843" title="All 2 branches covered.">        if (nodeSet.contains(node.id())) {</span>
+<span class="fc" id="L844">          String previousGroupId = previousGroupIds.get(node.id());</span>
+<span class="pc bpc" id="L845" title="1 of 2 branches missed.">          String restoredGroupId = NO_GROUP.equals(previousGroupId) ? null : previousGroupId;</span>
+<span class="fc" id="L846">          Metadata metadata = updateMetadata(node.metadata(), GROUP_KEY, restoredGroupId);</span>
+<span class="fc" id="L847">          nodes.add(</span>
+              new Node(
+<span class="fc" id="L849">                  node.id(),</span>
+<span class="fc" id="L850">                  node.type(),</span>
+<span class="fc" id="L851">                  node.label(),</span>
+<span class="fc" id="L852">                  node.inputPorts(),</span>
+<span class="fc" id="L853">                  node.outputPorts(),</span>
+                  metadata));
+<span class="fc" id="L855">        } else {</span>
+<span class="fc" id="L856">          nodes.add(node);</span>
+        }
+<span class="fc" id="L858">      }</span>
+<span class="fc" id="L859">      String groupLabelKey = GROUP_LABEL_PREFIX + groupId + &quot;.label&quot;;</span>
+<span class="fc" id="L860">      boolean hasRemainingGroupMembers =</span>
+<span class="fc" id="L861">          nodes.stream().anyMatch(node -&gt; groupId.equals(node.metadata().entries().get(GROUP_KEY)));</span>
+      Metadata workflowMetadata =
+<span class="fc bfc" id="L863" title="All 2 branches covered.">          hasRemainingGroupMembers</span>
+<span class="fc" id="L864">              ? workflow.metadata()</span>
+<span class="fc" id="L865">              : updateMetadata(workflow.metadata(), groupLabelKey, null);</span>
+<span class="fc" id="L866">      return new Workflow(</span>
+<span class="fc" id="L867">          workflow.id(), workflow.name(), nodes, workflow.edges(), workflowMetadata);</span>
+    }
+  }
+
+  /**
+   * Internal restore operation used as inverse for {@link DeleteNode}.
+   *
+   * @param operationId unique operation id
+   * @param timestamp operation timestamp
+   * @param author operation author
+   * @param restoredNode node snapshot to restore
+   * @param restoredEdges edge snapshots to restore
+   */
+  record RestoreNode(
+      String operationId,
+      Instant timestamp,
+      String author,
+      Node restoredNode,
+      List&lt;Edge&gt; restoredEdges)
+      implements WorkflowOperation {
+
+<span class="fc" id="L888">    public RestoreNode {</span>
+<span class="fc" id="L889">      requireOperationMetadata(operationId, timestamp, author, &quot;RestoreNode&quot;);</span>
+<span class="fc" id="L890">      Objects.requireNonNull(restoredNode, &quot;restoredNode&quot;);</span>
+<span class="fc" id="L891">      Objects.requireNonNull(restoredEdges, &quot;restoredEdges&quot;);</span>
+<span class="fc" id="L892">      restoredEdges = List.copyOf(restoredEdges);</span>
+<span class="fc" id="L893">    }</span>
+
+    @Override
+    public List&lt;String&gt; affectedObjectIds() {
+<span class="fc" id="L897">      List&lt;String&gt; ids = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L898">      ids.add(restoredNode.id());</span>
+<span class="pc bpc" id="L899" title="1 of 2 branches missed.">      for (Edge edge : restoredEdges) {</span>
+<span class="nc" id="L900">        ids.add(edge.id());</span>
+<span class="nc" id="L901">      }</span>
+<span class="fc" id="L902">      return List.copyOf(ids);</span>
+    }
+
+    @Override
+    public Map&lt;String, String&gt; payload() {
+<span class="fc" id="L907">      return Map.of(</span>
+<span class="fc" id="L908">          NODE_ID, restoredNode.id(), &quot;restoredEdgeCount&quot;, String.valueOf(restoredEdges.size()));</span>
+    }
+
+    @Override
+    public Optional&lt;WorkflowOperation&gt; inverseOperation() {
+<span class="nc" id="L913">      List&lt;String&gt; affectedIds = new ArrayList&lt;&gt;();</span>
+<span class="nc" id="L914">      affectedIds.add(restoredNode.id());</span>
+<span class="nc bnc" id="L915" title="All 2 branches missed.">      for (Edge edge : restoredEdges) {</span>
+<span class="nc" id="L916">        affectedIds.add(edge.id());</span>
+<span class="nc" id="L917">      }</span>
+<span class="nc" id="L918">      return Optional.of(</span>
+          new DeleteNode(
+              operationId + UNDO_SUFFIX,
+              timestamp,
+              author,
+              restoredNode,
+              restoredEdges,
+              affectedIds));
+    }
+
+    @Override
+    public Workflow apply(Workflow workflow) {
+<span class="fc" id="L930">      Objects.requireNonNull(workflow, WORKFLOW_FIELD);</span>
+<span class="fc" id="L931">      boolean nodeExists =</span>
+<span class="fc" id="L932">          workflow.nodes().stream().anyMatch(node -&gt; node.id().equals(restoredNode.id()));</span>
+<span class="pc bpc" id="L933" title="1 of 2 branches missed.">      if (nodeExists) {</span>
+<span class="nc" id="L934">        throw new IllegalArgumentException(&quot;node already exists: &quot; + restoredNode.id());</span>
+      }
+<span class="fc" id="L936">      List&lt;Node&gt; nodes = new ArrayList&lt;&gt;(workflow.nodes());</span>
+<span class="fc" id="L937">      nodes.add(restoredNode);</span>
+
+<span class="fc" id="L939">      Set&lt;String&gt; edgeIds = new LinkedHashSet&lt;&gt;();</span>
+<span class="pc bpc" id="L940" title="1 of 2 branches missed.">      for (Edge edge : workflow.edges()) {</span>
+<span class="nc" id="L941">        edgeIds.add(edge.id());</span>
+<span class="nc" id="L942">      }</span>
+<span class="fc" id="L943">      List&lt;Edge&gt; edges = new ArrayList&lt;&gt;(workflow.edges());</span>
+<span class="fc bfc" id="L944" title="All 2 branches covered.">      for (Edge edge : restoredEdges) {</span>
+<span class="pc bpc" id="L945" title="1 of 2 branches missed.">        if (!edgeIds.contains(edge.id())) {</span>
+<span class="fc" id="L946">          edges.add(edge);</span>
+        }
+<span class="fc" id="L948">      }</span>
+<span class="fc" id="L949">      return new Workflow(workflow.id(), workflow.name(), nodes, edges, workflow.metadata());</span>
+    }
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>
