@@ -1,5 +1,6 @@
 package org.hammer.audio.infrastructure.workflow.collaboration.store;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -17,6 +18,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicReference;
 import org.hammer.audio.workflow.collaboration.CollaborationMode;
 import org.hammer.audio.workflow.collaboration.OperationActor;
 import org.hammer.audio.workflow.collaboration.store.StoredWorkflowOutboxEntry;
@@ -27,6 +29,7 @@ import org.hammer.audio.workflow.collaboration.store.WorkflowOutboxEventData;
 import org.hammer.audio.workflow.collaboration.store.WorkflowSessionAppendCommand;
 import org.hammer.audio.workflow.collaboration.store.WorkflowSessionAppendResult;
 import org.hammer.audio.workflow.collaboration.store.WorkflowSessionRevisionConflictException;
+import org.hibernate.resource.jdbc.spi.StatementInspector;
 import org.junit.jupiter.api.Test;
 
 class HibernateWorkflowSessionStateStoreTest {
@@ -219,6 +222,48 @@ class HibernateWorkflowSessionStateStoreTest {
         });
   }
 
+  @Test
+  void identicalAppendCommittedAfterDuplicateLookupRemainsIdempotent() {
+    AtomicReference<Runnable> beforeAggregateRead = new AtomicReference<>();
+    Properties properties = new Properties();
+    properties.put(
+        "hibernate.session_factory.statement_inspector",
+        (StatementInspector)
+            sql -> {
+              if (sql.contains(" from workflow_collaboration_session ")) {
+                Runnable commitWinner = beforeAggregateRead.getAndSet(null);
+                if (commitWinner != null) {
+                  commitWinner.run();
+                }
+              }
+              return sql;
+            });
+
+    withStore(
+        properties,
+        store -> {
+          StoredWorkflowSession initial = session("session.retry-between-reads");
+          store.create(initial);
+          WorkflowSessionAppendCommand command =
+              command(initial, "operation.same", "event.same", 0, "same");
+          AtomicReference<WorkflowSessionAppendResult> winner = new AtomicReference<>();
+
+          // The first operation lookup is empty; commit another transaction before its aggregate
+          // read.
+          beforeAggregateRead.set(() -> winner.set(store.append(command)));
+          WorkflowSessionAppendResult retry = assertDoesNotThrow(() -> store.append(command));
+
+          assertFalse(winner.get().duplicate());
+          assertTrue(retry.duplicate());
+          assertEquals(winner.get().session(), retry.session());
+          assertEquals(winner.get().operation(), retry.operation());
+          assertEquals(winner.get().outboxEntry(), retry.outboxEntry());
+          assertEquals(1, store.find(initial.sessionId()).orElseThrow().revision());
+          assertEquals(1, store.operations(initial.sessionId()).size());
+          assertEquals(1, store.pendingOutbox(10).size());
+        });
+  }
+
   private static List<AppendAttempt> runConcurrently(
       HibernateWorkflowSessionStateStore store,
       WorkflowSessionAppendCommand firstCommand,
@@ -306,7 +351,10 @@ class HibernateWorkflowSessionStateStoreTest {
   }
 
   private static void withStore(StoreScenario scenario) {
-    Properties properties = new Properties();
+    withStore(new Properties(), scenario);
+  }
+
+  private static void withStore(Properties properties, StoreScenario scenario) {
     properties.put(
         "hibernate.connection.url", "jdbc:h2:mem:" + UUID.randomUUID() + ";DB_CLOSE_DELAY=-1");
     properties.put("hibernate.connection.driver_class", "org.h2.Driver");
