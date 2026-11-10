@@ -5,13 +5,14 @@ outbox delivery require an explicit persistence mode.
 
 ## Shared persistence runtime
 
-Audio Analyzer consumes the released migration-bearing storage library:
+Audio Analyzer consumes the released migration-bearing storage library. The root `pom.xml` selects
+the shared storage, JGit and Hibernate ORM versions; `audio-app/pom.xml` selects Flyway:
 
 ```text
-io.github.carstenartur:jgit-storage-hibernate-core:0.11.8
-io.github.carstenartur:jgit-storage-hibernate-search:0.11.8
-JGit 7.8.0.202609011348-r
-Hibernate ORM 7.4.12.Final
+io.github.carstenartur:jgit-storage-hibernate-core:0.12.1
+io.github.carstenartur:jgit-storage-hibernate-search:0.12.1
+JGit 7.8.1.202611041320-r
+Hibernate ORM 7.4.14.Final
 Flyway 13.8.0
 ```
 
@@ -192,24 +193,22 @@ The resulting classes are added to the same application-managed `SessionFactory`
 storage entities. This extension point does not copy or replace any mapping from
 `jgit-storage-hibernate-core`.
 
-## GitHub Packages access
+## Anonymous artifact access
 
-The shared artifact is published through GitHub Packages. Maven uses repository id `github`. Local
-users need a settings entry with a token that has `read:packages`:
+`audio-app/pom.xml` resolves the shared library from its public, release-only Maven repository:
 
 ```xml
-<settings>
-  <servers>
-    <server>
-      <id>github</id>
-      <username>YOUR_GITHUB_USERNAME</username>
-      <password>YOUR_GITHUB_TOKEN</password>
-    </server>
-  </servers>
-</settings>
+<repository>
+  <id>jgit-storage-hibernate-public</id>
+  <url>https://raw.githubusercontent.com/carstenartur/jgit-storage-hibernate/maven-repository/</url>
+  <releases><enabled>true</enabled></releases>
+  <snapshots><enabled>false</enabled></snapshots>
+</repository>
 ```
 
-Repository CI configures this server from `GITHUB_TOKEN` and requests `packages: read`.
+The repository permits anonymous downloads. Resolving these artifacts needs no Maven server
+credentials or package-read token. Keep the configured repository URL and release-only policy when
+updating the version selected by the root POM.
 
 ## Explicit filesystem fallback
 
