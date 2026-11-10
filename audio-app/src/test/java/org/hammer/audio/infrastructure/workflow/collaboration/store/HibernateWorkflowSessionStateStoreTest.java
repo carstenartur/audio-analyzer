@@ -248,7 +248,8 @@ class HibernateWorkflowSessionStateStoreTest {
               command(initial, "operation.same", "event.same", 0, "same");
           AtomicReference<WorkflowSessionAppendResult> winner = new AtomicReference<>();
 
-          // The first operation lookup is empty; commit another transaction before its aggregate read.
+          // The first operation lookup is empty; commit another transaction before its aggregate
+          // read.
           beforeAggregateRead.set(() -> winner.set(store.append(command)));
           WorkflowSessionAppendResult retry = assertDoesNotThrow(() -> store.append(command));
 
