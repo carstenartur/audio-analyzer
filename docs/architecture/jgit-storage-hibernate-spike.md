@@ -10,7 +10,7 @@ The database-backed JGit implementation lives in the independent
 `carstenartur/jgit-storage-hibernate` project. Audio Analyzer does not copy its pack, ref,
 reftable or reflog mappings and does not import JGit implementation internals.
 
-The verified integration line is:
+The original spike verified this integration line (historical baseline):
 
 ```text
 jgit-storage-hibernate-core 0.1.4
@@ -18,6 +18,10 @@ Hibernate ORM 7.4.5.Final
 JGit 7.7.0.202606012155-r
 Java 21
 ```
+
+Current dependency versions are selected by the [root POM](../../pom.xml). The
+[persistence guide](../workbench-hibernate-persistence.md) describes the selected runtime and its
+public artifact repository.
 
 `jgit-storage-hibernate-core` accepts an application-managed Hibernate `SessionFactory` through
 `DefaultHibernateRepositoryFactory`. The same persistence context can contain Audio Analyzer
