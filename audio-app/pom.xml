@@ -173,18 +173,6 @@
       <version>${jgit.version}</version>
     </dependency>
   </dependencies>
-  <repositories>
-    <repository>
-      <releases>
-        <enabled>true</enabled>
-      </releases>
-      <snapshots>
-        <enabled>false</enabled>
-      </snapshots>
-      <id>jgit-storage-hibernate-public</id>
-      <url>https://raw.githubusercontent.com/carstenartur/jgit-storage-hibernate/maven-repository/</url>
-    </repository>
-  </repositories>
   <build>
     <plugins>
       <plugin>
