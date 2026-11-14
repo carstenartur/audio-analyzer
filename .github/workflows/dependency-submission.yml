@@ -19,28 +19,23 @@ on:
 
 permissions:
   contents: write
-  packages: read
 
 jobs:
   submit-maven:
     runs-on: ubuntu-latest
     env:
       JAVA_VERSION: '21'
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
 
-      - name: Set up JDK and authenticated Maven registry
+      - name: Set up JDK
         uses: actions/setup-java@v6
         with:
           java-version: ${{ env.JAVA_VERSION }}
           distribution: temurin
           cache: maven
-          server-id: github
-          server-username: GITHUB_ACTOR
-          server-password: GITHUB_TOKEN
 
       - name: Validate dependency resolution
         run: mvn -B validate --file pom.xml
