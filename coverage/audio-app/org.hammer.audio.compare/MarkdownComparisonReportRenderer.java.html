@@ -1,0 +1,170 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>MarkdownComparisonReportRenderer.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.compare</a> &gt; <span class="el_source">MarkdownComparisonReportRenderer.java</span></div><h1>MarkdownComparisonReportRenderer.java</h1><pre class="source lang-java linenums">package org.hammer.audio.compare;
+
+import java.util.List;
+import java.util.Locale;
+import java.util.Objects;
+import org.hammer.audio.analysis.MeasurementSnapshot;
+import org.hammer.audio.analysis.SpectrumSnapshot;
+import org.hammer.audio.diagnosis.DiagnosisFinding;
+
+/**
+ * Renders a {@link ComparisonReport} as a Markdown document. The format is intentionally simple
+ * (one table per analyzed dimension) so the output can be pasted into QA notes, GitHub issues or a
+ * regression log.
+ */
+<span class="fc" id="L15">public final class MarkdownComparisonReportRenderer {</span>
+
+  /** Render the given comparison report to a Markdown string. */
+  public String render(ComparisonReport report) {
+<span class="fc" id="L19">    Objects.requireNonNull(report, &quot;report&quot;);</span>
+<span class="fc" id="L20">    StringBuilder sb = new StringBuilder(2048);</span>
+<span class="fc" id="L21">    sb.append(&quot;# A/B comparison report\n\n&quot;);</span>
+<span class="fc" id="L22">    sb.append(&quot;| Side | Label | Format | Duration | Frames |\n&quot;);</span>
+<span class="fc" id="L23">    sb.append(&quot;|------|-------|--------|----------|--------|\n&quot;);</span>
+<span class="fc" id="L24">    appendSideRow(sb, &quot;A&quot;, report.a());</span>
+<span class="fc" id="L25">    appendSideRow(sb, &quot;B&quot;, report.b());</span>
+<span class="fc" id="L26">    sb.append('\n');</span>
+
+<span class="fc" id="L28">    appendMeasurementsTable(sb, report);</span>
+<span class="fc" id="L29">    sb.append('\n');</span>
+
+<span class="fc" id="L31">    appendSpectrumSummary(sb, report);</span>
+<span class="fc" id="L32">    sb.append('\n');</span>
+
+<span class="fc" id="L34">    appendDiagnosisSummary(sb, report);</span>
+<span class="fc" id="L35">    return sb.toString();</span>
+  }
+
+  private static void appendSideRow(StringBuilder sb, String tag, ComparisonReport.Side s) {
+<span class="fc" id="L39">    sb.append(&quot;| &quot;)</span>
+<span class="fc" id="L40">        .append(tag)</span>
+<span class="fc" id="L41">        .append(&quot; | &quot;)</span>
+<span class="fc" id="L42">        .append(escapePipes(s.label()))</span>
+<span class="fc" id="L43">        .append(&quot; | &quot;)</span>
+<span class="fc" id="L44">        .append(s.format().sampleRate())</span>
+<span class="fc" id="L45">        .append(&quot; Hz / &quot;)</span>
+<span class="fc" id="L46">        .append(s.format().channels())</span>
+<span class="fc" id="L47">        .append(&quot; ch / &quot;)</span>
+<span class="fc" id="L48">        .append(s.format().sourceSampleSizeInBits())</span>
+<span class="fc" id="L49">        .append(&quot; bit | &quot;)</span>
+<span class="fc" id="L50">        .append(String.format(Locale.ROOT, &quot;%.3f s&quot;, s.durationSeconds()))</span>
+<span class="fc" id="L51">        .append(&quot; | &quot;)</span>
+<span class="fc" id="L52">        .append(s.totalFrames())</span>
+<span class="fc" id="L53">        .append(&quot; |\n&quot;);</span>
+<span class="fc" id="L54">  }</span>
+
+  private static void appendMeasurementsTable(StringBuilder sb, ComparisonReport report) {
+<span class="fc" id="L57">    MeasurementSnapshot a = report.a().measurement();</span>
+<span class="fc" id="L58">    MeasurementSnapshot b = report.b().measurement();</span>
+<span class="fc" id="L59">    sb.append(&quot;## Measurements\n\n&quot;);</span>
+<span class="fc" id="L60">    sb.append(&quot;| Metric | A | B | abs Δ |\n&quot;);</span>
+<span class="fc" id="L61">    sb.append(&quot;|--------|---|---|-------|\n&quot;);</span>
+<span class="fc" id="L62">    appendDoubleRow(sb, &quot;RMS&quot;, a.rms(), b.rms(), &quot;%.4f&quot;);</span>
+<span class="fc" id="L63">    appendDoubleRow(sb, &quot;Peak level&quot;, a.peakLevel(), b.peakLevel(), &quot;%.4f&quot;);</span>
+<span class="fc" id="L64">    appendDoubleRow(</span>
+<span class="fc" id="L65">        sb, &quot;Dominant freq (Hz)&quot;, a.dominantFrequencyHz(), b.dominantFrequencyHz(), &quot;%.1f&quot;);</span>
+<span class="pc bpc" id="L66" title="2 of 4 branches missed.">    if (a.stereoCorrelationAvailable() || b.stereoCorrelationAvailable()) {</span>
+<span class="nc bnc" id="L67" title="All 2 branches missed.">      double sa = a.stereoCorrelationAvailable() ? a.stereoCorrelation() : Double.NaN;</span>
+<span class="nc bnc" id="L68" title="All 2 branches missed.">      double sb2 = b.stereoCorrelationAvailable() ? b.stereoCorrelation() : Double.NaN;</span>
+<span class="nc" id="L69">      appendDoubleRow(sb, &quot;Stereo correlation&quot;, sa, sb2, &quot;%.3f&quot;);</span>
+    }
+<span class="fc" id="L71">    sb.append(&quot;| Clipping | &quot;)</span>
+<span class="pc bpc" id="L72" title="1 of 2 branches missed.">        .append(a.clipping() ? &quot;YES&quot; : &quot;no&quot;)</span>
+<span class="fc" id="L73">        .append(&quot; | &quot;)</span>
+<span class="pc bpc" id="L74" title="1 of 2 branches missed.">        .append(b.clipping() ? &quot;YES&quot; : &quot;no&quot;)</span>
+<span class="fc" id="L75">        .append(&quot; | &quot;)</span>
+<span class="pc bpc" id="L76" title="1 of 2 branches missed.">        .append(a.clipping() == b.clipping() ? &quot;same&quot; : &quot;**changed**&quot;)</span>
+<span class="fc" id="L77">        .append(&quot; |\n&quot;);</span>
+<span class="fc" id="L78">  }</span>
+
+  private static void appendDoubleRow(
+      StringBuilder sb, String label, double a, double b, String fmt) {
+<span class="fc" id="L82">    sb.append(&quot;| &quot;).append(label).append(&quot; | &quot;);</span>
+<span class="fc" id="L83">    sb.append(formatDouble(a, fmt)).append(&quot; | &quot;);</span>
+<span class="fc" id="L84">    sb.append(formatDouble(b, fmt)).append(&quot; | &quot;);</span>
+<span class="fc" id="L85">    double delta = ComparisonReport.absDelta(a, b);</span>
+<span class="fc" id="L86">    sb.append(formatDouble(delta, fmt)).append(&quot; |\n&quot;);</span>
+<span class="fc" id="L87">  }</span>
+
+  private static String formatDouble(double v, String fmt) {
+<span class="pc bpc" id="L90" title="1 of 2 branches missed.">    if (Double.isNaN(v)) {</span>
+<span class="nc" id="L91">      return &quot;n/a&quot;;</span>
+    }
+<span class="fc" id="L93">    return String.format(Locale.ROOT, fmt, v);</span>
+  }
+
+  private static void appendSpectrumSummary(StringBuilder sb, ComparisonReport report) {
+<span class="fc" id="L97">    SpectrumSnapshot a = report.a().spectrum();</span>
+<span class="fc" id="L98">    SpectrumSnapshot b = report.b().spectrum();</span>
+<span class="fc" id="L99">    sb.append(&quot;## Spectrum summary\n\n&quot;);</span>
+<span class="pc bpc" id="L100" title="2 of 4 branches missed.">    if (a == null || b == null) {</span>
+<span class="nc" id="L101">      sb.append(&quot;_One or both recordings produced no spectrum snapshot._\n&quot;);</span>
+<span class="nc" id="L102">      return;</span>
+    }
+<span class="fc" id="L104">    sb.append(&quot;| Metric | A | B | abs Δ |\n&quot;);</span>
+<span class="fc" id="L105">    sb.append(&quot;|--------|---|---|-------|\n&quot;);</span>
+<span class="fc" id="L106">    appendDoubleRow(</span>
+<span class="fc" id="L107">        sb, &quot;FFT bin count&quot;, a.magnitudesView().length, b.magnitudesView().length, &quot;%.0f&quot;);</span>
+<span class="fc" id="L108">    appendDoubleRow(sb, &quot;Peak magnitude&quot;, peakMagnitude(a), peakMagnitude(b), &quot;%.4f&quot;);</span>
+<span class="fc" id="L109">    appendDoubleRow(sb, &quot;Spectral centroid (Hz)&quot;, centroid(a), centroid(b), &quot;%.1f&quot;);</span>
+<span class="fc" id="L110">  }</span>
+
+  private static double peakMagnitude(SpectrumSnapshot s) {
+<span class="fc" id="L113">    float[] m = s.magnitudesView();</span>
+<span class="fc" id="L114">    double peak = 0.0;</span>
+<span class="fc bfc" id="L115" title="All 2 branches covered.">    for (float v : m) {</span>
+<span class="fc" id="L116">      double abs = Math.abs(v);</span>
+<span class="fc bfc" id="L117" title="All 2 branches covered.">      if (abs &gt; peak) {</span>
+<span class="fc" id="L118">        peak = abs;</span>
+      }
+    }
+<span class="fc" id="L121">    return peak;</span>
+  }
+
+  private static double centroid(SpectrumSnapshot s) {
+<span class="fc" id="L125">    float[] m = s.magnitudesView();</span>
+<span class="pc bpc" id="L126" title="1 of 2 branches missed.">    if (m.length == 0) {</span>
+<span class="nc" id="L127">      return Double.NaN;</span>
+    }
+<span class="pc bpc" id="L129" title="1 of 2 branches missed.">    double binHz = m.length &gt; 1 ? (double) s.sampleRate() / (2.0d * (double) (m.length - 1)) : 0.0d;</span>
+<span class="fc" id="L130">    double sum = 0.0;</span>
+<span class="fc" id="L131">    double weighted = 0.0;</span>
+<span class="fc bfc" id="L132" title="All 2 branches covered.">    for (int i = 0; i &lt; m.length; i++) {</span>
+<span class="fc" id="L133">      double mag = Math.abs(m[i]);</span>
+<span class="fc" id="L134">      sum += mag;</span>
+<span class="fc" id="L135">      weighted += mag * (i * binHz);</span>
+    }
+<span class="pc bpc" id="L137" title="1 of 2 branches missed.">    return sum &gt; 0.0 ? weighted / sum : Double.NaN;</span>
+  }
+
+  private static void appendDiagnosisSummary(StringBuilder sb, ComparisonReport report) {
+<span class="fc" id="L141">    sb.append(&quot;## Diagnosis findings\n\n&quot;);</span>
+<span class="fc" id="L142">    appendFindings(sb, &quot;A&quot;, report.a().findings());</span>
+<span class="fc" id="L143">    sb.append('\n');</span>
+<span class="fc" id="L144">    appendFindings(sb, &quot;B&quot;, report.b().findings());</span>
+<span class="fc" id="L145">  }</span>
+
+  private static void appendFindings(StringBuilder sb, String tag, List&lt;DiagnosisFinding&gt; list) {
+<span class="fc" id="L148">    sb.append(&quot;**&quot;).append(tag).append(&quot;**\n\n&quot;);</span>
+<span class="pc bpc" id="L149" title="1 of 2 branches missed.">    if (list.isEmpty()) {</span>
+<span class="nc" id="L150">      sb.append(&quot;- _no findings_\n&quot;);</span>
+<span class="nc" id="L151">      return;</span>
+    }
+<span class="fc bfc" id="L153" title="All 2 branches covered.">    for (DiagnosisFinding f : list) {</span>
+<span class="fc" id="L154">      sb.append(&quot;- `&quot;)</span>
+<span class="fc" id="L155">          .append(f.severity())</span>
+<span class="fc" id="L156">          .append(&quot;` &quot;)</span>
+<span class="fc" id="L157">          .append(f.type())</span>
+<span class="fc" id="L158">          .append(&quot; — &quot;)</span>
+<span class="fc" id="L159">          .append(escapePipes(f.message()))</span>
+<span class="fc" id="L160">          .append(&quot; (conf &quot;)</span>
+<span class="fc" id="L161">          .append(String.format(Locale.ROOT, &quot;%.2f&quot;, f.confidence()))</span>
+<span class="fc" id="L162">          .append(&quot;)\n&quot;);</span>
+<span class="fc" id="L163">    }</span>
+<span class="fc" id="L164">  }</span>
+
+  private static String escapePipes(String s) {
+<span class="pc bpc" id="L167" title="1 of 2 branches missed.">    return s == null ? &quot;&quot; : s.replace(&quot;|&quot;, &quot;\\|&quot;);</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

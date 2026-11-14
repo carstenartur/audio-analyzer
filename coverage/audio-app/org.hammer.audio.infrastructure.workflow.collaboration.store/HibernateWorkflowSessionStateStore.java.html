@@ -1,0 +1,382 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>HibernateWorkflowSessionStateStore.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.infrastructure.workflow.collaboration.store</a> &gt; <span class="el_source">HibernateWorkflowSessionStateStore.java</span></div><h1>HibernateWorkflowSessionStateStore.java</h1><pre class="source lang-java linenums">package org.hammer.audio.infrastructure.workflow.collaboration.store;
+
+import jakarta.persistence.LockModeType;
+import jakarta.persistence.OptimisticLockException;
+import java.time.Instant;
+import java.util.List;
+import java.util.NoSuchElementException;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.function.Function;
+import org.hammer.audio.workflow.collaboration.store.StoredWorkflowOperation;
+import org.hammer.audio.workflow.collaboration.store.StoredWorkflowOutboxEntry;
+import org.hammer.audio.workflow.collaboration.store.StoredWorkflowSession;
+import org.hammer.audio.workflow.collaboration.store.WorkflowOperationPersistenceConflictException;
+import org.hammer.audio.workflow.collaboration.store.WorkflowSessionAppendCommand;
+import org.hammer.audio.workflow.collaboration.store.WorkflowSessionAppendResult;
+import org.hammer.audio.workflow.collaboration.store.WorkflowSessionRevisionConflictException;
+import org.hammer.audio.workflow.collaboration.store.WorkflowSessionSequenceConflictException;
+import org.hammer.audio.workflow.collaboration.store.WorkflowSessionStateStore;
+import org.hibernate.Session;
+import org.hibernate.SessionFactory;
+import org.hibernate.StaleStateException;
+import org.hibernate.Transaction;
+import org.hibernate.exception.ConstraintViolationException;
+
+/** Hibernate ORM implementation of the durable collaboration-session boundary. */
+public final class HibernateWorkflowSessionStateStore implements WorkflowSessionStateStore {
+
+  private static final String SESSION_ID_PARAMETER = &quot;sessionId&quot;;
+
+  private final SessionFactory sessionFactory;
+
+  /** Creates a store using the application-managed shared Hibernate context. */
+<span class="fc" id="L34">  public HibernateWorkflowSessionStateStore(SessionFactory sessionFactory) {</span>
+<span class="fc" id="L35">    this.sessionFactory = Objects.requireNonNull(sessionFactory, &quot;sessionFactory&quot;);</span>
+<span class="fc" id="L36">  }</span>
+
+  @Override
+  public StoredWorkflowSession create(StoredWorkflowSession storedSession) {
+<span class="fc" id="L40">    Objects.requireNonNull(storedSession, &quot;storedSession&quot;);</span>
+<span class="pc bpc" id="L41" title="1 of 2 branches missed.">    if (storedSession.revision() != 0) {</span>
+<span class="nc" id="L42">      throw new IllegalArgumentException(</span>
+          &quot;A new workflow session must start at semantic revision 0&quot;);
+    }
+<span class="pc bpc" id="L45" title="1 of 2 branches missed.">    if (storedSession.closed()) {</span>
+<span class="nc" id="L46">      throw new IllegalArgumentException(&quot;A new workflow session must be open&quot;);</span>
+    }
+<span class="fc" id="L48">    return inTransaction(</span>
+        session -&gt; {
+<span class="fc" id="L50">          WorkflowSessionEntity entity = WorkflowSessionEntity.from(storedSession);</span>
+<span class="fc" id="L51">          session.persist(entity);</span>
+<span class="fc" id="L52">          session.flush();</span>
+<span class="fc" id="L53">          return entity.toStoredSession();</span>
+        });
+  }
+
+  @Override
+  public Optional&lt;StoredWorkflowSession&gt; find(String sessionId) {
+<span class="fc" id="L59">    String requiredSessionId = requireNotBlank(sessionId, SESSION_ID_PARAMETER);</span>
+<span class="fc" id="L60">    try (Session session = sessionFactory.openSession()) {</span>
+<span class="fc" id="L61">      return Optional.ofNullable(session.find(WorkflowSessionEntity.class, requiredSessionId))</span>
+<span class="fc" id="L62">          .map(WorkflowSessionEntity::toStoredSession);</span>
+    }
+  }
+
+  @Override
+  public List&lt;StoredWorkflowSession&gt; openSessions() {
+<span class="fc" id="L68">    try (Session session = sessionFactory.openSession()) {</span>
+<span class="fc" id="L69">      return session</span>
+<span class="fc" id="L70">          .createQuery(</span>
+              &quot;FROM WorkflowSessionEntity aggregate &quot;
+                  + &quot;WHERE aggregate.sessionClosed = false &quot;
+                  + &quot;ORDER BY aggregate.storedSessionId&quot;,
+              WorkflowSessionEntity.class)
+<span class="fc" id="L75">          .getResultList()</span>
+<span class="fc" id="L76">          .stream()</span>
+<span class="fc" id="L77">          .map(WorkflowSessionEntity::toStoredSession)</span>
+<span class="fc" id="L78">          .toList();</span>
+    }
+  }
+
+  @Override
+  public WorkflowSessionAppendResult append(WorkflowSessionAppendCommand command) {
+<span class="fc" id="L84">    Objects.requireNonNull(command, &quot;command&quot;);</span>
+    try {
+<span class="fc" id="L86">      return inTransaction(session -&gt; appendWithinTransaction(session, command));</span>
+<span class="fc" id="L87">    } catch (OptimisticLockException</span>
+        | StaleStateException
+        | ConstraintViolationException
+        | WorkflowSessionRevisionConflictException failure) {
+<span class="fc" id="L91">      return recoverConcurrentAppend(command, failure);</span>
+    }
+  }
+
+  @Override
+  public StoredWorkflowSession advanceEventSequence(String sessionId, long expectedSequence) {
+<span class="fc" id="L97">    String requiredSessionId = requireNotBlank(sessionId, SESSION_ID_PARAMETER);</span>
+<span class="fc" id="L98">    requireNonNegative(expectedSequence, &quot;expectedSequence&quot;);</span>
+    try {
+<span class="fc" id="L100">      return inTransaction(</span>
+          session -&gt;
+<span class="fc" id="L102">              advanceEventSequenceWithinTransaction(session, requiredSessionId, expectedSequence));</span>
+<span class="nc" id="L103">    } catch (OptimisticLockException | StaleStateException failure) {</span>
+<span class="nc" id="L104">      throw sequenceConflict(requiredSessionId, expectedSequence, failure);</span>
+    }
+  }
+
+  @Override
+  public StoredWorkflowSession close(
+      String sessionId, long expectedRevision, long expectedSequence) {
+<span class="fc" id="L111">    String requiredSessionId = requireNotBlank(sessionId, SESSION_ID_PARAMETER);</span>
+<span class="fc" id="L112">    requireNonNegative(expectedRevision, &quot;expectedRevision&quot;);</span>
+<span class="fc" id="L113">    requireNonNegative(expectedSequence, &quot;expectedSequence&quot;);</span>
+    try {
+<span class="fc" id="L115">      return inTransaction(</span>
+          session -&gt;
+<span class="fc" id="L117">              closeWithinTransaction(</span>
+                  session, requiredSessionId, expectedRevision, expectedSequence));
+<span class="nc" id="L119">    } catch (OptimisticLockException | StaleStateException failure) {</span>
+<span class="nc" id="L120">      StoredWorkflowSession current = requireStoredSession(requiredSessionId);</span>
+<span class="nc bnc" id="L121" title="All 2 branches missed.">      if (current.revision() != expectedRevision) {</span>
+<span class="nc" id="L122">        throw new WorkflowSessionRevisionConflictException(</span>
+<span class="nc" id="L123">            requiredSessionId, expectedRevision, current.revision(), failure);</span>
+      }
+<span class="nc" id="L125">      throw new WorkflowSessionSequenceConflictException(</span>
+<span class="nc" id="L126">          requiredSessionId, expectedSequence, current.sequence(), failure);</span>
+    }
+  }
+
+  @Override
+  public List&lt;StoredWorkflowOperation&gt; operations(String sessionId) {
+<span class="fc" id="L132">    String requiredSessionId = requireNotBlank(sessionId, SESSION_ID_PARAMETER);</span>
+<span class="fc" id="L133">    try (Session session = sessionFactory.openSession()) {</span>
+<span class="fc" id="L134">      return session</span>
+<span class="fc" id="L135">          .createQuery(</span>
+              &quot;FROM WorkflowOperationEntity operation &quot;
+                  + &quot;WHERE operation.storedSessionId = :sessionId &quot;
+                  + &quot;ORDER BY operation.storedOperationSequence&quot;,
+              WorkflowOperationEntity.class)
+<span class="fc" id="L140">          .setParameter(SESSION_ID_PARAMETER, requiredSessionId)</span>
+<span class="fc" id="L141">          .getResultList()</span>
+<span class="fc" id="L142">          .stream()</span>
+<span class="fc" id="L143">          .map(WorkflowOperationEntity::toStoredOperation)</span>
+<span class="fc" id="L144">          .toList();</span>
+    }
+  }
+
+  @Override
+  public List&lt;StoredWorkflowOutboxEntry&gt; pendingOutbox(int limit) {
+<span class="pc bpc" id="L150" title="1 of 2 branches missed.">    if (limit &lt;= 0) {</span>
+<span class="nc" id="L151">      throw new IllegalArgumentException(&quot;limit must be &gt; 0&quot;);</span>
+    }
+<span class="fc" id="L153">    try (Session session = sessionFactory.openSession()) {</span>
+<span class="fc" id="L154">      return session</span>
+<span class="fc" id="L155">          .createQuery(</span>
+              &quot;FROM WorkflowOutboxEntity event &quot;
+                  + &quot;WHERE event.publishedAt IS NULL AND event.nextAttemptAt &lt;= :now &quot;
+                  + &quot;ORDER BY event.occurredAt, event.storedSessionId, event.storedEventSequence&quot;,
+              WorkflowOutboxEntity.class)
+<span class="fc" id="L160">          .setParameter(&quot;now&quot;, Instant.now())</span>
+<span class="fc" id="L161">          .setMaxResults(limit)</span>
+<span class="fc" id="L162">          .getResultList()</span>
+<span class="fc" id="L163">          .stream()</span>
+<span class="fc" id="L164">          .map(WorkflowOutboxEntity::toStoredEntry)</span>
+<span class="fc" id="L165">          .toList();</span>
+    }
+  }
+
+  private WorkflowSessionAppendResult appendWithinTransaction(
+      Session session, WorkflowSessionAppendCommand command) {
+<span class="fc" id="L171">    WorkflowOperationEntity duplicate = findOperation(session, command.operation().operationId());</span>
+<span class="fc bfc" id="L172" title="All 2 branches covered.">    if (duplicate != null) {</span>
+<span class="fc" id="L173">      return duplicateResult(session, duplicate, command);</span>
+    }
+
+<span class="fc" id="L176">    WorkflowSessionEntity aggregate = requireOpenAggregate(session, command.sessionId());</span>
+<span class="pc bpc" id="L177" title="1 of 2 branches missed.">    if (!aggregate.workflowId().equals(command.workflowId())) {</span>
+<span class="nc" id="L178">      throw new IllegalArgumentException(</span>
+<span class="nc" id="L179">          &quot;Workflow id does not match durable session: &quot; + command.workflowId());</span>
+    }
+<span class="fc bfc" id="L181" title="All 2 branches covered.">    if (aggregate.semanticRevision() != command.expectedRevision()) {</span>
+<span class="fc" id="L182">      throw new WorkflowSessionRevisionConflictException(</span>
+<span class="fc" id="L183">          command.sessionId(), command.expectedRevision(), aggregate.semanticRevision());</span>
+    }
+
+<span class="fc" id="L186">    long nextRevision = Math.addExact(aggregate.semanticRevision(), 1);</span>
+<span class="fc" id="L187">    long nextSequence = Math.addExact(aggregate.eventSequence(), 1);</span>
+<span class="fc" id="L188">    aggregate.applyAcceptedOperation(</span>
+<span class="fc" id="L189">        command.workflowId(), command.workflowDsl(), nextRevision, nextSequence);</span>
+
+<span class="fc" id="L191">    WorkflowOperationEntity operation =</span>
+<span class="fc" id="L192">        WorkflowOperationEntity.accepted(</span>
+<span class="fc" id="L193">            command.sessionId(), command.operation(), nextSequence, nextRevision);</span>
+<span class="fc" id="L194">    WorkflowOutboxEntity outbox =</span>
+<span class="fc" id="L195">        WorkflowOutboxEntity.pending(</span>
+<span class="fc" id="L196">            command.sessionId(), command.outboxEvent(), nextSequence, nextRevision);</span>
+<span class="fc" id="L197">    session.persist(operation);</span>
+<span class="fc" id="L198">    session.persist(outbox);</span>
+<span class="fc" id="L199">    session.flush();</span>
+
+<span class="fc" id="L201">    return new WorkflowSessionAppendResult(</span>
+<span class="fc" id="L202">        aggregate.toStoredSession(), operation.toStoredOperation(), outbox.toStoredEntry(), false);</span>
+  }
+
+  private StoredWorkflowSession advanceEventSequenceWithinTransaction(
+      Session session, String sessionId, long expectedSequence) {
+<span class="fc" id="L207">    WorkflowSessionEntity aggregate = requireOpenAggregate(session, sessionId);</span>
+<span class="fc bfc" id="L208" title="All 2 branches covered.">    if (aggregate.eventSequence() != expectedSequence) {</span>
+<span class="fc" id="L209">      throw new WorkflowSessionSequenceConflictException(</span>
+<span class="fc" id="L210">          sessionId, expectedSequence, aggregate.eventSequence());</span>
+    }
+<span class="fc" id="L212">    aggregate.advanceEventSequence(Math.addExact(expectedSequence, 1));</span>
+<span class="fc" id="L213">    session.flush();</span>
+<span class="fc" id="L214">    return aggregate.toStoredSession();</span>
+  }
+
+  private StoredWorkflowSession closeWithinTransaction(
+      Session session, String sessionId, long expectedRevision, long expectedSequence) {
+<span class="fc" id="L219">    WorkflowSessionEntity aggregate = requireAggregate(session, sessionId);</span>
+<span class="fc bfc" id="L220" title="All 2 branches covered.">    if (aggregate.closed()) {</span>
+<span class="pc bpc" id="L221" title="1 of 2 branches missed.">      if (aggregate.semanticRevision() == expectedRevision</span>
+<span class="pc bpc" id="L222" title="1 of 2 branches missed.">          &amp;&amp; aggregate.eventSequence() == Math.addExact(expectedSequence, 1)) {</span>
+<span class="fc" id="L223">        return aggregate.toStoredSession();</span>
+      }
+<span class="nc" id="L225">      throw new IllegalStateException(&quot;Workflow session is already closed: &quot; + sessionId);</span>
+    }
+<span class="fc bfc" id="L227" title="All 2 branches covered.">    if (aggregate.semanticRevision() != expectedRevision) {</span>
+<span class="fc" id="L228">      throw new WorkflowSessionRevisionConflictException(</span>
+<span class="fc" id="L229">          sessionId, expectedRevision, aggregate.semanticRevision());</span>
+    }
+<span class="pc bpc" id="L231" title="1 of 2 branches missed.">    if (aggregate.eventSequence() != expectedSequence) {</span>
+<span class="nc" id="L232">      throw new WorkflowSessionSequenceConflictException(</span>
+<span class="nc" id="L233">          sessionId, expectedSequence, aggregate.eventSequence());</span>
+    }
+<span class="fc" id="L235">    aggregate.markClosed(Math.addExact(expectedSequence, 1));</span>
+<span class="fc" id="L236">    session.flush();</span>
+<span class="fc" id="L237">    return aggregate.toStoredSession();</span>
+  }
+
+  private static WorkflowSessionAppendResult duplicateResult(
+      Session session, WorkflowOperationEntity existing, WorkflowSessionAppendCommand command) {
+<span class="fc bfc" id="L242" title="All 2 branches covered.">    if (!existing.hasSameSemanticContent(command.sessionId(), command.operation())</span>
+<span class="pc bpc" id="L243" title="1 of 2 branches missed.">        || command.expectedRevision() != existing.semanticRevision() - 1) {</span>
+<span class="fc" id="L244">      throw operationConflict(command);</span>
+    }
+
+<span class="fc" id="L247">    WorkflowSessionEntity aggregate =</span>
+<span class="fc" id="L248">        session.find(WorkflowSessionEntity.class, existing.sessionId());</span>
+<span class="fc" id="L249">    WorkflowOutboxEntity outbox =</span>
+        session
+<span class="fc" id="L251">            .createQuery(</span>
+                &quot;FROM WorkflowOutboxEntity event &quot;
+                    + &quot;WHERE event.storedSessionId = :sessionId &quot;
+                    + &quot;AND event.storedEventSequence = :sequence&quot;,
+                WorkflowOutboxEntity.class)
+<span class="fc" id="L256">            .setParameter(SESSION_ID_PARAMETER, existing.sessionId())</span>
+<span class="fc" id="L257">            .setParameter(&quot;sequence&quot;, existing.operationSequence())</span>
+<span class="fc" id="L258">            .uniqueResult();</span>
+<span class="pc bpc" id="L259" title="2 of 4 branches missed.">    if (aggregate == null || outbox == null) {</span>
+<span class="nc" id="L260">      throw new IllegalStateException(</span>
+<span class="nc" id="L261">          &quot;Durable operation is missing its aggregate or outbox event: &quot; + existing.operationId());</span>
+    }
+
+<span class="pc bpc" id="L264" title="1 of 2 branches missed.">    boolean currentSnapshotIsOriginal = aggregate.semanticRevision() == existing.semanticRevision();</span>
+<span class="pc bpc" id="L265" title="2 of 4 branches missed.">    if (!aggregate.workflowId().equals(command.workflowId())</span>
+<span class="pc bpc" id="L266" title="1 of 2 branches missed.">        || (currentSnapshotIsOriginal &amp;&amp; !aggregate.workflowDsl().equals(command.workflowDsl()))</span>
+<span class="fc bfc" id="L267" title="All 2 branches covered.">        || !outbox.hasSameSemanticContent(</span>
+<span class="fc" id="L268">            command.sessionId(),</span>
+<span class="fc" id="L269">            command.outboxEvent(),</span>
+<span class="fc" id="L270">            existing.operationSequence(),</span>
+<span class="fc" id="L271">            existing.semanticRevision())) {</span>
+<span class="fc" id="L272">      throw operationConflict(command);</span>
+    }
+
+<span class="fc" id="L275">    return new WorkflowSessionAppendResult(</span>
+<span class="fc" id="L276">        aggregate.toStoredSession(), existing.toStoredOperation(), outbox.toStoredEntry(), true);</span>
+  }
+
+  private WorkflowSessionAppendResult recoverConcurrentAppend(
+      WorkflowSessionAppendCommand command, RuntimeException failure) {
+<span class="fc" id="L281">    return inTransaction(</span>
+        session -&gt; {
+          // The failed append may race a still-uncommitted winner. Locking the aggregate
+          // first makes the duplicate lookup and revision classification observe one
+          // committed database state without polling or timing sleeps.
+<span class="fc" id="L286">          WorkflowSessionEntity aggregate =</span>
+<span class="fc" id="L287">              session.find(</span>
+<span class="fc" id="L288">                  WorkflowSessionEntity.class, command.sessionId(), LockModeType.PESSIMISTIC_WRITE);</span>
+<span class="pc bpc" id="L289" title="1 of 2 branches missed.">          if (aggregate == null) {</span>
+<span class="nc" id="L290">            throw new NoSuchElementException(&quot;Unknown workflow session: &quot; + command.sessionId());</span>
+          }
+
+<span class="fc" id="L293">          WorkflowOperationEntity existing =</span>
+<span class="fc" id="L294">              findOperation(session, command.operation().operationId());</span>
+<span class="fc bfc" id="L295" title="All 2 branches covered.">          if (existing != null) {</span>
+<span class="fc" id="L296">            return duplicateResult(session, existing, command);</span>
+          }
+
+<span class="fc" id="L299">          long actualRevision = aggregate.semanticRevision();</span>
+<span class="fc bfc" id="L300" title="All 2 branches covered.">          if (actualRevision != command.expectedRevision()) {</span>
+<span class="fc" id="L301">            throw new WorkflowSessionRevisionConflictException(</span>
+<span class="fc" id="L302">                command.sessionId(), command.expectedRevision(), actualRevision, failure);</span>
+          }
+<span class="fc" id="L304">          throw new IllegalStateException(</span>
+<span class="fc" id="L305">              &quot;Durable append constraint failed without advancing session &quot; + command.sessionId(),</span>
+              failure);
+        });
+  }
+
+  private static WorkflowSessionEntity requireOpenAggregate(Session session, String sessionId) {
+<span class="fc" id="L311">    WorkflowSessionEntity aggregate = requireAggregate(session, sessionId);</span>
+<span class="pc bpc" id="L312" title="1 of 2 branches missed.">    if (aggregate.closed()) {</span>
+<span class="nc" id="L313">      throw new IllegalStateException(&quot;Workflow session is closed: &quot; + sessionId);</span>
+    }
+<span class="fc" id="L315">    return aggregate;</span>
+  }
+
+  private static WorkflowSessionEntity requireAggregate(Session session, String sessionId) {
+<span class="fc" id="L319">    WorkflowSessionEntity aggregate = session.find(WorkflowSessionEntity.class, sessionId);</span>
+<span class="pc bpc" id="L320" title="1 of 2 branches missed.">    if (aggregate == null) {</span>
+<span class="nc" id="L321">      throw new NoSuchElementException(&quot;Unknown workflow session: &quot; + sessionId);</span>
+    }
+<span class="fc" id="L323">    return aggregate;</span>
+  }
+
+  private static WorkflowOperationEntity findOperation(Session session, String operationId) {
+<span class="fc" id="L327">    return session</span>
+<span class="fc" id="L328">        .createQuery(</span>
+            &quot;FROM WorkflowOperationEntity operation &quot;
+                + &quot;WHERE operation.storedOperationId = :operationId&quot;,
+            WorkflowOperationEntity.class)
+<span class="fc" id="L332">        .setParameter(&quot;operationId&quot;, operationId)</span>
+<span class="fc" id="L333">        .uniqueResult();</span>
+  }
+
+  private static WorkflowOperationPersistenceConflictException operationConflict(
+      WorkflowSessionAppendCommand command) {
+<span class="fc" id="L338">    return new WorkflowOperationPersistenceConflictException(</span>
+<span class="fc" id="L339">        command.sessionId(), command.operation().operationId());</span>
+  }
+
+  private WorkflowSessionSequenceConflictException sequenceConflict(
+      String sessionId, long expectedSequence, RuntimeException cause) {
+<span class="nc" id="L344">    return new WorkflowSessionSequenceConflictException(</span>
+<span class="nc" id="L345">        sessionId, expectedSequence, requireStoredSession(sessionId).sequence(), cause);</span>
+  }
+
+  private StoredWorkflowSession requireStoredSession(String sessionId) {
+<span class="nc" id="L349">    return find(sessionId)</span>
+<span class="nc" id="L350">        .orElseThrow(() -&gt; new NoSuchElementException(&quot;Unknown workflow session: &quot; + sessionId));</span>
+  }
+
+  private &lt;T&gt; T inTransaction(Function&lt;Session, T&gt; work) {
+<span class="fc" id="L354">    try (Session session = sessionFactory.openSession()) {</span>
+<span class="fc" id="L355">      Transaction transaction = session.beginTransaction();</span>
+      try {
+<span class="fc" id="L357">        T result = work.apply(session);</span>
+<span class="fc" id="L358">        transaction.commit();</span>
+<span class="fc" id="L359">        return result;</span>
+      } finally {
+<span class="fc bfc" id="L361" title="All 2 branches covered.">        if (transaction.isActive()) {</span>
+<span class="fc" id="L362">          transaction.rollback();</span>
+        }
+      }
+    }
+  }
+
+  private static String requireNotBlank(String value, String name) {
+<span class="fc" id="L369">    Objects.requireNonNull(value, name);</span>
+<span class="pc bpc" id="L370" title="1 of 2 branches missed.">    if (value.isBlank()) {</span>
+<span class="nc" id="L371">      throw new IllegalArgumentException(name + &quot; must not be blank&quot;);</span>
+    }
+<span class="fc" id="L373">    return value;</span>
+  }
+
+  private static void requireNonNegative(long value, String name) {
+<span class="pc bpc" id="L377" title="1 of 2 branches missed.">    if (value &lt; 0) {</span>
+<span class="nc" id="L378">      throw new IllegalArgumentException(name + &quot; must be &gt;= 0&quot;);</span>
+    }
+<span class="fc" id="L380">  }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>FeatureEvaluationReport.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.feature.evaluation</a> &gt; <span class="el_source">FeatureEvaluationReport.java</span></div><h1>FeatureEvaluationReport.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.feature.evaluation;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+
+/**
+ * Ordered collection of per-feature evaluation entries produced by {@link
+ * FeatureEvaluationService}.
+ *
+ * @param entries evaluation entries, one per feature, in extraction order; must not be empty
+ */
+public record FeatureEvaluationReport(List&lt;FeatureEvaluationEntry&gt; entries) {
+
+  /** Validate and defensively copy the entry list. */
+<span class="fc" id="L17">  public FeatureEvaluationReport {</span>
+<span class="fc" id="L18">    Objects.requireNonNull(entries, &quot;entries&quot;);</span>
+<span class="pc bpc" id="L19" title="1 of 2 branches missed.">    if (entries.isEmpty()) {</span>
+<span class="nc" id="L20">      throw new IllegalArgumentException(&quot;entries must not be empty&quot;);</span>
+    }
+<span class="fc" id="L22">    entries = List.copyOf(entries);</span>
+<span class="fc" id="L23">  }</span>
+
+  /**
+   * Return the entry for the given feature name, or an empty optional when not present.
+   *
+   * @param featureName feature name to look up; must not be {@code null}
+   * @return matching entry, or empty
+   */
+  public Optional&lt;FeatureEvaluationEntry&gt; entry(String featureName) {
+<span class="fc" id="L32">    Objects.requireNonNull(featureName, &quot;featureName&quot;);</span>
+<span class="fc" id="L33">    return entries.stream().filter(e -&gt; featureName.equals(e.featureName())).findFirst();</span>
+  }
+
+  /**
+   * Return the ordered list of feature names present in this report.
+   *
+   * @return feature names in extraction order; never {@code null}
+   */
+  public List&lt;String&gt; featureNames() {
+<span class="fc" id="L42">    List&lt;String&gt; names = new ArrayList&lt;&gt;(entries.size());</span>
+<span class="fc bfc" id="L43" title="All 2 branches covered.">    for (FeatureEvaluationEntry entry : entries) {</span>
+<span class="fc" id="L44">      names.add(entry.featureName());</span>
+<span class="fc" id="L45">    }</span>
+<span class="fc" id="L46">    return List.copyOf(names);</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

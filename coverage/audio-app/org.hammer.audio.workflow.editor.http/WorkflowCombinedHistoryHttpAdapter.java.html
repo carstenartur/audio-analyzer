@@ -1,0 +1,215 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WorkflowCombinedHistoryHttpAdapter.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.editor.http</a> &gt; <span class="el_source">WorkflowCombinedHistoryHttpAdapter.java</span></div><h1>WorkflowCombinedHistoryHttpAdapter.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.editor.http;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import java.time.Instant;
+import java.util.List;
+import java.util.Objects;
+import org.hammer.audio.workflow.history.IndexedWorkflowCombinedHistorySearch;
+import org.hammer.audio.workflow.history.WorkflowCombinedHistoryQuery;
+import org.hammer.audio.workflow.history.WorkflowCombinedHistoryResult;
+import org.hammer.audio.workflow.history.WorkflowHistoryTextQuery;
+import org.hammer.audio.workflow.history.WorkflowSemanticHistoryFilter;
+import org.hammer.audio.workflow.history.WorkflowSemanticProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+/** HTTP boundary for one correctly composed generic and semantic workflow-history query. */
+@RestController
+@RequestMapping(&quot;/workflow/history/combined&quot;)
+@ConditionalOnProperty(name = &quot;workbench.persistence.mode&quot;, havingValue = &quot;hibernate&quot;)
+public final class WorkflowCombinedHistoryHttpAdapter {
+
+  private static final int DEFAULT_LIMIT = 20;
+  private final IndexedWorkflowCombinedHistorySearch search;
+
+  /** Creates the combined history controller. */
+<span class="fc" id="L33">  public WorkflowCombinedHistoryHttpAdapter(IndexedWorkflowCombinedHistorySearch search) {</span>
+<span class="fc" id="L34">    this.search = Objects.requireNonNull(search, &quot;search&quot;);</span>
+<span class="fc" id="L35">  }</span>
+
+  /** Executes semantic candidate selection before generic ranking and the final result limit. */
+  @PostMapping(&quot;/query&quot;)
+  public List&lt;CombinedHitResponse&gt; query(@Valid @RequestBody CombinedSearchRequest request) {
+<span class="fc" id="L40">    return search.searchCombined(request.toDomain()).stream()</span>
+<span class="fc" id="L41">        .map(CombinedHitResponse::from)</span>
+<span class="fc" id="L42">        .toList();</span>
+  }
+
+  /**
+   * Combined request with independently named generic and semantic filters.
+   *
+   * @param generic generic commit-history predicates and final result limit
+   * @param semantic branch and workflow-domain predicates
+   */
+  public record CombinedSearchRequest(
+      @NotNull @Valid GenericFilters generic, @NotNull @Valid SemanticFilters semantic) {
+
+<span class="fc" id="L54">    public CombinedSearchRequest {</span>
+      // Bean validation owns the transport contract.
+<span class="fc" id="L56">    }</span>
+
+    WorkflowCombinedHistoryQuery toDomain() {
+<span class="fc" id="L59">      return new WorkflowCombinedHistoryQuery(generic.toDomain(), semantic.toDomain());</span>
+    }
+  }
+
+  /**
+   * Generic commit-history filters.
+   *
+   * @param text full-text expression
+   * @param authorEmail exact author email
+   * @param pathText analyzed changed-path expression
+   * @param from inclusive lower time bound
+   * @param to inclusive upper time bound
+   * @param limit final result limit, defaulting to 20
+   */
+  public record GenericFilters(
+      String text,
+      String authorEmail,
+      String pathText,
+      Instant from,
+      Instant to,
+      @Min(1) @Max(200) Integer limit) {
+
+<span class="fc" id="L81">    public GenericFilters {</span>
+      // Domain construction normalizes optional strings and validates time bounds.
+<span class="fc" id="L83">    }</span>
+
+    WorkflowHistoryTextQuery toDomain() {
+<span class="fc" id="L86">      return new WorkflowHistoryTextQuery(</span>
+<span class="pc bpc" id="L87" title="1 of 2 branches missed.">          text, authorEmail, pathText, from, to, limit == null ? DEFAULT_LIMIT : limit);</span>
+    }
+  }
+
+  /**
+   * Workflow-semantic filters.
+   *
+   * @param branch required reachability boundary
+   * @param workflowId exact workflow identifier
+   * @param nodeId exact node identifier
+   * @param nodeType exact node type
+   * @param labelText workflow-name or node-label expression
+   * @param propertyKey exact metadata key
+   * @param propertyValue exact metadata value
+   */
+  public record SemanticFilters(
+      @NotBlank String branch,
+      String workflowId,
+      String nodeId,
+      String nodeType,
+      String labelText,
+      String propertyKey,
+      String propertyValue) {
+
+<span class="fc" id="L111">    public SemanticFilters {</span>
+      // Domain construction normalizes optional semantic values.
+<span class="fc" id="L113">    }</span>
+
+    WorkflowSemanticHistoryFilter toDomain() {
+<span class="fc" id="L116">      return new WorkflowSemanticHistoryFilter(</span>
+          branch, workflowId, nodeId, nodeType, labelText, propertyKey, propertyValue);
+    }
+  }
+
+  /**
+   * Combined response for one exact commit.
+   *
+   * @param commit generic commit metadata and changed-path evidence
+   * @param semantics branch-specific workflow-domain evidence
+   */
+  public record CombinedHitResponse(CommitEvidence commit, SemanticEvidence semantics) {
+
+<span class="fc" id="L129">    public CombinedHitResponse {</span>
+<span class="fc" id="L130">      Objects.requireNonNull(commit, &quot;commit&quot;);</span>
+<span class="fc" id="L131">      Objects.requireNonNull(semantics, &quot;semantics&quot;);</span>
+<span class="fc" id="L132">    }</span>
+
+    static CombinedHitResponse from(WorkflowCombinedHistoryResult result) {
+<span class="fc" id="L135">      return new CombinedHitResponse(CommitEvidence.from(result), SemanticEvidence.from(result));</span>
+    }
+  }
+
+  /**
+   * Generic exact-commit evidence.
+   *
+   * @param commitId exact Git commit identity
+   * @param message short commit message
+   * @param authorName author display name
+   * @param authorEmail exact author email
+   * @param timestamp commit timestamp
+   * @param changedPaths first-parent changed paths
+   */
+  public record CommitEvidence(
+      String commitId,
+      String message,
+      String authorName,
+      String authorEmail,
+      Instant timestamp,
+      List&lt;String&gt; changedPaths) {
+
+<span class="fc" id="L157">    public CommitEvidence {</span>
+<span class="fc" id="L158">      commitId = Objects.requireNonNull(commitId, &quot;commitId&quot;);</span>
+<span class="fc" id="L159">      changedPaths = List.copyOf(Objects.requireNonNull(changedPaths, &quot;changedPaths&quot;));</span>
+<span class="fc" id="L160">    }</span>
+
+    static CommitEvidence from(WorkflowCombinedHistoryResult result) {
+<span class="fc" id="L163">      return new CommitEvidence(</span>
+<span class="fc" id="L164">          result.commit().commitId().value(),</span>
+<span class="fc" id="L165">          result.commit().shortMessage(),</span>
+<span class="fc" id="L166">          result.commit().authorName(),</span>
+<span class="fc" id="L167">          result.commit().authorEmail(),</span>
+<span class="fc" id="L168">          result.commit().timestamp(),</span>
+<span class="fc" id="L169">          result.commit().changedPaths());</span>
+    }
+  }
+
+  /**
+   * Branch-specific workflow-domain evidence.
+   *
+   * @param branch branch from which the commit is reachable
+   * @param workflowId exact workflow identifier
+   * @param workflowName workflow display name
+   * @param nodeIds exact node identifiers
+   * @param nodeTypes exact node types
+   * @param nodeLabels node labels
+   * @param properties correlated metadata entries
+   */
+  public record SemanticEvidence(
+      String branch,
+      String workflowId,
+      String workflowName,
+      List&lt;String&gt; nodeIds,
+      List&lt;String&gt; nodeTypes,
+      List&lt;String&gt; nodeLabels,
+      List&lt;WorkflowSemanticProperty&gt; properties) {
+
+<span class="fc" id="L193">    public SemanticEvidence {</span>
+<span class="fc" id="L194">      branch = Objects.requireNonNull(branch, &quot;branch&quot;);</span>
+<span class="fc" id="L195">      workflowId = Objects.requireNonNull(workflowId, &quot;workflowId&quot;);</span>
+<span class="fc" id="L196">      workflowName = Objects.requireNonNull(workflowName, &quot;workflowName&quot;);</span>
+<span class="fc" id="L197">      nodeIds = List.copyOf(Objects.requireNonNull(nodeIds, &quot;nodeIds&quot;));</span>
+<span class="fc" id="L198">      nodeTypes = List.copyOf(Objects.requireNonNull(nodeTypes, &quot;nodeTypes&quot;));</span>
+<span class="fc" id="L199">      nodeLabels = List.copyOf(Objects.requireNonNull(nodeLabels, &quot;nodeLabels&quot;));</span>
+<span class="fc" id="L200">      properties = List.copyOf(Objects.requireNonNull(properties, &quot;properties&quot;));</span>
+<span class="fc" id="L201">    }</span>
+
+    static SemanticEvidence from(WorkflowCombinedHistoryResult result) {
+<span class="fc" id="L204">      return new SemanticEvidence(</span>
+<span class="fc" id="L205">          result.semantics().branch(),</span>
+<span class="fc" id="L206">          result.semantics().workflowId(),</span>
+<span class="fc" id="L207">          result.semantics().workflowName(),</span>
+<span class="fc" id="L208">          result.semantics().nodeIds(),</span>
+<span class="fc" id="L209">          result.semantics().nodeTypes(),</span>
+<span class="fc" id="L210">          result.semantics().nodeLabels(),</span>
+<span class="fc" id="L211">          result.semantics().properties());</span>
+    }
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

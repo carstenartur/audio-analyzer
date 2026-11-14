@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>InformationGainScorer.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.feature.ranking</a> &gt; <span class="el_source">InformationGainScorer.java</span></div><h1>InformationGainScorer.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.feature.ranking;
+
+import java.util.Map;
+import org.hammer.audio.experimental.acoustic.feature.evaluation.ClassSeparationScore;
+import org.hammer.audio.experimental.acoustic.feature.evaluation.FeatureEvaluationEntry;
+
+/**
+ * Estimates feature utility with a Fisher-weighted entropy proxy.
+ *
+ * &lt;p&gt;This scorer computes the class-label prior entropy {@code H(Y)} from {@link
+ * ClassSeparationScore#classCounts()} and then scales it by {@code fisherRatio / (1 +
+ * fisherRatio)}. It is an information-gain-inspired heuristic, not an exact information gain
+ * computation.
+ */
+<span class="fc" id="L15">public final class InformationGainScorer implements FeatureScorer {</span>
+
+<span class="fc" id="L17">  private static final double LOG2 = Math.log(2.0);</span>
+
+  @Override
+  public double score(FeatureEvaluationEntry entry) {
+<span class="fc" id="L21">    ClassSeparationScore sep = entry.separation();</span>
+<span class="fc" id="L22">    Map&lt;String, Integer&gt; counts = sep.classCounts();</span>
+
+<span class="fc" id="L24">    int total = 0;</span>
+<span class="fc bfc" id="L25" title="All 2 branches covered.">    for (int c : counts.values()) {</span>
+<span class="fc" id="L26">      total += c;</span>
+<span class="fc" id="L27">    }</span>
+<span class="pc bpc" id="L28" title="1 of 2 branches missed.">    if (total == 0) {</span>
+<span class="nc" id="L29">      return 0.0;</span>
+    }
+
+    // H(Y): entropy of the marginal class distribution
+<span class="fc" id="L33">    double priorEntropy = 0.0;</span>
+<span class="fc bfc" id="L34" title="All 2 branches covered.">    for (int c : counts.values()) {</span>
+<span class="pc bpc" id="L35" title="1 of 2 branches missed.">      if (c &gt; 0) {</span>
+<span class="fc" id="L36">        double p = c / (double) total;</span>
+<span class="fc" id="L37">        priorEntropy -= p * (Math.log(p) / LOG2);</span>
+      }
+<span class="fc" id="L39">    }</span>
+
+    // Approximation: features with high Fisher ratio reduce entropy proportionally.
+    // IG ≈ priorEntropy * (fisherRatio / (1 + fisherRatio))
+<span class="fc" id="L43">    double fisher = sep.fisherRatio();</span>
+<span class="fc" id="L44">    return priorEntropy * (fisher / (1.0 + fisher));</span>
+  }
+
+  @Override
+  public String name() {
+<span class="fc" id="L49">    return &quot;informationGain&quot;;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

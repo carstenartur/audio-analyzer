@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>AudioBlockBroadcaster.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio</a> &gt; <span class="el_source">AudioBlockBroadcaster.java</span></div><h1>AudioBlockBroadcaster.java</h1><pre class="source lang-java linenums">package org.hammer.audio;
+
+import java.util.List;
+import java.util.Objects;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import org.hammer.audio.core.AudioBlock;
+
+/** Package-private fan-out used by capture-service implementations. */
+<span class="fc" id="L12">final class AudioBlockBroadcaster {</span>
+
+<span class="fc" id="L14">  private static final Logger LOGGER = Logger.getLogger(AudioBlockBroadcaster.class.getName());</span>
+
+<span class="fc" id="L16">  private final List&lt;Subscription&gt; subscriptions = new CopyOnWriteArrayList&lt;&gt;();</span>
+
+  AudioBlockSubscription subscribe(AudioBlockListener listener) {
+<span class="nc" id="L19">    return new Subscription(Objects.requireNonNull(listener, &quot;listener&quot;));</span>
+  }
+
+  void publish(AudioBlock block) {
+<span class="fc" id="L23">    Objects.requireNonNull(block, &quot;block&quot;);</span>
+<span class="pc bpc" id="L24" title="1 of 2 branches missed.">    for (Subscription subscription : subscriptions) {</span>
+<span class="nc" id="L25">      subscription.publish(block);</span>
+<span class="nc" id="L26">    }</span>
+<span class="fc" id="L27">  }</span>
+
+  private final class Subscription implements AudioBlockSubscription {
+
+    private final AudioBlockListener listener;
+<span class="nc" id="L32">    private final AtomicBoolean closed = new AtomicBoolean(false);</span>
+
+<span class="nc" id="L34">    private Subscription(AudioBlockListener listener) {</span>
+<span class="nc" id="L35">      this.listener = listener;</span>
+<span class="nc" id="L36">      subscriptions.add(this);</span>
+<span class="nc" id="L37">    }</span>
+
+    private void publish(AudioBlock block) {
+<span class="nc bnc" id="L40" title="All 2 branches missed.">      if (closed.get()) {</span>
+<span class="nc" id="L41">        return;</span>
+      }
+      try {
+<span class="nc" id="L44">        listener.onAudioBlock(block);</span>
+<span class="nc" id="L45">      } catch (RuntimeException exception) {</span>
+<span class="nc" id="L46">        LOGGER.log(Level.WARNING, &quot;Audio-block listener failed; removing subscription&quot;, exception);</span>
+<span class="nc" id="L47">        close();</span>
+<span class="nc" id="L48">      }</span>
+<span class="nc" id="L49">    }</span>
+
+    @Override
+    public void close() {
+<span class="nc bnc" id="L53" title="All 2 branches missed.">      if (closed.compareAndSet(false, true)) {</span>
+<span class="nc" id="L54">        subscriptions.remove(this);</span>
+      }
+<span class="nc" id="L56">    }</span>
+
+    @Override
+    public boolean isClosed() {
+<span class="nc" id="L60">      return closed.get();</span>
+    }
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

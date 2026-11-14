@@ -1,0 +1,171 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>DeterministicAudioWorkflowExecutionBackend.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer DSP and Analysis</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.dsp.workflow</a> &gt; <span class="el_source">DeterministicAudioWorkflowExecutionBackend.java</span></div><h1>DeterministicAudioWorkflowExecutionBackend.java</h1><pre class="source lang-java linenums">package org.hammer.audio.dsp.workflow;
+
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
+import org.hammer.audio.core.AudioBlock;
+import org.hammer.audio.workflow.Node;
+import org.hammer.audio.workflow.execution.ExecutionContext;
+import org.hammer.audio.workflow.execution.ExecutionStatus;
+import org.hammer.audio.workflow.execution.ReproducibilityBundle;
+import org.hammer.audio.workflow.execution.WorkflowExecutionBackendException;
+import org.hammer.audio.workflow.execution.WorkflowRunModels.Control;
+import org.hammer.audio.workflow.execution.WorkflowRunModels.ExecutionBackend;
+import org.hammer.audio.workflow.execution.WorkflowRunModels.Input;
+import org.hammer.audio.workflow.execution.WorkflowRunModels.Mode;
+import org.hammer.audio.workflow.execution.WorkflowRunModels.Result;
+import org.hammer.audio.workflow.execution.WorkflowRunModels.Violation;
+
+/** Executes deterministic synthetic-signal and gain workflows on immutable {@link AudioBlock}s. */
+public final class DeterministicAudioWorkflowExecutionBackend implements ExecutionBackend {
+
+  /** Version of the executable semantics and emitted artifact contract. */
+  public static final String BACKEND_VERSION = &quot;deterministic-audio-v1&quot;;
+
+  private final DeterministicAudioNodeExecutorRegistry executorRegistry;
+  private final DeterministicAudioWorkflowValidator workflowValidator;
+
+  /** Creates the production backend with the standard synthetic-source and gain executors. */
+  public DeterministicAudioWorkflowExecutionBackend() {
+<span class="fc" id="L33">    this(DeterministicAudioNodeExecutorRegistry.standard());</span>
+<span class="fc" id="L34">  }</span>
+
+  DeterministicAudioWorkflowExecutionBackend(
+<span class="fc" id="L37">      DeterministicAudioNodeExecutorRegistry executorRegistry) {</span>
+<span class="fc" id="L38">    this.executorRegistry = Objects.requireNonNull(executorRegistry, &quot;executorRegistry&quot;);</span>
+<span class="fc" id="L39">    this.workflowValidator = new DeterministicAudioWorkflowValidator(executorRegistry);</span>
+<span class="fc" id="L40">  }</span>
+
+  @Override
+  public Mode mode() {
+<span class="nc" id="L44">    return Mode.COMPUTATION;</span>
+  }
+
+  @Override
+  public List&lt;Violation&gt; validate(Input input) {
+<span class="fc" id="L49">    return workflowValidator.validate(input);</span>
+  }
+
+  @Override
+  public Result execute(Input input, Control control) throws WorkflowExecutionBackendException {
+<span class="fc" id="L54">    Objects.requireNonNull(input, &quot;input&quot;);</span>
+<span class="fc" id="L55">    Objects.requireNonNull(control, &quot;control&quot;);</span>
+<span class="fc" id="L56">    List&lt;Violation&gt; violations = validate(input);</span>
+<span class="pc bpc" id="L57" title="1 of 2 branches missed.">    if (!violations.isEmpty()) {</span>
+<span class="nc" id="L58">      throw new WorkflowExecutionBackendException(</span>
+<span class="nc" id="L59">          &quot;Deterministic audio preflight rejected &quot; + violations.size() + &quot; violation(s)&quot;,</span>
+<span class="nc" id="L60">          new IllegalArgumentException(DeterministicAudioWorkflowValidator.format(violations)));</span>
+    }
+<span class="fc" id="L62">    return executeValidated(input, control);</span>
+  }
+
+  private Result executeValidated(Input input, Control control) {
+<span class="fc" id="L66">    DeterministicAudioExecutionGraph graph = DeterministicAudioExecutionGraph.from(input);</span>
+<span class="fc" id="L67">    Map&lt;String, AudioBlock&gt; outputs = new ConcurrentHashMap&lt;&gt;();</span>
+<span class="fc" id="L68">    ExecutionContext context =</span>
+<span class="fc" id="L69">        new ExecutionContext(input.runId() + &quot;:audio-execution&quot;, input.plan(), input.capturedAt());</span>
+<span class="fc" id="L70">    List&lt;String&gt; orderedNodeIds = input.plan().orderedNodeIds();</span>
+<span class="fc bfc" id="L71" title="All 2 branches covered.">    for (int index = 0; index &lt; orderedNodeIds.size(); index++) {</span>
+<span class="fc" id="L72">      String nodeId = orderedNodeIds.get(index);</span>
+<span class="pc bpc" id="L73" title="1 of 2 branches missed.">      if (control.cancellationRequested()) {</span>
+<span class="nc" id="L74">        cancelRemaining(context, orderedNodeIds, index);</span>
+<span class="nc" id="L75">        return cancellationResult(input, context, nodeId);</span>
+      }
+<span class="fc" id="L77">      Node node = graph.node(nodeId);</span>
+<span class="fc" id="L78">      context.updateNodeStatus(nodeId, ExecutionStatus.RUNNING);</span>
+<span class="fc" id="L79">      control.progress(progressBefore(index, orderedNodeIds.size()), &quot;Starting &quot; + nodeId);</span>
+      try {
+<span class="fc" id="L81">        DeterministicAudioNodeExecutor executor = requiredExecutor(node);</span>
+<span class="fc" id="L82">        AudioBlock output = executor.execute(node, graph.upstreamInput(nodeId, outputs), control);</span>
+<span class="fc" id="L83">        outputs.put(nodeId, output);</span>
+<span class="fc" id="L84">        context.updateNodeStatus(nodeId, ExecutionStatus.COMPLETED);</span>
+<span class="fc" id="L85">        control.progress(progressAfter(index, orderedNodeIds.size()), &quot;Computed &quot; + nodeId);</span>
+<span class="fc" id="L86">      } catch (DeterministicAudioCancellationException cancellation) {</span>
+<span class="fc" id="L87">        cancelRemaining(context, orderedNodeIds, index);</span>
+<span class="fc" id="L88">        return cancellationResult(input, context, nodeId);</span>
+<span class="fc" id="L89">      } catch (RuntimeException failure) {</span>
+<span class="fc" id="L90">        return failureResult(input, context, orderedNodeIds, index, node, failure);</span>
+<span class="fc" id="L91">      }</span>
+    }
+<span class="fc" id="L93">    String terminalNodeId = graph.terminalNodeId();</span>
+<span class="fc" id="L94">    AudioBlock terminalOutput = outputs.get(terminalNodeId);</span>
+<span class="fc" id="L95">    Map&lt;String, String&gt; artifacts = baseArtifacts();</span>
+<span class="fc" id="L96">    artifacts.putAll(</span>
+<span class="fc" id="L97">        AudioBlockEvidence.artifacts(terminalOutput, terminalNodeId, graph.terminalOutputPortId()));</span>
+<span class="fc" id="L98">    return result(input, context, artifacts);</span>
+  }
+
+  private DeterministicAudioNodeExecutor requiredExecutor(Node node) {
+<span class="fc" id="L102">    return executorRegistry</span>
+<span class="fc" id="L103">        .find(node.type())</span>
+<span class="fc" id="L104">        .orElseThrow(</span>
+<span class="nc" id="L105">            () -&gt; new IllegalStateException(&quot;Validated node has no executor: &quot; + node.type()));</span>
+  }
+
+  private static Result cancellationResult(
+      Input input, ExecutionContext context, String cancelledAtNode) {
+<span class="fc" id="L110">    Map&lt;String, String&gt; artifacts = baseArtifacts();</span>
+<span class="fc" id="L111">    artifacts.put(DeterministicAudioArtifacts.CANCELLED_AT_NODE, cancelledAtNode);</span>
+<span class="fc" id="L112">    return result(input, context, artifacts);</span>
+  }
+
+  private static Result failureResult(
+      Input input,
+      ExecutionContext context,
+      List&lt;String&gt; orderedNodeIds,
+      int failedIndex,
+      Node failedNode,
+      RuntimeException failure) {
+<span class="fc" id="L122">    context.updateNodeStatus(failedNode.id(), ExecutionStatus.FAILED);</span>
+<span class="fc" id="L123">    List&lt;String&gt; skippedNodeIds = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L124" title="All 2 branches covered.">    for (int index = failedIndex + 1; index &lt; orderedNodeIds.size(); index++) {</span>
+<span class="fc" id="L125">      String skippedNodeId = orderedNodeIds.get(index);</span>
+<span class="fc" id="L126">      context.updateNodeStatus(skippedNodeId, ExecutionStatus.SKIPPED);</span>
+<span class="fc" id="L127">      skippedNodeIds.add(skippedNodeId);</span>
+    }
+<span class="fc" id="L129">    Map&lt;String, String&gt; artifacts = baseArtifacts();</span>
+<span class="fc" id="L130">    artifacts.put(DeterministicAudioArtifacts.FAILED_NODE_ID, failedNode.id());</span>
+<span class="fc" id="L131">    artifacts.put(DeterministicAudioArtifacts.FAILED_NODE_TYPE, failedNode.type());</span>
+<span class="fc" id="L132">    artifacts.put(DeterministicAudioArtifacts.FAILURE_CLASS, failure.getClass().getName());</span>
+<span class="fc" id="L133">    artifacts.put(</span>
+        DeterministicAudioArtifacts.FAILURE_MESSAGE,
+<span class="pc bpc" id="L135" title="1 of 2 branches missed.">        failure.getMessage() == null ? failure.getClass().getSimpleName() : failure.getMessage());</span>
+<span class="fc" id="L136">    artifacts.put(DeterministicAudioArtifacts.SKIPPED_NODE_IDS, String.join(&quot;,&quot;, skippedNodeIds));</span>
+<span class="fc" id="L137">    return result(input, context, artifacts);</span>
+  }
+
+  private static Map&lt;String, String&gt; baseArtifacts() {
+<span class="fc" id="L141">    Map&lt;String, String&gt; artifacts = new ConcurrentHashMap&lt;&gt;();</span>
+<span class="fc" id="L142">    artifacts.put(DeterministicAudioArtifacts.BACKEND_MODE, Mode.COMPUTATION.name());</span>
+<span class="fc" id="L143">    artifacts.put(DeterministicAudioArtifacts.BACKEND_VERSION, BACKEND_VERSION);</span>
+<span class="fc" id="L144">    return artifacts;</span>
+  }
+
+  private static Result result(
+      Input input, ExecutionContext context, Map&lt;String, String&gt; artifacts) {
+<span class="fc" id="L149">    Instant completedAt = input.capturedAt();</span>
+<span class="fc" id="L150">    ReproducibilityBundle bundle =</span>
+        new ReproducibilityBundle(
+<span class="fc" id="L152">            input.snapshot(), context.toResult(completedAt), input.commitId(), null);</span>
+<span class="fc" id="L153">    return new Result(bundle, artifacts);</span>
+  }
+
+  private static void cancelRemaining(
+      ExecutionContext context, List&lt;String&gt; orderedNodeIds, int firstRemainingIndex) {
+<span class="fc bfc" id="L158" title="All 2 branches covered.">    for (int index = firstRemainingIndex; index &lt; orderedNodeIds.size(); index++) {</span>
+<span class="fc" id="L159">      context.updateNodeStatus(orderedNodeIds.get(index), ExecutionStatus.CANCELLED);</span>
+    }
+<span class="fc" id="L161">  }</span>
+
+  private static int progressBefore(int index, int nodeCount) {
+<span class="fc" id="L164">    return Math.multiplyExact(index, 100) / nodeCount;</span>
+  }
+
+  private static int progressAfter(int index, int nodeCount) {
+<span class="fc" id="L168">    return Math.multiplyExact(index + 1, 100) / nodeCount;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

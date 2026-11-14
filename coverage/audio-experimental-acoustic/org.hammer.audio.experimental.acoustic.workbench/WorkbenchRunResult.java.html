@@ -1,0 +1,183 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WorkbenchRunResult.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.workbench</a> &gt; <span class="el_source">WorkbenchRunResult.java</span></div><h1>WorkbenchRunResult.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.workbench;
+
+import java.util.Comparator;
+import java.util.EnumSet;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import org.hammer.audio.acquisition.LocalizationExperiment;
+import org.hammer.audio.acquisition.SynchronizationMode;
+import org.hammer.audio.acquisition.SynchronizationStatus;
+import org.hammer.audio.experimental.acoustic.benchmark.BenchmarkReport;
+import org.hammer.audio.experimental.acoustic.simulation.SimulationScenarios.SimulationScenario;
+import org.hammer.audio.experimental.acoustic.tracking.FrameSchedule;
+import org.hammer.audio.experimental.acoustic.tracking.TrackedSource;
+import org.hammer.audio.experimental.acoustic.tracking.TrackingSnapshot;
+
+/**
+ * Immutable result of a completed headless workbench scenario run.
+ *
+ * @param scenario the scenario that was executed
+ * @param parameters the parameters used during the run
+ * @param snapshots one {@link TrackingSnapshot} per processed audio block, in order
+ * @param totalProcessingNanos cumulative pipeline wall-clock time across all blocks
+ * @param benchmarkReport benchmark quality report comparing estimated tracks against ground truth,
+ *     or {@code null} if benchmarking was not possible (e.g. empty run)
+ * @param frameSchedule the real-time budget schedule used during the run, or {@code null} when not
+ *     available; used to identify over-budget frames
+ * @param experiment reproducibility, array, source and calibration metadata, or {@code null} for
+ *     legacy callers
+ */
+public record WorkbenchRunResult(
+    SimulationScenario scenario,
+    WorkbenchParameters parameters,
+    List&lt;TrackingSnapshot&gt; snapshots,
+    long totalProcessingNanos,
+    BenchmarkReport benchmarkReport,
+    FrameSchedule frameSchedule,
+    LocalizationExperiment experiment) {
+
+  // Validates and defensively copies the snapshots list.
+<span class="fc" id="L42">  public WorkbenchRunResult {</span>
+<span class="fc" id="L43">    Objects.requireNonNull(scenario, &quot;scenario&quot;);</span>
+<span class="fc" id="L44">    Objects.requireNonNull(parameters, &quot;parameters&quot;);</span>
+<span class="fc" id="L45">    Objects.requireNonNull(snapshots, &quot;snapshots&quot;);</span>
+<span class="pc bpc" id="L46" title="1 of 2 branches missed.">    if (totalProcessingNanos &lt; 0L) {</span>
+<span class="nc" id="L47">      throw new IllegalArgumentException(&quot;totalProcessingNanos must be &gt;= 0&quot;);</span>
+    }
+<span class="fc" id="L49">    snapshots = List.copyOf(snapshots);</span>
+    // benchmarkReport, frameSchedule and experiment may be null for compatibility.
+<span class="fc" id="L51">  }</span>
+
+  /** Construct a result without experiment metadata. */
+  public WorkbenchRunResult(
+      SimulationScenario scenario,
+      WorkbenchParameters parameters,
+      List&lt;TrackingSnapshot&gt; snapshots,
+      long totalProcessingNanos,
+      BenchmarkReport benchmarkReport,
+      FrameSchedule frameSchedule) {
+<span class="fc" id="L61">    this(</span>
+        scenario,
+        parameters,
+        snapshots,
+        totalProcessingNanos,
+        benchmarkReport,
+        frameSchedule,
+        null);
+<span class="fc" id="L69">  }</span>
+
+  /** Construct a result without a frame schedule or experiment metadata. */
+  public WorkbenchRunResult(
+      SimulationScenario scenario,
+      WorkbenchParameters parameters,
+      List&lt;TrackingSnapshot&gt; snapshots,
+      long totalProcessingNanos,
+      BenchmarkReport benchmarkReport) {
+<span class="fc" id="L78">    this(scenario, parameters, snapshots, totalProcessingNanos, benchmarkReport, null, null);</span>
+<span class="fc" id="L79">  }</span>
+
+  /** Optional reproducibility and hardware metadata. */
+  public Optional&lt;LocalizationExperiment&gt; experimentMetadata() {
+<span class="fc" id="L83">    return Optional.ofNullable(experiment);</span>
+  }
+
+  /** Number of audio blocks that were processed. */
+  public int blockCount() {
+<span class="fc" id="L88">    return snapshots.size();</span>
+  }
+
+  /** Whether at least one tracked source appeared in any frame. */
+  public boolean anyTracked() {
+<span class="fc bfc" id="L93" title="All 2 branches covered.">    return snapshots.stream().anyMatch(snapshot -&gt; !snapshot.tracks().isEmpty());</span>
+  }
+
+  /** Maximum number of tracked sources observed in any single frame. */
+  public int maxTracksInAnyFrame() {
+<span class="fc" id="L98">    return snapshots.stream().mapToInt(snapshot -&gt; snapshot.tracks().size()).max().orElse(0);</span>
+  }
+
+  /** Average pipeline processing time per block in nanoseconds, or zero for an empty run. */
+  public double averageProcessingNanosPerBlock() {
+<span class="pc bpc" id="L103" title="1 of 2 branches missed.">    return snapshots.isEmpty() ? 0.0 : (double) totalProcessingNanos / snapshots.size();</span>
+  }
+
+  /** Maximum pipeline processing time across all blocks in nanoseconds. */
+  public long maxProcessingNanosPerBlock() {
+<span class="fc" id="L108">    return snapshots.stream().mapToLong(TrackingSnapshot::processingNanos).max().orElse(0L);</span>
+  }
+
+  /** Total number of distinct track IDs observed across all frames. */
+  public long distinctTrackCount() {
+<span class="fc" id="L113">    return snapshots.stream()</span>
+<span class="fc" id="L114">        .flatMap(snapshot -&gt; snapshot.tracks().stream())</span>
+<span class="fc" id="L115">        .mapToInt(TrackedSource::id)</span>
+<span class="fc" id="L116">        .distinct()</span>
+<span class="fc" id="L117">        .count();</span>
+  }
+
+  /** Returns every synchronization model used during the run. */
+  public Set&lt;SynchronizationMode&gt; synchronizationModes() {
+<span class="fc" id="L122">    Set&lt;SynchronizationMode&gt; modes = EnumSet.noneOf(SynchronizationMode.class);</span>
+<span class="fc" id="L123">    snapshots.stream().map(snapshot -&gt; snapshot.synchronization().mode()).forEach(modes::add);</span>
+<span class="fc" id="L124">    return Set.copyOf(modes);</span>
+  }
+
+  /** Returns the most severe synchronization status observed during the run. */
+  public SynchronizationStatus worstSynchronizationStatus() {
+<span class="fc" id="L129">    return snapshots.stream()</span>
+<span class="fc" id="L130">        .map(snapshot -&gt; snapshot.synchronization().status())</span>
+<span class="fc" id="L131">        .max(Comparator.comparingInt(Enum::ordinal))</span>
+<span class="fc" id="L132">        .orElse(SynchronizationStatus.TRUSTED);</span>
+  }
+
+  /** Whether any frame carries degraded or rejected synchronization evidence. */
+  public boolean hasSynchronizationWarning() {
+<span class="pc bpc" id="L137" title="1 of 2 branches missed.">    return worstSynchronizationStatus() != SynchronizationStatus.TRUSTED;</span>
+  }
+
+  /** Mean physical/cycle-consistency score across all processed frames. */
+  public double meanTdoaConsistencyScore() {
+<span class="fc" id="L142">    return snapshots.stream()</span>
+<span class="fc" id="L143">        .mapToDouble(snapshot -&gt; snapshot.tdoaConsistency().consistencyScore())</span>
+<span class="fc" id="L144">        .average()</span>
+<span class="fc" id="L145">        .orElse(1.0);</span>
+  }
+
+  /** Largest absolute TDOA cycle residual observed during the run. */
+  public double maximumTdoaCycleResidualSeconds() {
+<span class="fc" id="L150">    return snapshots.stream()</span>
+<span class="fc" id="L151">        .mapToDouble(snapshot -&gt; snapshot.tdoaConsistency().maximumAbsoluteCycleResidualSeconds())</span>
+<span class="fc" id="L152">        .max()</span>
+<span class="fc" id="L153">        .orElse(0.0);</span>
+  }
+
+  /** Total pair delays that exceeded their physical propagation limit. */
+  public int physicalTdoaViolationCount() {
+<span class="fc" id="L158">    return snapshots.stream()</span>
+<span class="fc" id="L159">        .mapToInt(snapshot -&gt; snapshot.tdoaConsistency().physicalViolationCount())</span>
+<span class="fc" id="L160">        .sum();</span>
+  }
+
+  /** Number of frames whose TDOA pair evidence is unreliable. */
+  public long unreliableTdoaFrameCount() {
+<span class="fc bfc" id="L165" title="All 2 branches covered.">    return snapshots.stream().filter(snapshot -&gt; !snapshot.tdoaConsistency().reliable()).count();</span>
+  }
+
+  /** Number of frames whose processing time exceeded the configured frame budget. */
+  public long overBudgetFrameCount() {
+<span class="fc bfc" id="L170" title="All 2 branches covered.">    if (frameSchedule == null) {</span>
+<span class="fc" id="L171">      return 0L;</span>
+    }
+<span class="fc" id="L173">    long budget = frameSchedule.maxProcessingNanos();</span>
+<span class="fc bfc" id="L174" title="All 2 branches covered.">    return snapshots.stream().filter(snapshot -&gt; snapshot.processingNanos() &gt; budget).count();</span>
+  }
+
+  /** Whether one snapshot exceeded the configured frame budget. */
+  public boolean isFrameOverBudget(TrackingSnapshot snapshot) {
+<span class="fc" id="L179">    Objects.requireNonNull(snapshot, &quot;snapshot&quot;);</span>
+<span class="fc bfc" id="L180" title="All 4 branches covered.">    return frameSchedule != null &amp;&amp; snapshot.processingNanos() &gt; frameSchedule.maxProcessingNanos();</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

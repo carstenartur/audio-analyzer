@@ -1,0 +1,283 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>AdaptiveBeamformingSearch.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic</a> &gt; <span class="el_source">AdaptiveBeamformingSearch.java</span></div><h1>AdaptiveBeamformingSearch.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic;
+
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Objects;
+import java.util.Set;
+import org.hammer.audio.acquisition.MicrophoneArray;
+import org.hammer.audio.core.AudioBlock;
+import org.hammer.audio.experimental.acoustic.DelayAndSumBeamformer.BeamformingPoint;
+import org.hammer.audio.geometry.Vector2;
+
+/** Coarse-to-fine candidate refinement over the existing delay-and-sum beamforming baseline. */
+public final class AdaptiveBeamformingSearch {
+
+  private static final int ACTIVE_HYPOTHESIS_LIMIT = 2;
+
+  private final DelayAndSumBeamformer beamformer;
+
+  /** Creates an adaptive search over one interchangeable beamforming scorer. */
+<span class="fc" id="L22">  public AdaptiveBeamformingSearch(DelayAndSumBeamformer beamformer) {</span>
+<span class="fc" id="L23">    this.beamformer = Objects.requireNonNull(beamformer, &quot;beamformer&quot;);</span>
+<span class="fc" id="L24">  }</span>
+
+  /**
+   * Searches the initial bounds and repeatedly refines two deterministic, spatially distinct score
+   * hypotheses. Retaining more than one path prevents an early coarse-grid alias from irreversibly
+   * excluding the physically correct basin.
+   */
+  public BeamformingSearchResult search(
+      AudioBlock block,
+      MicrophoneArray array,
+      SearchBounds initialBounds,
+      int stepsPerAxis,
+      int refinementLevels) {
+<span class="fc" id="L37">    Objects.requireNonNull(block, &quot;block&quot;);</span>
+<span class="fc" id="L38">    Objects.requireNonNull(array, &quot;array&quot;);</span>
+<span class="fc" id="L39">    Objects.requireNonNull(initialBounds, &quot;initialBounds&quot;);</span>
+<span class="pc bpc" id="L40" title="1 of 2 branches missed.">    if (stepsPerAxis &lt; 2) {</span>
+<span class="nc" id="L41">      throw new IllegalArgumentException(&quot;stepsPerAxis must be &gt;= 2&quot;);</span>
+    }
+<span class="pc bpc" id="L43" title="1 of 2 branches missed.">    if (refinementLevels &lt; 1) {</span>
+<span class="nc" id="L44">      throw new IllegalArgumentException(&quot;refinementLevels must be &gt;= 1&quot;);</span>
+    }
+
+<span class="fc" id="L47">    List&lt;SearchBounds&gt; activeRegions = List.of(initialBounds);</span>
+<span class="fc" id="L48">    Set&lt;Vector2&gt; evaluatedPositions = new LinkedHashSet&lt;&gt;();</span>
+<span class="fc" id="L49">    List&lt;BeamformingPoint&gt; evaluatedPoints = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L50">    BeamformingPoint globalBest = null;</span>
+<span class="fc bfc" id="L51" title="All 2 branches covered.">    for (int level = 0; level &lt; refinementLevels; level++) {</span>
+<span class="fc" id="L52">      Set&lt;Vector2&gt; levelPositions = new LinkedHashSet&lt;&gt;();</span>
+<span class="fc" id="L53">      List&lt;BeamformingPoint&gt; levelPoints = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L54" title="All 2 branches covered.">      for (SearchBounds region : activeRegions) {</span>
+<span class="fc bfc" id="L55" title="All 2 branches covered.">        for (BeamformingPoint point : beamformer.scan(block, array, region.grid(stepsPerAxis))) {</span>
+<span class="fc bfc" id="L56" title="All 2 branches covered.">          if (levelPositions.add(point.positionMeters())) {</span>
+<span class="fc" id="L57">            levelPoints.add(point);</span>
+          }
+<span class="fc bfc" id="L59" title="All 2 branches covered.">          if (evaluatedPositions.add(point.positionMeters())) {</span>
+<span class="fc" id="L60">            evaluatedPoints.add(point);</span>
+          }
+<span class="fc" id="L62">        }</span>
+<span class="fc" id="L63">      }</span>
+
+<span class="fc" id="L65">      List&lt;BeamformingPoint&gt; ranked = rankByEnergy(levelPoints);</span>
+<span class="fc" id="L66">      BeamformingPoint levelBest = ranked.get(0);</span>
+<span class="fc bfc" id="L67" title="All 4 branches covered.">      if (globalBest == null || levelBest.energy() &gt; globalBest.energy()) {</span>
+<span class="fc" id="L68">        globalBest = levelBest;</span>
+      }
+<span class="fc bfc" id="L70" title="All 2 branches covered.">      if (level + 1 &lt; refinementLevels) {</span>
+<span class="fc" id="L71">        double scale = Math.pow(stepsPerAxis, level + 1.0);</span>
+<span class="fc" id="L72">        double xRadius = initialBounds.width() / scale;</span>
+<span class="fc" id="L73">        double yRadius = initialBounds.height() / scale;</span>
+<span class="fc" id="L74">        List&lt;BeamformingPoint&gt; centers =</span>
+<span class="fc" id="L75">            selectRefinementCenters(ranked, xRadius, yRadius, ACTIVE_HYPOTHESIS_LIMIT);</span>
+<span class="fc" id="L76">        List&lt;SearchBounds&gt; nextRegions = new ArrayList&lt;&gt;(centers.size());</span>
+<span class="fc bfc" id="L77" title="All 2 branches covered.">        for (BeamformingPoint center : centers) {</span>
+<span class="fc" id="L78">          nextRegions.add(initialBounds.around(center.positionMeters(), xRadius, yRadius));</span>
+<span class="fc" id="L79">        }</span>
+<span class="fc" id="L80">        activeRegions = List.copyOf(nextRegions);</span>
+      }
+    }
+
+<span class="fc" id="L84">    return new BeamformingSearchResult(</span>
+<span class="fc" id="L85">        globalBest, List.copyOf(evaluatedPoints), refinementLevels, stepsPerAxis);</span>
+  }
+
+  private static List&lt;BeamformingPoint&gt; rankByEnergy(List&lt;BeamformingPoint&gt; points) {
+<span class="fc" id="L89">    List&lt;BeamformingPoint&gt; ranked = new ArrayList&lt;&gt;(points);</span>
+<span class="fc" id="L90">    ranked.sort(</span>
+<span class="fc" id="L91">        Comparator.comparingDouble(BeamformingPoint::energy)</span>
+<span class="fc" id="L92">            .reversed()</span>
+<span class="fc" id="L93">            .thenComparingDouble(point -&gt; point.positionMeters().x())</span>
+<span class="fc" id="L94">            .thenComparingDouble(point -&gt; point.positionMeters().y()));</span>
+<span class="pc bpc" id="L95" title="1 of 2 branches missed.">    if (ranked.isEmpty()) {</span>
+<span class="nc" id="L96">      throw new IllegalArgumentException(&quot;points must not be empty&quot;);</span>
+    }
+<span class="fc" id="L98">    return List.copyOf(ranked);</span>
+  }
+
+  private static List&lt;BeamformingPoint&gt; selectRefinementCenters(
+      List&lt;BeamformingPoint&gt; ranked, double xRadius, double yRadius, int maximumCenters) {
+<span class="fc" id="L103">    List&lt;BeamformingPoint&gt; selected = new ArrayList&lt;&gt;(maximumCenters);</span>
+<span class="fc bfc" id="L104" title="All 2 branches covered.">    for (BeamformingPoint candidate : ranked) {</span>
+<span class="fc bfc" id="L105" title="All 2 branches covered.">      if (isSpatiallyDistinct(candidate, selected, xRadius, yRadius)) {</span>
+<span class="fc" id="L106">        selected.add(candidate);</span>
+<span class="fc bfc" id="L107" title="All 2 branches covered.">        if (selected.size() == maximumCenters) {</span>
+<span class="fc" id="L108">          return List.copyOf(selected);</span>
+        }
+      }
+<span class="fc" id="L111">    }</span>
+<span class="pc bpc" id="L112" title="1 of 2 branches missed.">    for (BeamformingPoint candidate : ranked) {</span>
+<span class="fc bfc" id="L113" title="All 2 branches covered.">      if (!selected.contains(candidate)) {</span>
+<span class="fc" id="L114">        selected.add(candidate);</span>
+<span class="pc bpc" id="L115" title="1 of 2 branches missed.">        if (selected.size() == maximumCenters) {</span>
+<span class="fc" id="L116">          break;</span>
+        }
+      }
+<span class="fc" id="L119">    }</span>
+<span class="fc" id="L120">    return List.copyOf(selected);</span>
+  }
+
+  private static boolean isSpatiallyDistinct(
+      BeamformingPoint candidate, List&lt;BeamformingPoint&gt; selected, double xRadius, double yRadius) {
+<span class="fc bfc" id="L125" title="All 2 branches covered.">    for (BeamformingPoint existing : selected) {</span>
+<span class="fc" id="L126">      double xDistance = Math.abs(candidate.positionMeters().x() - existing.positionMeters().x());</span>
+<span class="fc" id="L127">      double yDistance = Math.abs(candidate.positionMeters().y() - existing.positionMeters().y());</span>
+<span class="pc bpc" id="L128" title="1 of 4 branches missed.">      if (xDistance &lt;= 2.0 * xRadius &amp;&amp; yDistance &lt;= 2.0 * yRadius) {</span>
+<span class="fc" id="L129">        return false;</span>
+      }
+<span class="fc" id="L131">    }</span>
+<span class="fc" id="L132">    return true;</span>
+  }
+
+  private static void requirePositiveFinite(double value, String name) {
+<span class="pc bpc" id="L136" title="2 of 4 branches missed.">    if (Double.isFinite(value) &amp;&amp; value &gt; 0.0) {</span>
+<span class="fc" id="L137">      return;</span>
+    }
+<span class="nc" id="L139">    throw new IllegalArgumentException(name + &quot; must be finite and &gt; 0&quot;);</span>
+  }
+
+  /**
+   * Rectangular search region in meters.
+   *
+   * @param minimumX inclusive minimum x coordinate
+   * @param maximumX inclusive maximum x coordinate
+   * @param minimumY inclusive minimum y coordinate
+   * @param maximumY inclusive maximum y coordinate
+   */
+  public record SearchBounds(double minimumX, double maximumX, double minimumY, double maximumY) {
+
+    // Validate finite ordered bounds.
+<span class="fc" id="L153">    public SearchBounds {</span>
+<span class="pc bpc" id="L154" title="1 of 2 branches missed.">      if (!Double.isFinite(minimumX)</span>
+<span class="pc bpc" id="L155" title="1 of 2 branches missed.">          || !Double.isFinite(maximumX)</span>
+<span class="pc bpc" id="L156" title="1 of 2 branches missed.">          || !Double.isFinite(minimumY)</span>
+<span class="pc bpc" id="L157" title="1 of 2 branches missed.">          || !Double.isFinite(maximumY)) {</span>
+<span class="nc" id="L158">        throw new IllegalArgumentException(&quot;search bounds must be finite&quot;);</span>
+      }
+<span class="pc bpc" id="L160" title="2 of 4 branches missed.">      if (minimumX &gt;= maximumX || minimumY &gt;= maximumY) {</span>
+<span class="nc" id="L161">        throw new IllegalArgumentException(&quot;search bounds must have positive width and height&quot;);</span>
+      }
+<span class="fc" id="L163">    }</span>
+
+    /** Region width in meters. */
+    public double width() {
+<span class="fc" id="L167">      return maximumX - minimumX;</span>
+    }
+
+    /** Region height in meters. */
+    public double height() {
+<span class="fc" id="L172">      return maximumY - minimumY;</span>
+    }
+
+    /** Returns an inclusive regular grid over this region. */
+    public List&lt;Vector2&gt; grid(int stepsPerAxis) {
+<span class="pc bpc" id="L177" title="1 of 2 branches missed.">      if (stepsPerAxis &lt; 1) {</span>
+<span class="nc" id="L178">        throw new IllegalArgumentException(&quot;stepsPerAxis must be &gt;= 1&quot;);</span>
+      }
+<span class="fc" id="L180">      List&lt;Vector2&gt; points = new ArrayList&lt;&gt;((stepsPerAxis + 1) * (stepsPerAxis + 1));</span>
+<span class="fc bfc" id="L181" title="All 2 branches covered.">      for (int xIndex = 0; xIndex &lt;= stepsPerAxis; xIndex++) {</span>
+<span class="fc bfc" id="L182" title="All 2 branches covered.">        for (int yIndex = 0; yIndex &lt;= stepsPerAxis; yIndex++) {</span>
+<span class="fc" id="L183">          points.add(</span>
+              new Vector2(
+<span class="fc" id="L185">                  minimumX + width() * xIndex / stepsPerAxis,</span>
+<span class="fc" id="L186">                  minimumY + height() * yIndex / stepsPerAxis));</span>
+        }
+      }
+<span class="fc" id="L189">      return List.copyOf(points);</span>
+    }
+
+    /** Returns a clipped refinement region around one selected point. */
+    public SearchBounds around(Vector2 center, double xRadius, double yRadius) {
+<span class="fc" id="L194">      Objects.requireNonNull(center, &quot;center&quot;);</span>
+<span class="fc" id="L195">      requirePositiveFinite(xRadius, &quot;xRadius&quot;);</span>
+<span class="fc" id="L196">      requirePositiveFinite(yRadius, &quot;yRadius&quot;);</span>
+<span class="fc" id="L197">      double clippedMinimumX = Math.max(minimumX, center.x() - xRadius);</span>
+<span class="fc" id="L198">      double clippedMaximumX = Math.min(maximumX, center.x() + xRadius);</span>
+<span class="fc" id="L199">      double clippedMinimumY = Math.max(minimumY, center.y() - yRadius);</span>
+<span class="fc" id="L200">      double clippedMaximumY = Math.min(maximumY, center.y() + yRadius);</span>
+<span class="pc bpc" id="L201" title="1 of 2 branches missed.">      if (clippedMinimumX &gt;= clippedMaximumX) {</span>
+<span class="nc" id="L202">        clippedMinimumX = Math.max(minimumX, clippedMinimumX - xRadius);</span>
+<span class="nc" id="L203">        clippedMaximumX = Math.min(maximumX, clippedMaximumX + xRadius);</span>
+      }
+<span class="pc bpc" id="L205" title="1 of 2 branches missed.">      if (clippedMinimumY &gt;= clippedMaximumY) {</span>
+<span class="nc" id="L206">        clippedMinimumY = Math.max(minimumY, clippedMinimumY - yRadius);</span>
+<span class="nc" id="L207">        clippedMaximumY = Math.min(maximumY, clippedMaximumY + yRadius);</span>
+      }
+<span class="fc" id="L209">      return new SearchBounds(clippedMinimumX, clippedMaximumX, clippedMinimumY, clippedMaximumY);</span>
+    }
+  }
+
+  /**
+   * Adaptive search result with the global best point and full evaluated surface.
+   *
+   * @param best global best point across all refinement levels
+   * @param evaluatedPoints uniquely evaluated points in deterministic order
+   * @param refinementLevels number of completed refinement levels
+   * @param stepsPerAxis grid steps used in each active region
+   */
+  public record BeamformingSearchResult(
+      BeamformingPoint best,
+      List&lt;BeamformingPoint&gt; evaluatedPoints,
+      int refinementLevels,
+      int stepsPerAxis) {
+
+    // Validate and defensively copy one search result.
+<span class="fc" id="L228">    public BeamformingSearchResult {</span>
+<span class="fc" id="L229">      Objects.requireNonNull(best, &quot;best&quot;);</span>
+<span class="fc" id="L230">      evaluatedPoints = List.copyOf(Objects.requireNonNull(evaluatedPoints, &quot;evaluatedPoints&quot;));</span>
+<span class="pc bpc" id="L231" title="1 of 2 branches missed.">      if (evaluatedPoints.isEmpty()) {</span>
+<span class="nc" id="L232">        throw new IllegalArgumentException(&quot;evaluatedPoints must not be empty&quot;);</span>
+      }
+<span class="pc bpc" id="L234" title="2 of 4 branches missed.">      if (refinementLevels &lt; 1 || stepsPerAxis &lt; 2) {</span>
+<span class="nc" id="L235">        throw new IllegalArgumentException(&quot;invalid search configuration&quot;);</span>
+      }
+<span class="fc" id="L237">    }</span>
+
+    /** Number of unique beamforming candidates actually evaluated. */
+    public int evaluatedCandidateCount() {
+<span class="fc" id="L241">      return evaluatedPoints.size();</span>
+    }
+
+    /** Full evaluated confidence surface normalized to the global maximum energy. */
+    public List&lt;BeamformingConfidencePoint&gt; normalizedConfidenceSurface() {
+<span class="fc" id="L246">      double maximumEnergy =</span>
+<span class="fc" id="L247">          evaluatedPoints.stream().mapToDouble(BeamformingPoint::energy).max().orElse(0.0);</span>
+<span class="fc" id="L248">      return evaluatedPoints.stream()</span>
+<span class="fc" id="L249">          .map(</span>
+              point -&gt;
+<span class="fc" id="L251">                  new BeamformingConfidencePoint(</span>
+<span class="fc" id="L252">                      point.positionMeters(),</span>
+<span class="fc" id="L253">                      point.energy(),</span>
+<span class="pc bpc" id="L254" title="1 of 2 branches missed.">                      maximumEnergy &gt; 0.0 ? point.energy() / maximumEnergy : 0.0))</span>
+<span class="fc" id="L255">          .toList();</span>
+    }
+  }
+
+  /**
+   * One evaluated beamforming point with confidence normalized to the global maximum.
+   *
+   * @param positionMeters candidate position in meters
+   * @param energy raw beamforming energy
+   * @param normalizedConfidence energy divided by the global maximum in {@code [0,1]}
+   */
+  public record BeamformingConfidencePoint(
+      Vector2 positionMeters, double energy, double normalizedConfidence) {
+
+    // Validate one immutable confidence-surface point.
+<span class="fc" id="L270">    public BeamformingConfidencePoint {</span>
+<span class="fc" id="L271">      Objects.requireNonNull(positionMeters, &quot;positionMeters&quot;);</span>
+<span class="pc bpc" id="L272" title="2 of 4 branches missed.">      if (!Double.isFinite(energy) || energy &lt; 0.0) {</span>
+<span class="nc" id="L273">        throw new IllegalArgumentException(&quot;energy must be finite and &gt;= 0&quot;);</span>
+      }
+<span class="pc bpc" id="L275" title="3 of 6 branches missed.">      if (!Double.isFinite(normalizedConfidence)</span>
+          || normalizedConfidence &lt; 0.0
+          || normalizedConfidence &gt; 1.0) {
+<span class="nc" id="L278">        throw new IllegalArgumentException(&quot;normalizedConfidence must be in [0,1]&quot;);</span>
+      }
+<span class="fc" id="L280">    }</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

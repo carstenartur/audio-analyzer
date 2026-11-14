@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>AcousticGroundTruth.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.scenario</a> &gt; <span class="el_source">AcousticGroundTruth.java</span></div><h1>AcousticGroundTruth.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.scenario;
+
+import java.util.List;
+
+/**
+ * Acoustic ground truth for a single source in a scenario.
+ *
+ * &lt;p&gt;Only {@link #fundamentalFrequencyHz()} is required. All other fields may be {@code null} to
+ * represent partial ground truth (e.g. harmonics or modulation parameters that are unknown for a
+ * real-world recording).
+ *
+ * &lt;p&gt;Use {@link #ofFrequency(double)} when only the fundamental frequency is known.
+ *
+ * @param fundamentalFrequencyHz emitted fundamental frequency in Hz
+ * @param harmonicCount optional number of harmonic partials
+ * @param harmonics optional harmonic amplitude profile
+ * @param modulationFrequencyHz optional modulation frequency in Hz
+ * @param modulationDepth optional modulation depth in [0, 1]
+ * @param jitter optional maximum signed per-sample frequency deviation in Hz
+ * @param drift optional frequency drift parameter
+ * @param noiseAmplitude optional additive white-noise amplitude in [0, 1]
+ * @param signalPower optional signal power parameter
+ */
+public record AcousticGroundTruth(
+    double fundamentalFrequencyHz,
+    Integer harmonicCount,
+    List&lt;Double&gt; harmonics,
+    Double modulationFrequencyHz,
+    Double modulationDepth,
+    Double jitter,
+    Double drift,
+    Double noiseAmplitude,
+    Double signalPower) {
+
+  /* Validate required fields and defensively copy {@link #harmonics()} when provided. */
+<span class="fc" id="L36">  public AcousticGroundTruth {</span>
+<span class="fc bfc" id="L37" title="All 4 branches covered.">    if (fundamentalFrequencyHz &lt;= 0.0 || !Double.isFinite(fundamentalFrequencyHz)) {</span>
+<span class="fc" id="L38">      throw new IllegalArgumentException(&quot;fundamentalFrequencyHz must be finite and &gt; 0&quot;);</span>
+    }
+<span class="pc bpc" id="L40" title="1 of 4 branches missed.">    if (harmonicCount != null &amp;&amp; harmonicCount &lt; 1) {</span>
+<span class="nc" id="L41">      throw new IllegalArgumentException(&quot;harmonicCount must be &gt;= 1 when provided&quot;);</span>
+    }
+<span class="fc bfc" id="L43" title="All 2 branches covered.">    harmonics = harmonics != null ? List.copyOf(harmonics) : null;</span>
+<span class="fc bfc" id="L44" title="All 2 branches covered.">    if (harmonics != null) {</span>
+<span class="fc bfc" id="L45" title="All 2 branches covered.">      for (int i = 0; i &lt; harmonics.size(); i++) {</span>
+<span class="fc" id="L46">        Double harmonic = harmonics.get(i);</span>
+<span class="pc bpc" id="L47" title="2 of 4 branches missed.">        if (harmonic == null || !Double.isFinite(harmonic)) {</span>
+<span class="nc" id="L48">          throw new IllegalArgumentException(</span>
+<span class="nc" id="L49">              &quot;harmonics[%d] must be non-null and finite&quot;.formatted(i));</span>
+        }
+      }
+    }
+<span class="pc bpc" id="L53" title="2 of 6 branches missed.">    if (harmonicCount != null &amp;&amp; harmonics != null &amp;&amp; harmonicCount != harmonics.size()) {</span>
+<span class="nc" id="L54">      throw new IllegalArgumentException(</span>
+          &quot;harmonicCount must match harmonics.size() when both are provided&quot;);
+    }
+<span class="fc bfc" id="L57" title="All 2 branches covered.">    if (modulationFrequencyHz != null</span>
+<span class="pc bpc" id="L58" title="2 of 4 branches missed.">        &amp;&amp; (!Double.isFinite(modulationFrequencyHz) || modulationFrequencyHz &lt; 0.0)) {</span>
+<span class="nc" id="L59">      throw new IllegalArgumentException(</span>
+          &quot;modulationFrequencyHz must be finite and &gt;= 0 when provided&quot;);
+    }
+<span class="fc bfc" id="L62" title="All 2 branches covered.">    if (modulationDepth != null</span>
+<span class="pc bpc" id="L63" title="3 of 6 branches missed.">        &amp;&amp; (!Double.isFinite(modulationDepth) || modulationDepth &lt; 0.0 || modulationDepth &gt; 1.0)) {</span>
+<span class="nc" id="L64">      throw new IllegalArgumentException(&quot;modulationDepth must be in [0, 1] when provided&quot;);</span>
+    }
+<span class="pc bpc" id="L66" title="1 of 6 branches missed.">    if (jitter != null &amp;&amp; (!Double.isFinite(jitter) || jitter &lt; 0.0)) {</span>
+<span class="fc" id="L67">      throw new IllegalArgumentException(&quot;jitter must be finite and &gt;= 0 when provided&quot;);</span>
+    }
+<span class="pc bpc" id="L69" title="1 of 4 branches missed.">    if (drift != null &amp;&amp; !Double.isFinite(drift)) {</span>
+<span class="nc" id="L70">      throw new IllegalArgumentException(&quot;drift must be finite when provided&quot;);</span>
+    }
+<span class="fc bfc" id="L72" title="All 2 branches covered.">    if (noiseAmplitude != null</span>
+<span class="pc bpc" id="L73" title="3 of 6 branches missed.">        &amp;&amp; (!Double.isFinite(noiseAmplitude) || noiseAmplitude &lt; 0.0 || noiseAmplitude &gt; 1.0)) {</span>
+<span class="nc" id="L74">      throw new IllegalArgumentException(&quot;noiseAmplitude must be in [0, 1] when provided&quot;);</span>
+    }
+<span class="pc bpc" id="L76" title="1 of 4 branches missed.">    if (signalPower != null &amp;&amp; !Double.isFinite(signalPower)) {</span>
+<span class="nc" id="L77">      throw new IllegalArgumentException(&quot;signalPower must be finite when provided&quot;);</span>
+    }
+<span class="fc" id="L79">  }</span>
+
+  /**
+   * Create acoustic truth with only the fundamental frequency known.
+   *
+   * @param fundamentalFrequencyHz emitted fundamental frequency in Hz; must be finite and positive
+   */
+  public static AcousticGroundTruth ofFrequency(double fundamentalFrequencyHz) {
+<span class="fc" id="L87">    return new AcousticGroundTruth(</span>
+        fundamentalFrequencyHz, null, null, null, null, null, null, null, null);
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

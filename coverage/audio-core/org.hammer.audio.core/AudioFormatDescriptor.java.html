@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>AudioFormatDescriptor.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Core</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.core</a> &gt; <span class="el_source">AudioFormatDescriptor.java</span></div><h1>AudioFormatDescriptor.java</h1><pre class="source lang-java linenums">package org.hammer.audio.core;
+
+import java.util.Objects;
+
+/**
+ * Immutable, audio-domain-only description of an audio stream.
+ *
+ * &lt;p&gt;This is the platform's canonical format descriptor. Unlike {@link
+ * javax.sound.sampled.AudioFormat}, it is:
+ *
+ * &lt;ul&gt;
+ *   &lt;li&gt;UI/JavaSound-independent (no pixels, no Swing, no platform types)
+ *   &lt;li&gt;immutable and thread-safe (all fields {@code final})
+ *   &lt;li&gt;cheap to share between the capture, DSP, analysis and UI layers
+ * &lt;/ul&gt;
+ *
+ * &lt;p&gt;It always describes a stream of &lt;em&gt;normalized floating-point&lt;/em&gt; samples. The original
+ * device sample size in bits is retained for diagnostics and back-conversion only; downstream DSP
+ * and analysis modules must operate on the normalized {@code float} representation.
+ *
+ * @author refactoring
+ */
+public final class AudioFormatDescriptor {
+
+  private final float sampleRate;
+  private final int channels;
+  private final int sourceSampleSizeInBits;
+
+  /**
+   * Create a new immutable audio format descriptor.
+   *
+   * @param sampleRate sample rate in Hz; must be {@code &gt; 0}
+   * @param channels number of channels (e.g. 1 for mono, 2 for stereo); must be {@code &gt;= 1}
+   * @param sourceSampleSizeInBits source device sample size in bits (e.g. 8 or 16); must be {@code
+   *     &gt;= 1}. Retained for diagnostics, not used in DSP math.
+   * @throws IllegalArgumentException if any argument is invalid
+   */
+<span class="fc" id="L38">  public AudioFormatDescriptor(float sampleRate, int channels, int sourceSampleSizeInBits) {</span>
+<span class="pc bpc" id="L39" title="2 of 6 branches missed.">    if (!(sampleRate &gt; 0f) || Float.isNaN(sampleRate) || Float.isInfinite(sampleRate)) {</span>
+<span class="fc" id="L40">      throw new IllegalArgumentException(&quot;sampleRate must be &gt; 0, was &quot; + sampleRate);</span>
+    }
+<span class="fc bfc" id="L42" title="All 2 branches covered.">    if (channels &lt; 1) {</span>
+<span class="fc" id="L43">      throw new IllegalArgumentException(&quot;channels must be &gt;= 1, was &quot; + channels);</span>
+    }
+<span class="fc bfc" id="L45" title="All 2 branches covered.">    if (sourceSampleSizeInBits &lt; 1) {</span>
+<span class="fc" id="L46">      throw new IllegalArgumentException(</span>
+          &quot;sourceSampleSizeInBits must be &gt;= 1, was &quot; + sourceSampleSizeInBits);
+    }
+<span class="fc" id="L49">    this.sampleRate = sampleRate;</span>
+<span class="fc" id="L50">    this.channels = channels;</span>
+<span class="fc" id="L51">    this.sourceSampleSizeInBits = sourceSampleSizeInBits;</span>
+<span class="fc" id="L52">  }</span>
+
+  /**
+   * @return the sample rate in Hz (e.g. {@code 44100.0f})
+   */
+  public float sampleRate() {
+<span class="fc" id="L58">    return sampleRate;</span>
+  }
+
+  /**
+   * @return the number of channels (e.g. 1 for mono, 2 for stereo)
+   */
+  public int channels() {
+<span class="fc" id="L65">    return channels;</span>
+  }
+
+  /**
+   * @return the source device sample size in bits (typically 8, 16 or 24). Provided for diagnostics
+   *     only; DSP code should not depend on this.
+   */
+  public int sourceSampleSizeInBits() {
+<span class="fc" id="L73">    return sourceSampleSizeInBits;</span>
+  }
+
+  @Override
+  public boolean equals(Object o) {
+<span class="fc bfc" id="L78" title="All 2 branches covered.">    if (this == o) {</span>
+<span class="fc" id="L79">      return true;</span>
+    }
+<span class="pc bpc" id="L81" title="1 of 2 branches missed.">    if (!(o instanceof AudioFormatDescriptor other)) {</span>
+<span class="nc" id="L82">      return false;</span>
+    }
+<span class="pc bpc" id="L84" title="2 of 6 branches missed.">    return Float.compare(other.sampleRate, sampleRate) == 0</span>
+        &amp;&amp; other.channels == channels
+        &amp;&amp; other.sourceSampleSizeInBits == sourceSampleSizeInBits;
+  }
+
+  @Override
+  public int hashCode() {
+<span class="fc" id="L91">    return Objects.hash(sampleRate, channels, sourceSampleSizeInBits);</span>
+  }
+
+  @Override
+  public String toString() {
+<span class="nc" id="L96">    return &quot;AudioFormatDescriptor[sampleRate=&quot;</span>
+        + sampleRate
+        + &quot;Hz, channels=&quot;
+        + channels
+        + &quot;, sourceBits=&quot;
+        + sourceSampleSizeInBits
+        + &quot;]&quot;;
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

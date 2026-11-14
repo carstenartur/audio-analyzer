@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>SampleDecoder.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer DSP and Analysis</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.capture</a> &gt; <span class="el_source">SampleDecoder.java</span></div><h1>SampleDecoder.java</h1><pre class="source lang-java linenums">package org.hammer.audio.capture;
+
+import org.hammer.audio.core.AudioFormatDescriptor;
+
+/**
+ * Stateless decoder of interleaved PCM byte buffers into normalized {@code float[channels][frames]}
+ * sample arrays.
+ *
+ * &lt;p&gt;Supports the formats used by the platform's capture path:
+ *
+ * &lt;ul&gt;
+ *   &lt;li&gt;signed/unsigned 8-bit PCM
+ *   &lt;li&gt;signed/unsigned 16-bit PCM, little- or big-endian
+ *   &lt;li&gt;generic 1..4-byte big-endian fallback for any other sample size
+ * &lt;/ul&gt;
+ *
+ * &lt;p&gt;Output samples are normalized to {@code [-1.0f, 1.0f]} for signed formats and to {@code [-1,
+ * 1]} for unsigned formats (mapped from {@code [0, max]} to {@code [-1, 1]}).
+ *
+ * &lt;p&gt;This class is stateless and thread-safe.
+ *
+ * @author refactoring
+ */
+public final class SampleDecoder {
+
+  private final AudioFormatDescriptor descriptor;
+  private final int bytesPerSample;
+  private final int frameSize;
+  private final boolean signed;
+  private final boolean bigEndian;
+  private final float signedScale;
+  private final float unsignedScale;
+  private final int unsignedOffset;
+
+  /**
+   * @param descriptor audio format descriptor
+   * @param signed true if source samples are signed
+   * @param bigEndian true if source samples are big-endian (16-bit and wider)
+   */
+<span class="fc" id="L40">  public SampleDecoder(AudioFormatDescriptor descriptor, boolean signed, boolean bigEndian) {</span>
+<span class="fc" id="L41">    this.descriptor = descriptor;</span>
+<span class="fc" id="L42">    this.signed = signed;</span>
+<span class="fc" id="L43">    this.bigEndian = bigEndian;</span>
+<span class="fc" id="L44">    this.bytesPerSample = Math.max(1, descriptor.sourceSampleSizeInBits() / 8);</span>
+<span class="fc" id="L45">    this.frameSize = bytesPerSample * descriptor.channels();</span>
+<span class="fc" id="L46">    int bits = descriptor.sourceSampleSizeInBits();</span>
+<span class="fc" id="L47">    this.signedScale = 1f / ((1 &lt;&lt; (bits - 1)) - 1);</span>
+<span class="fc" id="L48">    int unsignedMax = (1 &lt;&lt; bits) - 1;</span>
+<span class="fc" id="L49">    this.unsignedScale = 2f / unsignedMax;</span>
+<span class="fc" id="L50">    this.unsignedOffset = unsignedMax / 2;</span>
+<span class="fc" id="L51">  }</span>
+
+  /**
+   * @return descriptor of the produced audio
+   */
+  public AudioFormatDescriptor descriptor() {
+<span class="nc" id="L57">    return descriptor;</span>
+  }
+
+  /**
+   * @return number of bytes per single-channel sample
+   */
+  public int bytesPerSample() {
+<span class="nc" id="L64">    return bytesPerSample;</span>
+  }
+
+  /**
+   * @return number of bytes per frame ({@code bytesPerSample * channels})
+   */
+  public int frameSize() {
+<span class="fc" id="L71">    return frameSize;</span>
+  }
+
+  /**
+   * @param byteCount number of bytes
+   * @return number of complete frames in that byte count
+   */
+  public int framesIn(int byteCount) {
+<span class="fc" id="L79">    return byteCount / frameSize;</span>
+  }
+
+  /**
+   * Decode raw bytes into a pre-allocated {@code float[channels][frames]} buffer. Existing samples
+   * beyond the decoded range are not touched.
+   *
+   * @param data raw interleaved PCM bytes
+   * @param byteCount number of valid bytes in {@code data}
+   * @param dest destination buffer of shape {@code [channels][&gt;=framesIn(byteCount)]}
+   * @return number of decoded frames
+   */
+  public int decode(byte[] data, int byteCount, float[][] dest) {
+<span class="fc" id="L92">    int frames = framesIn(byteCount);</span>
+<span class="fc" id="L93">    int channels = descriptor.channels();</span>
+<span class="fc bfc" id="L94" title="All 2 branches covered.">    for (int frame = 0; frame &lt; frames; frame++) {</span>
+<span class="fc" id="L95">      int frameOffset = frame * frameSize;</span>
+<span class="fc bfc" id="L96" title="All 2 branches covered.">      for (int ch = 0; ch &lt; channels; ch++) {</span>
+<span class="fc" id="L97">        int sampleOffset = frameOffset + ch * bytesPerSample;</span>
+<span class="fc" id="L98">        dest[ch][frame] = decodeOne(data, sampleOffset);</span>
+      }
+    }
+<span class="fc" id="L101">    return frames;</span>
+  }
+
+  private float decodeOne(byte[] data, int offset) {
+<span class="fc bfc" id="L105" title="All 2 branches covered.">    if (bytesPerSample == 1) {</span>
+<span class="fc" id="L106">      int b = data[offset] &amp; 0xFF;</span>
+<span class="fc bfc" id="L107" title="All 2 branches covered.">      if (signed) {</span>
+<span class="fc" id="L108">        return (byte) b * signedScale;</span>
+      }
+<span class="fc" id="L110">      return (b - unsignedOffset) * unsignedScale;</span>
+    }
+<span class="pc bpc" id="L112" title="1 of 2 branches missed.">    if (bytesPerSample == 2) {</span>
+<span class="pc bpc" id="L113" title="1 of 2 branches missed.">      int hi = data[offset + (bigEndian ? 0 : 1)] &amp; 0xFF;</span>
+<span class="pc bpc" id="L114" title="1 of 2 branches missed.">      int lo = data[offset + (bigEndian ? 1 : 0)] &amp; 0xFF;</span>
+<span class="fc" id="L115">      int raw = (hi &lt;&lt; 8) | lo;</span>
+<span class="pc bpc" id="L116" title="1 of 2 branches missed.">      if (signed) {</span>
+<span class="fc" id="L117">        return ((short) raw) * signedScale;</span>
+      }
+<span class="nc" id="L119">      return ((raw &amp; 0xFFFF) - unsignedOffset) * unsignedScale;</span>
+    }
+    // Generic big-endian fallback for non-standard sizes.
+<span class="nc" id="L122">    int sample = 0;</span>
+<span class="nc bnc" id="L123" title="All 2 branches missed.">    for (int b = 0; b &lt; bytesPerSample; b++) {</span>
+<span class="nc" id="L124">      sample = (sample &lt;&lt; 8) | (data[offset + b] &amp; 0xFF);</span>
+    }
+<span class="nc" id="L126">    int bits = descriptor.sourceSampleSizeInBits();</span>
+<span class="nc bnc" id="L127" title="All 2 branches missed.">    if (signed) {</span>
+<span class="nc" id="L128">      int shift = 32 - bits;</span>
+<span class="nc" id="L129">      sample = (sample &lt;&lt; shift) &gt;&gt; shift;</span>
+<span class="nc" id="L130">      return sample * signedScale;</span>
+    }
+<span class="nc" id="L132">    return (sample - unsignedOffset) * unsignedScale;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

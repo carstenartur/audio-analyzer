@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ExperimentDocumentApplyHttpAdapter.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experiment.document.http</a> &gt; <span class="el_source">ExperimentDocumentApplyHttpAdapter.java</span></div><h1>ExperimentDocumentApplyHttpAdapter.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experiment.document.http;
+
+import jakarta.servlet.http.HttpServletRequest;
+import java.io.IOException;
+import java.util.Objects;
+import org.hammer.audio.experiment.document.ExperimentDocumentException;
+import org.hammer.audio.experiment.document.ExperimentDocumentFormat;
+import org.hammer.audio.experiment.document.workspace.ExperimentDocumentApplyException;
+import org.hammer.audio.experiment.document.workspace.ExperimentDocumentWorkspaceService;
+import org.hammer.audio.workflow.editor.DirtyWorkflowException;
+import org.hammer.audio.workflow.editor.WorkflowProjection;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+/** Confirmed destructive apply adapter for portable experiment documents. */
+@RestController
+@RequestMapping(&quot;/experiment-documents&quot;)
+public final class ExperimentDocumentApplyHttpAdapter {
+
+  /** Explicit confirmation header for discarding dirty current workflow state. */
+  public static final String DISCARD_DIRTY_HEADER = &quot;X-Audio-Analyzer-Discard-Dirty&quot;;
+
+  private final ExperimentDocumentWorkspaceService workspaceService;
+
+  /** Create the adapter with the server-authoritative workspace coordinator. */
+<span class="fc" id="L33">  public ExperimentDocumentApplyHttpAdapter(ExperimentDocumentWorkspaceService workspaceService) {</span>
+<span class="fc" id="L34">    this.workspaceService = Objects.requireNonNull(workspaceService, &quot;workspaceService&quot;);</span>
+<span class="fc" id="L35">  }</span>
+
+  /**
+   * Revalidate and apply a previously previewed setup.
+   *
+   * &lt;p&gt;The caller must echo the preview hash through {@code If-Match}. Dirty current state is
+   * rejected unless the dedicated discard header is explicitly true.
+   */
+  @PostMapping(
+      path = &quot;/apply&quot;,
+      consumes = {ExperimentDocumentFormat.MEDIA_TYPE, MediaType.APPLICATION_JSON_VALUE},
+      produces = MediaType.APPLICATION_JSON_VALUE)
+  public ResponseEntity&lt;ApplyResponse&gt; apply(
+      HttpServletRequest request,
+      @RequestHeader(HttpHeaders.IF_MATCH) String expectedCanonicalSha256,
+      @RequestHeader(name = DISCARD_DIRTY_HEADER, defaultValue = &quot;false&quot;) boolean discardDirty)
+      throws IOException {
+<span class="fc" id="L52">    ExperimentDocumentWorkspaceService.ApplyResult result =</span>
+<span class="fc" id="L53">        workspaceService.apply(request.getInputStream(), expectedCanonicalSha256, discardDirty);</span>
+<span class="fc" id="L54">    return ResponseEntity.ok()</span>
+<span class="fc" id="L55">        .header(HttpHeaders.ETAG, &quot;\&quot;&quot; + result.canonicalSha256() + &quot;\&quot;&quot;)</span>
+<span class="fc" id="L56">        .body(new ApplyResponse(result.canonicalSha256(), result.projection(), result.dirty()));</span>
+  }
+
+  /** Dirty workspace conflicts require an explicit discard confirmation. */
+  @ExceptionHandler(DirtyWorkflowException.class)
+  public ResponseEntity&lt;ExperimentDocumentHttpAdapter.ErrorResponse&gt; handleDirty(
+      DirtyWorkflowException failure) {
+<span class="fc" id="L63">    return ResponseEntity.status(HttpStatus.CONFLICT)</span>
+<span class="fc" id="L64">        .body(</span>
+            new ExperimentDocumentHttpAdapter.ErrorResponse(
+<span class="fc" id="L66">                &quot;dirty-workflow&quot;, &quot;/workflow&quot;, failure.getMessage()));</span>
+  }
+
+  /** Map stable apply precondition/compatibility failures to appropriate HTTP status codes. */
+  @ExceptionHandler(ExperimentDocumentApplyException.class)
+  public ResponseEntity&lt;ExperimentDocumentHttpAdapter.ErrorResponse&gt; handleApplyFailure(
+      ExperimentDocumentApplyException failure) {
+    HttpStatus status =
+<span class="fc bfc" id="L74" title="All 3 branches covered.">        switch (failure.code()) {</span>
+<span class="fc" id="L75">          case &quot;document-hash-mismatch&quot; -&gt; HttpStatus.PRECONDITION_FAILED;</span>
+<span class="fc" id="L76">          case &quot;invalid-document-hash&quot; -&gt; HttpStatus.BAD_REQUEST;</span>
+<span class="fc" id="L77">          default -&gt; HttpStatus.CONFLICT;</span>
+        };
+<span class="fc" id="L79">    return ResponseEntity.status(status)</span>
+<span class="fc" id="L80">        .body(</span>
+            new ExperimentDocumentHttpAdapter.ErrorResponse(
+<span class="fc" id="L82">                failure.code(), &quot;/&quot;, failure.getMessage()));</span>
+  }
+
+  /** Pointer-aware malformed document response. */
+  @ExceptionHandler(ExperimentDocumentException.class)
+  public ResponseEntity&lt;ExperimentDocumentHttpAdapter.ErrorResponse&gt; handleDocumentFailure(
+      ExperimentDocumentException failure) {
+<span class="nc" id="L89">    return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)</span>
+<span class="nc" id="L90">        .body(</span>
+            new ExperimentDocumentHttpAdapter.ErrorResponse(
+<span class="nc" id="L92">                failure.code(), failure.pointer(), failure.getMessage()));</span>
+  }
+
+  /** Bounded transport/read failures. */
+  @ExceptionHandler(IOException.class)
+  public ResponseEntity&lt;ExperimentDocumentHttpAdapter.ErrorResponse&gt; handleInputFailure(
+      IOException failure) {
+<span class="nc" id="L99">    return ResponseEntity.badRequest()</span>
+<span class="nc" id="L100">        .body(</span>
+            new ExperimentDocumentHttpAdapter.ErrorResponse(
+<span class="nc" id="L102">                &quot;document-input&quot;, &quot;/&quot;, failure.getMessage()));</span>
+  }
+
+  /**
+   * Successful confirmed apply response.
+   *
+   * @param canonicalSha256 canonical imported document digest
+   * @param projection resulting server-authoritative workflow projection
+   * @param dirty whether the imported workflow has uncheckpointed changes
+   */
+  public record ApplyResponse(
+      String canonicalSha256, WorkflowProjection projection, boolean dirty) {
+
+    /* Validate immutable response fields. */
+<span class="fc" id="L116">    public ApplyResponse {</span>
+<span class="fc" id="L117">      Objects.requireNonNull(canonicalSha256, &quot;canonicalSha256&quot;);</span>
+<span class="fc" id="L118">      Objects.requireNonNull(projection, &quot;projection&quot;);</span>
+<span class="fc" id="L119">    }</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>SimulationWorkflowExecutionBackend.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Core</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.execution</a> &gt; <span class="el_source">SimulationWorkflowExecutionBackend.java</span></div><h1>SimulationWorkflowExecutionBackend.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.execution;
+
+import java.time.Clock;
+import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import org.hammer.audio.workflow.execution.WorkflowRunModels.Control;
+import org.hammer.audio.workflow.execution.WorkflowRunModels.Input;
+import org.hammer.audio.workflow.execution.WorkflowRunModels.Mode;
+import org.hammer.audio.workflow.execution.WorkflowRunModels.Result;
+import org.hammer.audio.workflow.execution.WorkflowRunModels.Violation;
+
+/** Dry-run backend that exercises lifecycle and plan ordering without audio computation. */
+public final class SimulationWorkflowExecutionBackend
+    implements WorkflowRunModels.ExecutionBackend {
+
+  private final Clock clock;
+
+  /** Creates a simulation backend using UTC wall-clock time. */
+  public SimulationWorkflowExecutionBackend() {
+<span class="fc" id="L22">    this(Clock.systemUTC());</span>
+<span class="fc" id="L23">  }</span>
+
+<span class="fc" id="L25">  SimulationWorkflowExecutionBackend(Clock clock) {</span>
+<span class="fc" id="L26">    this.clock = Objects.requireNonNull(clock, &quot;clock&quot;);</span>
+<span class="fc" id="L27">  }</span>
+
+  @Override
+  public Mode mode() {
+<span class="fc" id="L31">    return Mode.SIMULATION;</span>
+  }
+
+  @Override
+  public List&lt;Violation&gt; validate(Input input) {
+<span class="fc" id="L36">    Objects.requireNonNull(input, &quot;input&quot;);</span>
+<span class="fc" id="L37">    return List.of();</span>
+  }
+
+  @Override
+  public Result execute(Input input, Control control) {
+<span class="fc" id="L42">    Objects.requireNonNull(input, &quot;input&quot;);</span>
+<span class="fc" id="L43">    Objects.requireNonNull(control, &quot;control&quot;);</span>
+<span class="fc" id="L44">    Instant startedAt = clock.instant();</span>
+<span class="fc" id="L45">    ExecutionContext context =</span>
+<span class="fc" id="L46">        new ExecutionContext(input.runId() + &quot;:execution&quot;, input.plan(), startedAt);</span>
+<span class="fc" id="L47">    List&lt;String&gt; nodeIds = input.plan().orderedNodeIds();</span>
+<span class="fc bfc" id="L48" title="All 2 branches covered.">    for (int index = 0; index &lt; nodeIds.size(); index++) {</span>
+<span class="fc" id="L49">      String nodeId = nodeIds.get(index);</span>
+<span class="pc bpc" id="L50" title="1 of 2 branches missed.">      if (control.cancellationRequested()) {</span>
+<span class="nc" id="L51">        cancelRemaining(context, nodeIds, index);</span>
+<span class="nc" id="L52">        break;</span>
+      }
+<span class="fc" id="L54">      context.updateNodeStatus(nodeId, ExecutionStatus.RUNNING);</span>
+<span class="fc" id="L55">      context.updateNodeStatus(nodeId, ExecutionStatus.COMPLETED);</span>
+<span class="pc bpc" id="L56" title="1 of 2 branches missed.">      int progress = nodeIds.isEmpty() ? 100 : Math.multiplyExact(index + 1, 100) / nodeIds.size();</span>
+<span class="fc" id="L57">      control.progress(progress, &quot;Simulated &quot; + nodeId);</span>
+    }
+<span class="fc bfc" id="L59" title="All 2 branches covered.">    if (nodeIds.isEmpty()) {</span>
+<span class="fc" id="L60">      control.progress(100, &quot;Simulation completed&quot;);</span>
+    }
+<span class="fc" id="L62">    ExecutionResult executionResult = context.toResult(clock.instant());</span>
+<span class="fc" id="L63">    ReproducibilityBundle bundle =</span>
+<span class="fc" id="L64">        new ReproducibilityBundle(input.snapshot(), executionResult, input.commitId(), null);</span>
+<span class="fc" id="L65">    return new Result(bundle, Map.of(&quot;backendMode&quot;, Mode.SIMULATION.name()));</span>
+  }
+
+  private static void cancelRemaining(
+      ExecutionContext context, List&lt;String&gt; nodeIds, int firstRemainingIndex) {
+<span class="nc bnc" id="L70" title="All 2 branches missed.">    for (int index = firstRemainingIndex; index &lt; nodeIds.size(); index++) {</span>
+<span class="nc" id="L71">      context.updateNodeStatus(nodeIds.get(index), ExecutionStatus.CANCELLED);</span>
+    }
+<span class="nc" id="L73">  }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

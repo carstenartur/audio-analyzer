@@ -1,0 +1,279 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>FeatureEvaluationService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.feature.evaluation</a> &gt; <span class="el_source">FeatureEvaluationService.java</span></div><h1>FeatureEvaluationService.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.feature.evaluation;
+
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.function.ToDoubleFunction;
+import org.hammer.audio.experimental.acoustic.dataset.FeatureHistogram;
+import org.hammer.audio.experimental.acoustic.wingbeat.WingbeatFeatureVector;
+
+/**
+ * Computes a {@link FeatureEvaluationReport} from a labelled collection of {@link
+ * WingbeatFeatureVector}s.
+ *
+ * &lt;p&gt;Each scalar feature field of {@link WingbeatFeatureVector} becomes one {@link
+ * FeatureEvaluationEntry}. List-valued fields ({@code harmonicAmplitudes} and {@code
+ * harmonicRatios}) contribute their first element as a scalar feature, or {@code 0} when the list
+ * is empty.
+ *
+ * &lt;p&gt;This service is stateless; the same instance may be called concurrently.
+ */
+<span class="fc" id="L25">public final class FeatureEvaluationService {</span>
+
+  /** Ordered list of (featureName, extractor) pairs covering all scalar-like fields. */
+<span class="fc" id="L28">  private static final List&lt;Map.Entry&lt;String, ToDoubleFunction&lt;WingbeatFeatureVector&gt;&gt;&gt; EXTRACTORS =</span>
+<span class="fc" id="L29">      buildExtractors();</span>
+
+  private static List&lt;Map.Entry&lt;String, ToDoubleFunction&lt;WingbeatFeatureVector&gt;&gt;&gt;
+      buildExtractors() {
+<span class="fc" id="L33">    List&lt;Map.Entry&lt;String, ToDoubleFunction&lt;WingbeatFeatureVector&gt;&gt;&gt; list = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L34">    list.add(Map.entry(&quot;fundamentalFrequencyHz&quot;, WingbeatFeatureVector::fundamentalFrequencyHz));</span>
+<span class="fc" id="L35">    list.add(</span>
+<span class="fc" id="L36">        Map.entry(</span>
+            &quot;harmonicAmplitude1&quot;,
+<span class="pc bpc" id="L38" title="1 of 2 branches missed.">            v -&gt; v.harmonicAmplitudes().isEmpty() ? 0.0 : v.harmonicAmplitudes().get(0)));</span>
+<span class="fc" id="L39">    list.add(</span>
+<span class="fc" id="L40">        Map.entry(</span>
+<span class="pc bpc" id="L41" title="1 of 2 branches missed.">            &quot;harmonicRatio1&quot;, v -&gt; v.harmonicRatios().isEmpty() ? 0.0 : v.harmonicRatios().get(0)));</span>
+<span class="fc" id="L42">    list.add(Map.entry(&quot;spectralCentroidHz&quot;, WingbeatFeatureVector::spectralCentroidHz));</span>
+<span class="fc" id="L43">    list.add(Map.entry(&quot;spectralBandwidthHz&quot;, WingbeatFeatureVector::spectralBandwidthHz));</span>
+<span class="fc" id="L44">    list.add(</span>
+<span class="fc" id="L45">        Map.entry(&quot;frequencyDriftHzPerSecond&quot;, WingbeatFeatureVector::frequencyDriftHzPerSecond));</span>
+<span class="fc" id="L46">    list.add(Map.entry(&quot;frequencyJitterHz&quot;, WingbeatFeatureVector::frequencyJitterHz));</span>
+<span class="fc" id="L47">    list.add(Map.entry(&quot;amplitudeModulation&quot;, WingbeatFeatureVector::amplitudeModulation));</span>
+<span class="fc" id="L48">    list.add(Map.entry(&quot;signalToNoiseRatio&quot;, WingbeatFeatureVector::signalToNoiseRatio));</span>
+<span class="fc" id="L49">    list.add(Map.entry(&quot;trackDurationSeconds&quot;, WingbeatFeatureVector::trackDurationSeconds));</span>
+<span class="fc" id="L50">    list.add(Map.entry(&quot;featureConfidence&quot;, WingbeatFeatureVector::featureConfidence));</span>
+<span class="fc" id="L51">    return List.copyOf(list);</span>
+  }
+
+  /**
+   * Evaluate every feature in the given labelled dataset.
+   *
+   * @param vectors feature vectors; must not be {@code null} or empty
+   * @param labels class labels, one per vector; must not be {@code null}; must have the same size
+   *     as {@code vectors}
+   * @return feature evaluation report; never {@code null}
+   */
+  public FeatureEvaluationReport evaluate(
+      List&lt;WingbeatFeatureVector&gt; vectors, List&lt;String&gt; labels) {
+<span class="fc" id="L64">    Objects.requireNonNull(vectors, &quot;vectors&quot;);</span>
+<span class="fc" id="L65">    Objects.requireNonNull(labels, &quot;labels&quot;);</span>
+<span class="pc bpc" id="L66" title="1 of 2 branches missed.">    if (vectors.isEmpty()) {</span>
+<span class="nc" id="L67">      throw new IllegalArgumentException(&quot;vectors must not be empty&quot;);</span>
+    }
+<span class="pc bpc" id="L69" title="1 of 2 branches missed.">    if (vectors.size() != labels.size()) {</span>
+<span class="nc" id="L70">      throw new IllegalArgumentException(&quot;vectors and labels must have the same size&quot;);</span>
+    }
+
+<span class="fc" id="L73">    List&lt;FeatureEvaluationEntry&gt; entries = new ArrayList&lt;&gt;(EXTRACTORS.size());</span>
+<span class="fc bfc" id="L74" title="All 2 branches covered.">    for (Map.Entry&lt;String, ToDoubleFunction&lt;WingbeatFeatureVector&gt;&gt; fe : EXTRACTORS) {</span>
+<span class="fc" id="L75">      entries.add(evaluateFeature(fe.getKey(), fe.getValue(), vectors, labels));</span>
+<span class="fc" id="L76">    }</span>
+<span class="fc" id="L77">    return new FeatureEvaluationReport(entries);</span>
+  }
+
+  /**
+   * Return the ordered list of feature names that this service evaluates.
+   *
+   * @return feature names in evaluation order; never {@code null}
+   */
+  public static List&lt;String&gt; featureNames() {
+<span class="fc" id="L86">    List&lt;String&gt; names = new ArrayList&lt;&gt;(EXTRACTORS.size());</span>
+<span class="fc bfc" id="L87" title="All 2 branches covered.">    for (Map.Entry&lt;String, ToDoubleFunction&lt;WingbeatFeatureVector&gt;&gt; fe : EXTRACTORS) {</span>
+<span class="fc" id="L88">      names.add(fe.getKey());</span>
+<span class="fc" id="L89">    }</span>
+<span class="fc" id="L90">    return List.copyOf(names);</span>
+  }
+
+  // -------------------------------------------------------------------------
+  // Internal helpers
+  // -------------------------------------------------------------------------
+
+  private static FeatureEvaluationEntry evaluateFeature(
+      String name,
+      ToDoubleFunction&lt;WingbeatFeatureVector&gt; extractor,
+      List&lt;WingbeatFeatureVector&gt; vectors,
+      List&lt;String&gt; labels) {
+
+<span class="fc" id="L103">    int n = vectors.size();</span>
+<span class="fc" id="L104">    double[] values = new double[n];</span>
+<span class="fc bfc" id="L105" title="All 2 branches covered.">    for (int i = 0; i &lt; n; i++) {</span>
+<span class="fc" id="L106">      values[i] = extractor.applyAsDouble(vectors.get(i));</span>
+    }
+
+<span class="fc" id="L109">    FeatureStatistics stats = computeStatistics(name, values);</span>
+<span class="fc" id="L110">    ClassSeparationScore separation = computeSeparation(name, values, labels);</span>
+<span class="fc" id="L111">    double correlation = computeLabelCorrelation(values, labels);</span>
+<span class="fc" id="L112">    return new FeatureEvaluationEntry(name, stats, separation, correlation);</span>
+  }
+
+  private static FeatureStatistics computeStatistics(String name, double[] values) {
+<span class="fc" id="L116">    double sum = 0.0;</span>
+<span class="fc" id="L117">    int missingCount = 0;</span>
+<span class="fc" id="L118">    int observedCount = 0;</span>
+<span class="fc" id="L119">    List&lt;Double&gt; observedValues = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L120" title="All 2 branches covered.">    for (double v : values) {</span>
+<span class="pc bpc" id="L121" title="1 of 2 branches missed.">      if (!Double.isFinite(v)) {</span>
+<span class="nc" id="L122">        missingCount++;</span>
+<span class="nc" id="L123">        continue;</span>
+      }
+<span class="fc" id="L125">      sum += v;</span>
+<span class="fc" id="L126">      observedCount++;</span>
+<span class="fc" id="L127">      observedValues.add(v);</span>
+    }
+<span class="pc bpc" id="L129" title="1 of 2 branches missed.">    if (observedCount == 0) {</span>
+<span class="nc" id="L130">      return new FeatureStatistics(</span>
+<span class="nc" id="L131">          name, 0.0, 0.0, FeatureHistogram.of(name, new double[0]), missingCount);</span>
+    }
+<span class="fc" id="L133">    double mean = sum / observedCount;</span>
+<span class="fc" id="L134">    double variance = 0.0;</span>
+<span class="fc bfc" id="L135" title="All 2 branches covered.">    for (double v : observedValues) {</span>
+<span class="fc" id="L136">      double diff = v - mean;</span>
+<span class="fc" id="L137">      variance += diff * diff;</span>
+<span class="fc" id="L138">    }</span>
+<span class="fc" id="L139">    double stdDev = Math.sqrt(variance / observedCount);</span>
+<span class="fc" id="L140">    double[] observedArray = new double[observedValues.size()];</span>
+<span class="fc bfc" id="L141" title="All 2 branches covered.">    for (int i = 0; i &lt; observedValues.size(); i++) {</span>
+<span class="fc" id="L142">      observedArray[i] = observedValues.get(i);</span>
+    }
+<span class="fc" id="L144">    FeatureHistogram histogram = FeatureHistogram.of(name, observedArray);</span>
+<span class="fc" id="L145">    return new FeatureStatistics(name, mean, stdDev, histogram, missingCount);</span>
+  }
+
+  @SuppressWarnings(&quot;PMD.UseConcurrentHashMap&quot;)
+  private static ClassSeparationScore computeSeparation(
+      String name, double[] values, List&lt;String&gt; labels) {
+
+    // Collect per-class sums and sum-of-squares
+<span class="fc" id="L153">    Map&lt;String, List&lt;Double&gt;&gt; perClass = new LinkedHashMap&lt;&gt;();</span>
+<span class="fc bfc" id="L154" title="All 2 branches covered.">    for (int i = 0; i &lt; values.length; i++) {</span>
+<span class="fc" id="L155">      perClass.computeIfAbsent(labels.get(i), k -&gt; new ArrayList&lt;&gt;()).add(values[i]);</span>
+    }
+
+<span class="fc" id="L158">    Map&lt;String, Double&gt; classMeans = new LinkedHashMap&lt;&gt;();</span>
+<span class="fc" id="L159">    Map&lt;String, Double&gt; classStdDevs = new LinkedHashMap&lt;&gt;();</span>
+<span class="fc" id="L160">    Map&lt;String, Integer&gt; classCounts = new LinkedHashMap&lt;&gt;();</span>
+
+<span class="fc bfc" id="L162" title="All 2 branches covered.">    for (Map.Entry&lt;String, List&lt;Double&gt;&gt; entry : perClass.entrySet()) {</span>
+<span class="fc" id="L163">      List&lt;Double&gt; classValues = entry.getValue();</span>
+<span class="fc" id="L164">      double classSum = 0.0;</span>
+<span class="fc bfc" id="L165" title="All 2 branches covered.">      for (double v : classValues) {</span>
+<span class="fc" id="L166">        classSum += v;</span>
+<span class="fc" id="L167">      }</span>
+<span class="fc" id="L168">      double classMean = classSum / classValues.size();</span>
+<span class="fc" id="L169">      double classVar = 0.0;</span>
+<span class="fc bfc" id="L170" title="All 2 branches covered.">      for (double v : classValues) {</span>
+<span class="fc" id="L171">        double diff = v - classMean;</span>
+<span class="fc" id="L172">        classVar += diff * diff;</span>
+<span class="fc" id="L173">      }</span>
+<span class="fc" id="L174">      classVar /= classValues.size();</span>
+<span class="fc" id="L175">      classMeans.put(entry.getKey(), classMean);</span>
+<span class="fc" id="L176">      classStdDevs.put(entry.getKey(), Math.sqrt(classVar));</span>
+<span class="fc" id="L177">      classCounts.put(entry.getKey(), classValues.size());</span>
+<span class="fc" id="L178">    }</span>
+
+    // Global mean
+<span class="fc" id="L181">    double globalMean = 0.0;</span>
+<span class="fc bfc" id="L182" title="All 2 branches covered.">    for (double v : values) {</span>
+<span class="fc" id="L183">      globalMean += v;</span>
+    }
+<span class="fc" id="L185">    globalMean /= values.length;</span>
+
+    // Between-class variance (weighted by class size)
+<span class="fc" id="L188">    double betweenClassVar = 0.0;</span>
+<span class="fc bfc" id="L189" title="All 2 branches covered.">    for (Map.Entry&lt;String, Double&gt; entry : classMeans.entrySet()) {</span>
+<span class="fc" id="L190">      int count = classCounts.get(entry.getKey());</span>
+<span class="fc" id="L191">      double diff = entry.getValue() - globalMean;</span>
+<span class="fc" id="L192">      betweenClassVar += count * diff * diff;</span>
+<span class="fc" id="L193">    }</span>
+<span class="fc" id="L194">    betweenClassVar /= values.length;</span>
+
+    // Within-class variance (weighted average of per-class variances)
+<span class="fc" id="L197">    double withinClassVar = 0.0;</span>
+<span class="fc bfc" id="L198" title="All 2 branches covered.">    for (Map.Entry&lt;String, Double&gt; entry : classStdDevs.entrySet()) {</span>
+<span class="fc" id="L199">      int count = classCounts.get(entry.getKey());</span>
+<span class="fc" id="L200">      double std = entry.getValue();</span>
+<span class="fc" id="L201">      withinClassVar += count * std * std;</span>
+<span class="fc" id="L202">    }</span>
+<span class="fc" id="L203">    withinClassVar /= values.length;</span>
+
+<span class="fc bfc" id="L205" title="All 2 branches covered.">    double fisherRatio = withinClassVar == 0.0 ? 0.0 : betweenClassVar / withinClassVar;</span>
+
+<span class="fc" id="L207">    return new ClassSeparationScore(</span>
+        name, classMeans, classStdDevs, classCounts, betweenClassVar, withinClassVar, fisherRatio);
+  }
+
+  /**
+   * Compute the maximum absolute point-biserial correlation between the feature values and any
+   * binary class indicator.
+   */
+  private static double computeLabelCorrelation(double[] values, List&lt;String&gt; labels) {
+    // Collect all distinct labels
+<span class="fc" id="L217">    Set&lt;String&gt; distinctLabels = new LinkedHashSet&lt;&gt;(labels);</span>
+<span class="fc bfc" id="L218" title="All 2 branches covered.">    if (distinctLabels.size() &lt;= 1) {</span>
+<span class="fc" id="L219">      return 0.0;</span>
+    }
+
+<span class="fc" id="L222">    double featureMean = 0.0;</span>
+<span class="fc bfc" id="L223" title="All 2 branches covered.">    for (double v : values) {</span>
+<span class="fc" id="L224">      featureMean += v;</span>
+    }
+<span class="fc" id="L226">    featureMean /= values.length;</span>
+
+<span class="fc" id="L228">    double featureStd = 0.0;</span>
+<span class="fc bfc" id="L229" title="All 2 branches covered.">    for (double v : values) {</span>
+<span class="fc" id="L230">      double diff = v - featureMean;</span>
+<span class="fc" id="L231">      featureStd += diff * diff;</span>
+    }
+<span class="fc" id="L233">    featureStd = Math.sqrt(featureStd / values.length);</span>
+
+<span class="fc bfc" id="L235" title="All 2 branches covered.">    if (featureStd == 0.0) {</span>
+<span class="fc" id="L236">      return 0.0;</span>
+    }
+
+<span class="fc" id="L239">    double maxAbsCorr = 0.0;</span>
+<span class="fc bfc" id="L240" title="All 2 branches covered.">    for (String targetLabel : distinctLabels) {</span>
+<span class="fc" id="L241">      double corr = pointBiserialCorrelation(values, labels, targetLabel, featureMean, featureStd);</span>
+<span class="fc" id="L242">      double absCorr = Math.abs(corr);</span>
+<span class="fc bfc" id="L243" title="All 2 branches covered.">      if (absCorr &gt; maxAbsCorr) {</span>
+<span class="fc" id="L244">        maxAbsCorr = absCorr;</span>
+      }
+<span class="fc" id="L246">    }</span>
+<span class="fc" id="L247">    return Math.min(1.0, maxAbsCorr);</span>
+  }
+
+  /**
+   * Point-biserial correlation between a continuous feature and a binary indicator for {@code
+   * targetLabel}.
+   */
+  private static double pointBiserialCorrelation(
+      double[] values,
+      List&lt;String&gt; labels,
+      String targetLabel,
+      double featureMean,
+      double featureStd) {
+
+<span class="fc" id="L261">    int n = values.length;</span>
+<span class="fc" id="L262">    double sum1 = 0.0;</span>
+<span class="fc" id="L263">    int n1 = 0;</span>
+<span class="fc bfc" id="L264" title="All 2 branches covered.">    for (int i = 0; i &lt; n; i++) {</span>
+<span class="fc bfc" id="L265" title="All 2 branches covered.">      if (targetLabel.equals(labels.get(i))) {</span>
+<span class="fc" id="L266">        sum1 += values[i];</span>
+<span class="fc" id="L267">        n1++;</span>
+      }
+    }
+<span class="pc bpc" id="L270" title="2 of 4 branches missed.">    if (n1 == 0 || n1 == n) {</span>
+<span class="nc" id="L271">      return 0.0;</span>
+    }
+<span class="fc" id="L273">    int n0 = n - n1;</span>
+<span class="fc" id="L274">    double mean1 = sum1 / n1;</span>
+<span class="fc" id="L275">    double mean0 = (featureMean * n - sum1) / n0;</span>
+<span class="fc" id="L276">    return ((mean1 - mean0) / featureStd) * Math.sqrt((double) n1 * n0 / (n * n));</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

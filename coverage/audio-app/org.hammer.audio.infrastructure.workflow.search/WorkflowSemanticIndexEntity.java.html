@@ -1,0 +1,211 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WorkflowSemanticIndexEntity.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.infrastructure.workflow.search</a> &gt; <span class="el_source">WorkflowSemanticIndexEntity.java</span></div><h1>WorkflowSemanticIndexEntity.java</h1><pre class="source lang-java linenums">package org.hammer.audio.infrastructure.workflow.search;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Index;
+import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
+import jakarta.persistence.UniqueConstraint;
+import java.util.List;
+import org.hibernate.annotations.Nationalized;
+import org.hibernate.search.engine.backend.analysis.AnalyzerNames;
+import org.hibernate.search.engine.backend.types.Sortable;
+import org.hibernate.search.mapper.pojo.mapping.definition.annotation.FullTextField;
+import org.hibernate.search.mapper.pojo.mapping.definition.annotation.GenericField;
+import org.hibernate.search.mapper.pojo.mapping.definition.annotation.Indexed;
+import org.hibernate.search.mapper.pojo.mapping.definition.annotation.IndexingDependency;
+import org.hibernate.search.mapper.pojo.mapping.definition.annotation.KeywordField;
+import org.hibernate.search.mapper.pojo.mapping.definition.annotation.ObjectPath;
+import org.hibernate.search.mapper.pojo.mapping.definition.annotation.PropertyValue;
+
+/** Branch-aware, rebuildable semantic projection of one authoritative workflow commit. */
+@Entity
+@Indexed
+@Table(
+    name = &quot;workflow_semantic_index&quot;,
+    indexes = {
+      @Index(
+          name = &quot;idx_workflow_semantic_repo_branch_position&quot;,
+          columnList = &quot;repository_name, branch_name, branch_position&quot;),
+      @Index(
+          name = &quot;idx_workflow_semantic_repo_workflow&quot;,
+          columnList = &quot;repository_name, workflow_id&quot;)
+    },
+    uniqueConstraints = {
+      @UniqueConstraint(
+          name = &quot;uk_workflow_semantic_repo_branch_commit&quot;,
+          columnNames = {&quot;repository_name&quot;, &quot;branch_name&quot;, &quot;object_id&quot;})
+    })
+public class WorkflowSemanticIndexEntity {
+
+  static final String NODE_IDS_FIELD = &quot;nodeIds&quot;;
+  static final String NODE_TYPES_FIELD = &quot;nodeTypes&quot;;
+  static final String NODE_LABELS_FIELD = &quot;nodeLabels&quot;;
+  static final String PROPERTY_KEYS_FIELD = &quot;propertyKeys&quot;;
+  static final String PROPERTY_VALUES_FIELD = &quot;propertyValues&quot;;
+  static final String PROPERTY_PAIRS_FIELD = &quot;propertyPairs&quot;;
+
+  @Id
+  @GeneratedValue(strategy = GenerationType.IDENTITY)
+  private Long id;
+
+  @KeywordField
+  @Column(name = &quot;repository_name&quot;, nullable = false, length = 255)
+  private String repositoryName;
+
+  @KeywordField
+  @Nationalized
+  @Column(name = &quot;branch_name&quot;, nullable = false, length = 255)
+  private String branchName;
+
+  @KeywordField
+  @Column(name = &quot;object_id&quot;, nullable = false, length = 40)
+  private String objectId;
+
+  @GenericField(sortable = Sortable.YES)
+  @Column(name = &quot;branch_position&quot;, nullable = false)
+  private int branchPosition;
+
+  @KeywordField
+  @Nationalized
+  @Column(name = &quot;workflow_id&quot;, nullable = false, length = 255)
+  private String workflowId;
+
+  @FullTextField(analyzer = AnalyzerNames.STANDARD)
+  @Nationalized
+  @Column(name = &quot;workflow_name&quot;, nullable = false, length = 2048)
+  private String workflowName;
+
+  @Column(name = &quot;node_ids&quot;, nullable = false, length = 65535)
+  private String encodedNodeIds;
+
+  @Column(name = &quot;node_types&quot;, nullable = false, length = 65535)
+  private String encodedNodeTypes;
+
+  @Column(name = &quot;node_labels&quot;, nullable = false, length = 65535)
+  private String encodedNodeLabels;
+
+  @FullTextField(analyzer = AnalyzerNames.STANDARD)
+  @Nationalized
+  @Column(name = &quot;node_label_text&quot;, nullable = false, length = 65535)
+  private String nodeLabelText;
+
+  @Column(name = &quot;property_keys&quot;, nullable = false, length = 65535)
+  private String encodedPropertyKeys;
+
+  @Column(name = &quot;property_values&quot;, nullable = false, length = 65535)
+  private String encodedPropertyValues;
+
+  @Column(name = &quot;property_pairs&quot;, nullable = false, length = 65535)
+  private String encodedPropertyPairs;
+
+<span class="fc" id="L105">  protected WorkflowSemanticIndexEntity() {</span>
+    // Required by Jakarta Persistence.
+<span class="fc" id="L107">  }</span>
+
+  static WorkflowSemanticIndexEntity create(
+      String repositoryName,
+      String branchName,
+      String objectId,
+      int branchPosition,
+      WorkflowSemanticProjectionValues values) {
+<span class="fc" id="L115">    WorkflowSemanticIndexEntity entity = new WorkflowSemanticIndexEntity();</span>
+<span class="fc" id="L116">    entity.repositoryName = repositoryName;</span>
+<span class="fc" id="L117">    entity.branchName = branchName;</span>
+<span class="fc" id="L118">    entity.objectId = objectId;</span>
+<span class="fc" id="L119">    entity.branchPosition = branchPosition;</span>
+<span class="fc" id="L120">    entity.apply(values);</span>
+<span class="fc" id="L121">    return entity;</span>
+  }
+
+  void apply(WorkflowSemanticProjectionValues values) {
+<span class="fc" id="L125">    workflowId = values.workflowId();</span>
+<span class="fc" id="L126">    workflowName = values.workflowName();</span>
+<span class="fc" id="L127">    encodedNodeIds = WorkflowSemanticProjectionValues.encodeValues(values.nodeIds());</span>
+<span class="fc" id="L128">    encodedNodeTypes = WorkflowSemanticProjectionValues.encodeValues(values.nodeTypes());</span>
+<span class="fc" id="L129">    encodedNodeLabels = WorkflowSemanticProjectionValues.encodeValues(values.nodeLabels());</span>
+<span class="fc" id="L130">    nodeLabelText = String.join(&quot;\n&quot;, values.nodeLabels());</span>
+<span class="fc" id="L131">    encodedPropertyKeys = WorkflowSemanticProjectionValues.encodeValues(values.propertyKeys());</span>
+<span class="fc" id="L132">    encodedPropertyValues = WorkflowSemanticProjectionValues.encodeValues(values.propertyValues());</span>
+<span class="fc" id="L133">    encodedPropertyPairs = String.join(&quot;\n&quot;, values.propertyPairs());</span>
+<span class="fc" id="L134">  }</span>
+
+  void setBranchPosition(int branchPosition) {
+<span class="fc" id="L137">    this.branchPosition = branchPosition;</span>
+<span class="fc" id="L138">  }</span>
+
+  String getRepositoryName() {
+<span class="nc" id="L141">    return repositoryName;</span>
+  }
+
+  String getBranchName() {
+<span class="fc" id="L145">    return branchName;</span>
+  }
+
+  String getObjectId() {
+<span class="fc" id="L149">    return objectId;</span>
+  }
+
+  int getBranchPosition() {
+<span class="nc" id="L153">    return branchPosition;</span>
+  }
+
+  String getWorkflowId() {
+<span class="fc" id="L157">    return workflowId;</span>
+  }
+
+  String getWorkflowName() {
+<span class="fc" id="L161">    return workflowName;</span>
+  }
+
+  @Transient
+  @KeywordField(name = NODE_IDS_FIELD)
+  @IndexingDependency(derivedFrom = @ObjectPath(@PropertyValue(propertyName = &quot;encodedNodeIds&quot;)))
+  public List&lt;String&gt; getNodeIds() {
+<span class="fc" id="L168">    return WorkflowSemanticProjectionValues.decodeValues(encodedNodeIds);</span>
+  }
+
+  @Transient
+  @KeywordField(name = NODE_TYPES_FIELD)
+  @IndexingDependency(derivedFrom = @ObjectPath(@PropertyValue(propertyName = &quot;encodedNodeTypes&quot;)))
+  public List&lt;String&gt; getNodeTypes() {
+<span class="fc" id="L175">    return WorkflowSemanticProjectionValues.decodeValues(encodedNodeTypes);</span>
+  }
+
+  @Transient
+  @KeywordField(name = NODE_LABELS_FIELD)
+  @IndexingDependency(derivedFrom = @ObjectPath(@PropertyValue(propertyName = &quot;encodedNodeLabels&quot;)))
+  public List&lt;String&gt; getNodeLabels() {
+<span class="fc" id="L182">    return WorkflowSemanticProjectionValues.decodeValues(encodedNodeLabels);</span>
+  }
+
+  @Transient
+  @KeywordField(name = PROPERTY_KEYS_FIELD)
+  @IndexingDependency(
+      derivedFrom = @ObjectPath(@PropertyValue(propertyName = &quot;encodedPropertyKeys&quot;)))
+  public List&lt;String&gt; getPropertyKeys() {
+<span class="fc" id="L190">    return WorkflowSemanticProjectionValues.decodeValues(encodedPropertyKeys);</span>
+  }
+
+  @Transient
+  @KeywordField(name = PROPERTY_VALUES_FIELD)
+  @IndexingDependency(
+      derivedFrom = @ObjectPath(@PropertyValue(propertyName = &quot;encodedPropertyValues&quot;)))
+  public List&lt;String&gt; getPropertyValues() {
+<span class="fc" id="L198">    return WorkflowSemanticProjectionValues.decodeValues(encodedPropertyValues);</span>
+  }
+
+  @Transient
+  @KeywordField(name = PROPERTY_PAIRS_FIELD)
+  @IndexingDependency(
+      derivedFrom = @ObjectPath(@PropertyValue(propertyName = &quot;encodedPropertyPairs&quot;)))
+  public List&lt;String&gt; getPropertyPairs() {
+<span class="pc bpc" id="L206" title="1 of 4 branches missed.">    return encodedPropertyPairs == null || encodedPropertyPairs.isBlank()</span>
+<span class="fc" id="L207">        ? List.of()</span>
+<span class="pc bpc" id="L208" title="1 of 2 branches missed.">        : encodedPropertyPairs.lines().filter(value -&gt; !value.isBlank()).toList();</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

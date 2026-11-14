@@ -1,0 +1,185 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WorkflowMergeCommandService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Core</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.history</a> &gt; <span class="el_source">WorkflowMergeCommandService.java</span></div><h1>WorkflowMergeCommandService.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.history;
+
+import java.util.List;
+import java.util.Objects;
+import org.hammer.audio.workflow.Workflow;
+import org.hammer.audio.workflow.dsl.WorkflowDslParser;
+import org.hammer.audio.workflow.dsl.WorkflowDslSerializer;
+import org.hammer.audio.workflow.merge.WorkflowMergeModels.Resolution;
+import org.hammer.audio.workflow.merge.WorkflowMergeModels.Result;
+import org.hammer.audio.workflow.merge.WorkflowThreeWayMerger;
+import org.hammer.audio.workflow.store.CommitId;
+import org.hammer.audio.workflow.store.CommitInfo;
+import org.hammer.audio.workflow.store.CommitMetadata;
+import org.hammer.audio.workflow.store.StaleWorkflowHeadException;
+import org.hammer.audio.workflow.store.VersionedWorkflowStore;
+import org.hammer.audio.workflow.store.WorkflowSnapshot;
+
+/** Application service for exact stored-commit semantic merge preview and checkpoint creation. */
+public final class WorkflowMergeCommandService {
+
+  private final VersionedWorkflowStore store;
+  private final WorkflowHistoryAccessPolicy accessPolicy;
+  private final WorkflowDslParser parser;
+  private final WorkflowDslSerializer serializer;
+  private final WorkflowThreeWayMerger merger;
+
+  /** Creates the production merge service over one repository-scoped workflow store. */
+  public WorkflowMergeCommandService(
+      VersionedWorkflowStore store, WorkflowHistoryAccessPolicy accessPolicy) {
+<span class="fc" id="L30">    this(</span>
+        store,
+        accessPolicy,
+        new WorkflowDslParser(),
+        new WorkflowDslSerializer(),
+        new WorkflowThreeWayMerger());
+<span class="fc" id="L36">  }</span>
+
+  WorkflowMergeCommandService(
+      VersionedWorkflowStore store,
+      WorkflowHistoryAccessPolicy accessPolicy,
+      WorkflowDslParser parser,
+      WorkflowDslSerializer serializer,
+<span class="fc" id="L43">      WorkflowThreeWayMerger merger) {</span>
+<span class="fc" id="L44">    this.store = Objects.requireNonNull(store, &quot;store&quot;);</span>
+<span class="fc" id="L45">    this.accessPolicy = Objects.requireNonNull(accessPolicy, &quot;accessPolicy&quot;);</span>
+<span class="fc" id="L46">    this.parser = Objects.requireNonNull(parser, &quot;parser&quot;);</span>
+<span class="fc" id="L47">    this.serializer = Objects.requireNonNull(serializer, &quot;serializer&quot;);</span>
+<span class="fc" id="L48">    this.merger = Objects.requireNonNull(merger, &quot;merger&quot;);</span>
+<span class="fc" id="L49">  }</span>
+
+  /** Loads exact stored commits and returns a deterministic semantic merge preview. */
+  public WorkflowMergePreview preview(PreviewWorkflowMergeCommand command) {
+<span class="fc" id="L53">    MergeContext context = loadContext(command);</span>
+<span class="fc" id="L54">    accessPolicy.assertCompareAllowed(command.targetBranch(), context.base().id());</span>
+<span class="fc" id="L55">    accessPolicy.assertCompareAllowed(command.remoteBranch(), context.base().id());</span>
+<span class="fc" id="L56">    return new WorkflowMergePreview(</span>
+<span class="fc" id="L57">        command.targetBranch(),</span>
+<span class="fc" id="L58">        command.remoteBranch(),</span>
+<span class="fc" id="L59">        command.baseCommit(),</span>
+<span class="fc" id="L60">        command.localCommit(),</span>
+<span class="fc" id="L61">        command.remoteCommit(),</span>
+<span class="fc" id="L62">        context.base(),</span>
+<span class="fc" id="L63">        context.local(),</span>
+<span class="fc" id="L64">        context.remote(),</span>
+<span class="fc" id="L65">        merger.preview(context.base(), context.local(), context.remote()));</span>
+  }
+
+  /** Resolves all conflicts, validates the candidate and commits it on the expected target HEAD. */
+  public WorkflowMergeCommitResult resolveAndCommit(ResolveWorkflowMergeCommand command) {
+<span class="fc" id="L70">    Objects.requireNonNull(command, &quot;command&quot;);</span>
+<span class="fc" id="L71">    MergeContext context = loadContext(command.preview());</span>
+<span class="fc bfc" id="L72" title="All 2 branches covered.">    if (!command.expectedHead().equals(context.actualTargetHead())) {</span>
+<span class="fc" id="L73">      throw new StaleWorkflowHeadException(</span>
+<span class="fc" id="L74">          command.preview().targetBranch(), command.expectedHead(), context.actualTargetHead());</span>
+    }
+
+<span class="fc" id="L77">    List&lt;Resolution&gt; resolutions =</span>
+<span class="fc" id="L78">        command.resolutions().stream()</span>
+<span class="fc" id="L79">            .map(</span>
+                decision -&gt;
+<span class="fc" id="L81">                    new Resolution(</span>
+<span class="fc" id="L82">                        decision.conflictId(), decision.choice(), decision.customValue()))</span>
+<span class="fc" id="L83">            .toList();</span>
+<span class="fc" id="L84">    Result merged = merger.resolve(context.base(), context.local(), context.remote(), resolutions);</span>
+<span class="fc bfc" id="L85" title="All 2 branches covered.">    if (!merged.readyToCommit()) {</span>
+<span class="fc" id="L86">      throw new WorkflowMergeRejectedException(</span>
+<span class="fc" id="L87">          merged.unresolvedConflicts(), merged.validationViolations());</span>
+    }
+
+<span class="fc" id="L90">    accessPolicy.assertMergeAllowed(command.preview().targetBranch(), merged.workflow().id());</span>
+<span class="fc" id="L91">    CommitMetadata auditMetadata =</span>
+<span class="fc" id="L92">        WorkflowMergeAuditTrail.metadata(</span>
+<span class="fc" id="L93">            command.preview(), command.resolutions(), command.metadata());</span>
+<span class="fc" id="L94">    WorkflowSnapshot snapshot =</span>
+<span class="fc" id="L95">        new WorkflowSnapshot(merged.workflow().id(), serializer.serialize(merged.workflow()));</span>
+<span class="fc" id="L96">    CommitId mergedCommit =</span>
+<span class="fc" id="L97">        store.commitIfHead(</span>
+<span class="fc" id="L98">            command.preview().targetBranch(), command.expectedHead(), snapshot, auditMetadata);</span>
+<span class="fc" id="L99">    Workflow reloaded = parseAndValidate(store.loadAtCommit(mergedCommit));</span>
+<span class="pc bpc" id="L100" title="1 of 2 branches missed.">    if (!merged.workflow().equals(reloaded)) {</span>
+<span class="nc" id="L101">      throw new IllegalStateException(</span>
+          &quot;Reloaded merge checkpoint differs from the deterministic resolved workflow&quot;);
+    }
+<span class="fc" id="L104">    return new WorkflowMergeCommitResult(</span>
+<span class="fc" id="L105">        command.preview().targetBranch(),</span>
+<span class="fc" id="L106">        command.preview().baseCommit(),</span>
+<span class="fc" id="L107">        command.preview().localCommit(),</span>
+<span class="fc" id="L108">        command.preview().remoteCommit(),</span>
+        mergedCommit,
+        reloaded,
+<span class="fc" id="L111">        auditMetadata.message());</span>
+  }
+
+  private MergeContext loadContext(PreviewWorkflowMergeCommand command) {
+<span class="fc" id="L115">    Objects.requireNonNull(command, &quot;command&quot;);</span>
+<span class="fc" id="L116">    List&lt;CommitInfo&gt; targetHistory = store.history(command.targetBranch(), Integer.MAX_VALUE);</span>
+<span class="fc" id="L117">    List&lt;CommitInfo&gt; remoteHistory = store.history(command.remoteBranch(), Integer.MAX_VALUE);</span>
+<span class="pc bpc" id="L118" title="1 of 2 branches missed.">    if (targetHistory.isEmpty()) {</span>
+<span class="nc" id="L119">      throw new IllegalArgumentException(</span>
+<span class="nc" id="L120">          &quot;Unknown or empty target workflow branch: &quot; + command.targetBranch());</span>
+    }
+<span class="pc bpc" id="L122" title="1 of 2 branches missed.">    if (remoteHistory.isEmpty()) {</span>
+<span class="nc" id="L123">      throw new IllegalArgumentException(</span>
+<span class="nc" id="L124">          &quot;Unknown or empty remote workflow branch: &quot; + command.remoteBranch());</span>
+    }
+<span class="fc" id="L126">    requireReachable(targetHistory, command.baseCommit(), command.targetBranch());</span>
+<span class="fc" id="L127">    requireReachable(targetHistory, command.localCommit(), command.targetBranch());</span>
+<span class="fc" id="L128">    requireReachable(remoteHistory, command.baseCommit(), command.remoteBranch());</span>
+<span class="fc" id="L129">    requireReachable(remoteHistory, command.remoteCommit(), command.remoteBranch());</span>
+
+<span class="fc" id="L131">    Workflow base = loadWorkflow(command.baseCommit());</span>
+<span class="fc" id="L132">    Workflow local = loadWorkflow(command.localCommit());</span>
+<span class="fc" id="L133">    Workflow remote = loadWorkflow(command.remoteCommit());</span>
+<span class="fc" id="L134">    requireSameWorkflow(base, local, remote);</span>
+<span class="fc" id="L135">    return new MergeContext(base, local, remote, targetHistory.getFirst().commitId());</span>
+  }
+
+  private Workflow loadWorkflow(CommitId commitId) {
+<span class="fc" id="L139">    return parseAndValidate(store.loadAtCommit(commitId));</span>
+  }
+
+  private Workflow parseAndValidate(WorkflowSnapshot snapshot) {
+<span class="fc" id="L143">    Workflow workflow = parser.parse(snapshot.dslText());</span>
+<span class="pc bpc" id="L144" title="1 of 2 branches missed.">    if (!snapshot.workflowId().equals(workflow.id())) {</span>
+<span class="nc" id="L145">      throw new IllegalArgumentException(</span>
+          &quot;snapshot workflowId '&quot;
+<span class="nc" id="L147">              + snapshot.workflowId()</span>
+              + &quot;' does not match DSL workflow id '&quot;
+<span class="nc" id="L149">              + workflow.id()</span>
+              + &quot;'&quot;);
+    }
+<span class="fc" id="L152">    return workflow;</span>
+  }
+
+  private static void requireSameWorkflow(Workflow base, Workflow local, Workflow remote) {
+<span class="pc bpc" id="L156" title="2 of 4 branches missed.">    if (!base.id().equals(local.id()) || !base.id().equals(remote.id())) {</span>
+<span class="nc" id="L157">      throw new IllegalArgumentException(</span>
+          &quot;Cannot merge commits with different workflow ids: &quot;
+<span class="nc" id="L159">              + base.id()</span>
+              + &quot;, &quot;
+<span class="nc" id="L161">              + local.id()</span>
+              + &quot; and &quot;
+<span class="nc" id="L163">              + remote.id());</span>
+    }
+<span class="fc" id="L165">  }</span>
+
+  private static void requireReachable(List&lt;CommitInfo&gt; history, CommitId commitId, String branch) {
+<span class="fc" id="L168">    boolean found = history.stream().anyMatch(info -&gt; info.commitId().equals(commitId));</span>
+<span class="fc bfc" id="L169" title="All 2 branches covered.">    if (!found) {</span>
+<span class="fc" id="L170">      throw new IllegalArgumentException(</span>
+<span class="fc" id="L171">          &quot;Commit &quot; + commitId.value() + &quot; is not reachable from branch &quot; + branch);</span>
+    }
+<span class="fc" id="L173">  }</span>
+
+  private record MergeContext(
+      Workflow base, Workflow local, Workflow remote, CommitId actualTargetHead) {
+<span class="fc" id="L177">    MergeContext {</span>
+<span class="fc" id="L178">      Objects.requireNonNull(base, &quot;base&quot;);</span>
+<span class="fc" id="L179">      Objects.requireNonNull(local, &quot;local&quot;);</span>
+<span class="fc" id="L180">      Objects.requireNonNull(remote, &quot;remote&quot;);</span>
+<span class="fc" id="L181">      Objects.requireNonNull(actualTargetHead, &quot;actualTargetHead&quot;);</span>
+<span class="fc" id="L182">    }</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

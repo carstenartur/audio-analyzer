@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>SpectrogramAnalyzer.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer DSP and Analysis</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.spectrogram</a> &gt; <span class="el_source">SpectrogramAnalyzer.java</span></div><h1>SpectrogramAnalyzer.java</h1><pre class="source lang-java linenums">package org.hammer.audio.spectrogram;
+
+import org.hammer.audio.analysis.AnalysisModule;
+import org.hammer.audio.analysis.SpectrumAnalyzer;
+import org.hammer.audio.analysis.SpectrumSnapshot;
+import org.hammer.audio.core.AudioBlock;
+
+/**
+ * Analyzer that computes a {@link SpectrogramFrame} per {@link AudioBlock} and appends it to an
+ * internal {@link SpectrogramHistory}.
+ *
+ * &lt;p&gt;Implemented on top of {@link SpectrumAnalyzer}; the per-block FFT result is also exposed as a
+ * {@link SpectrumSnapshot} via {@link #lastSpectrum()} for callers that need both views without
+ * paying the cost of a second FFT.
+ *
+ * &lt;p&gt;Instances are &lt;strong&gt;not thread-safe&lt;/strong&gt; and are intended to be driven by a single
+ * analysis / UI thread.
+ */
+public final class SpectrogramAnalyzer implements AnalysisModule&lt;SpectrogramFrame&gt; {
+
+  private final SpectrumAnalyzer spectrumAnalyzer;
+  private final SpectrogramHistory history;
+  private SpectrumSnapshot lastSpectrum;
+
+  /**
+   * Create a spectrogram analyzer.
+   *
+   * @param fftSize FFT size; must be a power of two and {@code &gt;= 2}
+   * @param channel channel index of the source block to analyze (0 for mono)
+   * @param sampleRate sample rate of the source audio in Hz
+   * @param historyFrames maximum number of retained frames; must be {@code &gt;= 1}
+   */
+  public SpectrogramAnalyzer(int fftSize, int channel, float sampleRate, int historyFrames) {
+<span class="fc" id="L34">    this(new SpectrumAnalyzer(fftSize, channel, sampleRate), new SpectrogramHistory(historyFrames));</span>
+<span class="fc" id="L35">  }</span>
+
+  /**
+   * Create a spectrogram analyzer with externally supplied dependencies.
+   *
+   * @param spectrumAnalyzer FFT-based spectrum analyzer
+   * @param history rolling history of frames
+   */
+<span class="fc" id="L43">  public SpectrogramAnalyzer(SpectrumAnalyzer spectrumAnalyzer, SpectrogramHistory history) {</span>
+<span class="fc" id="L44">    this.spectrumAnalyzer = spectrumAnalyzer;</span>
+<span class="fc" id="L45">    this.history = history;</span>
+<span class="fc" id="L46">  }</span>
+
+  @Override
+  public SpectrogramFrame analyze(AudioBlock block) {
+<span class="fc" id="L50">    SpectrumSnapshot snapshot = spectrumAnalyzer.analyze(block);</span>
+    // Use the non-copying view + adopting factory to avoid an extra defensive clone in the
+    // per-block hot path (the SpectrogramFrame still ends up with its own backing array).
+<span class="fc" id="L53">    SpectrogramFrame frame =</span>
+<span class="fc" id="L54">        SpectrogramFrame.adopting(</span>
+<span class="fc" id="L55">            snapshot.sourceFrameIndex(),</span>
+<span class="fc" id="L56">            snapshot.sourceTimestampNanos(),</span>
+<span class="fc" id="L57">            snapshot.sampleRate(),</span>
+<span class="fc" id="L58">            snapshot.fftSize(),</span>
+<span class="fc" id="L59">            snapshot.magnitudesView());</span>
+<span class="fc" id="L60">    history.append(frame);</span>
+<span class="fc" id="L61">    lastSpectrum = snapshot;</span>
+<span class="fc" id="L62">    return frame;</span>
+  }
+
+  /**
+   * @return the spectrogram history backing this analyzer
+   */
+  public SpectrogramHistory history() {
+<span class="fc" id="L69">    return history;</span>
+  }
+
+  /**
+   * @return the most recent {@link SpectrumSnapshot}, or {@code null} if {@link
+   *     #analyze(AudioBlock)} has not yet been called
+   */
+  public SpectrumSnapshot lastSpectrum() {
+<span class="nc" id="L77">    return lastSpectrum;</span>
+  }
+
+  /**
+   * @return configured FFT size
+   */
+  public int fftSize() {
+<span class="nc" id="L84">    return spectrumAnalyzer.fftSize();</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

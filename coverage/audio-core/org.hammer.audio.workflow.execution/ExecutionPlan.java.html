@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ExecutionPlan.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Core</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.execution</a> &gt; <span class="el_source">ExecutionPlan.java</span></div><h1>ExecutionPlan.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.execution;
+
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Queue;
+import org.hammer.audio.workflow.Edge;
+import org.hammer.audio.workflow.Node;
+
+/**
+ * Immutable execution plan derived from an {@link ExecutionSnapshot} by topologically sorting
+ * workflow nodes.
+ *
+ * &lt;p&gt;The plan fixes the order in which nodes must be executed so that every node is processed only
+ * after all its upstream dependencies have finished. An {@link IllegalArgumentException} is thrown
+ * at construction time if the workflow graph contains a cycle.
+ *
+ * @param planId stable identifier for this plan
+ * @param snapshotId identifier of the snapshot this plan was derived from
+ * @param orderedNodeIds node identifiers in topological execution order (upstream nodes first)
+ */
+public record ExecutionPlan(String planId, String snapshotId, List&lt;String&gt; orderedNodeIds) {
+
+<span class="fc" id="L27">  public ExecutionPlan {</span>
+<span class="fc" id="L28">    StableExecutionIds.requireStable(planId, &quot;planId&quot;);</span>
+<span class="fc" id="L29">    StableExecutionIds.requireStable(snapshotId, &quot;snapshotId&quot;);</span>
+<span class="fc" id="L30">    Objects.requireNonNull(orderedNodeIds, &quot;orderedNodeIds&quot;);</span>
+<span class="fc" id="L31">    orderedNodeIds = List.copyOf(orderedNodeIds);</span>
+<span class="fc" id="L32">  }</span>
+
+  /**
+   * Derives an execution plan from the given snapshot using topological ordering (Kahn's
+   * algorithm).
+   *
+   * @param planId stable identifier for this plan
+   * @param snapshot the execution snapshot to plan
+   * @return execution plan with nodes ordered so every predecessor comes before its successors
+   * @throws IllegalArgumentException if the workflow graph contains a cycle
+   */
+  public static ExecutionPlan of(String planId, ExecutionSnapshot snapshot) {
+<span class="fc" id="L44">    Objects.requireNonNull(planId, &quot;planId&quot;);</span>
+<span class="fc" id="L45">    Objects.requireNonNull(snapshot, &quot;snapshot&quot;);</span>
+<span class="fc" id="L46">    List&lt;String&gt; ordered = topologicalSort(snapshot.nodes(), snapshot.edges());</span>
+<span class="fc" id="L47">    return new ExecutionPlan(planId, snapshot.snapshotId(), ordered);</span>
+  }
+
+  private static List&lt;String&gt; topologicalSort(List&lt;Node&gt; nodes, List&lt;Edge&gt; edges) {
+<span class="fc" id="L51">    Map&lt;String, Integer&gt; inDegree = new LinkedHashMap&lt;&gt;();</span>
+<span class="fc" id="L52">    Map&lt;String, List&lt;String&gt;&gt; successors = new LinkedHashMap&lt;&gt;();</span>
+
+<span class="fc bfc" id="L54" title="All 2 branches covered.">    for (Node node : nodes) {</span>
+<span class="fc" id="L55">      inDegree.put(node.id(), 0);</span>
+<span class="fc" id="L56">      successors.put(node.id(), new ArrayList&lt;&gt;());</span>
+<span class="fc" id="L57">    }</span>
+
+<span class="fc bfc" id="L59" title="All 2 branches covered.">    for (Edge edge : edges) {</span>
+<span class="pc bpc" id="L60" title="1 of 2 branches missed.">      if (!inDegree.containsKey(edge.sourceNodeId())) {</span>
+<span class="nc" id="L61">        throw new IllegalArgumentException(&quot;Edge source node is not part of the snapshot: &quot; + edge);</span>
+      }
+<span class="fc bfc" id="L63" title="All 2 branches covered.">      if (!inDegree.containsKey(edge.targetNodeId())) {</span>
+<span class="fc" id="L64">        throw new IllegalArgumentException(&quot;Edge target node is not part of the snapshot: &quot; + edge);</span>
+      }
+<span class="fc" id="L66">      inDegree.merge(edge.targetNodeId(), 1, Integer::sum);</span>
+<span class="fc" id="L67">      successors.get(edge.sourceNodeId()).add(edge.targetNodeId());</span>
+<span class="fc" id="L68">    }</span>
+
+<span class="fc" id="L70">    Queue&lt;String&gt; ready = new ArrayDeque&lt;&gt;();</span>
+<span class="fc bfc" id="L71" title="All 2 branches covered.">    for (Map.Entry&lt;String, Integer&gt; entry : inDegree.entrySet()) {</span>
+<span class="fc bfc" id="L72" title="All 2 branches covered.">      if (entry.getValue() == 0) {</span>
+<span class="fc" id="L73">        ready.add(entry.getKey());</span>
+      }
+<span class="fc" id="L75">    }</span>
+
+<span class="fc" id="L77">    List&lt;String&gt; result = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L78" title="All 2 branches covered.">    while (!ready.isEmpty()) {</span>
+<span class="fc" id="L79">      String nodeId = ready.poll();</span>
+<span class="fc" id="L80">      result.add(nodeId);</span>
+<span class="fc bfc" id="L81" title="All 2 branches covered.">      for (String successor : successors.getOrDefault(nodeId, List.of())) {</span>
+<span class="fc" id="L82">        int newDegree = inDegree.merge(successor, -1, Integer::sum);</span>
+<span class="pc bpc" id="L83" title="1 of 2 branches missed.">        if (newDegree == 0) {</span>
+<span class="fc" id="L84">          ready.add(successor);</span>
+        }
+<span class="fc" id="L86">      }</span>
+<span class="fc" id="L87">    }</span>
+
+<span class="fc bfc" id="L89" title="All 2 branches covered.">    if (result.size() != nodes.size()) {</span>
+<span class="fc" id="L90">      throw new IllegalArgumentException(</span>
+          &quot;Workflow graph contains a cycle; topological sort is not possible&quot;);
+    }
+
+<span class="fc" id="L94">    return result;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>
