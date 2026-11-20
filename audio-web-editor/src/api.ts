@@ -46,8 +46,13 @@ export type CollaborationMode =
 
 export interface ActorIdentity {
   actorId: string;
-  userId: string;
   displayName: string;
+  provenance: 'ANONYMOUS' | 'SELF_ASSERTED' | 'AUTHENTICATED';
+  verified: boolean;
+  accountHandle: string | null;
+  role: 'OWNER' | 'EDITOR' | 'VIEWER';
+  participantCode: string;
+  lastSeen: string | null;
 }
 
 export interface SessionResponse {
@@ -66,6 +71,7 @@ export type HistoryCommandKind = 'NORMAL' | 'UNDO' | 'REDO';
 export type HistoryActionStatus = 'AVAILABLE' | 'BLOCKED' | 'NOT_RECONSTRUCTIBLE';
 
 export interface HistoryOperationResponse {
+  actor?: ActorIdentity | null;
   operationId: string;
   operationType: string;
   actorId: string;
@@ -220,8 +226,22 @@ async function responseJson<T>(response: Response, url: string): Promise<T> {
   return (await response.json()) as T;
 }
 
+let collaborationActorId = '';
+
+export function setCollaborationActorId(actorId: string): void {
+  collaborationActorId = actorId;
+}
+
 async function requestJson<T>(url: string, method: string, body?: unknown): Promise<T> {
   const headers: Record<string, string> = { Accept: 'application/json' };
+  if (
+    collaborationActorId &&
+    (url.startsWith('/workflow/sessions') ||
+      url.startsWith('/workflow/runs') ||
+      url.startsWith('/workflow/experiment-health'))
+  ) {
+    headers['X-Workflow-Actor'] = collaborationActorId;
+  }
   if (body !== undefined) {
     headers['Content-Type'] = 'application/json';
   }

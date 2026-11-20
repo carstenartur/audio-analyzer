@@ -33,6 +33,34 @@ class WorkflowSessionRegistryTest {
   }
 
   @Test
+  void authorizedCaptureRequiresTheExactJoinedActorAndRetainsTheOriginalSession() {
+    WorkflowSessionRegistry registry = new WorkflowSessionRegistry();
+    registry.create("session.capture", CollaborationMode.PRIVATE_WORKSPACE, OWNER, emptyWorkflow());
+    assertCode(
+        WorkflowSessionException.Code.ACTOR_NOT_JOINED,
+        () -> registry.authorizedWorkflow("session.capture", GUEST));
+    OperationActor copiedId = new OperationActor(OWNER.actorId(), "another-user", "Copied");
+    assertCode(
+        WorkflowSessionException.Code.ACTOR_METADATA_MISMATCH,
+        () -> registry.authorizedWorkflow("session.capture", copiedId));
+    WorkflowSessionRegistry.SessionWorkflowSnapshot captured =
+        registry.authorizedWorkflow("session.capture", OWNER);
+
+    registry.close("session.capture", OWNER.actorId());
+    registry.create(
+        "session.capture",
+        CollaborationMode.PRIVATE_WORKSPACE,
+        GUEST,
+        new Workflow("workflow.replacement", "Replacement", List.of(), List.of()));
+
+    assertEquals("workflow.session", captured.workflow().id());
+    assertEquals(OWNER, captured.session().owner());
+    assertCode(
+        WorkflowSessionException.Code.ACTOR_NOT_JOINED,
+        () -> registry.authorizedWorkflow("session.capture", OWNER));
+  }
+
+  @Test
   void privateWorkspaceRejectsDifferentActorButAllowsOwnerReconnect() {
     WorkflowSessionRegistry registry = new WorkflowSessionRegistry();
     registry.create("session.private", CollaborationMode.PRIVATE_WORKSPACE, OWNER, emptyWorkflow());

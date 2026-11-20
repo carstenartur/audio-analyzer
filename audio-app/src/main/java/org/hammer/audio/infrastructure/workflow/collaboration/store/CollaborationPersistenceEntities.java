@@ -12,6 +12,9 @@ public final class CollaborationPersistenceEntities {
   /** Returns immutable annotated classes registered in the shared Hibernate context. */
   public static List<Class<?>> annotatedClasses() {
     return List.of(
-        WorkflowSessionEntity.class, WorkflowOperationEntity.class, WorkflowOutboxEntity.class);
+        WorkflowSessionEntity.class,
+        WorkflowOperationEntity.class,
+        WorkflowOutboxEntity.class,
+        CollaborationIdentityEntity.class);
   }
 }

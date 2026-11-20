@@ -70,6 +70,35 @@ class WorkflowRunServiceTest {
   }
 
   @org.junit.jupiter.api.Test
+  void authorizedCaptureRejectsDifferentSessionOrRevisionBeforeDispatch() {
+    WorkflowSessionRegistry sessions = sessionsWithEmptyWorkflow();
+    WorkflowSessionRegistry.SessionWorkflowSnapshot captured =
+        sessions.authorizedWorkflow("session.test", OWNER);
+    AtomicInteger dispatched = new AtomicInteger();
+    WorkflowRunService service =
+        service(
+            sessions,
+            null,
+            new SimulationWorkflowExecutionBackend(),
+            task -> dispatched.incrementAndGet());
+
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            service.start(
+                new Command("command.wrong-session", new LiveSessionSource("session.other", 0)),
+                captured));
+    assertThrows(
+        WorkflowSessionRevisionConflictException.class,
+        () ->
+            service.start(
+                new Command("command.wrong-revision", new LiveSessionSource("session.test", 1)),
+                captured));
+    assertTrue(service.runs().isEmpty());
+    assertEquals(0, dispatched.get());
+  }
+
+  @org.junit.jupiter.api.Test
   void loadsExactStoredCommitAndRetainsItsProvenance() {
     InMemoryVersionedWorkflowStore store = new InMemoryVersionedWorkflowStore();
     Workflow workflow = emptyWorkflow();

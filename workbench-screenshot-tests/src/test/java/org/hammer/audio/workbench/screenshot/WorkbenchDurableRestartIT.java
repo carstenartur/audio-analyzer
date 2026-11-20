@@ -57,6 +57,7 @@ class WorkbenchDurableRestartIT {
     long acceptedSequence;
     String oldCommitId;
     String newCommitId;
+    WorkbenchBrowserHarness.IdentitySnapshot clientIdentity;
 
     try (WorkbenchBrowserHarness first =
             WorkbenchBrowserHarness.start(
@@ -88,6 +89,7 @@ class WorkbenchDurableRestartIT {
         applyLegacyOperation(page);
         newCommitId = checkpoint(page, "Durable E2E after legacy edit", "2026-07-19T12:01:00Z");
         assertFalse(Files.exists(publications));
+        clientIdentity = actor.identitySnapshot();
       } catch (Throwable failure) {
         captureDurableFailure("process-1", first, publications, failure);
         throw failure;
@@ -101,20 +103,19 @@ class WorkbenchDurableRestartIT {
       try (WorkbenchBrowserHarness second =
               WorkbenchBrowserHarness.start(
                   WorkbenchContainerFactory.createDurableRestart(dataDirectory, true));
-          WorkbenchBrowserHarness.ActorBrowser actor =
-              second.openActor("actor-e2e-durable", "user-e2e-durable", "Durable E2E")) {
+          WorkbenchBrowserHarness.ActorBrowser actor = second.resumeActor(clientIdentity)) {
         Page page = actor.page();
         try {
           open(second, page);
+          joinSession(page);
           Map<String, Object> recoveredMetadata = inspectSession(page);
           assertEquals(
               1,
               number(recoveredMetadata, "revision"),
-              "Recovered server session revision before browser join");
+              "Recovered server session revision after credential-backed browser rejoin");
           assertTrue(
               projectionNodeIds(sessionProjection(page)).contains(NODE_ID),
-              "Recovered server projection must contain the durable node before browser join");
-          joinSession(page);
+              "Recovered server projection must contain the durable node after browser rejoin");
           waitForRevision(page, 1);
           page.locator(NODE_SELECTOR).waitFor();
           assertEquals(1, page.locator(NODE_SELECTOR).count());
@@ -198,7 +199,7 @@ class WorkbenchDurableRestartIT {
         """
         input => {
           const source = new EventSource(
-            `/workflow/sessions/${encodeURIComponent(input.sessionId)}/events?afterSequence=0`
+            `/workflow/sessions/${encodeURIComponent(input.sessionId)}/events?afterSequence=0&actorId=${encodeURIComponent(JSON.parse(sessionStorage.getItem('audio-analyzer.workflow.actor')).actorId)}`
           );
           window.__durableAcceptedEvent = new Promise((resolve, reject) => {
             const timeout = window.setTimeout(() => {
@@ -237,7 +238,7 @@ class WorkbenchDurableRestartIT {
                   headers: {'Content-Type': 'application/json', Accept: 'application/json'},
                   body: JSON.stringify({
                     mode: 'SHARED_SESSION_PERSONAL_UNDO',
-                    actor: input.actor,
+                    actor: JSON.parse(sessionStorage.getItem('audio-analyzer.workflow.actor')),
                     expectedRevision: input.expectedRevision,
                     operation: {
                       type: 'CreateNode',
@@ -324,7 +325,9 @@ class WorkbenchDurableRestartIT {
         page.evaluate(
             """
             async sessionId => await (
-              await fetch(`/workflow/sessions/${encodeURIComponent(sessionId)}`)
+              await fetch(`/workflow/sessions/${encodeURIComponent(sessionId)}`, {
+                headers: {'X-Workflow-Actor': JSON.parse(sessionStorage.getItem('audio-analyzer.workflow.actor')).actorId}
+              })
             ).json()
             """,
             SESSION_ID);
@@ -336,7 +339,9 @@ class WorkbenchDurableRestartIT {
         page.evaluate(
             """
             async sessionId => await (
-              await fetch(`/workflow/sessions/${encodeURIComponent(sessionId)}/projection`)
+              await fetch(`/workflow/sessions/${encodeURIComponent(sessionId)}/projection`, {
+                headers: {'X-Workflow-Actor': JSON.parse(sessionStorage.getItem('audio-analyzer.workflow.actor')).actorId}
+              })
             ).json()
             """,
             SESSION_ID);

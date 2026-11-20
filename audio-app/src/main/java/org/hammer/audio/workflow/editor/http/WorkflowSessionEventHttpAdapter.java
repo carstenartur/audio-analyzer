@@ -1,9 +1,11 @@
 package org.hammer.audio.workflow.editor.http;
 
+import jakarta.servlet.http.HttpServletRequest;
 import java.io.IOException;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import org.hammer.audio.workflow.collaboration.OperationActor;
 import org.hammer.audio.workflow.collaboration.WorkflowSessionEvent;
 import org.hammer.audio.workflow.collaboration.WorkflowSessionEventHub;
 import org.hammer.audio.workflow.collaboration.WorkflowSessionRegistry;
@@ -26,13 +28,13 @@ public final class WorkflowSessionEventHttpAdapter {
   private static final String CONNECTED_COMMENT = "connected";
 
   private final WorkflowSessionRegistry registry;
-  private final WorkflowSessionEventHub eventHub;
+  private final CollaborationIdentityService identities;
 
   /** Creates the SSE adapter with the shared registry and transport-neutral event hub. */
   public WorkflowSessionEventHttpAdapter(
-      WorkflowSessionRegistry registry, WorkflowSessionEventHub eventHub) {
+      WorkflowSessionRegistry registry, CollaborationIdentityService identities) {
     this.registry = Objects.requireNonNull(registry, "registry");
-    this.eventHub = Objects.requireNonNull(eventHub, "eventHub");
+    this.identities = Objects.requireNonNull(identities, "identities");
   }
 
   /**
@@ -49,8 +51,9 @@ public final class WorkflowSessionEventHttpAdapter {
   public SseEmitter events(
       @PathVariable("sessionId") String sessionId,
       @RequestHeader(name = "Last-Event-ID", required = false) String lastEventId,
-      @RequestParam(name = "afterSequence", required = false) Long afterSequence) {
-    registry.inspect(sessionId);
+      @RequestParam(name = "afterSequence", required = false) Long afterSequence,
+      HttpServletRequest http) {
+    OperationActor actor = identities.requireActor(http, null);
     long cursor = resolveCursor(afterSequence, lastEventId);
     SseEmitter emitter = new SseEmitter(EMITTER_TIMEOUT_MILLIS);
     SubscriptionHolder holder = new SubscriptionHolder();
@@ -58,7 +61,18 @@ public final class WorkflowSessionEventHttpAdapter {
     emitter.onTimeout(holder::close);
     emitter.onError(ignored -> holder.close());
     WorkflowSessionEventHub.Subscription subscription =
-        eventHub.subscribe(sessionId, cursor, event -> send(emitter, holder, event));
+        registry.subscribe(
+            sessionId,
+            actor,
+            cursor,
+            (snapshot, event) ->
+                send(
+                    emitter,
+                    holder,
+                    event,
+                    snapshot.owner().actorId(),
+                    actor,
+                    snapshot.sequence()));
     holder.attach(subscription);
     flushConnection(emitter, holder);
     return emitter;
@@ -73,15 +87,29 @@ public final class WorkflowSessionEventHttpAdapter {
     }
   }
 
-  private static void send(
-      SseEmitter emitter, SubscriptionHolder holder, WorkflowSessionEvent event) {
+  private void send(
+      SseEmitter emitter,
+      SubscriptionHolder holder,
+      WorkflowSessionEvent event,
+      String ownerId,
+      OperationActor subscriber,
+      long subscriptionSequence) {
     try {
+      if (!identities.isActive(subscriber)) {
+        holder.close();
+        emitter.complete();
+        return;
+      }
       emitter.send(
           SseEmitter.event()
               .id(Long.toString(event.sequence()))
               .name(event.type().name())
-              .data(SessionEventResponse.from(event)));
-      if (event.type() == WorkflowSessionEvent.Type.SESSION_CLOSED) {
+              .data(SessionEventResponse.from(event, identities, ownerId)));
+      boolean departed =
+          event.type() == WorkflowSessionEvent.Type.PRESENCE_LEFT
+              && event.sequence() > subscriptionSequence
+              && event.actor().actorId().equals(subscriber.actorId());
+      if (departed || event.type() == WorkflowSessionEvent.Type.SESSION_CLOSED) {
         holder.close();
         emitter.complete();
       }

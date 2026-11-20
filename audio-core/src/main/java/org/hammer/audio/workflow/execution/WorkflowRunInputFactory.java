@@ -11,6 +11,7 @@ import java.util.Objects;
 import java.util.function.Supplier;
 import org.hammer.audio.workflow.Workflow;
 import org.hammer.audio.workflow.WorkflowValidator;
+import org.hammer.audio.workflow.collaboration.WorkflowSessionRegistry.SessionWorkflowSnapshot;
 import org.hammer.audio.workflow.execution.WorkflowRunException.Code;
 import org.hammer.audio.workflow.execution.WorkflowRunModels.Command;
 import org.hammer.audio.workflow.execution.WorkflowRunModels.Input;
@@ -40,10 +41,18 @@ final class WorkflowRunInputFactory {
   }
 
   Input capture(Command command) {
+    return capture(command, () -> sourceResolver.resolve(command.source()));
+  }
+
+  Input capture(Command command, SessionWorkflowSnapshot captured) {
+    return capture(command, () -> sourceResolver.resolve(command.source(), captured));
+  }
+
+  private Input capture(Command command, Supplier<ResolvedWorkflow> resolve) {
     Objects.requireNonNull(command, "command");
     String runId = requireGeneratedRunId(identifierSupplier.get());
     Instant capturedAt = wallClock.instant();
-    ResolvedWorkflow resolved = sourceResolver.resolve(command.source());
+    ResolvedWorkflow resolved = resolve.get();
     List<Violation> violations = validateWorkflow(resolved.workflow(), resolved.workflowId());
     if (!violations.isEmpty()) {
       throw validationFailure(runId, command.startCommandId(), violations, null);

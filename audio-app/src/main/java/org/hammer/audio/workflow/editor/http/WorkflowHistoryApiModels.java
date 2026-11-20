@@ -9,6 +9,7 @@ import jakarta.validation.constraints.Positive;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.Function;
 import org.hammer.audio.workflow.collaboration.CollaborationMode;
 import org.hammer.audio.workflow.collaboration.WorkflowHistoryCapabilities;
 import org.hammer.audio.workflow.collaboration.WorkflowHistoryDescriptor;
@@ -16,6 +17,7 @@ import org.hammer.audio.workflow.collaboration.WorkflowHistoryPage;
 import org.hammer.audio.workflow.collaboration.WorkflowRedoPreview;
 import org.hammer.audio.workflow.collaboration.WorkflowUndoPreview;
 import org.hammer.audio.workflow.editor.http.WorkflowSessionApiModels.ActorRequest;
+import org.hammer.audio.workflow.editor.http.WorkflowSessionApiModels.ActorResponse;
 
 /** Request and response models for durable semantic workflow history discovery. */
 public final class WorkflowHistoryApiModels {
@@ -87,6 +89,7 @@ public final class WorkflowHistoryApiModels {
    * @param reconstructible whether the complete semantic body is available
    * @param activeUndoTarget whether the operation is currently an active undo target
    * @param activeRedoTarget whether the operation is currently an active redo target
+   * @param actor durable privacy-aware attribution, absent for legacy history
    */
   public record HistoryEntryResponse(
       String operationId,
@@ -101,14 +104,16 @@ public final class WorkflowHistoryApiModels {
       List<String> affectedObjectIds,
       boolean reconstructible,
       boolean activeUndoTarget,
-      boolean activeRedoTarget) {
+      boolean activeRedoTarget,
+      ActorResponse actor) {
 
     public HistoryEntryResponse {
       affectedObjectIds =
           List.copyOf(Objects.requireNonNull(affectedObjectIds, "affectedObjectIds"));
     }
 
-    static HistoryEntryResponse from(WorkflowHistoryDescriptor descriptor) {
+    static HistoryEntryResponse from(
+        WorkflowHistoryDescriptor descriptor, Function<String, ActorResponse> actors) {
       return new HistoryEntryResponse(
           descriptor.operationId(),
           descriptor.operationType(),
@@ -122,7 +127,8 @@ public final class WorkflowHistoryApiModels {
           descriptor.affectedObjectIds(),
           descriptor.reconstructible(),
           descriptor.activeUndoTarget(),
-          descriptor.activeRedoTarget());
+          descriptor.activeRedoTarget(),
+          actors.apply(descriptor.actorId()));
     }
   }
 
@@ -140,9 +146,12 @@ public final class WorkflowHistoryApiModels {
       operations = List.copyOf(Objects.requireNonNull(operations, "operations"));
     }
 
-    static HistoryPageResponse from(WorkflowHistoryPage page) {
+    static HistoryPageResponse from(
+        WorkflowHistoryPage page, Function<String, ActorResponse> actors) {
       return new HistoryPageResponse(
-          page.operations().stream().map(HistoryEntryResponse::from).toList(),
+          page.operations().stream()
+              .map(operation -> HistoryEntryResponse.from(operation, actors))
+              .toList(),
           page.nextBeforeRevision(),
           page.currentRevision());
     }
@@ -169,12 +178,13 @@ public final class WorkflowHistoryApiModels {
           List.copyOf(Objects.requireNonNull(blockingOperations, "blockingOperations"));
     }
 
-    static HistoryActionResponse from(WorkflowHistoryCapabilities.Action action) {
+    static HistoryActionResponse from(
+        WorkflowHistoryCapabilities.Action action, Function<String, ActorResponse> actors) {
       if (action == null) {
         return null;
       }
       return new HistoryActionResponse(
-          HistoryEntryResponse.from(action.operation()),
+          HistoryEntryResponse.from(action.operation(), actors),
           action.status(),
           action.available(),
           action.blockingOperations().stream().map(BlockingOperationResponse::from).toList());
@@ -199,13 +209,14 @@ public final class WorkflowHistoryApiModels {
       HistoryActionResponse redo,
       boolean sharedUndoPermitted) {
 
-    static HistoryCapabilitiesResponse from(WorkflowHistoryCapabilities capabilities) {
+    static HistoryCapabilitiesResponse from(
+        WorkflowHistoryCapabilities capabilities, Function<String, ActorResponse> actors) {
       return new HistoryCapabilitiesResponse(
           capabilities.mode(),
           capabilities.revision(),
           capabilities.personalUndoPermitted(),
-          HistoryActionResponse.from(capabilities.personalUndo()),
-          HistoryActionResponse.from(capabilities.redo()),
+          HistoryActionResponse.from(capabilities.personalUndo(), actors),
+          HistoryActionResponse.from(capabilities.redo(), actors),
           capabilities.sharedUndoPermitted());
     }
   }

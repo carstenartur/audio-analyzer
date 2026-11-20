@@ -32,7 +32,13 @@ class WorkflowSessionHistoryHttpAdapterTest {
     WorkflowSessionRegistry registry =
         new WorkflowSessionRegistry(new WorkflowSessionEventHub(32, 8));
     mvc =
-        MockMvcBuilders.standaloneSetup(new WorkflowSessionHttpAdapter(registry))
+        MockMvcBuilders.standaloneSetup(
+                new WorkflowSessionHttpAdapter(
+                    registry, CollaborationIdentityTestSupport.identities()))
+            .defaultRequest(
+                get("/")
+                    .cookie(CollaborationIdentityTestSupport.cookies())
+                    .param("actorId", "actor.owner"))
             .setControllerAdvice(new WorkflowApiExceptionHandler())
             .setValidator(validator)
             .build();

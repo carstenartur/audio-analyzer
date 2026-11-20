@@ -32,8 +32,8 @@ class WorkbenchCollaborationScreenshotIT {
   private static final String SESSION_ID = "docs-collaboration";
   private static final String ACTOR_INIT_SCRIPT =
       "window.sessionStorage.setItem('audio-analyzer.workflow.actor',"
-          + " JSON.stringify({actorId:'actor-docs',userId:'user-docs',"
-          + "displayName:'Documentation User'}));";
+          + " JSON.stringify({actorId:'',provenance:'ANONYMOUS',verified:false,accountHandle:null,role:'EDITOR',participantCode:'',lastSeen:null,displayName:'Documentation"
+          + " User'}));";
 
   private GenericContainer<?> container;
   private Playwright playwright;
@@ -93,7 +93,10 @@ class WorkbenchCollaborationScreenshotIT {
       assertEquals(SESSION_ID, activeSession.innerText());
       assertEquals("SHARED_SESSION_PERSONAL_UNDO", activeMode.getAttribute("data-mode"));
       assertEquals("Shared session · personal undo", activeMode.innerText());
-      assertTrue(page.locator("[data-testid='participant-actor-docs']").isVisible());
+      assertTrue(
+          page.locator("[data-testid='participant-list']")
+              .innerText()
+              .contains("Documentation User"));
 
       Locator connectionState = page.locator("[data-testid='connection-state']");
       page.waitForCondition(() -> "live".equals(connectionState.innerText()));
@@ -121,6 +124,7 @@ class WorkbenchCollaborationScreenshotIT {
       assertEquals("SHARED_SESSION_PERSONAL_UNDO", activeMode.getAttribute("data-mode"));
       assertEquals("Shared session · personal undo", activeMode.innerText());
 
+      WorkbenchBrowserHarness.normalizeIdentityLabels(page);
       byte[] pngBytes = page.screenshot(new Page.ScreenshotOptions().setFullPage(false));
       ScreenshotPipeline.processScreenshot("collaboration-session.png", pngBytes);
     }

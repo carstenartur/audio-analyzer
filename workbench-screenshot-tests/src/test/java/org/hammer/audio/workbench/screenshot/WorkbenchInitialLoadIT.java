@@ -62,8 +62,8 @@ class WorkbenchInitialLoadIT {
   private static final String EXPECTED_STATUS_PREFIX = "Loaded:";
   private static final String ACTOR_INIT_SCRIPT =
       "window.sessionStorage.setItem('audio-analyzer.workflow.actor',"
-          + " JSON.stringify({actorId:'actor-docs',userId:'user-docs',"
-          + "displayName:'Documentation User'}));";
+          + " JSON.stringify({actorId:'',provenance:'ANONYMOUS',verified:false,accountHandle:null,role:'EDITOR',participantCode:'',lastSeen:null,displayName:'Documentation"
+          + " User'}));";
 
   private GenericContainer<?> container;
   private Playwright playwright;

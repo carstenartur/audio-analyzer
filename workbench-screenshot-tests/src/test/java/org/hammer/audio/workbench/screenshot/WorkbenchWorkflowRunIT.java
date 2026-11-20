@@ -232,7 +232,7 @@ class WorkbenchWorkflowRunIT {
                       headers: {'Content-Type': 'application/json', Accept: 'application/json'},
                       body: JSON.stringify({
                         mode: input.mode,
-                        actor: input.actor,
+                        actor: JSON.parse(sessionStorage.getItem('audio-analyzer.workflow.actor')),
                         expectedRevision: input.expectedRevision,
                         operation: input.operation
                       })
@@ -315,7 +315,7 @@ class WorkbenchWorkflowRunIT {
   }
 
   private static boolean isJarAvailable() {
-    String jarPath = System.getProperty("workbench.jar");
+    String jarPath = System.getProperty("workbench.jar.path");
     return jarPath != null && Files.isRegularFile(Path.of(jarPath));
   }
 

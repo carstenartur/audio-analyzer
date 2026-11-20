@@ -3,7 +3,7 @@
  * Canonical workflow state always comes from server projections carried by REST or SSE.
  */
 
-/** @typedef {{actorId: string, userId: string, displayName: string}} Actor */
+/** @typedef {import('./api').ActorIdentity} Actor */
 /** @typedef {{workflowId: string, workflowName: string, nodes: Array<object>, edges: Array<object>}} Projection */
 /**
  * @typedef {{
@@ -68,8 +68,8 @@ export function reduceSessionEvent(current, event) {
   const presence = event.type === 'SNAPSHOT' ? {} : { ...current.presence };
   let closed = current.closed;
 
-  if (event.actor !== null && event.type === 'PRESENCE_JOINED') {
-    upsertActor(participants, event.actor);
+  if (event.actor !== null && event.type !== 'PRESENCE_LEFT' && event.type !== 'SESSION_CLOSED') {
+    upsertActor(participants, { ...event.actor, lastSeen: event.occurredAt });
   }
   if (event.actor !== null && event.type === 'PRESENCE_LEFT') {
     removeActor(participants, event.actor.actorId);
@@ -79,7 +79,7 @@ export function reduceSessionEvent(current, event) {
     event.actor !== null &&
     (event.type === 'PRESENCE_JOINED' || event.type === 'PRESENCE_UPDATED')
   ) {
-    upsertActor(participants, event.actor);
+    upsertActor(participants, { ...event.actor, lastSeen: event.occurredAt });
     presence[event.actor.actorId] = {
       actor: event.actor,
       observedAt: event.occurredAt,
@@ -134,11 +134,15 @@ export function acceptCommandProjection(
 export function recoveryForProblemCode(code) {
   if (
     code === 'WORKFLOW_SESSION_REVISION_CONFLICT' ||
-    code === 'WORKFLOW_SESSION_SEQUENCE_CONFLICT'
+    code === 'WORKFLOW_SESSION_SEQUENCE_CONFLICT' ||
+    code === 'ACTOR_NOT_JOINED'
   ) {
     return 'reconcile';
   }
-  if (code === 'SESSION_NOT_FOUND') {
+  if (
+    code === 'SESSION_NOT_FOUND' ||
+    code === 'COLLABORATION_IDENTITY_REQUIRED'
+  ) {
     return 'reset';
   }
   return 'reject';

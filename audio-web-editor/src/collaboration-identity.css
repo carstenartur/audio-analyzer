@@ -1,0 +1,25 @@
+.identity-badge {
+  display: inline-block;
+  margin: 0.2rem 0;
+  padding: 0.1rem 0.35rem;
+  border: 1px solid currentColor;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+}
+
+.identity-badge--verified {
+  color: #a6e3a1;
+}
+
+.identity-badge--unverified {
+  color: #f9e2af;
+}
+
+.participant-list details {
+  margin-top: 0.25rem;
+}
+
+.participant-list details code {
+  overflow-wrap: anywhere;
+  font-size: 0.7rem;
+}

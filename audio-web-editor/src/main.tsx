@@ -10,27 +10,6 @@ import './indexed-history.css';
 import './workflow-run.css';
 import './workflow-merge.css';
 
-const ACTOR_STORAGE_KEY = 'audio-analyzer.workflow.actor';
-
-function seedTabActorIdentity(): void {
-  try {
-    if (sessionStorage.getItem(ACTOR_STORAGE_KEY) !== null) {
-      return;
-    }
-    const suffix = crypto.randomUUID().slice(0, 8);
-    sessionStorage.setItem(
-      ACTOR_STORAGE_KEY,
-      JSON.stringify({
-        actorId: `actor-${suffix}`,
-        userId: `user-${suffix}`,
-        displayName: `Browser ${suffix}`,
-      }),
-    );
-  } catch {
-    // The session hook still creates an in-memory identity when browser storage is unavailable.
-  }
-}
-
 function protectServerOwnedNodeDeletion(): void {
   document.addEventListener(
     'keydown',
@@ -55,7 +34,6 @@ function protectServerOwnedNodeDeletion(): void {
   );
 }
 
-seedTabActorIdentity();
 protectServerOwnedNodeDeletion();
 
 const rootElement = document.getElementById('root');

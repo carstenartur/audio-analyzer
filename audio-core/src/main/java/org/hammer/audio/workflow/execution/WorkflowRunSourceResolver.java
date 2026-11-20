@@ -6,6 +6,7 @@ import java.util.Objects;
 import org.hammer.audio.workflow.Workflow;
 import org.hammer.audio.workflow.collaboration.WorkflowSessionRegistry;
 import org.hammer.audio.workflow.collaboration.WorkflowSessionRegistry.SessionSnapshot;
+import org.hammer.audio.workflow.collaboration.WorkflowSessionRegistry.SessionWorkflowSnapshot;
 import org.hammer.audio.workflow.collaboration.store.WorkflowSessionRevisionConflictException;
 import org.hammer.audio.workflow.dsl.WorkflowDslParser;
 import org.hammer.audio.workflow.dsl.WorkflowDslSerializer;
@@ -47,16 +48,30 @@ final class WorkflowRunSourceResolver {
     return resolveStored((StoredCommitSource) source);
   }
 
+  ResolvedWorkflow resolve(Source source, SessionWorkflowSnapshot captured) {
+    Objects.requireNonNull(source, "source");
+    Objects.requireNonNull(captured, "captured");
+    if (!(source instanceof LiveSessionSource live)
+        || !live.sessionId().equals(captured.session().sessionId())) {
+      throw new IllegalArgumentException("Authorized workflow capture must match the live source");
+    }
+    requireExpectedRevision(live, captured.session().revision());
+    return canonicalWorkflow(captured.workflow(), captured.session().revision());
+  }
+
   private ResolvedWorkflow resolveLive(LiveSessionSource source) {
     SessionSnapshot before = sessionRegistry.inspect(source.sessionId());
     requireExpectedRevision(source, before.revision());
     Workflow immutableWorkflow = sessionRegistry.workflow(source.sessionId());
     SessionSnapshot after = sessionRegistry.inspect(source.sessionId());
     requireExpectedRevision(source, after.revision());
-    String dslText = dslSerializer.serialize(immutableWorkflow);
+    return canonicalWorkflow(immutableWorkflow, after.revision());
+  }
+
+  private ResolvedWorkflow canonicalWorkflow(Workflow workflow, long revision) {
+    String dslText = dslSerializer.serialize(workflow);
     Workflow parsedWorkflow = dslParser.parse(dslText);
-    return new ResolvedWorkflow(
-        parsedWorkflow.id(), parsedWorkflow, dslText, after.revision(), null);
+    return new ResolvedWorkflow(parsedWorkflow.id(), parsedWorkflow, dslText, revision, null);
   }
 
   private ResolvedWorkflow resolveStored(StoredCommitSource source) {
