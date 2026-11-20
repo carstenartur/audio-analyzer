@@ -61,7 +61,7 @@ jobs:
 
           root = pathlib.Path('target/desktop/extracted')
           mime = 'application/vnd.carstenartur.audio-analyzer.experiment+json'
-          desktops = list(root.rglob('*.desktop'))
+          desktops = [path for path in root.rglob('*.desktop') if path.is_file()]
           assert desktops, 'Native package has no desktop launch entry'
           entries = [dict(line.split('=', 1) for line in path.read_text().splitlines()
                           if '=' in line and not line.startswith('#')) for path in desktops]
@@ -74,6 +74,8 @@ jobs:
           namespace = {'m': 'http://www.freedesktop.org/standards/shared-mime-info'}
           matches = []
           for path in root.rglob('*.xml'):
+              if not path.is_file():
+                  continue
               try:
                   document = ET.parse(path)
               except ET.ParseError:
@@ -83,6 +85,7 @@ jobs:
           print('Verified .audioexp extension, MIME type, file argument and dedicated icon')
           PY
       - name: Upload reviewable Linux installer
+        if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: audio-analyzer-linux-desktop
