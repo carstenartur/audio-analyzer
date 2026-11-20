@@ -111,6 +111,46 @@ public final class WorkflowEditorService {
     return withStateLock(() -> WorkflowProjection.fromWorkflow(operationLog.currentWorkflow()));
   }
 
+  /** Return the immutable current graph for non-mutating comparison and portable export. */
+  public Workflow currentWorkflow() {
+    return withStateLock(operationLog::currentWorkflow);
+  }
+
+  /** Capture the immutable graph and its dirty flag under the same editor lock. */
+  public CurrentState currentState() {
+    return withStateLock(() -> new CurrentState(operationLog.currentWorkflow(), dirty));
+  }
+
+  /**
+   * One coherent editor snapshot for non-mutating document and health adapters.
+   *
+   * @param workflow immutable graph captured under the editor lock
+   * @param dirty whether this captured graph has uncheckpointed changes
+   */
+  public record CurrentState(Workflow workflow, boolean dirty) {
+    /* Require the immutable workflow represented by this snapshot. */
+    public CurrentState {
+      Objects.requireNonNull(workflow, "workflow");
+    }
+  }
+
+  /** Atomically enforce the current-state preview precondition and dirty-state decision. */
+  public WorkflowProjection importGraphIfCurrent(
+      Workflow workflow, boolean discardDirty, Workflow expected) {
+    return withStateLock(
+        () -> {
+          if (!operationLog
+              .currentWorkflow()
+              .equals(Objects.requireNonNull(expected, "expected"))) {
+            throw new StaleWorkflowException();
+          }
+          if (dirty && !discardDirty) {
+            throw new DirtyWorkflowException();
+          }
+          return replaceGraph(workflow, true);
+        });
+  }
+
   /**
    * Loads the given workflow into the editor as a clean canonical state.
    *

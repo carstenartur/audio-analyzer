@@ -23,7 +23,7 @@ class ExperimentLocalBindingServiceTest {
   @Test
   void matchingAssetAndWritableOutputProduceReadyBinding() throws Exception {
     Path asset = temporaryDirectory.resolve("input.aarec");
-    Files.writeString(asset, "portable asset");
+    Files.writeString(asset, "AAR2portable asset");
     ExperimentDocumentPreview preview =
         preview(Files.size(asset), DocumentHashes.sha256(asset), true);
     ExperimentLocalBindings bindings =
@@ -72,13 +72,26 @@ class ExperimentLocalBindingServiceTest {
     assertTrue(
         result.diagnostics().stream().anyMatch(item -> item.code().equals("asset-size-mismatch")));
     assertTrue(
-        result.diagnostics().stream().anyMatch(item -> item.code().equals("asset-hash-mismatch")));
+        result.diagnostics().stream().noneMatch(item -> item.code().equals("asset-hash-mismatch")));
     assertTrue(
         result.diagnostics().stream()
             .anyMatch(
                 item ->
                     item.severity() == DocumentDiagnostic.Severity.WARNING
                         && item.code().equals("unused-asset-binding")));
+  }
+
+  @Test
+  void sameSizeWrongDigestCannotBeBound() throws Exception {
+    Path asset = temporaryDirectory.resolve("wrong-digest.aarec");
+    Files.writeString(asset, "AAR2changed-content");
+    ExperimentDocumentPreview preview = preview(Files.size(asset), "b".repeat(64), false);
+    ExperimentLocalBindingPreview result =
+        new ExperimentLocalBindingService()
+            .inspect(preview, new ExperimentLocalBindings(Map.of("recording", asset), null));
+    assertFalse(result.ready());
+    assertTrue(
+        result.diagnostics().stream().anyMatch(item -> item.code().equals("asset-hash-mismatch")));
   }
 
   private static ExperimentDocumentPreview preview(long size, String sha256, boolean withOutput)

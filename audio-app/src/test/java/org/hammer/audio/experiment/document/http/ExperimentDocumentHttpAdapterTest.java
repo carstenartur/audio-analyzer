@@ -84,7 +84,7 @@ class ExperimentDocumentHttpAdapterTest {
     return request;
   }
 
-  private static ExperimentDocument document() {
+  static ExperimentDocument document() {
     return new ExperimentDocument(
         ExperimentDocumentFormat.SCHEMA_RESOURCE,
         ExperimentDocumentFormat.FORMAT_ID,

@@ -13,6 +13,18 @@ import org.hammer.audio.plugin.document.DocumentDiagnostic;
 @SuppressWarnings("PMD.LooseCoupling")
 public final class ExperimentLocalBindingService {
 
+  private final java.time.Clock clock;
+
+  /** Use the current time when assessing calibration validity. */
+  public ExperimentLocalBindingService() {
+    this(java.time.Clock.systemUTC());
+  }
+
+  /** Supply a clock for deterministic calibration validity checks. */
+  public ExperimentLocalBindingService(java.time.Clock clock) {
+    this.clock = Objects.requireNonNull(clock, "clock");
+  }
+
   /**
    * Inspect local bindings without modifying the document, selected files or output directory.
    *
@@ -40,6 +52,8 @@ public final class ExperimentLocalBindingService {
                         "unused-asset-binding",
                         "Local asset binding does not match a document requirement")));
     inspectOutputDirectory(documentPreview.document(), bindings, diagnostics);
+    ExperimentCaptureReadiness.inspect(
+        documentPreview.document(), bindings.capture(), clock.instant(), diagnostics);
     boolean hasErrors =
         diagnostics.stream().anyMatch(item -> item.severity() == DocumentDiagnostic.Severity.ERROR);
     boolean ready = !hasErrors && documentPreview.executionAllowed() && !documentPreview.readOnly();
@@ -77,6 +91,19 @@ public final class ExperimentLocalBindingService {
                 pointer + "/sizeBytes",
                 "asset-size-mismatch",
                 "Selected local asset size does not match the portable requirement"));
+        return;
+      }
+      String detected = ExperimentAssetMediaType.detect(local);
+      if (!asset.mediaType().equals(detected)
+          && !(detected == null
+              && asset.mediaType().equals(bindings.confirmedMediaTypes().get(asset.id())))) {
+        diagnostics.add(
+            error(
+                pointer + "/mediaType",
+                "asset-media-type-mismatch",
+                detected == null
+                    ? "Confirm the media type of this local asset explicitly"
+                    : "Local asset content does not match its declared media type"));
       }
       String sha256 = DocumentHashes.sha256(local);
       if (!sha256.equals(asset.sha256())) {

@@ -1,95 +1,283 @@
 package org.hammer;
 
 import java.awt.Cursor;
+import java.awt.FlowLayout;
+import java.awt.event.InputEvent;
+import java.awt.event.KeyEvent;
 import java.nio.file.Path;
 import java.util.Objects;
+import java.util.concurrent.Callable;
+import java.util.function.Consumer;
+import javax.swing.JButton;
+import javax.swing.JDialog;
 import javax.swing.JFrame;
 import javax.swing.JMenu;
-import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
-import javax.swing.SwingWorker;
+import javax.swing.JProgressBar;
+import javax.swing.KeyStroke;
 import org.hammer.audio.experiment.document.ExperimentDocumentPreview;
 import org.hammer.audio.experiment.document.ExperimentDocumentService;
+import org.hammer.audio.experiment.document.ExperimentDocumentSession;
 
-/** Installs safe, non-mutating portable experiment-document actions into the Swing workbench. */
+/** Desktop adapter for the shared complete-document lifecycle and explicit confirmation preview. */
+// Compound revision checks and saves intentionally share the session's reentrant monitor.
+@SuppressWarnings("PMD.AvoidSynchronizedStatement")
 final class ExperimentDocumentSwingActions {
-
-  private static final String FILE_MENU = "File";
-  private static final String DIALOG_TITLE = "Portable experiment document";
-
   private final JFrame owner;
-  private final ExperimentDocumentService documentService;
+  private final ExperimentDocumentService service;
+  private final ExperimentDocumentSession session;
+  private final JMenu recent = new JMenu("Recent experiment files");
+  private final java.util.List<Path> recentPaths = new java.util.ArrayList<>();
+  private ExperimentDocumentTask<?> worker;
+  private final java.util.Deque<Runnable> pending = new java.util.ArrayDeque<>();
 
-  ExperimentDocumentSwingActions(JFrame owner, ExperimentDocumentService documentService) {
+  ExperimentDocumentSwingActions(JFrame owner, ExperimentDocumentService service) {
     this.owner = Objects.requireNonNull(owner, "owner");
-    this.documentService = Objects.requireNonNull(documentService, "documentService");
+    this.service = Objects.requireNonNull(service, "documentService");
+    this.session = new ExperimentDocumentSession(service);
   }
 
-  /** Add one keyboard-accessible inspect/normalize action to the existing File menu. */
+  /** Return one immutable snapshot for the host's document-health presentation. */
+  ExperimentDocumentSession.Context documentContext() {
+    return session.context();
+  }
+
+  /** Install keyboard-accessible Open, Import, Save, Save As and Validate actions. */
   void install() {
-    JMenu fileMenu = findMenu(owner.getJMenuBar(), FILE_MENU);
-    if (fileMenu == null) {
+    JMenu menu = null;
+    for (int index = 0; index < owner.getJMenuBar().getMenuCount(); index++) {
+      if ("File".equals(owner.getJMenuBar().getMenu(index).getText())) {
+        menu = owner.getJMenuBar().getMenu(index);
+        break;
+      }
+    }
+    if (menu == null) {
       throw new IllegalStateException("Desktop File menu is unavailable");
     }
-    JMenuItem inspect = new JMenuItem("Inspect experiment document...");
-    inspect.setToolTipText(
-        "Validate and preview a .audioexp setup without applying or executing it.");
-    inspect.addActionListener(event -> chooseDocument());
-    fileMenu.insert(inspect, Math.min(fileMenu.getItemCount(), 1));
+    add(
+        menu,
+        "Open experiment document...",
+        KeyEvent.VK_O,
+        InputEvent.CTRL_DOWN_MASK,
+        () -> choose(false));
+    add(
+        menu,
+        "Import experiment copy...",
+        KeyEvent.VK_O,
+        InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK,
+        () -> choose(true));
+    add(
+        menu,
+        "Save experiment document",
+        KeyEvent.VK_S,
+        InputEvent.CTRL_DOWN_MASK,
+        () -> save(false));
+    add(
+        menu,
+        "Save experiment document as...",
+        KeyEvent.VK_S,
+        InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK,
+        () -> save(true));
+    add(
+        menu,
+        "Validate current experiment",
+        KeyEvent.VK_F5,
+        0,
+        () -> {
+          if (session.status().open()) {
+            showEditor();
+          } else {
+            choose(false);
+          }
+        });
+    menu.add(recent);
   }
 
-  /** Validate and preview one explicitly selected document without applying or executing it. */
+  /** OS launch and already-running open events always enter the non-mutating preview first. */
   void inspect(Path source) {
-    Objects.requireNonNull(source, "source");
-    owner.setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
-    new SwingWorker<ExperimentDocumentPreview, Void>() {
-      @Override
-      protected ExperimentDocumentPreview doInBackground() throws Exception {
-        return documentService.preview(source);
-      }
-
-      @Override
-      protected void done() {
-        owner.setCursor(Cursor.getDefaultCursor());
-        try {
-          new ExperimentDocumentPreviewDialog(owner, documentService).show(source, get());
-        } catch (InterruptedException exception) {
-          Thread.currentThread().interrupt();
-          showFailure("Preview was interrupted.", exception);
-        } catch (java.util.concurrent.ExecutionException exception) {
-          showFailure("Experiment document preview failed.", exception.getCause());
-        }
-      }
-    }.execute();
+    run(() -> service.preview(source), preview -> showPreview(source, preview, false));
   }
 
-  private void chooseDocument() {
+  private void choose(boolean copy) {
     Path source = ExperimentDocumentFileChooser.chooseOpen(owner);
     if (source != null) {
-      inspect(source);
+      run(() -> service.preview(source), preview -> showPreview(source, preview, copy));
     }
   }
 
-  private static JMenu findMenu(JMenuBar menuBar, String title) {
-    if (menuBar == null) {
-      return null;
+  private void showPreview(Path source, ExperimentDocumentPreview preview, boolean copy) {
+    new ExperimentDocumentPreviewDialog(
+            owner,
+            service,
+            session,
+            request -> {
+              if (request.copy()) {
+                Path target = ExperimentDocumentFileChooser.chooseSave(owner);
+                if (target == null) {
+                  return;
+                }
+                run(
+                    () -> {
+                      ExperimentDocumentSession independent =
+                          new ExperimentDocumentSession(service);
+                      independent.open(
+                          preview, source, ExperimentDocumentSession.DirtyDecision.DISCARD, null);
+                      independent.saveAs(target);
+                      return target;
+                    },
+                    saved -> {
+                      remember(saved);
+                      JOptionPane.showMessageDialog(
+                          owner, "Independent experiment copy saved to:\n" + saved);
+                    });
+              } else {
+                Path target =
+                    request.decision() == ExperimentDocumentSession.DirtyDecision.SAVE
+                            && session.status().path() == null
+                        ? ExperimentDocumentFileChooser.chooseSave(owner)
+                        : null;
+                if (request.decision() == ExperimentDocumentSession.DirtyDecision.SAVE
+                    && session.status().path() == null
+                    && target == null) {
+                  return;
+                }
+                run(
+                    () ->
+                        session.openIfCurrent(
+                            preview,
+                            source,
+                            request.decision(),
+                            target,
+                            request.expectedRevision()),
+                    opened -> {
+                      if (opened) {
+                        remember(source);
+                        showEditor();
+                      }
+                    });
+              }
+            })
+        .show(source, preview, copy);
+  }
+
+  private void save(boolean saveAs) {
+    if (!session.status().open()) {
+      JOptionPane.showMessageDialog(owner, "Open an experiment document first.");
+      return;
     }
-    for (int index = 0; index < menuBar.getMenuCount(); index++) {
-      JMenu menu = menuBar.getMenu(index);
-      if (menu != null && title.equals(menu.getText())) {
-        return menu;
+    Path target =
+        saveAs || session.status().path() == null
+            ? ExperimentDocumentFileChooser.chooseSave(owner)
+            : null;
+    if ((saveAs || session.status().path() == null) && target == null) {
+      return;
+    }
+    long expectedRevision = session.revision();
+    run(
+        () -> {
+          synchronized (session) {
+            session.requireRevision(expectedRevision);
+            if (target == null) {
+              session.save();
+            } else {
+              session.saveAs(target);
+            }
+            return session.status();
+          }
+        },
+        status -> {
+          remember(status.path());
+          JOptionPane.showMessageDialog(
+              owner, "Saved " + status.path() + "\nSHA-256: " + status.canonicalSha256());
+        });
+  }
+
+  private void showEditor() {
+    new ExperimentDocumentEditorDialog(owner, service, session).show();
+  }
+
+  private void remember(Path path) {
+    if (path == null) {
+      return;
+    }
+    recentPaths.remove(path);
+    recentPaths.addFirst(path);
+    if (recentPaths.size() > 10) {
+      recentPaths.removeLast();
+    }
+    recent.removeAll();
+    for (Path entry : recentPaths) {
+      Path name = entry.getFileName();
+      JMenuItem item = new JMenuItem(name == null ? entry.toString() : name.toString());
+      item.addActionListener(event -> inspect(entry));
+      recent.add(item);
+    }
+  }
+
+  private <T> void run(Callable<T> task, Consumer<T> completed) {
+    if (worker != null) {
+      if (pending.size() >= 16) {
+        showFailure(owner, new IllegalStateException("Too many pending document operations"));
+      } else {
+        pending.addLast(() -> run(task, completed));
       }
+      return;
     }
-    return null;
+    JDialog progress = new JDialog(owner, "Experiment document", false);
+    progress.setLayout(new FlowLayout());
+    JProgressBar bar = new JProgressBar();
+    bar.setIndeterminate(true);
+    progress.add(bar);
+    JButton cancel = new JButton("Cancel");
+    progress.add(cancel);
+    owner.setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+    worker =
+        new ExperimentDocumentTask<>(
+            task,
+            finished -> {
+              worker = null;
+              progress.dispose();
+              owner.setCursor(Cursor.getDefaultCursor());
+              try {
+                completed.accept(finished.get());
+              } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+              } catch (java.util.concurrent.ExecutionException exception) {
+                showFailure(owner, exception.getCause());
+              } finally {
+                if (!pending.isEmpty()) {
+                  javax.swing.SwingUtilities.invokeLater(pending.removeFirst());
+                }
+              }
+            });
+    cancel.addActionListener(
+        event -> {
+          if (worker != null) {
+            worker.requestCancellation();
+            cancel.setText("Cancellation requested…");
+            cancel.setEnabled(false);
+          }
+        });
+    progress.setDefaultCloseOperation(JDialog.DO_NOTHING_ON_CLOSE);
+    progress.pack();
+    progress.setLocationRelativeTo(owner);
+    progress.setVisible(true);
+    worker.execute();
   }
 
-  private void showFailure(String message, Throwable failure) {
-    String detail = failure == null || failure.getMessage() == null ? "" : failure.getMessage();
-    JOptionPane.showMessageDialog(
-        owner,
-        detail.isBlank() ? message : message + "\n" + detail,
-        DIALOG_TITLE,
-        JOptionPane.ERROR_MESSAGE);
+  private static void add(JMenu menu, String title, int key, int modifiers, Runnable action) {
+    JMenuItem item = new JMenuItem(title);
+    item.setAccelerator(KeyStroke.getKeyStroke(key, modifiers));
+    item.addActionListener(event -> action.run());
+    menu.add(item);
+  }
+
+  static void showFailure(java.awt.Component owner, Throwable failure) {
+    String message =
+        failure == null || failure.getMessage() == null
+            ? "Document operation failed"
+            : failure.getMessage();
+    JOptionPane.showMessageDialog(owner, message, "Experiment document", JOptionPane.ERROR_MESSAGE);
   }
 }

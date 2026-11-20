@@ -24,6 +24,25 @@ class ExperimentDocumentCodecTest {
       "workflow\n  id: experiment-workflow\n  name: Portable workflow\n  nodes:\n  edges:\n";
 
   @Test
+  void interruptedSavePreservesExistingDestination(
+      @org.junit.jupiter.api.io.TempDir java.nio.file.Path directory) throws Exception {
+    java.nio.file.Path target = directory.resolve("existing.audioexp");
+    java.nio.file.Files.writeString(target, "keep original bytes");
+    Thread.currentThread().interrupt();
+    try {
+      assertThrows(
+          java.io.InterruptedIOException.class,
+          () -> new ExperimentDocumentCodec().save(target, document(Map.of(), List.of())));
+    } finally {
+      Thread.interrupted();
+    }
+    assertEquals("keep original bytes", java.nio.file.Files.readString(target));
+    try (var files = java.nio.file.Files.list(directory)) {
+      assertEquals(1, files.count());
+    }
+  }
+
+  @Test
   void canonicalSaveLoadSaveIsByteStable() throws Exception {
     ExperimentDocumentCodec codec = new ExperimentDocumentCodec();
     ExperimentDocument source = document(Map.of(), List.of());
@@ -192,7 +211,7 @@ class ExperimentDocumentCodecTest {
 
       @Override
       public String schemaSha256() {
-        return DocumentHashes.sha256(schema.getBytes(StandardCharsets.UTF_8));
+        return PluginDocumentTestKit.schemaSha256(schema);
       }
 
       @Override

@@ -2,13 +2,13 @@ package org.hammer.audio.experiment.document;
 
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.function.Function;
 import org.hammer.audio.plugin.AudioAnalyzerPlugin;
 import org.hammer.audio.plugin.PluginDescriptor;
 import org.hammer.audio.plugin.document.DocumentDiagnostic;
@@ -17,132 +17,122 @@ import org.hammer.audio.plugin.document.DocumentValue;
 import org.hammer.audio.plugin.document.ExperimentDocumentContribution;
 import org.hammer.audio.plugin.document.ExperimentSectionMigration;
 
-/**
- * Installed-plugin catalog for safe experiment-document inspection, migration and normalization.
- */
+/** Installed, trusted plugin sections with bounded, transactional migration and normalization. */
 @SuppressWarnings({"PMD.CouplingBetweenObjects", "PMD.LooseCoupling", "PMD.UseExplicitTypes"})
 public final class PluginDocumentCatalog {
 
+  private static final int MAX_SECTIONS = 64;
   private final Map<String, RegisteredPlugin> plugins;
   private final LocalJsonSchemaValidator schemaValidator = new LocalJsonSchemaValidator();
 
-  /** Build a catalog and reject duplicate plugin or section identities. */
+  /** Snapshot and validate registrations; duplicate identities are rejected deterministically. */
   public PluginDocumentCatalog(Collection<? extends AudioAnalyzerPlugin> installedPlugins) {
     Objects.requireNonNull(installedPlugins, "installedPlugins");
     TreeMap<String, RegisteredPlugin> collected = new TreeMap<>();
     for (AudioAnalyzerPlugin plugin : installedPlugins) {
-      Objects.requireNonNull(plugin, "plugin");
-      PluginDescriptor descriptor =
-          Objects.requireNonNull(plugin.descriptor(), "plugin descriptor");
-      TreeMap<String, ExperimentDocumentContribution> sections = new TreeMap<>();
-      for (ExperimentDocumentContribution contribution : plugin.experimentDocumentContributions()) {
-        validateContribution(contribution);
-        ExperimentDocumentContribution previous =
-            sections.put(contribution.sectionId(), contribution);
-        if (previous != null) {
-          throw new IllegalArgumentException(
-              "Duplicate experiment document section "
-                  + descriptor.id()
-                  + "/"
-                  + contribution.sectionId());
-        }
-      }
-      RegisteredPlugin previous =
-          collected.put(descriptor.id(), new RegisteredPlugin(descriptor, Map.copyOf(sections)));
-      if (previous != null) {
-        throw new IllegalArgumentException("Duplicate plugin id: " + descriptor.id());
+      RegisteredPlugin registered =
+          PluginCallbackRunner.invoke(() -> register(plugin, plugin.descriptor()));
+      String id = registered.descriptor().id();
+      if (collected.putIfAbsent(id, registered) != null) {
+        throw new IllegalArgumentException("Duplicate plugin id: " + id);
       }
     }
     plugins = Map.copyOf(collected);
   }
 
-  /** Return an empty catalog suitable for core-only inspection. */
+  /** Validate document contributions at plugin loading without reevaluating the descriptor. */
+  public static void validateRegistration(AudioAnalyzerPlugin plugin, PluginDescriptor descriptor) {
+    PluginCallbackRunner.invoke(() -> register(plugin, descriptor));
+  }
+
+  /** Return an empty catalog for inspection without installed plugins. */
   public static PluginDocumentCatalog empty() {
     return new PluginDocumentCatalog(List.of());
   }
 
-  /**
-   * Resolve installed plugins and return a non-mutating import preview.
-   *
-   * <p>The original document is never rewritten. The returned document is a normalized copy whose
-   * migration provenance is explicit.
-   */
+  /** Preview a bounded document, preserving any section whose interpretation fails. */
   public ExperimentDocumentPreview preview(ExperimentDocument input, ExperimentDocumentCodec codec)
       throws ExperimentDocumentException {
     Objects.requireNonNull(input, "input");
-    Objects.requireNonNull(codec, "codec");
     ArrayList<DocumentDiagnostic> diagnostics = new ArrayList<>();
     ArrayList<String> migrations = new ArrayList<>();
     Set<SectionKey> required = requiredSections(input, diagnostics);
-    TreeMap<String, Map<String, ExperimentDocument.PluginSection>> normalizedData = new TreeMap<>();
-
+    TreeMap<String, Map<String, ExperimentDocument.PluginSection>> data = new TreeMap<>();
+    int sectionCount = input.pluginData().values().stream().mapToInt(Map::size).sum();
+    if (sectionCount > MAX_SECTIONS) {
+      diagnostics.add(
+          error(
+              "/pluginData",
+              "plugin-section-limit",
+              "At most 64 plugin sections may be interpreted"));
+    }
+    long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
     for (var pluginEntry : input.pluginData().entrySet()) {
       String pluginId = pluginEntry.getKey();
-      TreeMap<String, ExperimentDocument.PluginSection> normalizedSections = new TreeMap<>();
       RegisteredPlugin installed = plugins.get(pluginId);
+      TreeMap<String, ExperimentDocument.PluginSection> sections = new TreeMap<>();
       for (var sectionEntry : pluginEntry.getValue().entrySet()) {
         String sectionId = sectionEntry.getKey();
-        SectionKey key = new SectionKey(pluginId, sectionId);
-        boolean requiredSection = required.contains(key);
+        ExperimentDocument.PluginSection original = sectionEntry.getValue();
         String pointer = sectionPointer(pluginId, sectionId);
-        ExperimentDocument.PluginSection section = sectionEntry.getValue();
-        if (installed == null) {
-          diagnostics.add(
-              diagnostic(
-                  requiredSection
-                      ? DocumentDiagnostic.Severity.ERROR
-                      : DocumentDiagnostic.Severity.WARNING,
-                  pointer,
-                  "missing-plugin",
-                  "Plugin is not installed; section is preserved without interpretation"));
-          normalizedSections.put(sectionId, section);
-          continue;
-        }
-        ExperimentDocumentContribution contribution = installed.sections().get(sectionId);
+        boolean requiredSection = required.contains(new SectionKey(pluginId, sectionId));
+        sections.put(sectionId, original);
+        RegisteredSection contribution =
+            installed == null ? null : installed.sections().get(sectionId);
         if (contribution == null) {
           diagnostics.add(
-              diagnostic(
+              new DocumentDiagnostic(
                   requiredSection
                       ? DocumentDiagnostic.Severity.ERROR
                       : DocumentDiagnostic.Severity.WARNING,
                   pointer,
-                  "missing-section",
-                  "Installed plugin does not provide this section; data is preserved"));
-          normalizedSections.put(sectionId, section);
-          continue;
+                  installed == null ? "missing-plugin" : "missing-section",
+                  "Section is unavailable and preserved without interpretation"));
+        } else if (sectionCount <= MAX_SECTIONS) {
+          if (System.nanoTime() >= deadline || Thread.currentThread().isInterrupted()) {
+            diagnostics.add(
+                error(
+                    pointer,
+                    "plugin-timeout",
+                    "Document validation budget exhausted; section preserved"));
+            continue;
+          }
+          try {
+            SectionResult result =
+                PluginCallbackRunner.invoke(
+                    () ->
+                        normalizeSection(
+                            contribution,
+                            original,
+                            pointer,
+                            requiredSection || contribution.required(),
+                            input.experiment().sourceMode()));
+            diagnostics.addAll(result.diagnostics());
+            migrations.addAll(result.migrations());
+            sections.put(sectionId, result.section());
+          } catch (PluginCallbackRunner.Failure failure) {
+            diagnostics.add(error(pointer, failure.code(), failure.getMessage()));
+          }
         }
-        ExperimentDocument.PluginSection normalized =
-            normalizeSection(
-                contribution,
-                section,
-                pointer,
-                requiredSection || contribution.requiredForExecution(),
-                input.experiment().sourceMode(),
-                diagnostics,
-                migrations);
-        normalizedSections.put(sectionId, normalized);
       }
-      normalizedData.put(pluginId, Map.copyOf(normalizedSections));
+      data.put(pluginId, Map.copyOf(sections));
     }
-
-    for (SectionKey key : required) {
-      Map<String, ExperimentDocument.PluginSection> sections =
-          input.pluginData().get(key.pluginId());
-      if (sections == null || !sections.containsKey(key.sectionId())) {
-        diagnostics.add(
-            diagnostic(
-                DocumentDiagnostic.Severity.ERROR,
-                sectionPointer(key.pluginId(), key.sectionId()),
-                "required-section-absent",
-                "Required plugin section is absent from the document"));
-      }
+    inspectAbsentSections(input, required, diagnostics);
+    ExperimentDocument normalized = withPluginData(input, data, migrations);
+    ExperimentDocument canonical;
+    try {
+      canonical = codec.decode(codec.encode(normalized));
+    } catch (ExperimentDocumentException exception) {
+      diagnostics.add(
+          error(
+              "/pluginData",
+              "plugin-output-limit",
+              "Normalized plugin data exceeds document limits; original preserved"));
+      migrations.clear();
+      canonical = codec.decode(codec.encode(input));
     }
-
-    ExperimentDocument normalized = withPluginData(input, normalizedData, migrations);
-    ExperimentDocument canonical = codec.decode(codec.encode(normalized));
-    boolean hasErrors =
-        diagnostics.stream().anyMatch(item -> item.severity() == DocumentDiagnostic.Severity.ERROR);
-    boolean compatibilityWarning =
+    boolean errors = hasErrors(diagnostics);
+    boolean incompatible =
         diagnostics.stream()
             .anyMatch(
                 item ->
@@ -154,110 +144,179 @@ public final class PluginDocumentCatalog {
         canonical.provenance().canonicalSha256(),
         diagnostics,
         migrations,
-        !hasErrors,
-        hasErrors || compatibilityWarning);
+        !errors,
+        errors || incompatible);
   }
 
-  private ExperimentDocument.PluginSection normalizeSection(
-      ExperimentDocumentContribution contribution,
+  private static void inspectAbsentSections(
+      ExperimentDocument input, Set<SectionKey> required, List<DocumentDiagnostic> diagnostics) {
+    for (SectionKey key : required) {
+      if (!input.pluginData().getOrDefault(key.pluginId(), Map.of()).containsKey(key.sectionId())) {
+        diagnostics.add(
+            error(
+                sectionPointer(key.pluginId(), key.sectionId()),
+                "required-section-absent",
+                "Required section is absent"));
+      }
+    }
+  }
+
+  /** Installed section metadata and schema-derived parameter tables for import previews. */
+  public List<SectionDescription> descriptions() {
+    ArrayList<SectionDescription> result = new ArrayList<>();
+    new TreeMap<>(plugins)
+        .forEach(
+            (pluginId, plugin) ->
+                new TreeMap<>(plugin.sections())
+                    .forEach(
+                        (sectionId, section) ->
+                            result.add(
+                                new SectionDescription(
+                                    pluginId,
+                                    plugin.descriptor().version(),
+                                    sectionId,
+                                    section.version(),
+                                    section.algorithm(),
+                                    section.name(),
+                                    section.description(),
+                                    section.required(),
+                                    section.schemaId(),
+                                    section.schemaDigest(),
+                                    section.sourceModes(),
+                                    PluginDocumentTestKit.parameters(section.schema())))));
+    return List.copyOf(result);
+  }
+
+  private SectionResult normalizeSection(
+      RegisteredSection contribution,
       ExperimentDocument.PluginSection original,
       String pointer,
       boolean required,
-      String sourceMode,
-      List<DocumentDiagnostic> diagnostics,
-      List<String> migrations) {
-    if (!contribution.supportedSourceModes().isEmpty()
-        && !contribution.supportedSourceModes().contains(sourceMode)) {
+      String sourceMode) {
+    ArrayList<DocumentDiagnostic> diagnostics = new ArrayList<>();
+    ArrayList<String> migrations = new ArrayList<>();
+    DocumentDiagnostic.Severity severity =
+        required ? DocumentDiagnostic.Severity.ERROR : DocumentDiagnostic.Severity.WARNING;
+    if (!contribution.sourceModes().isEmpty() && !contribution.sourceModes().contains(sourceMode)) {
       diagnostics.add(
-          diagnostic(
-              required ? DocumentDiagnostic.Severity.ERROR : DocumentDiagnostic.Severity.WARNING,
+          new DocumentDiagnostic(
+              severity,
               pointer,
               "source-mode-incompatible",
-              "Plugin section does not support source mode " + sourceMode));
+              "Section does not support this source mode"));
+      return preserved(original, diagnostics);
     }
-    if (original.schemaVersion() > contribution.schemaVersion()) {
+    if (original.schemaVersion() > contribution.version()) {
       diagnostics.add(
-          diagnostic(
-              required ? DocumentDiagnostic.Severity.ERROR : DocumentDiagnostic.Severity.WARNING,
+          new DocumentDiagnostic(
+              severity,
               pointer + "/schemaVersion",
               "future-schema-version",
-              "Plugin section version is newer than the installed contribution"));
-      return original;
+              "Newer section version is preserved"));
+      return preserved(original, diagnostics);
     }
-    if (!original.algorithmVersion().equals(contribution.algorithmVersion())) {
+    if (!original.algorithmVersion().equals(contribution.algorithm())) {
       diagnostics.add(
-          diagnostic(
-              required ? DocumentDiagnostic.Severity.ERROR : DocumentDiagnostic.Severity.WARNING,
+          new DocumentDiagnostic(
+              severity,
               pointer + "/algorithmVersion",
               "algorithm-incompatible",
-              "Document algorithm version differs from the installed contribution"));
-      return original;
+              "Algorithm compatibility identifier differs"));
+      return preserved(original, diagnostics);
     }
-    List<String> sectionMigrations = new ArrayList<>();
-    DocumentValue migratedValue = original.data();
-    int version = original.schemaVersion();
-    while (version < contribution.schemaVersion()) {
-      ExperimentSectionMigration migration = migrationFrom(contribution.migrations(), version);
-      if (migration == null || migration.toVersion() != version + 1) {
-        diagnostics.add(
-            diagnostic(
-                DocumentDiagnostic.Severity.ERROR,
-                pointer + "/schemaVersion",
-                "migration-gap",
-                "No explicit adjacent migration from schema version " + version));
-        return original;
-      }
-      try {
-        migratedValue = Objects.requireNonNull(migration.migrate(migratedValue), "migrated value");
-      } catch (RuntimeException exception) {
-        diagnostics.add(
-            diagnostic(
-                DocumentDiagnostic.Severity.ERROR,
-                pointer,
-                "migration-failed",
-                "Plugin migration failed: " + exception.getClass().getSimpleName()));
-        return original;
-      }
-      sectionMigrations.add(
-          contribution.sectionId() + ":" + migration.fromVersion() + "->" + migration.toVersion());
-      version = migration.toVersion();
-    }
-    diagnostics.addAll(
-        schemaValidator.validate(
-            contribution.schemaJson(),
-            contribution.schemaSha256(),
-            migratedValue,
-            pointer + "/data"));
-    DocumentValidationResult semantic;
+    DocumentValue value = original.data();
+    String dataPointer = pointer + "/data";
     try {
-      semantic = contribution.validateAndNormalize(migratedValue);
-    } catch (RuntimeException exception) {
-      diagnostics.add(
-          diagnostic(
-              DocumentDiagnostic.Severity.ERROR,
-              pointer,
-              "plugin-validator-failed",
-              "Plugin validation failed: " + exception.getClass().getSimpleName()));
-      return original;
+      DocumentValueBounds.check(value, dataPointer);
+      int version = original.schemaVersion();
+      while (version < contribution.version()) {
+        RegisteredMigration migration = contribution.migrations().get(version);
+        if (migration == null) {
+          diagnostics.add(
+              error(
+                  pointer + "/schemaVersion",
+                  "migration-gap",
+                  "No explicit adjacent migration from " + version));
+          return preserved(original, diagnostics);
+        }
+        try {
+          value = Objects.requireNonNull(migration.handler().apply(value), "migration result");
+          DocumentValueBounds.check(value, dataPointer);
+        } catch (RuntimeException exception) {
+          diagnostics.add(
+              error(
+                  pointer,
+                  "migration-failed",
+                  "Plugin migration failed: " + exception.getClass().getSimpleName()));
+          return preserved(original, diagnostics);
+        }
+        migrations.add(contribution.id() + ":" + version + "->" + (version + 1));
+        version++;
+      }
+      diagnostics.addAll(
+          schemaValidator.validate(
+              contribution.schema(), contribution.schemaDigest(), value, dataPointer));
+      if (hasErrors(diagnostics)) {
+        return preserved(original, diagnostics);
+      }
+      DocumentValidationResult semantic =
+          Objects.requireNonNull(contribution.handler().apply(value), "plugin validation result");
+      if (semantic.diagnostics().size() > 128) {
+        throw new IllegalArgumentException("Plugin returned more than 128 diagnostics");
+      }
+      for (DocumentDiagnostic diagnostic : semantic.diagnostics()) {
+        if (diagnostic.pointer().length() > 4096
+            || diagnostic.code().length() > 128
+            || diagnostic.message().length() > 8192) {
+          throw new IllegalArgumentException("Plugin diagnostic exceeds the bounded text limits");
+        }
+        String relative = diagnostic.pointer();
+        if (!relative.startsWith("/")) {
+          throw new IllegalArgumentException(
+              "Plugin diagnostic must be a data-relative JSON Pointer");
+        }
+        String scoped = dataPointer + ("/".equals(relative) ? "" : relative);
+        diagnostics.add(
+            new DocumentDiagnostic(
+                diagnostic.severity(), scoped, diagnostic.code(), diagnostic.message()));
+      }
+      DocumentValueBounds.check(semantic.normalizedValue(), dataPointer);
+      diagnostics.addAll(
+          schemaValidator.validate(
+              contribution.schema(),
+              contribution.schemaDigest(),
+              semantic.normalizedValue(),
+              dataPointer));
+      if (hasErrors(diagnostics)) {
+        return preserved(original, diagnostics);
+      }
+      return new SectionResult(
+          new ExperimentDocument.PluginSection(
+              contribution.version(), contribution.algorithm(), semantic.normalizedValue()),
+          List.copyOf(diagnostics),
+          List.copyOf(migrations));
+    } catch (ExperimentDocumentException exception) {
+      diagnostics.add(error(exception.pointer(), exception.code(), exception.getMessage()));
+      return preserved(original, diagnostics);
     }
-    diagnostics.addAll(semantic.diagnostics());
-    migrations.addAll(sectionMigrations);
-    return new ExperimentDocument.PluginSection(
-        contribution.schemaVersion(), contribution.algorithmVersion(), semantic.normalizedValue());
   }
 
   private Set<SectionKey> requiredSections(
       ExperimentDocument document, List<DocumentDiagnostic> diagnostics) {
     HashSet<SectionKey> required = new HashSet<>();
-    for (ExperimentDocument.PluginRequirement requirement : document.requiredPlugins()) {
+    for (int index = 0; index < document.requiredPlugins().size(); index++) {
+      ExperimentDocument.PluginRequirement requirement = document.requiredPlugins().get(index);
       RegisteredPlugin installed = plugins.get(requirement.id());
-      if (installed != null
-          && !"*".equals(requirement.versionRange())
-          && !installed.descriptor().version().equals(requirement.versionRange())) {
+      if (installed == null && requirement.sections().isEmpty()) {
         diagnostics.add(
-            diagnostic(
-                DocumentDiagnostic.Severity.ERROR,
-                "/requiredPlugins",
+            error(
+                "/requiredPlugins/" + index, "missing-plugin", "Required plugin is not installed"));
+      } else if (installed != null
+          && !PluginVersionRange.matches(
+              requirement.versionRange(), installed.descriptor().version())) {
+        diagnostics.add(
+            error(
+                "/requiredPlugins/" + index + "/versionRange",
                 "package-incompatible",
                 "Required plugin package version mismatch for "
                     + requirement.id()
@@ -273,38 +332,94 @@ public final class PluginDocumentCatalog {
     return required;
   }
 
-  private static ExperimentSectionMigration migrationFrom(
-      List<ExperimentSectionMigration> migrations, int version) {
-    ExperimentSectionMigration found = null;
-    for (ExperimentSectionMigration migration : migrations) {
-      if (migration.fromVersion() == version) {
-        if (found != null) {
-          throw new IllegalArgumentException("Duplicate migration from version " + version);
-        }
-        found = migration;
+  private static RegisteredPlugin register(
+      AudioAnalyzerPlugin plugin, PluginDescriptor descriptor) {
+    Objects.requireNonNull(descriptor, "plugin descriptor");
+    ExperimentDocument.requireIdentifier(descriptor.id(), "plugin id");
+    TreeMap<String, RegisteredSection> sections = new TreeMap<>();
+    List<ExperimentDocumentContribution> contributions =
+        List.copyOf(plugin.experimentDocumentContributions());
+    if (contributions.size() > MAX_SECTIONS) {
+      throw new IllegalArgumentException("At most 64 sections may be registered per plugin");
+    }
+    for (ExperimentDocumentContribution contribution : contributions) {
+      RegisteredSection section = snapshot(contribution);
+      if (sections.putIfAbsent(section.id(), section) != null) {
+        throw new IllegalArgumentException(
+            "Duplicate experiment document section " + descriptor.id() + "/" + section.id());
       }
     }
-    return found;
+    return new RegisteredPlugin(descriptor, Map.copyOf(sections));
+  }
+
+  private static RegisteredSection snapshot(ExperimentDocumentContribution contribution) {
+    String id = ExperimentDocument.requireIdentifier(contribution.sectionId(), "section id");
+    int version = contribution.schemaVersion();
+    if (version < 1) {
+      throw new IllegalArgumentException("Section version must be positive");
+    }
+    String algorithm =
+        ExperimentDocument.requireNonBlank(contribution.algorithmVersion(), "algorithmVersion");
+    String name = ExperimentDocument.requireNonBlank(contribution.name(), "name");
+    String description =
+        ExperimentDocument.requireNonBlank(contribution.description(), "description");
+    String schemaId = ExperimentDocument.requireNonBlank(contribution.schemaId(), "schemaId");
+    String schema = ExperimentDocument.requireNonBlank(contribution.schemaJson(), "schemaJson");
+    String digest = ExperimentDocument.requireSha256(contribution.schemaSha256(), "schemaSha256");
+    TreeMap<Integer, RegisteredMigration> migrations = new TreeMap<>();
+    for (ExperimentSectionMigration migration : List.copyOf(contribution.migrations())) {
+      int from = migration.fromVersion();
+      if (from < 1
+          || from >= version
+          || migration.toVersion() != from + 1
+          || migrations.size() >= MAX_SECTIONS
+          || migrations.putIfAbsent(from, new RegisteredMigration(migration::migrate)) != null) {
+        throw new IllegalArgumentException(
+            "Migrations must have unique adjacent positive versions below current version");
+      }
+    }
+    List<DocumentDiagnostic> schemaDiagnostics =
+        new LocalJsonSchemaValidator().validate(schema, digest, DocumentValue.nullValue(), "/");
+    Set<String> schemaErrors =
+        Set.of(
+            "invalid-schema", "schema-ref", "schema-keyword", "schema-digest", "schema-too-large");
+    if (schemaDiagnostics.stream().anyMatch(item -> schemaErrors.contains(item.code()))) {
+      throw new IllegalArgumentException("Invalid bundled plugin schema: " + schemaDiagnostics);
+    }
+    return new RegisteredSection(
+        id,
+        version,
+        algorithm,
+        name,
+        description,
+        contribution.requiredForExecution(),
+        schemaId,
+        schema,
+        digest,
+        Set.copyOf(contribution.supportedSourceModes()),
+        Map.copyOf(migrations),
+        contribution::validateAndNormalize);
   }
 
   private static ExperimentDocument withPluginData(
       ExperimentDocument input,
-      Map<String, Map<String, ExperimentDocument.PluginSection>> pluginData,
+      Map<String, Map<String, ExperimentDocument.PluginSection>> data,
       List<String> migrations) {
     ArrayList<String> notes = new ArrayList<>(input.provenance().migrationNotes());
     notes.addAll(migrations);
+    ExperimentDocument.Provenance old = input.provenance();
     ExperimentDocument.Provenance provenance =
         new ExperimentDocument.Provenance(
-            input.provenance().creatorDisplayName(),
-            input.provenance().verifiedAccount(),
-            input.provenance().createdAt(),
-            input.provenance().modifiedAt(),
-            input.provenance().softwareVersion(),
+            old.creatorDisplayName(),
+            old.verifiedAccount(),
+            old.createdAt(),
+            old.modifiedAt(),
+            old.softwareVersion(),
             "",
             notes,
-            input.provenance().algorithmVersions(),
-            input.provenance().sourceCommit(),
-            input.provenance().sourceRun());
+            old.algorithmVersions(),
+            old.sourceCommit(),
+            old.sourceRun());
     return new ExperimentDocument(
         input.schema(),
         input.format(),
@@ -313,52 +428,99 @@ public final class PluginDocumentCatalog {
         input.workflow(),
         input.profiles(),
         input.requiredPlugins(),
-        pluginData,
+        data,
         input.assets(),
         input.outputs(),
         provenance);
   }
 
-  private static void validateContribution(ExperimentDocumentContribution contribution) {
-    Objects.requireNonNull(contribution, "document contribution");
-    ExperimentDocument.requireIdentifier(contribution.sectionId(), "section id");
-    if (contribution.schemaVersion() < 1) {
-      throw new IllegalArgumentException("schemaVersion must be positive");
-    }
-    ExperimentDocument.requireNonBlank(contribution.algorithmVersion(), "algorithmVersion");
-    ExperimentDocument.requireNonBlank(contribution.name(), "contribution name");
-    ExperimentDocument.requireNonBlank(contribution.description(), "contribution description");
-    ExperimentDocument.requireNonBlank(contribution.schemaId(), "schemaId");
-    ExperimentDocument.requireNonBlank(contribution.schemaJson(), "schemaJson");
-    ExperimentDocument.requireSha256(contribution.schemaSha256(), "schemaSha256");
-    HashMap<Integer, ExperimentSectionMigration> migrations = new HashMap<>();
-    for (ExperimentSectionMigration migration : contribution.migrations()) {
-      Objects.requireNonNull(migration, "migration");
-      if (migration.fromVersion() < 1 || migration.toVersion() != migration.fromVersion() + 1) {
-        throw new IllegalArgumentException("Migrations must advance exactly one positive version");
-      }
-      if (migrations.put(migration.fromVersion(), migration) != null) {
-        throw new IllegalArgumentException(
-            "Duplicate migration from version " + migration.fromVersion());
-      }
-    }
+  private static boolean hasErrors(List<DocumentDiagnostic> diagnostics) {
+    return diagnostics.stream()
+        .anyMatch(item -> item.severity() == DocumentDiagnostic.Severity.ERROR);
   }
 
-  private static String sectionPointer(String pluginId, String sectionId) {
-    return DocumentValueJson.pointer(DocumentValueJson.pointer("/pluginData", pluginId), sectionId);
+  private static SectionResult preserved(
+      ExperimentDocument.PluginSection original, List<DocumentDiagnostic> diagnostics) {
+    return new SectionResult(original, List.copyOf(diagnostics), List.of());
   }
 
-  private static DocumentDiagnostic diagnostic(
-      DocumentDiagnostic.Severity severity, String pointer, String code, String message) {
-    return new DocumentDiagnostic(severity, pointer, code, message);
+  private static String sectionPointer(String plugin, String section) {
+    return DocumentValueJson.pointer(DocumentValueJson.pointer("/pluginData", plugin), section);
+  }
+
+  private static DocumentDiagnostic error(String pointer, String code, String message) {
+    return new DocumentDiagnostic(DocumentDiagnostic.Severity.ERROR, pointer, code, message);
   }
 
   private record RegisteredPlugin(
-      PluginDescriptor descriptor, Map<String, ExperimentDocumentContribution> sections) {
-    // Immutable installed plugin descriptor and section registry.
+      PluginDescriptor descriptor, Map<String, RegisteredSection> sections) {
+    // Immutable value; record components carry the complete state.
+  }
+
+  private record RegisteredSection(
+      String id,
+      int version,
+      String algorithm,
+      String name,
+      String description,
+      boolean required,
+      String schemaId,
+      String schema,
+      String schemaDigest,
+      Set<String> sourceModes,
+      Map<Integer, RegisteredMigration> migrations,
+      Function<DocumentValue, DocumentValidationResult> handler) {
+    // Immutable value; record components carry the complete state.
+  }
+
+  private record RegisteredMigration(Function<DocumentValue, DocumentValue> handler) {
+    // Immutable value; record components carry the complete state.
   }
 
   private record SectionKey(String pluginId, String sectionId) {
-    // Immutable namespaced section identity.
+    // Immutable value; record components carry the complete state.
+  }
+
+  private record SectionResult(
+      ExperimentDocument.PluginSection section,
+      List<DocumentDiagnostic> diagnostics,
+      List<String> migrations) {
+    // Immutable value; record components carry the complete state.
+  }
+
+  /**
+   * Immutable registration details for schema-derived parameter/import previews.
+   *
+   * @param pluginId stable plugin namespace
+   * @param packageVersion installed plugin package version
+   * @param sectionId stable contribution-local identity
+   * @param schemaVersion current parameter schema version
+   * @param algorithmVersion algorithm compatibility identifier
+   * @param name human-readable section name
+   * @param description section purpose
+   * @param required whether this contribution is required for execution
+   * @param schemaId bundled schema identifier
+   * @param schemaSha256 canonical bundled schema digest
+   * @param sourceModes supported portable source modes
+   * @param parameters schema-derived parameter documentation
+   */
+  public record SectionDescription(
+      String pluginId,
+      String packageVersion,
+      String sectionId,
+      int schemaVersion,
+      String algorithmVersion,
+      String name,
+      String description,
+      boolean required,
+      String schemaId,
+      String schemaSha256,
+      Set<String> sourceModes,
+      List<PluginDocumentTestKit.Parameter> parameters) {
+    /* Copy collections from the trusted registration. */
+    public SectionDescription {
+      sourceModes = Set.copyOf(sourceModes);
+      parameters = List.copyOf(parameters);
+    }
   }
 }

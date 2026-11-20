@@ -22,6 +22,77 @@ import org.junit.jupiter.api.io.TempDir;
 class PluginManagerTest {
 
   @Test
+  void duplicatePluginIdentityIsIsolatedAtLoading(@TempDir Path tmp) throws Exception {
+    Path services = tmp.resolve("META-INF/services");
+    Files.createDirectories(services);
+    Files.writeString(
+        services.resolve("org.hammer.audio.plugin.AudioAnalyzerPlugin"),
+        TestPlugin.class.getName() + "\n" + DuplicateIdPlugin.class.getName() + "\n");
+    try (URLClassLoader loader =
+        new URLClassLoader(new URL[] {tmp.toUri().toURL()}, getClass().getClassLoader())) {
+      PluginRegistry registry = new PluginManager(loader).loadPlugins();
+      assertEquals(
+          1,
+          registry.plugins().stream()
+              .filter(plugin -> "test-plugin".equals(plugin.descriptor().id()))
+              .count());
+      assertTrue(
+          registry.failures().stream()
+              .anyMatch(
+                  result ->
+                      result.failure().orElseThrow().getMessage().contains("Duplicate plugin id")));
+    }
+  }
+
+  @Test
+  void duplicateDocumentSectionIsRejectedBeforePluginRegistration(@TempDir Path tmp)
+      throws Exception {
+    Path services = Files.createDirectories(tmp.resolve("META-INF/services"));
+    Files.writeString(
+        services.resolve("org.hammer.audio.plugin.AudioAnalyzerPlugin"),
+        DuplicateSectionPlugin.class.getName() + "\n");
+    try (URLClassLoader loader =
+        new URLClassLoader(new URL[] {tmp.toUri().toURL()}, getClass().getClassLoader())) {
+      PluginRegistry registry = new PluginManager(loader).loadPlugins();
+      assertTrue(
+          registry.plugins().stream()
+              .noneMatch(plugin -> "duplicate-sections".equals(plugin.descriptor().id())));
+      assertTrue(
+          registry.failures().stream()
+              .anyMatch(
+                  result ->
+                      result
+                          .descriptor()
+                          .id()
+                          .equals("failed:" + DuplicateSectionPlugin.class.getName())));
+    }
+  }
+
+  /** Provider with ambiguous section identity for loading-time rejection. */
+  public static final class DuplicateSectionPlugin implements AudioAnalyzerPlugin {
+    @Override
+    public PluginDescriptor descriptor() {
+      return new PluginDescriptor(
+          "duplicate-sections", "Duplicate sections", "1.0", "Fixture", null, false);
+    }
+
+    @Override
+    public List<org.hammer.audio.plugin.document.ExperimentDocumentContribution>
+        experimentDocumentContributions() {
+      var section = new org.hammer.audio.experiment.document.examples.GainDocumentContribution();
+      return List.of(section, section);
+    }
+  }
+
+  /** Second provider deliberately reuses a stable plugin identity. */
+  public static final class DuplicateIdPlugin implements AudioAnalyzerPlugin {
+    @Override
+    public PluginDescriptor descriptor() {
+      return new TestPlugin().descriptor();
+    }
+  }
+
+  @Test
   void emptyClassLoaderProducesEmptyRegistry() {
     PluginRegistry registry = new PluginManager(new EmptyServiceLoader()).loadPlugins();
     assertTrue(registry.plugins().isEmpty());

@@ -30,10 +30,25 @@ public final class ExperimentDocumentHttpAdapter {
   private static final String NORMALIZED_FILENAME = "normalized.audioexp";
 
   private final ExperimentDocumentService documentService;
+  private final java.util.function.Function<
+          ExperimentDocumentPreview,
+          org.hammer.audio.experiment.document.workspace.ExperimentDocumentWorkspaceService
+              .Comparison>
+      compareCurrent;
 
   /** Create the adapter with the shared application document service. */
   public ExperimentDocumentHttpAdapter(ExperimentDocumentService documentService) {
+    this(documentService, null);
+  }
+
+  /** Create the application preview adapter with semantic current-workflow comparison. */
+  @org.springframework.beans.factory.annotation.Autowired
+  public ExperimentDocumentHttpAdapter(
+      ExperimentDocumentService documentService,
+      org.hammer.audio.experiment.document.workspace.ExperimentDocumentWorkspaceService
+          workspaceService) {
     this.documentService = Objects.requireNonNull(documentService, "documentService");
+    this.compareCurrent = workspaceService == null ? preview -> null : workspaceService::comparison;
   }
 
   /** Parse and resolve one untrusted document without mutating the current workflow. */
@@ -61,7 +76,16 @@ public final class ExperimentDocumentHttpAdapter {
         preview.migrations(),
         preview.executionAllowed(),
         preview.readOnly(),
-        documentService.inspectionJson(preview));
+        documentService.inspectionJson(preview),
+        preview.sectionHashes(),
+        documentService.pluginSections(),
+        compareCurrent.apply(preview),
+        new org.hammer.audio.experiment.document.ExperimentLocalBindingService()
+            .inspect(
+                preview,
+                new org.hammer.audio.experiment.document.ExperimentLocalBindings(
+                    java.util.Map.of(), null))
+            .diagnostics());
   }
 
   /** Return canonical normalized bytes without applying or executing the imported document. */
@@ -119,6 +143,11 @@ public final class ExperimentDocumentHttpAdapter {
    * @param executionAllowed whether execution is allowed with installed plugins
    * @param readOnly whether the preview can only be inspected and preserved
    * @param canonicalDocument complete canonical JSON for inspection before applying
+   * @param sectionHashes namespaced canonical plugin section digests
+   * @param installedSections installed plugin schema and parameter metadata
+   * @param comparison current-workflow precondition and semantic changes, if a workspace is
+   *     available
+   * @param localRequirements unresolved local device, asset and output requirements
    */
   public record PreviewResponse(
       String format,
@@ -136,11 +165,20 @@ public final class ExperimentDocumentHttpAdapter {
       List<String> migrations,
       boolean executionAllowed,
       boolean readOnly,
-      String canonicalDocument) {
+      String canonicalDocument,
+      java.util.Map<String, String> sectionHashes,
+      java.util.List<org.hammer.audio.experiment.document.PluginDocumentCatalog.SectionDescription>
+          installedSections,
+      org.hammer.audio.experiment.document.workspace.ExperimentDocumentWorkspaceService.Comparison
+          comparison,
+      java.util.List<DocumentDiagnostic> localRequirements) {
 
     /* Defensively copy response collections. */
     public PreviewResponse {
       Objects.requireNonNull(canonicalDocument, "canonicalDocument");
+      sectionHashes = java.util.Map.copyOf(sectionHashes);
+      installedSections = java.util.List.copyOf(installedSections);
+      localRequirements = java.util.List.copyOf(localRequirements);
       requiredPlugins = List.copyOf(Objects.requireNonNull(requiredPlugins, "requiredPlugins"));
       diagnostics = List.copyOf(Objects.requireNonNull(diagnostics, "diagnostics"));
       migrations = List.copyOf(Objects.requireNonNull(migrations, "migrations"));

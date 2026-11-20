@@ -145,6 +145,9 @@ public final class ExperimentDocumentCodec {
   /** Atomically normalize and save to the requested path through a sibling temporary file. */
   public void save(java.nio.file.Path target, ExperimentDocument document) throws IOException {
     byte[] bytes = encode(document);
+    if (Thread.currentThread().isInterrupted()) {
+      throw new java.io.InterruptedIOException("Document save cancelled before writing");
+    }
     java.nio.file.Path normalized = target.toAbsolutePath().normalize();
     java.nio.file.Path parent = normalized.getParent();
     java.nio.file.Path fileName = normalized.getFileName();
@@ -156,6 +159,10 @@ public final class ExperimentDocumentCodec {
         java.nio.file.Files.createTempFile(parent, ".audioexp-", ".partial");
     try {
       java.nio.file.Files.write(temporary, bytes);
+      if (Thread.currentThread().isInterrupted()) {
+        throw new java.io.InterruptedIOException(
+            "Document save cancelled before atomic replacement");
+      }
       try {
         java.nio.file.Files.move(
             temporary,
@@ -163,8 +170,8 @@ public final class ExperimentDocumentCodec {
             java.nio.file.StandardCopyOption.ATOMIC_MOVE,
             java.nio.file.StandardCopyOption.REPLACE_EXISTING);
       } catch (java.nio.file.AtomicMoveNotSupportedException exception) {
-        java.nio.file.Files.move(
-            temporary, normalized, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        throw new IOException(
+            "Atomic replacement is unsupported; original destination remains unchanged", exception);
       }
     } finally {
       java.nio.file.Files.deleteIfExists(temporary);

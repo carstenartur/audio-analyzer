@@ -34,6 +34,11 @@ public final class ExperimentDocumentService {
     this.pluginCatalog = Objects.requireNonNull(pluginCatalog, "pluginCatalog");
   }
 
+  /** Installed section schemas and parameter metadata for a structured preview. */
+  public java.util.List<PluginDocumentCatalog.SectionDescription> pluginSections() {
+    return pluginCatalog.descriptions();
+  }
+
   /** Parse and preview untrusted document bytes without mutating application state. */
   public ExperimentDocumentPreview preview(byte[] source) throws ExperimentDocumentException {
     return pluginCatalog.preview(codec.decode(source), codec);
@@ -76,6 +81,73 @@ public final class ExperimentDocumentService {
     ExperimentDocumentPreview preview = preview(normalizedSource);
     codec.save(normalizedTarget, preview.document());
     return preview;
+  }
+
+  /** Create a portable copy of an existing workflow with explicitly unresolved source bindings. */
+  public ExperimentDocument fromWorkflow(Workflow workflow, java.time.Instant now) {
+    String content = new org.hammer.audio.workflow.dsl.WorkflowDslSerializer().serialize(workflow);
+    return new ExperimentDocument(
+        ExperimentDocumentFormat.SCHEMA_URI,
+        ExperimentDocumentFormat.FORMAT_ID,
+        1,
+        new ExperimentDocument.ExperimentInfo(
+            workflow.id(),
+            workflow.name(),
+            "Exported workflow; configure source requirements before execution",
+            java.util.List.of(),
+            "analysis",
+            "unbound",
+            null,
+            "development"),
+        new ExperimentDocument.WorkflowPayload(
+            ExperimentDocumentFormat.WORKFLOW_FORMAT_ID,
+            1,
+            content,
+            DocumentHashes.sha256(content)),
+        org.hammer.audio.plugin.document.DocumentValue.object(java.util.Map.of()),
+        java.util.List.of(),
+        java.util.Map.of(),
+        java.util.List.of(),
+        java.util.List.of(),
+        new ExperimentDocument.Provenance(
+            "Local author", "", now, now, "development", "", java.util.List.of()));
+  }
+
+  /** Replace the workflow in a complete document, preserving all unrelated portable data. */
+  public ExperimentDocument withWorkflow(
+      ExperimentDocument input, Workflow workflow, java.time.Instant modifiedAt) {
+    String content = new org.hammer.audio.workflow.dsl.WorkflowDslSerializer().serialize(workflow);
+    ExperimentDocument.WorkflowPayload payload =
+        new ExperimentDocument.WorkflowPayload(
+            input.workflow().format(),
+            input.workflow().formatVersion(),
+            content,
+            DocumentHashes.sha256(content));
+    ExperimentDocument.Provenance old = input.provenance();
+    ExperimentDocument.Provenance provenance =
+        new ExperimentDocument.Provenance(
+            old.creatorDisplayName(),
+            old.verifiedAccount(),
+            old.createdAt(),
+            modifiedAt,
+            old.softwareVersion(),
+            "",
+            old.migrationNotes(),
+            old.algorithmVersions(),
+            old.sourceCommit(),
+            old.sourceRun());
+    return new ExperimentDocument(
+        input.schema(),
+        input.format(),
+        input.formatVersion(),
+        input.experiment(),
+        payload,
+        input.profiles(),
+        input.requiredPlugins(),
+        input.pluginData(),
+        input.assets(),
+        input.outputs(),
+        provenance);
   }
 
   /** Rebuild the already hash-verified canonical workflow from a preview. */

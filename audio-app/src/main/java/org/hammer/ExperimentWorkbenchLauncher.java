@@ -38,6 +38,7 @@ public final class ExperimentWorkbenchLauncher {
                 new ExperimentDocumentService(plugins.plugins());
             ExperimentDocumentSwingActions documentActions =
                 new ExperimentDocumentSwingActions(frame, documentService);
+            frame.setDocumentContextSupplier(documentActions::documentContext);
             documentActions.install();
             installDesktopOpenFileHandler(documentActions::inspect);
             frame.setVisible(true);

@@ -1,13 +1,16 @@
 package org.hammer.audio.pluginhost;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Objects;
 import java.util.ServiceConfigurationError;
 import java.util.ServiceLoader;
+import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import org.hammer.audio.experiment.document.PluginDocumentCatalog;
 import org.hammer.audio.plugin.AudioAnalyzerPlugin;
 import org.hammer.audio.plugin.PluginDescriptor;
 
@@ -44,6 +47,7 @@ public final class PluginManager {
    */
   public PluginRegistry loadPlugins() {
     List<PluginLoadResult> results = new ArrayList<>();
+    Set<String> pluginIds = new HashSet<>();
     ServiceLoader<AudioAnalyzerPlugin> loader =
         ServiceLoader.load(AudioAnalyzerPlugin.class, classLoader);
     Iterator<ServiceLoader.Provider<AudioAnalyzerPlugin>> providers;
@@ -66,17 +70,31 @@ public final class PluginManager {
         // Force descriptor evaluation once and reuse it for validation, registration and logging
         // so a flaky descriptor() implementation is exercised exactly once per plugin.
         PluginDescriptor descriptor = Objects.requireNonNull(plugin.descriptor(), "descriptor");
+        if (pluginIds.contains(descriptor.id())) {
+          recordFailure(
+              results,
+              providerClassName,
+              new IllegalArgumentException("Duplicate plugin id: " + descriptor.id()));
+          continue;
+        }
+        PluginDocumentCatalog.validateRegistration(plugin, descriptor);
+        pluginIds.add(descriptor.id());
         results.add(PluginLoadResult.success(plugin, descriptor));
         LOGGER.log(
             Level.INFO,
             "Loaded plugin: {0} ({1} {2})",
             new Object[] {descriptor.id(), descriptor.name(), descriptor.version()});
       } catch (ServiceConfigurationError | RuntimeException ex) {
-        LOGGER.log(Level.WARNING, "Failed to load plugin " + providerClassName, ex);
-        results.add(PluginLoadResult.failure(providerClassName, ex));
+        recordFailure(results, providerClassName, ex);
       }
     }
     return new PluginRegistry(results);
+  }
+
+  private static void recordFailure(
+      List<PluginLoadResult> results, String providerClassName, Throwable failure) {
+    LOGGER.log(Level.WARNING, "Failed to load plugin " + providerClassName, failure);
+    results.add(PluginLoadResult.failure(providerClassName, failure));
   }
 
   private static String safeProviderName(ServiceLoader.Provider<AudioAnalyzerPlugin> provider) {

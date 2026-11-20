@@ -22,6 +22,24 @@ public record ExperimentDocumentPreview(
     boolean executionAllowed,
     boolean readOnly) {
 
+  /**
+   * Canonical SHA-256 for each namespaced section, including preserved unsupported data. The sorted
+   * map belongs to this call and is published only as an immutable copy.
+   */
+  @SuppressWarnings("PMD.UseConcurrentHashMap")
+  public java.util.Map<String, String> sectionHashes() {
+    java.util.Map<String, String> hashes = new java.util.TreeMap<>();
+    document
+        .pluginData()
+        .forEach(
+            (plugin, sections) ->
+                sections.forEach(
+                    (section, value) ->
+                        hashes.put(
+                            plugin + "/" + section, PluginDocumentTestKit.sectionSha256(value))));
+    return java.util.Map.copyOf(hashes);
+  }
+
   /* Validate and defensively copy preview state. */
   public ExperimentDocumentPreview {
     Objects.requireNonNull(document, "document");
