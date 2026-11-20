@@ -76,7 +76,8 @@ def main():
             association.write_text(descriptor + "\nicon=" + icon.resolve().as_posix() + "\n")
             command.extend(["--file-associations", str(association)])
             if sys.platform.startswith("linux"):
-                command.extend(["--linux-shortcut", "--linux-app-category", "Science"])
+                command.extend(["--linux-shortcut", "--linux-app-category", "Science",
+                                "--resource-dir", str(checkout / "packaging/desktop")])
             elif sys.platform == "darwin":
                 command.extend(["--mac-package-identifier", "io.github.carstenartur.audioanalyzer"])
             else:

@@ -2,8 +2,11 @@
 
 import importlib.util
 import pathlib
+import shlex
+import shutil
 import tempfile
 import unittest
+from unittest import mock
 import zipfile
 
 
@@ -53,6 +56,29 @@ class DesktopPackageTest(unittest.TestCase):
         self.assertEqual("0.1.0", PACKAGER.native_version("0.1.0-SNAPSHOT"))
         with self.assertRaises(ValueError):
             PACKAGER.native_version("development")
+
+    def test_linux_installer_passes_opened_file_to_preview_launcher(self):
+        self.write_jar("org.hammer.ExperimentWorkbenchLauncher")
+        (self.root / "pom.xml").write_text(
+            '<project xmlns="http://maven.apache.org/POM/4.0.0">'
+            '<version>0.1.0-SNAPSHOT</version></project>')
+        resources = pathlib.Path(__file__).resolve().parents[1] / "packaging/desktop"
+        shutil.copytree(resources, self.root / "packaging/desktop")
+        with mock.patch.object(PACKAGER, "__file__", str(self.root / "scripts/package-desktop.py")), \
+                mock.patch.object(PACKAGER.sys, "argv", ["package-desktop.py", "--type", "deb"]), \
+                mock.patch.object(PACKAGER.sys, "platform", "linux"), \
+                mock.patch.object(PACKAGER.subprocess, "run") as native:
+            PACKAGER.main()
+        command = native.call_args.args[0]
+        self.assertIn("--resource-dir", command)
+        self.assertNotIn("--arguments", command)
+        directory = pathlib.Path(command[command.index("--resource-dir") + 1])
+        template = (directory / "AudioAnalyzer.desktop").read_text()
+        launcher = next(line.removeprefix("Exec=") for line in template.splitlines()
+                        if line.startswith("Exec="))
+        rendered = launcher.replace("APPLICATION_LAUNCHER", '"/opt/Audio Analyzer/bin/AudioAnalyzer"')
+        self.assertEqual(["/opt/Audio Analyzer/bin/AudioAnalyzer", "%f"], shlex.split(rendered))
+        self.assertIn("DESKTOP_MIMES", template)
 
 
 if __name__ == "__main__":

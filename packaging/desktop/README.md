@@ -31,6 +31,8 @@ versions use its numeric release component because installer formats cannot repr
 Native installers consume `audioexp.properties`. An unpackaged app image does not register system file
 associations. Installing a package is an explicit user action; the build script never installs it.
 Windows and macOS installers must be produced and smoke-tested on those platforms before release.
+Linux installers also use `AudioAnalyzer.desktop` through `jpackage --resource-dir`; its `%f`
+placeholder forwards the selected local file to the preview launcher.
 
 ## Opening a shared experiment
 
