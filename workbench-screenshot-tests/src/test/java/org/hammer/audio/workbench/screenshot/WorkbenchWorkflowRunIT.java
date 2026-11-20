@@ -315,7 +315,7 @@ class WorkbenchWorkflowRunIT {
   }
 
   private static boolean isJarAvailable() {
-    String jarPath = System.getProperty("workbench.jar");
+    String jarPath = System.getProperty("workbench.jar.path");
     return jarPath != null && Files.isRegularFile(Path.of(jarPath));
   }
 

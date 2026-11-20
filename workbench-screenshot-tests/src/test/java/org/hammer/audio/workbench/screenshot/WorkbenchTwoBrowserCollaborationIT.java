@@ -10,6 +10,7 @@ import com.microsoft.playwright.Page;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -170,10 +171,20 @@ class WorkbenchTwoBrowserCollaborationIT {
         assertFalse(
             ((String) second.evaluate("document.cookie")).contains("aa_collab_"),
             "Collaboration credentials must not be readable by browser scripts");
-        second.locator("[data-testid='run-current-revision']").click();
+        buildExecutableWorkflow(second, "e2e-same-browser-tabs");
+        waitForRevision(first.page(), 11);
+        waitForRevision(second, 11);
+        clickWhenEnabled(second, "[data-testid='run-current-revision']");
+        Locator runState = second.locator("[data-testid='run-state']");
+        Locator runError = second.locator("[data-testid='run-error']");
         second.waitForCondition(
-            () -> "COMPLETED".equals(second.locator("[data-testid='run-state']").innerText()));
-        assertEquals(0, second.locator("[data-testid='run-error']").count());
+            () ->
+                runError.count() > 0
+                    || (runState.count() > 0
+                        && List.of("COMPLETED", "FAILED", "CANCELLED")
+                            .contains(runState.innerText())));
+        assertEquals(0, runError.count(), () -> runError.innerText());
+        assertEquals("COMPLETED", runState.innerText());
         first.page().reload();
         waitForActiveSession(first.page(), "e2e-same-browser-tabs");
         waitForLive(first.page());
@@ -268,6 +279,46 @@ class WorkbenchTwoBrowserCollaborationIT {
     page.locator("[data-testid='join-session-button']").click();
     waitForActiveSession(page, sessionId);
     waitForLive(page);
+  }
+
+  private static void buildExecutableWorkflow(Page page, String sessionId) {
+    page.evaluate(
+        """
+        async sessionId => {
+          const actor = JSON.parse(sessionStorage.getItem('audio-analyzer.workflow.actor'));
+          const operations = [
+            {type: 'CreateNode', catalogType: 'synthetic-signal-generator', nodeId: 'node.tabs.source'},
+            {type: 'CreateNode', catalogType: 'gain', nodeId: 'node.tabs.gain'}
+          ];
+          const properties = [
+            ['node.tabs.source', 'signal.waveform', 'sine'],
+            ['node.tabs.source', 'signal.frequency-hz', '1000'],
+            ['node.tabs.source', 'signal.phase-radians', '0'],
+            ['node.tabs.source', 'signal.amplitude', '0.5'],
+            ['node.tabs.source', 'signal.sample-rate-hz', '8000'],
+            ['node.tabs.source', 'signal.channels', '1'],
+            ['node.tabs.source', 'signal.frame-count', '4096'],
+            ['node.tabs.gain', 'gain.factor', '0.5']
+          ];
+          for (const [targetId, propertyKey, newValue] of properties) {
+            operations.push({type: 'UpdateProperty', target: 'NODE', targetId, propertyKey, newValue});
+          }
+          operations.push({type: 'ConnectPorts', edge: {
+            id: 'edge.tabs.source-gain', sourceNodeId: 'node.tabs.source', sourcePortId: 'signal-out',
+            targetNodeId: 'node.tabs.gain', targetPortId: 'audio-in'
+          }});
+          for (let revision = 0; revision < operations.length; revision++) {
+            const response = await fetch(`/workflow/sessions/${encodeURIComponent(sessionId)}/operations`, {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json', 'X-Workflow-Actor': actor.actorId},
+              body: JSON.stringify({mode: 'SHARED_SESSION_PERSONAL_UNDO', actor, expectedRevision: revision,
+                operation: {...operations[revision], operationId: `operation.tabs.${revision}`}})
+            });
+            if (!response.ok) throw new Error(`Executable fixture rejected: ${response.status} ${await response.text()}`);
+          }
+        }
+        """,
+        sessionId);
   }
 
   private static void waitForActiveSession(Page page, String sessionId) {
