@@ -1203,7 +1203,7 @@ public class AudioAnalyseFrame extends JFrame {
     DEMO
   }
 
-  private class SwingAction extends AbstractAction {
+  private final class SwingAction extends AbstractAction {
     private static final long serialVersionUID = 1L;
 
     SwingAction() {
