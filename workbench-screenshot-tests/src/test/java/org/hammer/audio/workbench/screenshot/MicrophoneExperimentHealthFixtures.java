@@ -60,7 +60,7 @@ final class MicrophoneExperimentHealthFixtures {
             incomplete ? 1L : 0L,
             incomplete ? 256L : 0L,
             incomplete ? 1L : 0L,
-            incomplete ? 0 : 2,
+            0,
             64,
             4,
             writtenFrames * 16L,

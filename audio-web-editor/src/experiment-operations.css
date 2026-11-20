@@ -43,6 +43,11 @@
 .experiment-facts div { display: grid; grid-template-columns: 160px 1fr; gap: 12px; margin: 8px 0; }
 .experiment-facts dd { margin: 0; overflow-wrap: anywhere; }
 .experiment-map { width: 100%; display: block; border: 1px solid #475569; border-radius: 8px; background: #0f172a; }
+.experiment-tracks { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+.experiment-tracks caption { margin: 16px 0 8px; text-align: left; font-weight: 600; }
+.experiment-tracks th, .experiment-tracks td { padding: 8px; text-align: right; border-bottom: 1px solid #475569; }
+.experiment-tracks th:first-child { text-align: left; }
+.experiment-tracks tbody th { color: #bbf7d0; }
 .experiment-profile-editor { padding: 12px; border: 1px solid #64748b; border-radius: 7px; }
 .experiment-profile-editor table { width: 100%; border-collapse: collapse; }
 .experiment-profile-editor th, .experiment-profile-editor td { padding: 5px; text-align: left; }

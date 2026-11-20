@@ -214,8 +214,22 @@ class WorkbenchInitialLoadIT {
 
       // Frame the actual catalog, not the document/collaboration controls earlier in the sidebar.
       Locator palette = page.locator("[data-testid='node-palette-content']");
+      page.setViewportSize(VIEWPORT_WIDTH, 1200);
       WorkbenchHealthScreenshots.awaitReadiness(page, null);
       palette.scrollIntoViewIfNeeded();
+      assertTrue(
+          Boolean.TRUE.equals(
+              palette.evaluate(
+                  """
+                  element => {
+                    const bounds = element.getBoundingClientRect();
+                    const panel = element.closest('[data-testid="node-palette"]').getBoundingClientRect();
+                    return bounds.top >= Math.max(0, panel.top)
+                      && bounds.bottom <= Math.min(window.innerHeight, panel.bottom)
+                      && bounds.left >= panel.left && bounds.right <= panel.right;
+                  }
+                  """)),
+          "The complete palette must fit inside the visible sidebar before capture");
       byte[] pngBytes = palette.screenshot();
 
       ScreenshotPipeline.processScreenshot("node-palette.png", pngBytes);

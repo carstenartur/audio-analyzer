@@ -1,5 +1,6 @@
 package org.hammer.audio.workbench.screenshot;
 
+import static com.microsoft.playwright.assertions.PlaywrightAssertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -72,7 +73,7 @@ class MicrophoneExperimentWebIT {
   @Test
   void profileReadinessSimulationAndEvidenceRemainVisibleInOneWorkflow() throws IOException {
     Map<String, byte[]> screenshots = new LinkedHashMap<>();
-    try (Page page = browser.newPage()) {
+    try (Page page = newExperimentPage()) {
       openExperiment(page);
       assertFalse(page.locator("[data-testid='experiment-start']").isEnabled());
 
@@ -122,6 +123,7 @@ class MicrophoneExperimentWebIT {
               .contains("Complete experiment evidence"));
       assertTrue(
           page.locator("[data-testid='experiment-evidence']").innerText().contains("AVAILABLE"));
+      assertEveryActualTrackIsReadable(page);
       // Actual wall-clock overruns vary with CI load. Keep the functional evidence assertions,
       // and cover this warning visibly in the fixed degraded fixture below.
       screenshots.put(
@@ -168,15 +170,15 @@ class MicrophoneExperimentWebIT {
   void controlsHaveAccessibleNamesKeyboardAccessAndReadableStateColors() {
     // Accessibility is an independent hard gate, so a failure still allows the functional scenario
     // to collect all six documentation images in the same CI run.
-    try (Page page = browser.newPage()) {
+    try (Page page = newExperimentPage()) {
       openExperiment(page);
       assertAccessibleNames(page);
-      Locator profileSummary =
-          page.getByRole(
-              AriaRole.BUTTON,
-              new Page.GetByRoleOptions()
-                  .setName("Edit geometry, device format and calibration")
-                  .setExact(true));
+      Locator profileSummary = page.locator("[data-testid='experiment-profile-editor'] > summary");
+      // Playwright's implicit-role table does not map native SUMMARY to BUTTON. Check its exact
+      // accessible name independently, while preserving the native keyboard interaction below.
+      assertThat(profileSummary).hasCount(1);
+      assertThat(profileSummary).hasText("Edit geometry, device format and calibration");
+      assertThat(profileSummary).hasAccessibleName("Edit geometry, device format and calibration");
       focusWithKeyboard(page, profileSummary);
       assertKeyboardFocusVisible(profileSummary);
       page.keyboard().press("Enter");
@@ -214,12 +216,41 @@ class MicrophoneExperimentWebIT {
       assertContrast(page.locator("[data-testid='finding-source.live-device'] strong"));
     }
     for (var state : runtimeStates()) {
-      try (Page page = browser.newPage()) {
+      try (Page page = newExperimentPage()) {
         openRuntimeState(page, state);
         assertContrast(page.locator("[data-testid='experiment-health-state']"));
         assertContrast(page.locator("[data-testid='experiment-runtime-strip'] strong"));
       }
     }
+  }
+
+  private void assertEveryActualTrackIsReadable(Page page) {
+    var response =
+        page.context()
+            .request()
+            .get(WorkbenchContainerFactory.baseUrl(container) + "/experiment-operations/status");
+    assertTrue(response.ok());
+    var tracks = new JsonMapper().readTree(response.text()).get("tracks");
+    assertTrue(
+        tracks.isArray() && !tracks.isEmpty(), "Simulation must produce localization tracks");
+    assertEquals(
+        tracks.size(), page.locator("[data-testid='experiment-track-table'] tbody tr").count());
+    assertEquals(tracks.size(), page.locator("[data-testid^='experiment-track-marker-']").count());
+    for (var track : tracks) {
+      int id = track.get("id").intValue();
+      Locator row = page.locator("[data-testid='experiment-track-row-" + id + "']");
+      assertTrue(row.isVisible(), "Every actual track needs its own readable row");
+      assertEquals(Integer.toString(id), row.locator("th").innerText());
+      Locator marker = page.locator("[data-testid='experiment-track-marker-" + id + "']");
+      assertEquals("experiment-track-title-" + id, marker.getAttribute("aria-labelledby"));
+      assertEquals(1, marker.locator("title").count());
+      String title = marker.locator("title").textContent();
+      assertTrue(title != null && title.startsWith("Track " + id + " · "));
+    }
+  }
+
+  private Page newExperimentPage() {
+    return browser.newPage(new Browser.NewPageOptions().setLocale("en-US").setTimezoneId("UTC"));
   }
 
   private void openExperiment(Page page) {
@@ -259,7 +290,7 @@ class MicrophoneExperimentWebIT {
 
   private void captureRuntimeStates(Map<String, byte[]> screenshots) {
     for (var state : runtimeStates()) {
-      try (Page page = browser.newPage()) {
+      try (Page page = newExperimentPage()) {
         openRuntimeState(page, state);
         assertFalse(page.locator("[data-testid='experiment-start']").isEnabled());
         assertEquals(
@@ -284,7 +315,9 @@ class MicrophoneExperimentWebIT {
         if (state == ExperimentHealthState.DEGRADED) {
           assertTrue(page.locator("[data-testid='finding-processing.overruns']").isVisible());
         }
-        screenshots.put("microphone-experiment-" + suffix + ".png", screenshot(page));
+        // All storage, rate, time, path and timing values are fixed in these typed snapshots.
+        // Keep them visible so the documentation demonstrates the actual runtime status fields.
+        screenshots.put("microphone-experiment-" + suffix + ".png", screenshot(page, "", false));
       }
     }
   }
@@ -390,11 +423,15 @@ class MicrophoneExperimentWebIT {
   }
 
   private static byte[] screenshot(Page page, String style) {
-    return page.screenshot(
-        new Page.ScreenshotOptions()
-            .setFullPage(true)
-            .setStyle(style)
-            .setMask(List.of(page.locator("[data-screenshot-mask='true']:visible"))));
+    return screenshot(page, style, true);
+  }
+
+  private static byte[] screenshot(Page page, String style, boolean maskVolatileValues) {
+    var options = new Page.ScreenshotOptions().setFullPage(true).setStyle(style);
+    if (maskVolatileValues) {
+      options.setMask(List.of(page.locator("[data-screenshot-mask='true']:visible")));
+    }
+    return page.screenshot(options);
   }
 
   private static boolean isDockerAvailable() {

@@ -169,9 +169,9 @@ export function ExperimentOperationsPanel() {
       <span>Elapsed {formatSafeDuration(Number(run?.health.facts['elapsed.sampleSeconds'] ?? 0))}</span>
       <span>Intended {formatSafeDuration(Number(health?.facts['intended.seconds'] ?? configuration.durationSeconds))}</span>
       <span>Written {formatCapacity(recording?.bytesWritten ?? 0)}</span>
-      <span data-screenshot-mask="true">Usable {formatCapacity(storage?.usableBytes ?? -1)}</span>
-      <span data-screenshot-mask="true">Rate {formatCapacity(recording?.measuredBytesPerSecond ?? storage?.expectedBytesPerSecond ?? -1)}/s</span>
-      <span data-screenshot-mask="true">Safe time {formatSafeDuration(storage?.estimatedSafeSecondsRemaining ?? -1)}</span>
+      <span>Usable <span data-screenshot-mask="true">{formatCapacity(storage?.usableBytes ?? -1)}</span></span>
+      <span>Rate <span data-screenshot-mask="true">{formatCapacity(recording?.measuredBytesPerSecond ?? storage?.expectedBytesPerSecond ?? -1)}</span>/s</span>
+      <span>Safe time <span data-screenshot-mask="true">{formatSafeDuration(storage?.estimatedSafeSecondsRemaining ?? -1)}</span></span>
       <button type="button" disabled={!running || busy} onClick={() => void command(async () => { setRun(await postJson<ExperimentRun>(`${API}/stop`, {})); })}
         title="Stop source acquisition, finalize captured samples, and label an early stop incomplete." data-testid="experiment-stop">Stop &amp; finalize</button>
     </section>
@@ -295,10 +295,19 @@ export function ExperimentOperationsPanel() {
             <rect x="40" y="40" width="520" height="260" rx="4" fill="#151b2b" stroke="#495773" />
             {microphones.map((microphone, index) => <g key={index}><circle cx={plotX(microphone.x)} cy={plotY(microphone.y)} r="6" fill="#89b4fa" />
               <text x={plotX(microphone.x) + 10} y={plotY(microphone.y) - 9} fill="#cdd6f4" fontSize="13">{microphone.id}</text></g>)}
-            {run?.tracks.map((track) => <g key={track.id}><circle cx={plotX(track.x)} cy={plotY(track.y)} r="9" fill="#a6e3a1" />
-              <text x={plotX(track.x) + 12} y={plotY(track.y) + 5} fill="#a6e3a1" fontSize="13">Track {track.id} · {Math.round(track.confidence * 100)}%</text></g>)}
+            {run?.tracks.map((track) => <circle key={track.id} cx={plotX(track.x)} cy={plotY(track.y)} r="9" fill="#a6e3a1"
+              role="img" aria-labelledby={`experiment-track-title-${track.id}`} data-testid={`experiment-track-marker-${track.id}`}>
+              <title id={`experiment-track-title-${track.id}`}>Track {track.id} · X {track.x.toFixed(3)} m · Y {track.y.toFixed(3)} m · Confidence {(track.confidence * 100).toFixed(1)}%</title>
+            </circle>)}
             <text x="40" y="328" fill="#bac2de" fontSize="13">Microphones (blue) · Estimated sources (green) · Coordinates in metres</text>
           </svg>
+          {run && run.tracks.length > 0 && <table className="experiment-tracks" data-testid="experiment-track-table">
+            <caption>Latest localization tracks</caption>
+            <thead><tr><th scope="col">Track</th><th scope="col">X (m)</th><th scope="col">Y (m)</th><th scope="col">Confidence</th></tr></thead>
+            <tbody>{run.tracks.map((track) => <tr key={track.id} data-testid={`experiment-track-row-${track.id}`}>
+              <th scope="row">{track.id}</th><td>{track.x.toFixed(3)}</td><td>{track.y.toFixed(3)}</td><td>{(track.confidence * 100).toFixed(1)}%</td>
+            </tr>)}</tbody>
+          </table>}
           <dl className="experiment-metrics"><div><dt>Processed frames</dt><dd>{run?.health.facts['processed.frames'] ?? '0'}</dd></div>
             <div><dt>Processed blocks</dt><dd>{run?.health.facts['processed.blocks'] ?? '0'}</dd></div>
             <div><dt>Recording queue</dt><dd>{recording ? `${recording.queueDepth}/${recording.queueCapacity}` : 'Not recording'}</dd></div>
