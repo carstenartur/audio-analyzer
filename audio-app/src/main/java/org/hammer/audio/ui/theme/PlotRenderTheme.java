@@ -3,6 +3,7 @@ package org.hammer.audio.ui.theme;
 import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Font;
+import java.awt.FontMetrics;
 import java.awt.Graphics2D;
 import java.awt.Rectangle;
 import java.awt.RenderingHints;
@@ -29,7 +30,7 @@ public final class PlotRenderTheme {
   public static final Font LABEL_FONT = new Font(Font.SANS_SERIF, Font.PLAIN, 12);
   public static final Font TITLE_FONT = new Font(Font.SANS_SERIF, Font.BOLD, 12);
 
-  /** Space for a rotated axis title, frequency tick labels and their separating gaps. */
+  /** Minimum left margin; use {@link #leftAxisMargin} to allow for the rendered tick labels. */
   public static final int LEFT_AXIS_MARGIN = 80;
 
   /** Space for separate tick-label and axis-title rows below a plot. */
@@ -48,6 +49,10 @@ public final class PlotRenderTheme {
   private static final double DB_FLOOR = -80.0d;
   private static final double MAG_EPSILON = 1.0e-7d;
   private static final int TICK_SIZE = 4;
+  private static final int TICK_LABEL_GAP = 4;
+  private static final int AXIS_TITLE_OUTER_PADDING = 4;
+  // Four clear pixels, plus one pixel per antialiased edge for fractional glyph bounds.
+  private static final int AXIS_TITLE_GAP = 6;
 
   private PlotRenderTheme() {
     // Static plotting theme and drawing helpers.
@@ -140,12 +145,40 @@ public final class PlotRenderTheme {
     g2.drawString(label, x, y);
   }
 
-  /** Draws a rotated Y-axis label in the left plot margin. */
-  public static void drawYAxisLabel(Graphics2D g2, Rectangle plotBounds, String label) {
+  /**
+   * Reserves separate columns for the rotated title, the widest tick label and the tick mark. Call
+   * this before constructing the plot rectangle, using the labels passed to {@link #drawYTicks} and
+   * {@link #drawYAxisLabel}.
+   */
+  public static int leftAxisMargin(Graphics2D g2, String[] tickLabels) {
+    FontMetrics metrics = g2.getFontMetrics(LABEL_FONT);
+    int tickWidth = 0;
+    for (String label : tickLabels) {
+      tickWidth = Math.max(tickWidth, metrics.stringWidth(label));
+    }
+    return Math.max(
+        LEFT_AXIS_MARGIN,
+        AXIS_TITLE_OUTER_PADDING
+            + metrics.getAscent()
+            + metrics.getDescent()
+            + AXIS_TITLE_GAP
+            + tickWidth
+            + TICK_LABEL_GAP
+            + TICK_SIZE);
+  }
+
+  /** Draws a rotated Y-axis label in the margin reserved by {@link #leftAxisMargin}. */
+  public static void drawYAxisLabel(
+      Graphics2D g2, Rectangle plotBounds, String label, String[] tickLabels) {
     g2.setFont(LABEL_FONT);
     g2.setColor(TEXT_MUTED);
-    int textWidth = g2.getFontMetrics().stringWidth(label);
-    int x = Math.max(14, plotBounds.x - 64);
+    FontMetrics metrics = g2.getFontMetrics();
+    int textWidth = metrics.stringWidth(label);
+    int x =
+        plotBounds.x
+            - leftAxisMargin(g2, tickLabels)
+            + AXIS_TITLE_OUTER_PADDING
+            + metrics.getAscent();
     int y = plotBounds.y + plotBounds.height / 2 + textWidth / 2;
     AffineTransform savedTransform = g2.getTransform();
     try {
@@ -200,7 +233,7 @@ public final class PlotRenderTheme {
       g2.drawLine(plotBounds.x - TICK_SIZE, y, plotBounds.x, y);
       g2.setColor(TEXT_MUTED);
       int textWidth = g2.getFontMetrics().stringWidth(labels[i]);
-      int labelX = Math.max(0, plotBounds.x - TICK_SIZE - 4 - textWidth);
+      int labelX = Math.max(0, plotBounds.x - TICK_SIZE - TICK_LABEL_GAP - textWidth);
       g2.drawString(labels[i], labelX, y + 4);
     }
   }

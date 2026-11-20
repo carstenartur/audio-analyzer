@@ -21,7 +21,6 @@ import org.hammer.audio.ui.theme.PlotRenderTheme;
 public class PhaseDiagramCanvas extends JPanel {
 
   private static final Logger LOGGER = Logger.getLogger(PhaseDiagramCanvas.class.getName());
-  private static final int LEFT_MARGIN = PlotRenderTheme.LEFT_AXIS_MARGIN;
   private static final int RIGHT_MARGIN = 12;
   private static final int TOP_MARGIN = 20;
   private static final int BOTTOM_MARGIN = PlotRenderTheme.BOTTOM_AXIS_MARGIN;
@@ -64,22 +63,23 @@ public class PhaseDiagramCanvas extends JPanel {
     }
     int width = Math.max(1, getWidth());
     int height = Math.max(1, getHeight());
+    String[] amplitudeTicks = {"+1", "0", "-1"};
+    int leftMargin = PlotRenderTheme.leftAxisMargin(g2, amplitudeTicks);
     Rectangle plotBounds =
         new Rectangle(
-            LEFT_MARGIN,
+            leftMargin,
             TOP_MARGIN,
-            Math.max(1, width - LEFT_MARGIN - RIGHT_MARGIN),
+            Math.max(1, width - leftMargin - RIGHT_MARGIN),
             Math.max(1, height - TOP_MARGIN - BOTTOM_MARGIN));
     PlotRenderTheme.drawPlotBackground(g2, getWidth(), getHeight(), plotBounds);
     PlotRenderTheme.drawGrid(g2, plotBounds, 6, 6);
     drawReferenceGrid(g2, plotBounds);
     PlotRenderTheme.drawTitle(g2, 10, 16, "Phase Scope");
     PlotRenderTheme.drawXAxisLabel(g2, plotBounds, "Left amplitude [-1..1]");
-    PlotRenderTheme.drawYAxisLabel(g2, plotBounds, "Right amplitude [-1..1]");
+    PlotRenderTheme.drawYAxisLabel(g2, plotBounds, "Right amplitude [-1..1]", amplitudeTicks);
     PlotRenderTheme.drawXTicks(
         g2, plotBounds, new double[] {0.0d, 0.5d, 1.0d}, new String[] {"-1", "0", "+1"});
-    PlotRenderTheme.drawYTicks(
-        g2, plotBounds, new double[] {0.0d, 0.5d, 1.0d}, new String[] {"+1", "0", "-1"});
+    PlotRenderTheme.drawYTicks(g2, plotBounds, new double[] {0.0d, 0.5d, 1.0d}, amplitudeTicks);
 
     if (audioCaptureService == null) {
       LOGGER.warning("paintComponent: audioCaptureService is null");

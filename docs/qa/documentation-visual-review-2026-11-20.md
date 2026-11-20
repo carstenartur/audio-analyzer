@@ -76,10 +76,14 @@ corrected at their source; regression assertions protect erased content and sepa
 
 All nine final regenerated images were opened individually by both the implementer and an independent
 reviewer. A second generation in the same Java/font environment reproduced all nine files byte for
-byte. Seven new regression assertions test retained content, text geometry and the calculated
+byte. Eight new regression tests cover retained content, text geometry and the calculated
 spectrogram frequency. The layout assertions first reproduced six failures; the frequency assertion
-separately reproduced the misplaced synthetic band. The final focused renderer/plot suite executed
-47 tests with zero failures, errors or skips.
+separately reproduced the misplaced synthetic band. The first PR run also exposed a font-dependent
+Y-axis collision that was reproduced locally with a wider logical font: two pixels of overlap instead
+of the required four-pixel gap. Axis margins now use the actual tick widths and font ascent/descent;
+the strict pixel assertion remains in place and a wide-label case checks that the margin grows.
+The final focused renderer/plot suite executed 48 tests with zero failures, errors or skips under
+both the default and the previously failing wider font configuration.
 
 ## Reproducible user workflows
 

@@ -28,16 +28,51 @@ class PlotRenderThemeTest {
 
   @Test
   void yAxisTitleHasItsOwnColumnBeforeFrequencyTicks() {
-    Rectangle plot = new Rectangle(80, 24, 200, 100);
-    Rectangle ticks =
-        renderedBounds(
-            g ->
-                PlotRenderTheme.drawYTicks(g, plot, new double[] {0.5}, new String[] {"22.1 kHz"}));
-    Rectangle title =
-        renderedBounds(g -> PlotRenderTheme.drawYAxisLabel(g, plot, "Frequency [Hz]"));
+    assertYAxisColumnsSeparated(new String[] {"22.1 kHz"});
+  }
 
-    assertTrue(title.x + title.width + 4 <= ticks.x, "Axis title must not overlap frequency ticks");
-    assertTrue(title.x >= 4, "Axis title must remain inside the left image margin");
+  @Test
+  void yAxisMarginGrowsForWideFrequencyTickLabels() {
+    Rectangle plot = assertYAxisColumnsSeparated(new String[] {"192000.000 Hz"});
+    assertTrue(
+        plot.x > PlotRenderTheme.LEFT_AXIS_MARGIN,
+        () -> "Wide ticks must reserve more than the minimum margin: plot=" + plot);
+  }
+
+  private static Rectangle assertYAxisColumnsSeparated(String[] labels) {
+    BufferedImage image = new BufferedImage(320, 180, BufferedImage.TYPE_INT_ARGB);
+    Graphics2D graphics = image.createGraphics();
+    Rectangle plot;
+    try {
+      PlotRenderTheme.applyQualityRendering(graphics);
+      plot = new Rectangle(PlotRenderTheme.leftAxisMargin(graphics, labels), 24, 200, 100);
+    } finally {
+      graphics.dispose();
+    }
+    Rectangle ticks =
+        renderedBounds(g -> PlotRenderTheme.drawYTicks(g, plot, new double[] {0.5}, labels));
+    Rectangle title =
+        renderedBounds(g -> PlotRenderTheme.drawYAxisLabel(g, plot, "Frequency [Hz]", labels));
+
+    assertTrue(
+        title.x + title.width + 4 <= ticks.x,
+        () ->
+            "Axis title must not overlap frequency ticks: title="
+                + title
+                + ", ticks="
+                + ticks
+                + ", measured gap="
+                + (ticks.x - title.x - title.width)
+                + " px, required=4 px, plot="
+                + plot);
+    assertTrue(
+        title.x >= 4,
+        () ->
+            "Axis title must remain inside the left image margin: title="
+                + title
+                + ", plot="
+                + plot);
+    return plot;
   }
 
   @Test

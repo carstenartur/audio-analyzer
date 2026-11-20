@@ -67,6 +67,8 @@ public final class DocImageRenderer {
   private static final double DASHBOARD_SPECTROGRAM_MAX_HZ = 2000.0;
   private static final AudioFormatDescriptor MONO_44K = new AudioFormatDescriptor(44100f, 1, 16);
   private static final int FFT = 1024;
+  private static final String[] AMPLITUDE_TICKS = {"+1", "0", "-1"};
+  private static final String[] MAGNITUDE_TICKS = {"0 dB", "-40 dB", "-80 dB"};
 
   private DocImageRenderer() {
     // Static documentation-rendering utility.
@@ -121,10 +123,12 @@ public final class DocImageRenderer {
       g.fillRect(0, 0, DASHBOARD_W, DASHBOARD_H);
       drawAppChrome(g);
       drawControlBar(g, measurement, spectrum);
-      drawWaveform(g, new Rectangle(104, 190, 1468, 260), block);
+      int waveformMargin = PlotRenderTheme.leftAxisMargin(g, AMPLITUDE_TICKS);
+      int spectrumMargin = PlotRenderTheme.leftAxisMargin(g, MAGNITUDE_TICKS);
+      drawWaveform(g, new Rectangle(24 + waveformMargin, 190, 1548 - waveformMargin, 260), block);
       drawSpectrumPanel(
           g,
-          new Rectangle(104, 548, 678, 174),
+          new Rectangle(24 + spectrumMargin, 548, 758 - spectrumMargin, 174),
           spectrum,
           "Spectrum — 440 Hz sine demo",
           PlotRenderTheme.SPECTRUM_LINE);
@@ -187,9 +191,8 @@ public final class DocImageRenderer {
     PlotRenderTheme.drawPlotBackground(g, plot);
     PlotRenderTheme.drawGrid(g, plot, 16, 8);
     PlotRenderTheme.drawTitle(g, plot.x, plot.y - 34, "Waveform — reproducible 440 Hz sine");
-    PlotRenderTheme.drawYAxisLabel(g, plot, "Amplitude [-1..1]");
-    PlotRenderTheme.drawYTicks(
-        g, plot, new double[] {0.0d, 0.5d, 1.0d}, new String[] {"+1", "0", "-1"});
+    PlotRenderTheme.drawYAxisLabel(g, plot, "Amplitude [-1..1]", AMPLITUDE_TICKS);
+    PlotRenderTheme.drawYTicks(g, plot, new double[] {0.0d, 0.5d, 1.0d}, AMPLITUDE_TICKS);
     PlotRenderTheme.drawXAxisLabel(g, plot, "Time [ms]");
     float[] samples = block.channelView(0);
     int visible = Math.min(samples.length, DASHBOARD_WAVEFORM_VISIBLE_SAMPLES);
@@ -250,9 +253,11 @@ public final class DocImageRenderer {
 
   private static void drawSpectrogram(Graphics2D g, Rectangle panel, SpectrogramHistory history) {
     drawPanelShell(g, panel, "Spectrogram — 0–2 kHz detail");
-    int x0 = panel.x + PlotRenderTheme.LEFT_AXIS_MARGIN;
+    String[] frequencyTicks = {"2 kHz", "1 kHz", "0 Hz"};
+    int leftMargin = PlotRenderTheme.leftAxisMargin(g, frequencyTicks);
+    int x0 = panel.x + leftMargin;
     int y0 = panel.y + 44;
-    int w = panel.width - PlotRenderTheme.LEFT_AXIS_MARGIN - 20;
+    int w = panel.width - leftMargin - 20;
     int h = panel.height - 44 - PlotRenderTheme.BOTTOM_AXIS_MARGIN;
     float reference = 1e-6f;
     for (SpectrogramFrame frame : history.snapshot()) {
@@ -272,9 +277,8 @@ public final class DocImageRenderer {
     }
     Rectangle plot = new Rectangle(x0, y0, w, h);
     PlotRenderTheme.drawGrid(g, plot, 8, 4);
-    PlotRenderTheme.drawYAxisLabel(g, plot, "Frequency [Hz]");
-    PlotRenderTheme.drawYTicks(
-        g, plot, new double[] {0.0d, 0.5d, 1.0d}, new String[] {"2 kHz", "1 kHz", "0 Hz"});
+    PlotRenderTheme.drawYAxisLabel(g, plot, "Frequency [Hz]", frequencyTicks);
+    PlotRenderTheme.drawYTicks(g, plot, new double[] {0.0d, 0.5d, 1.0d}, frequencyTicks);
     double durationSeconds =
         (history.latest().sourceFrameIndex() - history.frameAt(0).sourceFrameIndex())
             / (double) history.sampleRate();
@@ -354,13 +358,13 @@ public final class DocImageRenderer {
     Graphics2D g = img.createGraphics();
     try {
       applyHints(g);
-      Rectangle plot = new Rectangle(80, 52, W - 96, H - 96);
+      int leftMargin = PlotRenderTheme.leftAxisMargin(g, AMPLITUDE_TICKS);
+      Rectangle plot = new Rectangle(leftMargin, 52, W - leftMargin - 16, H - 96);
       PlotRenderTheme.drawPlotBackground(g, W, H, plot);
       PlotRenderTheme.drawGrid(g, plot, 10, 8);
       PlotRenderTheme.drawTitle(g, plot.x, 16, "Waveform (triggered)");
-      PlotRenderTheme.drawYAxisLabel(g, plot, "Amplitude [-1..1]");
-      PlotRenderTheme.drawYTicks(
-          g, plot, new double[] {0.0d, 0.5d, 1.0d}, new String[] {"+1", "0", "-1"});
+      PlotRenderTheme.drawYAxisLabel(g, plot, "Amplitude [-1..1]", AMPLITUDE_TICKS);
+      PlotRenderTheme.drawYTicks(g, plot, new double[] {0.0d, 0.5d, 1.0d}, AMPLITUDE_TICKS);
       PlotRenderTheme.drawXAxisLabel(g, plot, "Sample index");
 
       float[] samples = view.samplesView();
@@ -422,13 +426,13 @@ public final class DocImageRenderer {
     Graphics2D g = img.createGraphics();
     try {
       applyHints(g);
-      Rectangle plot = new Rectangle(80, 52, W - 96, H - 96);
+      int leftMargin = PlotRenderTheme.leftAxisMargin(g, MAGNITUDE_TICKS);
+      Rectangle plot = new Rectangle(leftMargin, 52, W - leftMargin - 16, H - 96);
       PlotRenderTheme.drawPlotBackground(g, W, H, plot);
       PlotRenderTheme.drawGrid(g, plot, 10, 8);
       PlotRenderTheme.drawTitle(g, plot.x, 16, "Spectrum (averaged + peak hold)");
-      PlotRenderTheme.drawYAxisLabel(g, plot, "Magnitude [dB rel. peak]");
-      PlotRenderTheme.drawYTicks(
-          g, plot, new double[] {0.0d, 0.5d, 1.0d}, new String[] {"0 dB", "-40 dB", "-80 dB"});
+      PlotRenderTheme.drawYAxisLabel(g, plot, "Magnitude [dB rel. peak]", MAGNITUDE_TICKS);
+      PlotRenderTheme.drawYTicks(g, plot, new double[] {0.0d, 0.5d, 1.0d}, MAGNITUDE_TICKS);
       PlotRenderTheme.drawXTicks(
           g, plot, new double[] {0.0d, 0.5d, 1.0d}, new String[] {"0 Hz", "11025 Hz", "22050 Hz"});
       PlotRenderTheme.drawXAxisLabel(g, plot, "Frequency [Hz]");
@@ -610,8 +614,10 @@ public final class DocImageRenderer {
       g.setColor(PlotRenderTheme.PANEL_BACKGROUND);
       g.fillRect(0, 0, W, H);
       int halfW = W / 2 - 4;
-      Rectangle leftPlot = new Rectangle(80, 48, halfW - 92, H - 112);
-      Rectangle rightPlot = new Rectangle(halfW + 84, 48, halfW - 92, H - 112);
+      int leftMargin = PlotRenderTheme.leftAxisMargin(g, MAGNITUDE_TICKS);
+      Rectangle leftPlot = new Rectangle(leftMargin, 48, halfW - leftMargin - 12, H - 112);
+      Rectangle rightPlot =
+          new Rectangle(halfW + leftMargin + 4, 48, halfW - leftMargin - 12, H - 112);
 
       drawSpectrumPanel(g, leftPlot, sa, "A — 440 Hz", PlotRenderTheme.SPECTRUM_LINE);
       drawSpectrumPanel(g, rightPlot, sb, "B — 880 Hz", PlotRenderTheme.WAVEFORM_RIGHT);
@@ -636,9 +642,8 @@ public final class DocImageRenderer {
     g.fillRect(plot.x, plot.y, plot.width, plot.height);
     PlotRenderTheme.drawGrid(g, plot, 10, 8);
     PlotRenderTheme.drawTitle(g, plot.x, plot.y - 16, title);
-    PlotRenderTheme.drawYAxisLabel(g, plot, "Magnitude [dB rel. peak]");
-    PlotRenderTheme.drawYTicks(
-        g, plot, new double[] {0.0d, 0.5d, 1.0d}, new String[] {"0 dB", "-40 dB", "-80 dB"});
+    PlotRenderTheme.drawYAxisLabel(g, plot, "Magnitude [dB rel. peak]", MAGNITUDE_TICKS);
+    PlotRenderTheme.drawYTicks(g, plot, new double[] {0.0d, 0.5d, 1.0d}, MAGNITUDE_TICKS);
     PlotRenderTheme.drawXTicks(
         g, plot, new double[] {0.0d, 0.5d, 1.0d}, new String[] {"0 Hz", "11025 Hz", "22050 Hz"});
     PlotRenderTheme.drawXAxisLabel(g, plot, "Frequency [Hz]");
@@ -843,13 +848,13 @@ public final class DocImageRenderer {
       g.drawString("Generated 330 Hz sine  |  44 100 Hz / mono / 16-bit  |  0.09 s", 148, 23);
 
       // Waveform area
-      Rectangle plot = new Rectangle(80, 64, W - 96, H - 148);
+      int leftMargin = PlotRenderTheme.leftAxisMargin(g, AMPLITUDE_TICKS);
+      Rectangle plot = new Rectangle(leftMargin, 64, W - leftMargin - 16, H - 148);
       PlotRenderTheme.drawPlotBackground(g, plot);
       PlotRenderTheme.drawGrid(g, plot, 10, 6);
       PlotRenderTheme.drawTitle(g, plot.x, plot.y - 16, "Waveform — 330 Hz demo");
-      PlotRenderTheme.drawYAxisLabel(g, plot, "Amplitude [-1..1]");
-      PlotRenderTheme.drawYTicks(
-          g, plot, new double[] {0.0d, 0.5d, 1.0d}, new String[] {"+1", "0", "-1"});
+      PlotRenderTheme.drawYAxisLabel(g, plot, "Amplitude [-1..1]", AMPLITUDE_TICKS);
+      PlotRenderTheme.drawYTicks(g, plot, new double[] {0.0d, 0.5d, 1.0d}, AMPLITUDE_TICKS);
       PlotRenderTheme.drawXAxisLabel(g, plot, "Time [ms]");
       int n = samples.length;
       double durationMs = 1000.0d * (n - 1) / MONO_44K.sampleRate();
@@ -1017,15 +1022,17 @@ public final class DocImageRenderer {
       int chartW = W - chartX - 12;
       int chartY = 52;
       int chartH = (WB_H - 80) / 2 - 4;
-      Rectangle chartBounds = new Rectangle(chartX + 80, chartY + 24, chartW - 90, chartH - 44);
+      String[] amplitudeTicks = {"1.0", "0.5", "0.0"};
+      int leftMargin = PlotRenderTheme.leftAxisMargin(g, amplitudeTicks);
+      Rectangle chartBounds =
+          new Rectangle(chartX + leftMargin, chartY + 24, chartW - leftMargin - 10, chartH - 44);
       PlotRenderTheme.drawPlotBackground(g, chartBounds);
       PlotRenderTheme.drawGrid(g, chartBounds, 4, 5);
       g.setFont(PlotRenderTheme.TITLE_FONT);
       g.setColor(PlotRenderTheme.TEXT_PRIMARY);
       g.drawString("Harmonic profile", chartBounds.x, chartY + 16);
-      PlotRenderTheme.drawYAxisLabel(g, chartBounds, "Amplitude");
-      PlotRenderTheme.drawYTicks(
-          g, chartBounds, new double[] {0.0d, 0.5d, 1.0d}, new String[] {"1.0", "0.5", "0.0"});
+      PlotRenderTheme.drawYAxisLabel(g, chartBounds, "Amplitude", amplitudeTicks);
+      PlotRenderTheme.drawYTicks(g, chartBounds, new double[] {0.0d, 0.5d, 1.0d}, amplitudeTicks);
       PlotRenderTheme.drawXTicks(
           g,
           chartBounds,
@@ -1114,16 +1121,14 @@ public final class DocImageRenderer {
       g.drawString("Example relative feature differences; no measured calibration result", 16, 48);
 
       // Bar chart area
-      int chartMarginLeft = PlotRenderTheme.LEFT_AXIS_MARGIN;
+      String[] differenceTicks = {"100 %", "75 %", "50 %", "25 %", "0 %"};
+      int chartMarginLeft = PlotRenderTheme.leftAxisMargin(g, differenceTicks);
       Rectangle chart = new Rectangle(chartMarginLeft, 82, W - chartMarginLeft - 16, 304);
       PlotRenderTheme.drawPlotBackground(g, chart);
       PlotRenderTheme.drawGrid(g, chart, 5, 8);
-      PlotRenderTheme.drawYAxisLabel(g, chart, "Relative difference");
+      PlotRenderTheme.drawYAxisLabel(g, chart, "Relative difference", differenceTicks);
       PlotRenderTheme.drawYTicks(
-          g,
-          chart,
-          new double[] {0.0d, 0.25d, 0.5d, 0.75d, 1.0d},
-          new String[] {"100 %", "75 %", "50 %", "25 %", "0 %"});
+          g, chart, new double[] {0.0d, 0.25d, 0.5d, 0.75d, 1.0d}, differenceTicks);
 
       int n = featureNames.length;
       int groupW = chart.width / Math.max(1, n);

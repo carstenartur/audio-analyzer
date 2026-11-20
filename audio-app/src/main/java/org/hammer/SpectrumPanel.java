@@ -19,7 +19,6 @@ public final class SpectrumPanel extends javax.swing.JPanel {
 
   private static final long serialVersionUID = 1L;
   private static final int FFT_SIZE = 1024;
-  private static final int LEFT_MARGIN = PlotRenderTheme.LEFT_AXIS_MARGIN;
   private static final int RIGHT_MARGIN = 12;
   private static final int TOP_MARGIN = 18;
   private static final int BOTTOM_MARGIN = PlotRenderTheme.BOTTOM_AXIS_MARGIN;
@@ -191,18 +190,18 @@ public final class SpectrumPanel extends javax.swing.JPanel {
   private void paintSpectrum(Graphics2D g) {
     int width = getWidth();
     int height = getHeight();
-    int plotX = LEFT_MARGIN;
+    String[] magnitudeTicks = {"0 dB", "-40 dB", "-80 dB"};
+    int plotX = PlotRenderTheme.leftAxisMargin(g, magnitudeTicks);
     int plotY = TOP_MARGIN;
-    int plotWidth = Math.max(1, width - LEFT_MARGIN - RIGHT_MARGIN);
+    int plotWidth = Math.max(1, width - plotX - RIGHT_MARGIN);
     int plotHeight = Math.max(1, height - TOP_MARGIN - BOTTOM_MARGIN);
     Rectangle plotBounds = new Rectangle(plotX, plotY, plotWidth, plotHeight);
     PlotRenderTheme.drawPlotBackground(g, width, height, plotBounds);
     PlotRenderTheme.drawGrid(g, plotBounds, 8, 6);
     PlotRenderTheme.drawTitle(g, plotBounds.x, 14, "Spectrum");
     PlotRenderTheme.drawXAxisLabel(g, plotBounds, "Frequency [Hz]");
-    PlotRenderTheme.drawYAxisLabel(g, plotBounds, "Magnitude [dB rel. peak]");
-    PlotRenderTheme.drawYTicks(
-        g, plotBounds, new double[] {0.0d, 0.5d, 1.0d}, new String[] {"0 dB", "-40 dB", "-80 dB"});
+    PlotRenderTheme.drawYAxisLabel(g, plotBounds, "Magnitude [dB rel. peak]", magnitudeTicks);
+    PlotRenderTheme.drawYTicks(g, plotBounds, new double[] {0.0d, 0.5d, 1.0d}, magnitudeTicks);
 
     SpectrumSnapshot spectrum = getCurrentSpectrum();
     if (spectrum == null) {
