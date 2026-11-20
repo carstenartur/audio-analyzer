@@ -42,10 +42,10 @@ final class WorkbenchHealthScreenshots {
   }
 
   static Page.ScreenshotOptions options(Page page) {
-    // Diagnostic hashes and generated IDs stay in closed details; only observed times are volatile
-    // in these screenshots. Session identifiers and pseudonyms are fixed by each real scenario.
+    // Closed details must not project mask rectangles onto unrelated visible controls. Scenario
+    // helpers separately normalize visible generated identifiers after their functional assertions.
     return new Page.ScreenshotOptions()
         .setFullPage(false)
-        .setMask(List.of(page.locator("[data-screenshot-mask='true']")));
+        .setMask(List.of(page.locator("[data-screenshot-mask='true']:visible")));
   }
 }

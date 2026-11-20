@@ -182,11 +182,11 @@ export function ExperimentOperationsPanel() {
         <h2 id="experiment-setup-heading">1. Source and microphone array</h2>
         <fieldset disabled={busy || running}>
           <label>Experiment name<input value={configuration.name} onChange={(event) => changed({ name: event.target.value })} /></label>
-          <label>Source mode<select data-testid="experiment-source-mode" value={configuration.sourceMode}
+          <label><span id="experiment-source-mode-label">Source mode</span><select aria-labelledby="experiment-source-mode-label" data-testid="experiment-source-mode" value={configuration.sourceMode}
             onChange={(event) => changed({ sourceMode: event.target.value as ExperimentConfiguration['sourceMode'] })}>
             <option value="SIMULATION">Simulation</option><option value="REPLAY">Recording replay</option><option value="LIVE">Live acquisition</option>
           </select></label>
-          <label>Microphone-array profile<select data-testid="experiment-profile" value={configuration.profileId} onChange={(event) => {
+          <label><span id="experiment-profile-label">Microphone-array profile</span><select aria-labelledby="experiment-profile-label" data-testid="experiment-profile" value={configuration.profileId} onChange={(event) => {
             const selected = catalogue?.profiles.find((item) => item.id === event.target.value);
             changed({ profileId: event.target.value }); setDefinition(selected?.definition ?? '');
           }}>{catalogue?.profiles.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.channels} channels</option>)}</select></label>

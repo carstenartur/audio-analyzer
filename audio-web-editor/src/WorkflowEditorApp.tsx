@@ -441,29 +441,31 @@ export default function WorkflowEditorApp() {
       <aside className="workbench__panel workbench__panel--left" data-testid="node-palette">
         <ExperimentDocumentPanel />
         <ExperimentDocumentHealthPanel />
-        <p><a className="action-button" href="/workbench/experiment" data-testid="open-microphone-experiment">Open microphone experiment workflow</a></p>
+        <p><a className="action-button workbench__experiment-link" href="/workbench/experiment" data-testid="open-microphone-experiment">Open microphone experiment workflow</a></p>
         <CollaborationPanel controller={collaboration} />
-        <h2>Node palette</h2>
-        <p className="help-text">
-          {canEdit
-            ? 'Semantic changes are pending until accepted and projected by the server.'
-            : 'The seed graph is read-only. Join a live collaboration session to edit.'}
-        </p>
-        <div data-testid="catalog-list">
-          {catalog.map((entry) => (
-            <button
-              className="palette-entry"
-              data-testid={`palette-node-${entry.type}`}
-              disabled={!canEdit}
-              key={entry.type}
-              onClick={() => addCatalogNode(entry)}
-              type="button"
-            >
-              <span className="palette-entry__label">{entry.label}</span>
-              <span className="palette-entry__type">{entry.type}</span>
-            </button>
-          ))}
-        </div>
+        <section aria-labelledby="node-palette-heading" data-testid="node-palette-content">
+          <h2 id="node-palette-heading">Node palette</h2>
+          <p className="help-text">
+            {canEdit
+              ? 'Semantic changes are pending until accepted and projected by the server.'
+              : 'The seed graph is read-only. Join a live collaboration session to edit.'}
+          </p>
+          <div data-testid="catalog-list">
+            {catalog.map((entry) => (
+              <button
+                className="palette-entry"
+                data-testid={`palette-node-${entry.type}`}
+                disabled={!canEdit}
+                key={entry.type}
+                onClick={() => addCatalogNode(entry)}
+                type="button"
+              >
+                <span className="palette-entry__label">{entry.label}</span>
+                <span className="palette-entry__type">{entry.type}</span>
+              </button>
+            ))}
+          </div>
+        </section>
       </aside>
 
       <main

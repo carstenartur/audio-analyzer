@@ -141,7 +141,7 @@ final class WorkbenchBrowserHarness implements AutoCloseable {
     return actor;
   }
 
-  /** Normalizes only screenshot text, never the actual server identity or credential. */
+  /** Normalizes only screenshot text, never actual server identities, graph IDs or credentials. */
   static void normalizeIdentityLabels(Page page) {
     page.evaluate(
         """
@@ -152,7 +152,8 @@ final class WorkbenchBrowserHarness implements AutoCloseable {
           while (walker.nextNode()) {
             walker.currentNode.textContent = walker.currentNode.textContent
               .replace(/ · [0-9A-F]{6}\\b/g, ' · CLIENT')
-              .replace(/actor\\.[a-f0-9-]{36}/g, 'client (masked)');
+              .replace(/actor\\.[a-f0-9-]{36}/g, 'client (masked)')
+              .replace(/(node\\.[a-z0-9-]+\\.)[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/g, '$1example');
           }
           panel.querySelectorAll('time').forEach(element => {
             element.textContent = '19 Jul 2026, 12:00 UTC';

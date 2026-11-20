@@ -112,6 +112,12 @@ select:disabled {
   cursor: pointer;
 }
 
+.workbench__experiment-link {
+  display: block;
+  line-height: 1.4;
+  text-decoration: none;
+}
+
 .palette-entry:hover:not(:disabled),
 .action-button:hover:not(:disabled) {
   border-color: #89b4fa;

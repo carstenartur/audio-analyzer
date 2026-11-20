@@ -212,9 +212,10 @@ class WorkbenchInitialLoadIT {
       String entryText = recordingInputEntry.innerText();
       assertTrue(entryText.contains("Recording Input"), "Entry must show label");
 
-      // Capture palette screenshot
-      Locator palette = page.locator("[data-testid='node-palette']");
+      // Frame the actual catalog, not the document/collaboration controls earlier in the sidebar.
+      Locator palette = page.locator("[data-testid='node-palette-content']");
       WorkbenchHealthScreenshots.awaitReadiness(page, null);
+      palette.scrollIntoViewIfNeeded();
       byte[] pngBytes = palette.screenshot();
 
       ScreenshotPipeline.processScreenshot("node-palette.png", pngBytes);

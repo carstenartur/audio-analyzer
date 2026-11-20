@@ -73,26 +73,12 @@ class MicrophoneExperimentWebIT {
   void profileReadinessSimulationAndEvidenceRemainVisibleInOneWorkflow() throws IOException {
     Map<String, byte[]> screenshots = new LinkedHashMap<>();
     try (Page page = browser.newPage()) {
-      page.setViewportSize(1440, 1000);
-      page.setDefaultTimeout(30_000);
-      page.navigate(WorkbenchContainerFactory.baseUrl(container) + "/workbench/experiment");
-      page.locator("[data-testid='experiment-operations']").waitFor();
-      page.waitForCondition(
-          () -> page.locator("[data-testid='experiment-profile'] option").count() > 0);
+      openExperiment(page);
       assertFalse(page.locator("[data-testid='experiment-start']").isEnabled());
-      assertAccessibleNames(page);
 
-      Locator profileSummary =
-          page.getByRole(
-              AriaRole.BUTTON,
-              new Page.GetByRoleOptions()
-                  .setName("Edit geometry, device format and calibration")
-                  .setExact(true));
-      focusWithKeyboard(page, profileSummary);
-      assertKeyboardFocusVisible(profileSummary);
-      page.keyboard().press("Enter");
-      assertTrue(
-          page.getByLabel("Profile name", new Page.GetByLabelOptions().setExact(true)).isVisible());
+      Locator profileSummary = page.locator("[data-testid='experiment-profile-editor'] > summary");
+      profileSummary.click();
+      assertTrue(page.locator("[data-testid='experiment-profile-name']").isVisible());
       page.locator("[data-testid='experiment-profile-name']").fill("Browser validation array");
       assertFalse(page.locator("[data-testid='experiment-preflight']").isEnabled());
       page.locator("[data-testid='experiment-save-profile']").click();
@@ -101,25 +87,14 @@ class MicrophoneExperimentWebIT {
               page.locator("[data-testid='experiment-profile']")
                   .innerText()
                   .contains("Browser validation array"));
-      profileSummary.press("Enter");
+      profileSummary.click();
       assertFalse(page.locator("[data-testid='experiment-profile-name']").isVisible());
       page.locator("[data-testid='experiment-duration']").fill("1");
-      Locator preflight =
-          page.getByRole(
-              AriaRole.BUTTON,
-              new Page.GetByRoleOptions().setName("Check experiment readiness").setExact(true));
-      focusWithKeyboard(page, preflight);
-      assertKeyboardFocusVisible(preflight);
-      page.keyboard().press("Enter");
+      page.locator("[data-testid='experiment-preflight']").click();
       page.waitForCondition(
           () ->
               page.locator("[data-testid='experiment-health-state']").innerText().equals("READY"));
       assertTrue(page.locator("[data-testid='experiment-start']").isEnabled());
-      assertContrast(page.locator("[data-testid='experiment-health-state']"));
-      assertContrast(page.locator(".experiment-help").first());
-      assertContrast(page.getByLabel("Source mode", new Page.GetByLabelOptions().setExact(true)));
-      assertContrast(preflight);
-      assertContrast(page.locator("[data-testid='experiment-start']"));
       screenshots.put("microphone-experiment-ready.png", screenshot(page));
 
       page.locator("[data-testid='experiment-source-mode']").selectOption("LIVE");
@@ -132,8 +107,6 @@ class MicrophoneExperimentWebIT {
                   .equals("BLOCKED"));
       assertTrue(page.locator("[data-testid='finding-source.live-device']").isVisible());
       assertFalse(page.locator("[data-testid='experiment-start']").isEnabled());
-      assertContrast(page.locator("[data-testid='experiment-health-state']"));
-      assertContrast(page.locator("[data-testid='finding-source.live-device'] strong"));
       screenshots.put("microphone-experiment-blocked.png", screenshot(page));
 
       page.locator("[data-testid='experiment-source-mode']").selectOption("SIMULATION");
@@ -191,32 +164,103 @@ class MicrophoneExperimentWebIT {
                                 entry.getKey(), entry.getValue())));
   }
 
-  private void captureRuntimeStates(Map<String, byte[]> screenshots) {
-    for (var state :
-        List.of(
-            ExperimentHealthState.RUNNING,
-            ExperimentHealthState.DEGRADED,
-            ExperimentHealthState.INCOMPLETE)) {
-      String body =
-          JsonMapper.builder()
-              .findAndAddModules()
-              .build()
-              .writeValueAsString(MicrophoneExperimentHealthFixtures.snapshot(state));
+  @Test
+  void controlsHaveAccessibleNamesKeyboardAccessAndReadableStateColors() {
+    // Accessibility is an independent hard gate, so a failure still allows the functional scenario
+    // to collect all six documentation images in the same CI run.
+    try (Page page = browser.newPage()) {
+      openExperiment(page);
+      assertAccessibleNames(page);
+      Locator profileSummary =
+          page.getByRole(
+              AriaRole.BUTTON,
+              new Page.GetByRoleOptions()
+                  .setName("Edit geometry, device format and calibration")
+                  .setExact(true));
+      focusWithKeyboard(page, profileSummary);
+      assertKeyboardFocusVisible(profileSummary);
+      page.keyboard().press("Enter");
+      assertTrue(
+          page.getByLabel("Profile name", new Page.GetByLabelOptions().setExact(true)).isVisible());
+      page.keyboard().press("Enter");
+      assertFalse(page.locator("[data-testid='experiment-profile-name']").isVisible());
+      page.locator("[data-testid='experiment-duration']").fill("1");
+      Locator preflight =
+          page.getByRole(
+              AriaRole.BUTTON,
+              new Page.GetByRoleOptions().setName("Check experiment readiness").setExact(true));
+      focusWithKeyboard(page, preflight);
+      assertKeyboardFocusVisible(preflight);
+      page.keyboard().press("Enter");
+      page.waitForCondition(
+          () ->
+              page.locator("[data-testid='experiment-health-state']").innerText().equals("READY"));
+      assertTrue(page.locator("[data-testid='experiment-start']").isEnabled());
+      assertContrast(page.locator("[data-testid='experiment-health-state']"));
+      assertContrast(page.locator(".experiment-help").first());
+      assertContrast(page.getByLabel("Source mode", new Page.GetByLabelOptions().setExact(true)));
+      assertContrast(preflight);
+      assertContrast(page.locator("[data-testid='experiment-start']"));
+
+      page.locator("[data-testid='experiment-source-mode']").selectOption("LIVE");
+      preflight.click();
+      page.waitForCondition(
+          () ->
+              page.locator("[data-testid='experiment-health-state']")
+                  .innerText()
+                  .equals("BLOCKED"));
+      assertFalse(page.locator("[data-testid='experiment-start']").isEnabled());
+      assertContrast(page.locator("[data-testid='experiment-health-state']"));
+      assertContrast(page.locator("[data-testid='finding-source.live-device'] strong"));
+    }
+    for (var state : runtimeStates()) {
       try (Page page = browser.newPage()) {
-        page.setViewportSize(1440, 1000);
-        page.route(
-            "**/experiment-operations/status",
-            route ->
-                route.fulfill(
-                    new Route.FulfillOptions().setContentType("application/json").setBody(body)));
-        page.navigate(WorkbenchContainerFactory.baseUrl(container) + "/workbench/experiment");
-        page.waitForCondition(
-            () ->
-                page.locator("[data-testid='experiment-health-state']")
-                    .innerText()
-                    .equals(state.name()));
-        page.waitForCondition(
-            () -> page.locator("[data-testid='experiment-profile'] option").count() > 0);
+        openRuntimeState(page, state);
+        assertContrast(page.locator("[data-testid='experiment-health-state']"));
+        assertContrast(page.locator("[data-testid='experiment-runtime-strip'] strong"));
+      }
+    }
+  }
+
+  private void openExperiment(Page page) {
+    page.setViewportSize(1440, 1000);
+    page.setDefaultTimeout(30_000);
+    page.navigate(WorkbenchContainerFactory.baseUrl(container) + "/workbench/experiment");
+    page.locator("[data-testid='experiment-operations']").waitFor();
+    page.waitForCondition(
+        () -> page.locator("[data-testid='experiment-profile'] option").count() > 0);
+  }
+
+  private static List<ExperimentHealthState> runtimeStates() {
+    return List.of(
+        ExperimentHealthState.RUNNING,
+        ExperimentHealthState.DEGRADED,
+        ExperimentHealthState.INCOMPLETE);
+  }
+
+  private void openRuntimeState(Page page, ExperimentHealthState state) {
+    String body =
+        JsonMapper.builder()
+            .findAndAddModules()
+            .build()
+            .writeValueAsString(MicrophoneExperimentHealthFixtures.snapshot(state));
+    page.route(
+        "**/experiment-operations/status",
+        route ->
+            route.fulfill(
+                new Route.FulfillOptions().setContentType("application/json").setBody(body)));
+    openExperiment(page);
+    page.waitForCondition(
+        () ->
+            page.locator("[data-testid='experiment-health-state']")
+                .innerText()
+                .equals(state.name()));
+  }
+
+  private void captureRuntimeStates(Map<String, byte[]> screenshots) {
+    for (var state : runtimeStates()) {
+      try (Page page = browser.newPage()) {
+        openRuntimeState(page, state);
         assertFalse(page.locator("[data-testid='experiment-start']").isEnabled());
         assertEquals(
             state != ExperimentHealthState.INCOMPLETE,
@@ -240,23 +284,29 @@ class MicrophoneExperimentWebIT {
         if (state == ExperimentHealthState.DEGRADED) {
           assertTrue(page.locator("[data-testid='finding-processing.overruns']").isVisible());
         }
-        assertContrast(page.locator("[data-testid='experiment-health-state']"));
-        assertContrast(page.locator("[data-testid='experiment-runtime-strip'] strong"));
         screenshots.put("microphone-experiment-" + suffix + ".png", screenshot(page));
       }
     }
   }
 
   private static void assertAccessibleNames(Page page) {
-    for (String label :
-        List.of(
-            "Experiment name",
-            "Source mode",
-            "Microphone-array profile",
-            "Intended duration (seconds)")) {
+    for (var control :
+        Map.of(
+                "Experiment name", AriaRole.TEXTBOX,
+                "Source mode", AriaRole.COMBOBOX,
+                "Microphone-array profile", AriaRole.COMBOBOX,
+                "Intended duration (seconds)", AriaRole.SPINBUTTON)
+            .entrySet()) {
+      String label = control.getKey();
       Locator input = page.getByLabel(label, new Page.GetByLabelOptions().setExact(true));
-      assertEquals(1, input.count(), "Each setting must have one unambiguous accessible name");
+      assertEquals(1, input.count(), "Expected one setting with the exact label: " + label);
       assertTrue(input.isVisible());
+      assertEquals(
+          1,
+          page.getByRole(
+                  control.getValue(), new Page.GetByRoleOptions().setName(label).setExact(true))
+              .count(),
+          "Expected one control with the exact accessible name: " + label);
     }
     for (String name :
         List.of(
@@ -344,7 +394,7 @@ class MicrophoneExperimentWebIT {
         new Page.ScreenshotOptions()
             .setFullPage(true)
             .setStyle(style)
-            .setMask(List.of(page.locator("[data-screenshot-mask='true']"))));
+            .setMask(List.of(page.locator("[data-screenshot-mask='true']:visible"))));
   }
 
   private static boolean isDockerAvailable() {
