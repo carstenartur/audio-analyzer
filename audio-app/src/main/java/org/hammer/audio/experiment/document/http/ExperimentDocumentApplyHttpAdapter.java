@@ -25,6 +25,9 @@ import org.springframework.web.bind.annotation.RestController;
 public final class ExperimentDocumentApplyHttpAdapter {
 
   /** Explicit confirmation header for discarding dirty current workflow state. */
+  public static final String CURRENT_WORKFLOW_HEADER = "X-Audio-Analyzer-Current-Workflow";
+
+  /** Explicit dirty-workflow discard decision. */
   public static final String DISCARD_DIRTY_HEADER = "X-Audio-Analyzer-Discard-Dirty";
 
   private final ExperimentDocumentWorkspaceService workspaceService;
@@ -34,12 +37,14 @@ public final class ExperimentDocumentApplyHttpAdapter {
     this.workspaceService = Objects.requireNonNull(workspaceService, "workspaceService");
   }
 
-  /**
-   * Revalidate and apply a previously previewed setup.
-   *
-   * <p>The caller must echo the preview hash through {@code If-Match}. Dirty current state is
-   * rejected unless the dedicated discard header is explicitly true.
-   */
+  /** Compatibility overload used by non-HTTP callers. */
+  public ResponseEntity<ApplyResponse> apply(
+      HttpServletRequest request, String expectedCanonicalSha256, boolean discardDirty)
+      throws IOException {
+    return apply(request, expectedCanonicalSha256, discardDirty, null);
+  }
+
+  /** Revalidate both preview hashes; replacement also requires an explicit dirty-state decision. */
   @PostMapping(
       path = "/apply",
       consumes = {ExperimentDocumentFormat.MEDIA_TYPE, MediaType.APPLICATION_JSON_VALUE},
@@ -47,13 +52,25 @@ public final class ExperimentDocumentApplyHttpAdapter {
   public ResponseEntity<ApplyResponse> apply(
       HttpServletRequest request,
       @RequestHeader(HttpHeaders.IF_MATCH) String expectedCanonicalSha256,
-      @RequestHeader(name = DISCARD_DIRTY_HEADER, defaultValue = "false") boolean discardDirty)
+      @RequestHeader(name = DISCARD_DIRTY_HEADER, defaultValue = "false") boolean discardDirty,
+      @RequestHeader(name = CURRENT_WORKFLOW_HEADER) String currentWorkflowHash)
       throws IOException {
     ExperimentDocumentWorkspaceService.ApplyResult result =
-        workspaceService.apply(request.getInputStream(), expectedCanonicalSha256, discardDirty);
+        workspaceService.apply(
+            request.getInputStream(), expectedCanonicalSha256, discardDirty, currentWorkflowHash);
     return ResponseEntity.ok()
         .header(HttpHeaders.ETAG, "\"" + result.canonicalSha256() + "\"")
         .body(new ApplyResponse(result.canonicalSha256(), result.projection(), result.dirty()));
+  }
+
+  /** Reject a concurrently changed graph instead of silently replacing a different preview. */
+  @ExceptionHandler(org.hammer.audio.workflow.editor.StaleWorkflowException.class)
+  public ResponseEntity<ExperimentDocumentHttpAdapter.ErrorResponse> handleStale(
+      org.hammer.audio.workflow.editor.StaleWorkflowException failure) {
+    return ResponseEntity.status(HttpStatus.PRECONDITION_FAILED)
+        .body(
+            new ExperimentDocumentHttpAdapter.ErrorResponse(
+                "current-workflow-changed", "/workflow", failure.getMessage()));
   }
 
   /** Dirty workspace conflicts require an explicit discard confirmation. */
@@ -72,7 +89,8 @@ public final class ExperimentDocumentApplyHttpAdapter {
       ExperimentDocumentApplyException failure) {
     HttpStatus status =
         switch (failure.code()) {
-          case "document-hash-mismatch" -> HttpStatus.PRECONDITION_FAILED;
+          case "document-hash-mismatch", "current-workflow-changed" ->
+              HttpStatus.PRECONDITION_FAILED;
           case "invalid-document-hash" -> HttpStatus.BAD_REQUEST;
           default -> HttpStatus.CONFLICT;
         };

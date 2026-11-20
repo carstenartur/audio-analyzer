@@ -15,12 +15,25 @@ import java.util.TreeMap;
  *
  * @param assetPaths local paths selected for portable asset identifiers
  * @param outputDirectory optional local directory selected for requested outputs
+ * @param capture explicitly selected local capture capabilities and channel mapping
+ * @param confirmedMediaTypes deliberate MIME confirmations for otherwise unrecognized file formats
  */
 @SuppressWarnings("PMD.LooseCoupling")
-public record ExperimentLocalBindings(Map<String, Path> assetPaths, Path outputDirectory) {
+public record ExperimentLocalBindings(
+    Map<String, Path> assetPaths,
+    Path outputDirectory,
+    ExperimentCaptureBinding capture,
+    Map<String, String> confirmedMediaTypes) {
+
+  /** Create file/output bindings without a local capture device or MIME confirmations. */
+  public ExperimentLocalBindings(Map<String, Path> assetPaths, Path outputDirectory) {
+    this(assetPaths, outputDirectory, null, Map.of());
+  }
 
   /* Validate identifiers and normalize all local paths. */
   public ExperimentLocalBindings {
+    confirmedMediaTypes =
+        Map.copyOf(Objects.requireNonNull(confirmedMediaTypes, "confirmedMediaTypes"));
     Objects.requireNonNull(assetPaths, "assetPaths");
     TreeMap<String, Path> copy = new TreeMap<>();
     assetPaths.forEach(

@@ -192,7 +192,7 @@ class ExperimentDocumentFixtureTest {
             .anyMatch(item -> "algorithm-incompatible".equals(item.code())));
   }
 
-  private static AudioAnalyzerPlugin gainPlugin() {
+  static AudioAnalyzerPlugin gainPlugin() {
     return new AudioAnalyzerPlugin() {
       @Override
       public PluginDescriptor descriptor() {

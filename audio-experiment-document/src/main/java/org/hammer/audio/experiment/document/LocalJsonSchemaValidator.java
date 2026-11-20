@@ -1,7 +1,5 @@
 package org.hammer.audio.experiment.document;
 
-import com.fasterxml.jackson.core.JsonFactory;
-import com.fasterxml.jackson.core.StreamReadFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -35,6 +33,8 @@ import org.hammer.audio.plugin.document.DocumentValue;
 final class LocalJsonSchemaValidator {
 
   private static final int MAX_SCHEMA_BYTES = 256 * 1024;
+  private static final List<String> NUMERIC_BOUNDS =
+      List.of("minimum", "maximum", "minLength", "maxLength", "minItems", "maxItems");
   private static final Set<String> ALLOWED_KEYWORDS =
       Set.of(
           "$id",
@@ -53,14 +53,6 @@ final class LocalJsonSchemaValidator {
           "minItems",
           "maxItems");
 
-  private final ObjectMapper mapper;
-
-  LocalJsonSchemaValidator() {
-    JsonFactory factory =
-        JsonFactory.builder().enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION).build();
-    mapper = new ObjectMapper(factory);
-  }
-
   List<DocumentDiagnostic> validate(
       String schemaJson, String expectedSha256, DocumentValue value, String pointer) {
     ArrayList<DocumentDiagnostic> diagnostics = new ArrayList<>();
@@ -69,14 +61,9 @@ final class LocalJsonSchemaValidator {
       diagnostics.add(error(pointer, "schema-too-large", "Plugin schema exceeds 256 KiB"));
       return diagnostics;
     }
-    if (!DocumentHashes.sha256(schemaBytes).equals(expectedSha256)) {
-      diagnostics.add(
-          error(pointer, "schema-digest", "Bundled plugin schema digest does not match"));
-      return diagnostics;
-    }
     JsonNode parsed;
     try {
-      parsed = mapper.readTree(schemaBytes);
+      parsed = new BoundedDocumentJson().read(schemaBytes);
     } catch (IOException exception) {
       diagnostics.add(error(pointer, "invalid-schema", "Bundled plugin schema is not strict JSON"));
       return diagnostics;
@@ -85,8 +72,104 @@ final class LocalJsonSchemaValidator {
       diagnostics.add(error(pointer, "invalid-schema", "Plugin schema root must be an object"));
       return diagnostics;
     }
+    try {
+      if (!schemaDigest(schemaJson).equals(expectedSha256)) {
+        diagnostics.add(
+            error(pointer, "schema-digest", "Bundled plugin schema digest does not match"));
+        return diagnostics;
+      }
+    } catch (IOException exception) {
+      diagnostics.add(error(pointer, "invalid-schema", "Bundled plugin schema is not strict JSON"));
+      return diagnostics;
+    }
+    checkSchema(root, pointer, diagnostics);
+    if (!diagnostics.isEmpty()) {
+      return diagnostics;
+    }
     validateSchemaNode(root, value, pointer, diagnostics, 0);
     return diagnostics;
+  }
+
+  static String schemaDigest(String schemaJson) throws IOException {
+    byte[] bytes = schemaJson.getBytes(StandardCharsets.UTF_8);
+    if (bytes.length > MAX_SCHEMA_BYTES) {
+      throw new IOException("Plugin schema exceeds 256 KiB");
+    }
+    DocumentValue value = DocumentValueJson.fromJson(new BoundedDocumentJson().read(bytes));
+    return DocumentHashes.sha256(
+        new ObjectMapper().writeValueAsBytes(DocumentValueJson.toJson(value)));
+  }
+
+  private static void checkSchema(
+      ObjectNode schema, String pointer, List<DocumentDiagnostic> diagnostics) {
+    schema
+        .fieldNames()
+        .forEachRemaining(
+            name -> {
+              if ("$ref".equals(name)) {
+                diagnostics.add(
+                    error(pointer, "schema-ref", "Plugin schemas must not contain $ref"));
+              } else if (!ALLOWED_KEYWORDS.contains(name)) {
+                diagnostics.add(
+                    error(pointer, "schema-keyword", "Unsupported plugin schema keyword: " + name));
+              }
+            });
+    checkTypes(schema, pointer, diagnostics);
+    checkBounds(schema, pointer, diagnostics);
+    textSet(schema.get("required"), pointer, diagnostics);
+    checkProperties(schema, pointer, diagnostics);
+    if (schema.has("enum") && (!schema.get("enum").isArray() || schema.get("enum").isEmpty())) {
+      diagnostics.add(error(pointer, "invalid-schema", "Schema enum must be a non-empty array"));
+    }
+  }
+
+  private static void checkTypes(
+      ObjectNode schema, String pointer, List<DocumentDiagnostic> diagnostics) {
+    if (schema.has("type")
+        && (!schema.get("type").isTextual()
+            || !Set.of("object", "array", "string", "number", "integer", "boolean", "null")
+                .contains(schema.get("type").asText()))) {
+      diagnostics.add(
+          error(pointer, "invalid-schema", "Schema type must name a supported JSON type"));
+    }
+    if (schema.has("additionalProperties") && !schema.get("additionalProperties").isBoolean()) {
+      diagnostics.add(
+          error(pointer, "invalid-schema", "Schema additionalProperties must be boolean"));
+    }
+  }
+
+  private static void checkBounds(
+      ObjectNode schema, String pointer, List<DocumentDiagnostic> diagnostics) {
+    for (String bound : NUMERIC_BOUNDS) {
+      if (schema.has(bound)
+          && (!schema.get(bound).isNumber()
+              || (bound.endsWith("Length") || bound.endsWith("Items"))
+                  && (schema.get(bound).decimalValue().stripTrailingZeros().scale() > 0
+                      || schema.get(bound).decimalValue().signum() < 0))) {
+        diagnostics.add(error(pointer, "invalid-schema", "Invalid schema bound: " + bound));
+      }
+    }
+  }
+
+  private static void checkProperties(
+      ObjectNode schema, String pointer, List<DocumentDiagnostic> diagnostics) {
+    JsonNode properties = schema.get("properties");
+    if (properties != null && !properties.isObject()) {
+      diagnostics.add(error(pointer, "invalid-schema", "Schema properties must be an object"));
+    } else if (properties != null) {
+      properties
+          .fields()
+          .forEachRemaining(
+              entry -> {
+                if (entry.getValue() instanceof ObjectNode child) {
+                  checkSchema(
+                      child, DocumentValueJson.pointer(pointer, entry.getKey()), diagnostics);
+                } else {
+                  diagnostics.add(
+                      error(pointer, "invalid-schema", "Property schema must be an object"));
+                }
+              });
+    }
   }
 
   private void validateSchemaNode(
@@ -169,11 +252,11 @@ final class LocalJsonSchemaValidator {
       DocumentValue.ArrayValue value,
       String pointer,
       List<DocumentDiagnostic> diagnostics) {
-    int size = value.values().size();
-    if (schema.has("minItems") && size < schema.path("minItems").asInt()) {
+    BigDecimal size = BigDecimal.valueOf(value.values().size());
+    if (schema.has("minItems") && size.compareTo(schema.path("minItems").decimalValue()) < 0) {
       diagnostics.add(error(pointer, "schema-min-items", "Plugin array has too few items"));
     }
-    if (schema.has("maxItems") && size > schema.path("maxItems").asInt()) {
+    if (schema.has("maxItems") && size.compareTo(schema.path("maxItems").decimalValue()) > 0) {
       diagnostics.add(error(pointer, "schema-max-items", "Plugin array has too many items"));
     }
   }
@@ -183,11 +266,11 @@ final class LocalJsonSchemaValidator {
       DocumentValue.StringValue value,
       String pointer,
       List<DocumentDiagnostic> diagnostics) {
-    int length = value.value().length();
-    if (schema.has("minLength") && length < schema.path("minLength").asInt()) {
+    BigDecimal length = BigDecimal.valueOf(value.value().codePointCount(0, value.value().length()));
+    if (schema.has("minLength") && length.compareTo(schema.path("minLength").decimalValue()) < 0) {
       diagnostics.add(error(pointer, "schema-min-length", "Plugin string is too short"));
     }
-    if (schema.has("maxLength") && length > schema.path("maxLength").asInt()) {
+    if (schema.has("maxLength") && length.compareTo(schema.path("maxLength").decimalValue()) > 0) {
       diagnostics.add(error(pointer, "schema-max-length", "Plugin string is too long"));
     }
   }
@@ -214,9 +297,13 @@ final class LocalJsonSchemaValidator {
     if (!(enumNode instanceof ArrayNode values)) {
       return;
     }
-    JsonNode actual = DocumentValueJson.toJson(value);
     for (JsonNode candidate : values) {
-      if (candidate.equals(actual)) {
+      try {
+        if (DocumentValueJson.fromJson(candidate).equals(value)) {
+          return;
+        }
+      } catch (ExperimentDocumentException exception) {
+        diagnostics.add(error(pointer, "invalid-schema", "Schema enum exceeds value limits"));
         return;
       }
     }
@@ -248,7 +335,9 @@ final class LocalJsonSchemaValidator {
       case "object" -> value instanceof DocumentValue.ObjectValue;
       case "array" -> value instanceof DocumentValue.ArrayValue;
       case "string" -> value instanceof DocumentValue.StringValue;
-      case "number", "integer" -> value instanceof DocumentValue.NumberValue;
+      case "number" -> value instanceof DocumentValue.NumberValue;
+      case "integer" ->
+          value instanceof DocumentValue.NumberValue number && number.value().scale() <= 0;
       case "boolean" -> value instanceof DocumentValue.BooleanValue;
       case "null" -> value instanceof DocumentValue.NullValue;
       default -> false;

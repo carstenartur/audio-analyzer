@@ -238,6 +238,9 @@ class ExperimentDocumentSecurityTest {
           ExperimentDocumentCli.run(new String[] {"validate", source.toString()}, stream, stream));
       assertTrue(output.toString(StandardCharsets.UTF_8).contains("\"provenance\""));
       assertEquals(
+          0,
+          ExperimentDocumentCli.run(new String[] {"inspect", source.toString()}, stream, stream));
+      assertEquals(
           2, ExperimentDocumentCli.run(new String[] {"invalid", "missing"}, stream, stream));
     }
   }

@@ -1,106 +1,127 @@
 package org.hammer;
 
 import java.awt.BorderLayout;
-import java.awt.Cursor;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.nio.file.Path;
+import java.util.function.Consumer;
 import javax.swing.JButton;
 import javax.swing.JDialog;
 import javax.swing.JFrame;
-import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
-import javax.swing.SwingWorker;
+import org.hammer.audio.experiment.document.ExperimentDocumentComparison;
 import org.hammer.audio.experiment.document.ExperimentDocumentPreview;
 import org.hammer.audio.experiment.document.ExperimentDocumentService;
-import org.hammer.audio.workflow.Workflow;
+import org.hammer.audio.experiment.document.ExperimentDocumentSession;
 
-/** Modeless, copyable preview and explicit Save-As surface for one experiment document. */
+/** Modeless confirmation preview with one visible Save/Discard/Cancel decision. */
 final class ExperimentDocumentPreviewDialog {
-
-  private static final String TITLE = "Portable experiment document";
-
   private final JFrame owner;
-  private final ExperimentDocumentService documentService;
+  private final ExperimentDocumentService service;
+  private final ExperimentDocumentSession session;
+  private final Consumer<OpenRequest> open;
 
-  ExperimentDocumentPreviewDialog(JFrame owner, ExperimentDocumentService documentService) {
-    this.owner = java.util.Objects.requireNonNull(owner, "owner");
-    this.documentService = java.util.Objects.requireNonNull(documentService, "documentService");
+  ExperimentDocumentPreviewDialog(
+      JFrame owner,
+      ExperimentDocumentService service,
+      ExperimentDocumentSession session,
+      Consumer<OpenRequest> open) {
+    this.owner = owner;
+    this.service = service;
+    this.session = session;
+    this.open = open;
   }
 
-  /** Display a modeless preview; no workflow state is applied or executed. */
-  void show(Path source, ExperimentDocumentPreview preview) {
-    Workflow workflow = documentService.workflow(preview);
-    JDialog dialog = new JDialog(owner, TITLE, false);
+  void show(Path source, ExperimentDocumentPreview preview, boolean importCopy) {
+    long expectedRevision = session.revision();
+    JDialog dialog = new JDialog(owner, "Preview experiment document", false);
     dialog.setLayout(new BorderLayout(8, 8));
-
-    JTextArea summary =
-        new JTextArea(ExperimentDocumentPreviewFormatter.format(source, preview, workflow));
-    summary.setEditable(false);
-    summary.setLineWrap(true);
-    summary.setWrapStyleWord(true);
-    summary.setCaretPosition(0);
-    summary.getAccessibleContext().setAccessibleName("Experiment document preview");
-    JScrollPane scrollPane = new JScrollPane(summary);
-    scrollPane.setPreferredSize(new Dimension(760, 480));
-    dialog.add(scrollPane, BorderLayout.CENTER);
-
+    StringBuilder summary =
+        new StringBuilder(
+            ExperimentDocumentPreviewFormatter.format(source, preview, service.workflow(preview)));
+    if (session.status().open()) {
+      summary
+          .append("\nChanges to current workflow:\n")
+          .append(
+              ExperimentDocumentComparison.compare(
+                  service.workflow(session.preview()), service.workflow(preview)));
+    }
+    summary
+        .append("\nSection SHA-256 values:\n")
+        .append(preview.sectionHashes())
+        .append("\nInstalled plugin sections:\n")
+        .append(service.pluginSections())
+        .append("\nLocal resources still required:\n")
+        .append(
+            new org.hammer.audio.experiment.document.ExperimentLocalBindingService()
+                .inspect(
+                    preview,
+                    new org.hammer.audio.experiment.document.ExperimentLocalBindings(
+                        java.util.Map.of(), null))
+                .diagnostics());
+    JTextArea text = new JTextArea(summary.toString());
+    text.setEditable(false);
+    text.setLineWrap(true);
+    text.setWrapStyleWord(true);
+    text.setCaretPosition(0);
+    text.getAccessibleContext()
+        .setAccessibleName("Complete experiment import preview and semantic changes");
+    JScrollPane scroll = new JScrollPane(text);
+    scroll.setPreferredSize(new Dimension(820, 540));
+    dialog.add(scroll, BorderLayout.CENTER);
     JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-    JButton saveAs = new JButton("Save normalized copy...");
-    saveAs.setToolTipText(
-        "Write a canonical copy to a distinct path without modifying the imported source.");
-    saveAs.addActionListener(event -> chooseNormalizeTarget(dialog, source));
-    actions.add(saveAs);
-    JButton close = new JButton("Close");
+    if (!importCopy) {
+      if (session.status().dirty()) {
+        JButton save = new JButton("Save current and open");
+        save.addActionListener(
+            event -> {
+              open.accept(
+                  new OpenRequest(
+                      false, ExperimentDocumentSession.DirtyDecision.SAVE, expectedRevision));
+              dialog.dispose();
+            });
+        actions.add(save);
+        JButton discard = new JButton("Discard current changes and open");
+        discard.addActionListener(
+            event -> {
+              open.accept(
+                  new OpenRequest(
+                      false, ExperimentDocumentSession.DirtyDecision.DISCARD, expectedRevision));
+              dialog.dispose();
+            });
+        actions.add(discard);
+      } else {
+        JButton apply = new JButton(preview.readOnly() ? "Open read-only" : "Open document");
+        apply.addActionListener(
+            event -> {
+              open.accept(
+                  new OpenRequest(
+                      false, ExperimentDocumentSession.DirtyDecision.DISCARD, expectedRevision));
+              dialog.dispose();
+            });
+        actions.add(apply);
+      }
+    }
+    JButton copy = new JButton("Import independent copy...");
+    copy.addActionListener(
+        event ->
+            open.accept(
+                new OpenRequest(
+                    true, ExperimentDocumentSession.DirtyDecision.CANCEL, expectedRevision)));
+    actions.add(copy);
+    JButton close = new JButton("Cancel");
     close.addActionListener(event -> dialog.dispose());
     actions.add(close);
     dialog.add(actions, BorderLayout.SOUTH);
-
     dialog.pack();
     dialog.setLocationRelativeTo(owner);
     dialog.setVisible(true);
   }
 
-  private void chooseNormalizeTarget(JDialog dialog, Path source) {
-    Path target = ExperimentDocumentFileChooser.chooseSave(dialog);
-    if (target == null) {
-      return;
-    }
-    dialog.setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
-    new SwingWorker<ExperimentDocumentPreview, Void>() {
-      @Override
-      protected ExperimentDocumentPreview doInBackground() throws Exception {
-        return documentService.normalize(source, target);
-      }
-
-      @Override
-      protected void done() {
-        dialog.setCursor(Cursor.getDefaultCursor());
-        try {
-          get();
-          JOptionPane.showMessageDialog(
-              dialog,
-              "Normalized experiment document saved to:\n" + target,
-              TITLE,
-              JOptionPane.INFORMATION_MESSAGE);
-        } catch (InterruptedException exception) {
-          Thread.currentThread().interrupt();
-          showFailure("Normalization was interrupted.", exception);
-        } catch (java.util.concurrent.ExecutionException exception) {
-          showFailure("Could not save normalized experiment document.", exception.getCause());
-        }
-      }
-    }.execute();
-  }
-
-  private void showFailure(String message, Throwable failure) {
-    String detail = failure == null || failure.getMessage() == null ? "" : failure.getMessage();
-    JOptionPane.showMessageDialog(
-        owner,
-        detail.isBlank() ? message : message + "\n" + detail,
-        TITLE,
-        JOptionPane.ERROR_MESSAGE);
+  record OpenRequest(
+      boolean copy, ExperimentDocumentSession.DirtyDecision decision, long expectedRevision) {
+    // Immutable value; record components carry the complete state.
   }
 }

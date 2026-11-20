@@ -43,6 +43,37 @@ class WorkflowEditorServiceTest {
   private WorkflowEditorService service;
   private WorkflowOperationLog log;
 
+  @Test
+  void currentStateRetainsTheWorkflowAndDirtyFlagFromOneEditorSnapshot() {
+    var before = service.currentState();
+    assertFalse(before.dirty());
+    service.applyOperation(updateGain("op.snapshot.gain", "1.5"));
+    var after = service.currentState();
+    assertTrue(after.dirty());
+    assertEquals(service.currentWorkflow(), after.workflow());
+    assertEquals(initialWorkflow(), before.workflow());
+    assertFalse(before.dirty());
+  }
+
+  @Test
+  void staleDocumentPreviewCannotDiscardAChangedWorkflow() {
+    Workflow original = initialWorkflow();
+    WorkflowEditorService editor =
+        new WorkflowEditorService(new WorkflowOperationLog(original), new WorkflowValidator());
+    Workflow changed =
+        new Workflow(
+            original.id(),
+            "Changed after preview",
+            original.nodes(),
+            original.edges(),
+            original.metadata());
+    editor.importGraph(changed);
+    assertThrows(
+        StaleWorkflowException.class, () -> editor.importGraphIfCurrent(original, true, original));
+    assertEquals(changed, editor.currentWorkflow());
+    assertTrue(editor.isDirty());
+  }
+
   @BeforeEach
   void setUp() {
     Workflow initial = initialWorkflow();

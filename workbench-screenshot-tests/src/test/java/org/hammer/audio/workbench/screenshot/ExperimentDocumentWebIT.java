@@ -1,18 +1,19 @@
 package org.hammer.audio.workbench.screenshot;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import com.microsoft.playwright.Browser;
 import com.microsoft.playwright.BrowserType;
+import com.microsoft.playwright.Download;
 import com.microsoft.playwright.Locator;
 import com.microsoft.playwright.Page;
 import com.microsoft.playwright.Playwright;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;
@@ -81,7 +82,7 @@ class ExperimentDocumentWebIT {
 
       Locator panel = page.locator("[data-testid='experiment-document-panel']");
       panel.waitFor(new Locator.WaitForOptions().setTimeout(PAGE_LOAD_TIMEOUT_MS));
-      panel.locator("summary").click();
+      panel.locator(":scope > summary").click();
       page.locator("[data-testid='experiment-document-file']").setInputFiles(fixture());
       page.locator("[data-testid='experiment-document-preview']").click();
 
@@ -99,19 +100,46 @@ class ExperimentDocumentWebIT {
 
       Locator apply = page.locator("[data-testid='experiment-document-apply']");
       assertTrue(apply.isEnabled());
-      AtomicBoolean confirmedNoExecution = new AtomicBoolean(false);
-      page.onceDialog(
-          dialog -> {
-            confirmedNoExecution.set(dialog.message().contains("does not execute"));
-            dialog.accept();
-          });
       apply.click();
+      Locator confirmation = page.locator("[data-testid='experiment-document-confirmation']");
+      assertTrue(confirmation.innerText().contains("does not execute"));
+      assertEquals(
+          initialNodeCount, graphNodes.count(), "confirmation must not apply anything yet");
+      Locator cleanOpen = page.locator("[data-testid='experiment-document-confirm-open']");
+      if (cleanOpen.count() > 0) {
+        cleanOpen.click();
+      } else {
+        page.locator("[data-testid='experiment-document-discard-open']").click();
+      }
       page.waitForCondition(() -> page.locator(".react-flow__node").count() == 0);
 
-      assertTrue(confirmedNoExecution.get());
       assertEquals(0, page.locator(".react-flow__node").count());
       assertEquals(0, page.locator("[data-testid='experiment-document-execute']").count());
+
+      panel.locator(":scope > summary").click();
+      page.locator("[data-testid='experiment-document-file']").setInputFiles(fixture());
+      page.locator("[data-testid='experiment-document-preview']").click();
+      preview.waitFor();
+      page.locator("[data-testid='experiment-document-apply']").click();
+      Download cancelled =
+          page.waitForDownload(
+              () -> page.locator("[data-testid='experiment-document-save-open']").click());
+      Locator pendingSave = page.locator("[data-testid='experiment-document-save-confirmation']");
+      pendingSave.waitFor();
+      assertTrue(pendingSave.innerText().contains("Confirm only after"));
+      assertTrue(currentDocumentIsDirty(page), "starting a download must not acknowledge a save");
+      cancelled.cancel();
+      page.locator("[data-testid='experiment-document-cancel-save']").click();
+      assertFalse(pendingSave.isVisible());
+      assertTrue(currentDocumentIsDirty(page), "cancel must preserve the unsaved current document");
+      assertEquals(0, page.locator(".react-flow__node").count());
     }
+  }
+
+  private static boolean currentDocumentIsDirty(Page page) {
+    return Boolean.TRUE.equals(
+        page.evaluate(
+            "async () => (await (await fetch('/experiment-documents/session')).json()).dirty"));
   }
 
   private static Path fixture() {

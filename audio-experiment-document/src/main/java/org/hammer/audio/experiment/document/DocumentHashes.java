@@ -34,6 +34,9 @@ public final class DocumentHashes {
     byte[] buffer = new byte[BUFFER_SIZE];
     int read = input.read(buffer);
     while (read >= 0) {
+      if (Thread.currentThread().isInterrupted()) {
+        throw new java.io.InterruptedIOException("Asset inspection was cancelled");
+      }
       if (read > 0) {
         digest.update(buffer, 0, read);
       }

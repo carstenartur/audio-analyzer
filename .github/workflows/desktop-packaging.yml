@@ -1,0 +1,93 @@
+name: Desktop Experiment Package
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [ master ]
+    paths:
+      - '.github/workflows/desktop-packaging.yml'
+      - 'scripts/*package_desktop*'
+      - 'scripts/package-desktop.py'
+      - 'packaging/desktop/**'
+      - 'audio-app/src/main/java/org/hammer/Experiment*'
+      - 'audio-app/pom.xml'
+  push:
+    branches: [ master ]
+    paths:
+      - '.github/workflows/desktop-packaging.yml'
+      - 'scripts/*package_desktop*'
+      - 'scripts/package-desktop.py'
+      - 'packaging/desktop/**'
+      - 'audio-app/src/main/java/org/hammer/Experiment*'
+      - 'audio-app/pom.xml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux-package:
+    name: Linux experiment file association
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up JDK 21
+        uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Install native packaging prerequisite
+        run: sudo apt-get update && sudo apt-get install -y fakeroot
+      - name: Build desktop application and native package
+        run: |
+          set -euo pipefail
+          python3 scripts/test_package_desktop.py
+          ./mvnw -B -ntp -DskipTests package
+          python3 scripts/package-desktop.py --type deb
+      - name: Verify installed file association without installing the package
+        shell: bash
+        run: |
+          set -euo pipefail
+          dpkg-deb --extract target/desktop/*.deb target/desktop/extracted
+          python3 - <<'PY'
+          import pathlib
+          import xml.etree.ElementTree as ET
+
+          root = pathlib.Path('target/desktop/extracted')
+          mime = 'application/vnd.carstenartur.audio-analyzer.experiment+json'
+          desktops = [path for path in root.rglob('*.desktop') if path.is_file()]
+          assert desktops, 'Native package has no desktop launch entry'
+          entries = [dict(line.split('=', 1) for line in path.read_text().splitlines()
+                          if '=' in line and not line.startswith('#')) for path in desktops]
+          associated = [entry for entry in entries if mime in entry.get('MimeType', '').split(';')]
+          assert associated, 'Experiment MIME type is missing from the desktop entry'
+          assert any('%f' in entry.get('Exec', '') or '%F' in entry.get('Exec', '')
+                     for entry in associated), 'Desktop entry drops the opened file argument'
+          for entry in associated:
+              assert (root / entry['Icon'].lstrip('/')).is_file(), 'Document icon is missing'
+          namespace = {'m': 'http://www.freedesktop.org/standards/shared-mime-info'}
+          matches = []
+          for path in root.rglob('*.xml'):
+              if not path.is_file():
+                  continue
+              try:
+                  document = ET.parse(path)
+              except ET.ParseError:
+                  continue
+              matches.extend(document.findall(f".//m:mime-type[@type='{mime}']/m:glob[@pattern='*.audioexp']", namespace))
+          assert matches, 'Native package does not register the .audioexp extension'
+          print('Verified .audioexp extension, MIME type, file argument and dedicated icon')
+          PY
+      - name: Upload reviewable Linux installer
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: audio-analyzer-linux-desktop
+          path: target/desktop/*.deb
+          if-no-files-found: error

@@ -10,6 +10,8 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Locale;
+import java.util.Objects;
+import java.util.function.Supplier;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.swing.JFileChooser;
@@ -24,6 +26,7 @@ import org.hammer.audio.ActiveAudioCaptureRegistry;
 import org.hammer.audio.AudioCaptureService;
 import org.hammer.audio.RecordingPreflight;
 import org.hammer.audio.RecordingTap;
+import org.hammer.audio.experiment.document.ExperimentDocumentSession;
 import org.hammer.audio.recording.AudioBlockRecordingFormat;
 import org.hammer.audio.recording.AudioBlockRecordingReader;
 import org.hammer.audio.recording.RecordingInspection;
@@ -47,6 +50,18 @@ public final class ExperimentAudioAnalyseFrame extends AudioAnalyseFrame {
 
   private final RecordingStatusPanel recordingStatusPanel = new RecordingStatusPanel();
   private transient RecordingTap recordingTap;
+  private transient volatile Supplier<ExperimentDocumentSession.Context> documentContextSupplier;
+
+  /** Attach the same session snapshot provider used by the desktop document actions. */
+  public void setDocumentContextSupplier(Supplier<ExperimentDocumentSession.Context> supplier) {
+    documentContextSupplier = Objects.requireNonNull(supplier, "supplier");
+  }
+
+  /** Capture document facts without treating a candidate preview's bindings as current. */
+  public ExperimentDocumentSession.Context documentContext() {
+    Supplier<ExperimentDocumentSession.Context> supplier = documentContextSupplier;
+    return supplier == null ? ExperimentDocumentSession.Context.empty() : supplier.get();
+  }
 
   /** Launch the experiment-aware desktop workbench. */
   public static void main(String[] args) {
