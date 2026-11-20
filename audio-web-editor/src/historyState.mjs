@@ -104,7 +104,7 @@ export function createHistoryCommandEnvelope({
  * Maps one stable envelope to the exact REST command contract.
  *
  * @param {HistoryCommandEnvelope} envelope pending command
- * @param {{actorId: string, userId: string, displayName: string}} actor actor identity
+ * @param {import('./api').ActorIdentity} actor actor identity
  * @returns {{endpoint: 'undo' | 'redo', body: Record<string, unknown>}} REST request
  */
 export function historyCommandRequest(envelope, actor) {

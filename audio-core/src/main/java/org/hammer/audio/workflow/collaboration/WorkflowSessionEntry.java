@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.BiConsumer;
 import org.hammer.audio.workflow.Workflow;
 import org.hammer.audio.workflow.WorkflowOperation;
 import org.hammer.audio.workflow.collaboration.WorkflowHistoryCapabilities.Action;
@@ -389,6 +390,33 @@ final class WorkflowSessionEntry {
     try {
       requireOpen();
       return currentWorkflow;
+    } finally {
+      lock.unlock();
+    }
+  }
+
+  WorkflowSessionRegistry.SessionWorkflowSnapshot authorizedWorkflow(OperationActor actor) {
+    lock.lock();
+    try {
+      requireOpen();
+      assertJoinedActor(actor);
+      return new WorkflowSessionRegistry.SessionWorkflowSnapshot(snapshotLocked(), currentWorkflow);
+    } finally {
+      lock.unlock();
+    }
+  }
+
+  WorkflowSessionEventHub.Subscription subscribe(
+      OperationActor actor,
+      long afterSequence,
+      BiConsumer<WorkflowSessionRegistry.SessionSnapshot, WorkflowSessionEvent> listener) {
+    lock.lock();
+    try {
+      requireOpen();
+      assertJoinedActor(actor);
+      WorkflowSessionRegistry.SessionSnapshot captured = snapshotLocked();
+      return eventHub.subscribe(
+          sessionId, afterSequence, event -> listener.accept(captured, event));
     } finally {
       lock.unlock();
     }

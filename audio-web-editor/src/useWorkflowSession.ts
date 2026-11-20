@@ -6,6 +6,7 @@ import {
   getJson,
   postJson,
   putJson,
+  setCollaborationActorId,
   type ActorIdentity,
   type CollaborationMode,
   type SessionEventResponse,
@@ -13,6 +14,7 @@ import {
   type SessionResponse,
   type WorkflowProjection,
 } from './api';
+import { claimClientActor, releaseClientActor } from './clientIdentity.mjs';
 import {
   acceptCommandProjection,
   collaborationState,
@@ -61,6 +63,7 @@ export interface RemotePresence {
 export interface WorkflowSessionController {
   actor: ActorIdentity;
   updateActor: (actor: ActorIdentity) => void;
+  resetIdentity: () => void;
   session: SessionResponse | null;
   active: boolean;
   connectionState: ConnectionState;
@@ -81,11 +84,9 @@ export interface WorkflowSessionController {
 }
 
 function generatedActor(): ActorIdentity {
-  const suffix = crypto.randomUUID().slice(0, 8);
   return {
-    actorId: `actor-${suffix}`,
-    userId: `user-${suffix}`,
-    displayName: `Browser ${suffix}`,
+    actorId: '', displayName: '', provenance: 'ANONYMOUS', verified: false,
+    accountHandle: null, role: 'EDITOR', participantCode: '', lastSeen: null,
   };
 }
 
@@ -93,8 +94,9 @@ function validActor(value: unknown): value is ActorIdentity {
   if (typeof value !== 'object' || value === null) {
     return false;
   }
-  const actor = value as Partial<ActorIdentity>;
-  return Boolean(actor.actorId?.trim() && actor.userId?.trim() && actor.displayName?.trim());
+  const candidate = value as Partial<ActorIdentity>;
+  return typeof candidate.actorId === 'string' && typeof candidate.displayName === 'string'
+    && typeof candidate.provenance === 'string';
 }
 
 function initialActor(): ActorIdentity {
@@ -107,7 +109,7 @@ function initialActor(): ActorIdentity {
       }
     }
   } catch {
-    // A browser policy may make storage unavailable; generated identity is still stable for the page.
+    // Browser storage is optional; credentials remain in server-issued HttpOnly cookies.
   }
   return generatedActor();
 }
@@ -137,10 +139,37 @@ export function useWorkflowSession(callbacks: WorkflowSessionCallbacks): Workflo
   const sessionId = useRef<string | null>(null);
   const reconciliation = useRef<Promise<void> | null>(null);
   const presenceAttributes = useRef<Record<string, string>>({});
+  const currentPresence = useRef<Record<string, string>>({});
+  const identityPromise = useRef<Promise<ActorIdentity> | null>(null);
   const presenceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const ensureIdentity = useCallback(async () => {
+    if (identityPromise.current !== null) {
+      return identityPromise.current;
+    }
+    const task = claimClientActor(actor.actorId).then((owned) => postJson<ActorIdentity>('/workflow/identity', {
+      actorId: owned ? actor.actorId || null : null, displayName: actor.displayName || null,
+    })).then(async (resolved) => {
+      await claimClientActor(resolved.actorId);
+      setActor(resolved);
+      setCollaborationActorId(resolved.actorId);
+      try {
+        sessionStorage.setItem(ACTOR_STORAGE_KEY, JSON.stringify(resolved));
+      } catch {
+        // Only the public actor selector is optional browser storage.
+      }
+      return resolved;
+    }).catch((failure: unknown) => {
+      identityPromise.current = null;
+      throw failure;
+    });
+    identityPromise.current = task;
+    return task;
+  }, [actor]);
 
   const clearPresenceBuffer = useCallback(() => {
     presenceAttributes.current = {};
+    currentPresence.current = {};
     if (presenceTimer.current !== null) {
       clearTimeout(presenceTimer.current);
       presenceTimer.current = null;
@@ -202,6 +231,22 @@ export function useWorkflowSession(callbacks: WorkflowSessionCallbacks): Workflo
     [clearPresenceBuffer, onError, onStatus],
   );
 
+  const resetAfterFailure = useCallback((failure: unknown, activeSessionId: string) => {
+    if (!(failure instanceof ApiError) || recoveryForProblemCode(failure.code) !== 'reset') {
+      return false;
+    }
+    if (sessionId.current !== activeSessionId) {
+      return true;
+    }
+    if (failure.code === 'COLLABORATION_IDENTITY_REQUIRED') {
+      identityPromise.current = null;
+      reset('Client identity expired or no longer matches your account. Start a new client identity to reconnect.');
+    } else {
+      reset(`Session ${activeSessionId} no longer exists`);
+    }
+    return true;
+  }, [reset]);
+
   const reconcile = useCallback(
     async (reason: string) => {
       const activeSessionId = sessionId.current;
@@ -213,6 +258,7 @@ export function useWorkflowSession(callbacks: WorkflowSessionCallbacks): Workflo
       }
       const task = (async () => {
         const basePath = encodedSessionPath(activeSessionId);
+        await postJson<SessionResponse>(`${basePath}/join`, { actorId: actor.actorId });
         const [projection, metadata] = await Promise.all([
           getJson<WorkflowProjection>(`${basePath}/projection`),
           getJson<SessionResponse>(basePath),
@@ -227,11 +273,7 @@ export function useWorkflowSession(callbacks: WorkflowSessionCallbacks): Workflo
         onStatus(`Loaded: reconciled ${activeSessionId} after ${reason}`);
       })()
         .catch((failure: unknown) => {
-          if (
-            failure instanceof ApiError &&
-            recoveryForProblemCode(failure.code) === 'reset'
-          ) {
-            reset(`Session ${activeSessionId} no longer exists`);
+          if (resetAfterFailure(failure, activeSessionId)) {
             return;
           }
           onError(errorMessage(failure));
@@ -243,7 +285,7 @@ export function useWorkflowSession(callbacks: WorkflowSessionCallbacks): Workflo
       reconciliation.current = task;
       return task;
     },
-    [commitAcceptedState, onError, onStatus, reset],
+    [actor.actorId, commitAcceptedState, onError, onStatus, resetAfterFailure],
   );
 
   useEffect(() => {
@@ -301,6 +343,10 @@ export function useWorkflowSession(callbacks: WorkflowSessionCallbacks): Workflo
       if (event.type === 'SNAPSHOT') {
         onStatus(`Loaded: canonical snapshot at sequence ${event.sequence}`);
       }
+      if (event.type === 'PRESENCE_LEFT' && event.actor?.actorId === actor.actorId) {
+        source?.close();
+        reset(`You left collaboration session ${activeSessionId}`);
+      }
       if (reduced.state.closed) {
         source?.close();
         reset(`Session ${activeSessionId} was closed`);
@@ -308,11 +354,11 @@ export function useWorkflowSession(callbacks: WorkflowSessionCallbacks): Workflo
     };
 
     const connect = () => {
-      if (cancelled) {
+      if (cancelled || sessionId.current !== activeSessionId) {
         return;
       }
       const cursor = acceptedState.current?.sequence ?? 0;
-      const url = `${encodedSessionPath(activeSessionId)}/events?afterSequence=${cursor}`;
+      const url = `${encodedSessionPath(activeSessionId)}/events?afterSequence=${cursor}&actorId=${encodeURIComponent(actor.actorId)}`;
       setConnectionState(attempt === 0 ? 'connecting' : 'reconnecting');
       source = new EventSource(url);
       source.onopen = () => {
@@ -340,7 +386,15 @@ export function useWorkflowSession(callbacks: WorkflowSessionCallbacks): Workflo
         onStatus(`Reconnecting: attempt ${attempt}`);
         retryTimer = setTimeout(() => {
           retryTimer = null;
-          connect();
+          void reconcile('transport reconnect')
+            .then(connect)
+            .catch((failure: unknown) => {
+              if (resetAfterFailure(failure, activeSessionId)) {
+                return;
+              }
+              onError(errorMessage(failure));
+              connect();
+            });
         }, delay);
       };
     };
@@ -353,7 +407,7 @@ export function useWorkflowSession(callbacks: WorkflowSessionCallbacks): Workflo
         clearTimeout(retryTimer);
       }
     };
-  }, [commitAcceptedState, onError, onStatus, reconcile, reset, session?.sessionId]);
+  }, [actor.actorId, commitAcceptedState, onError, onStatus, reconcile, reset, resetAfterFailure, session?.sessionId]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -371,22 +425,29 @@ export function useWorkflowSession(callbacks: WorkflowSessionCallbacks): Workflo
   useEffect(() => clearPresenceBuffer, [clearPresenceBuffer]);
 
   const updateActor = useCallback((nextActor: ActorIdentity) => {
-    if (!validActor(nextActor)) {
-      throw new Error('Actor id, user id and display name are required');
+    if (sessionId.current !== null || actor.actorId) {
+      throw new Error('This client identity keeps its original display name for history attribution');
     }
+    const displayName = nextActor.displayName.trim();
+    if (displayName.length > 120) {
+      throw new Error('Display name must contain at most 120 characters');
+    }
+    setActor({ ...generatedActor(), displayName });
+    identityPromise.current = null;
+  }, [actor.actorId]);
+
+  const resetIdentity = useCallback(() => {
     if (sessionId.current !== null) {
-      throw new Error('Leave the current session before changing actor identity');
+      throw new Error('Leave the current session before starting a new client identity');
     }
-    const normalized = {
-      actorId: nextActor.actorId.trim(),
-      userId: nextActor.userId.trim(),
-      displayName: nextActor.displayName.trim(),
-    };
-    setActor(normalized);
+    releaseClientActor();
+    identityPromise.current = null;
+    setCollaborationActorId('');
+    setActor(generatedActor());
     try {
-      sessionStorage.setItem(ACTOR_STORAGE_KEY, JSON.stringify(normalized));
+      sessionStorage.removeItem(ACTOR_STORAGE_KEY);
     } catch {
-      // Identity remains valid for the current page even when storage is unavailable.
+      // An in-memory selector still permits a fresh identity.
     }
   }, []);
 
@@ -396,10 +457,11 @@ export function useWorkflowSession(callbacks: WorkflowSessionCallbacks): Workflo
       if (normalizedSessionId.length === 0) {
         throw new Error('Session id is required');
       }
+      const resolvedActor = await ensureIdentity();
       const metadata = await postJson<SessionResponse>('/workflow/sessions', {
         sessionId: normalizedSessionId,
         mode: input.mode,
-        actor,
+        actor: resolvedActor,
         workflowId: input.workflowId,
         workflowName: input.workflowName,
       });
@@ -408,7 +470,7 @@ export function useWorkflowSession(callbacks: WorkflowSessionCallbacks): Workflo
       );
       activate(metadata, projection);
     },
-    [activate, actor],
+    [activate, ensureIdentity],
   );
 
   const joinSession = useCallback(
@@ -417,12 +479,13 @@ export function useWorkflowSession(callbacks: WorkflowSessionCallbacks): Workflo
       if (normalizedSessionId.length === 0) {
         throw new Error('Session id is required');
       }
+      const resolvedActor = await ensureIdentity();
       const basePath = encodedSessionPath(normalizedSessionId);
-      const metadata = await postJson<SessionResponse>(`${basePath}/join`, actor);
+      const metadata = await postJson<SessionResponse>(`${basePath}/join`, resolvedActor);
       const projection = await getJson<WorkflowProjection>(`${basePath}/projection`);
       activate(metadata, projection);
     },
-    [activate, actor],
+    [activate, ensureIdentity],
   );
 
   const leaveSession = useCallback(async () => {
@@ -430,20 +493,38 @@ export function useWorkflowSession(callbacks: WorkflowSessionCallbacks): Workflo
     if (activeSessionId === null) {
       return;
     }
-    await postJson<SessionResponse>(`${encodedSessionPath(activeSessionId)}/leave`, {
-      actorId: actor.actorId,
-    });
+    try {
+      await postJson<SessionResponse>(`${encodedSessionPath(activeSessionId)}/leave`, {
+        actorId: actor.actorId,
+      });
+    } catch (failure) {
+      if (failure instanceof ApiError && failure.code === 'ACTOR_NOT_JOINED') {
+        reset(`Left collaboration session ${activeSessionId}`);
+        return;
+      }
+      if (resetAfterFailure(failure, activeSessionId)) {
+        return;
+      }
+      throw failure;
+    }
     reset(`Left collaboration session ${activeSessionId}`);
-  }, [actor.actorId, reset]);
+  }, [actor.actorId, reset, resetAfterFailure]);
 
   const closeSession = useCallback(async () => {
     const activeSessionId = sessionId.current;
     if (activeSessionId === null) {
       return;
     }
-    await deleteJson<void>(encodedSessionPath(activeSessionId), { actorId: actor.actorId });
+    try {
+      await deleteJson<void>(encodedSessionPath(activeSessionId), { actorId: actor.actorId });
+    } catch (failure) {
+      if (resetAfterFailure(failure, activeSessionId)) {
+        return;
+      }
+      throw failure;
+    }
     reset(`Closed collaboration session ${activeSessionId}`);
-  }, [actor.actorId, reset]);
+  }, [actor.actorId, reset, resetAfterFailure]);
 
   const submitOperation = useCallback(
     async (operation: Record<string, unknown>) => {
@@ -499,14 +580,14 @@ export function useWorkflowSession(callbacks: WorkflowSessionCallbacks): Workflo
         if (recovery === 'reconcile') {
           await reconcile(failure instanceof ApiError ? failure.code ?? 'conflict' : 'conflict');
         } else if (recovery === 'reset') {
-          reset(`Session ${activeSession.sessionId} no longer exists`);
+          resetAfterFailure(failure, activeSession.sessionId);
         }
         throw failure;
       } finally {
         setPendingOperationId(null);
       }
     },
-    [actor, commitAcceptedState, onError, onStatus, reconcile, reset, session],
+    [actor, commitAcceptedState, onError, onStatus, reconcile, resetAfterFailure, session],
   );
 
   const publishPresence = useCallback(
@@ -514,7 +595,8 @@ export function useWorkflowSession(callbacks: WorkflowSessionCallbacks): Workflo
       if (sessionId.current === null || acceptedState.current?.closed === true) {
         return;
       }
-      presenceAttributes.current = { ...presenceAttributes.current, ...attributes };
+      currentPresence.current = { ...currentPresence.current, ...attributes };
+      presenceAttributes.current = { ...currentPresence.current };
       if (presenceTimer.current !== null) {
         return;
       }
@@ -531,15 +613,33 @@ export function useWorkflowSession(callbacks: WorkflowSessionCallbacks): Workflo
           actor,
           observedAt: new Date().toISOString(),
           attributes: nextAttributes,
-        }).catch((failure: unknown) => onError(errorMessage(failure)));
+        }).catch((failure: unknown) => {
+          if (failure instanceof ApiError && failure.code === 'ACTOR_NOT_JOINED') {
+            setConnectionState('reconnecting');
+            void reconcile('presence membership recovery').catch(() => undefined);
+            return;
+          }
+          if (!resetAfterFailure(failure, activeSessionId)) {
+            onError(errorMessage(failure));
+          }
+        });
       }, PRESENCE_THROTTLE_MILLIS);
     },
-    [actor, onError],
+    [actor, onError, reconcile, resetAfterFailure],
   );
+
+  useEffect(() => {
+    if (session === null) {
+      return undefined;
+    }
+    const timer = setInterval(() => publishPresence({}), 5_000);
+    return () => clearInterval(timer);
+  }, [publishPresence, session]);
 
   return {
     actor,
     updateActor,
+    resetIdentity,
     session,
     active: session !== null && connectionState !== 'closed',
     connectionState,

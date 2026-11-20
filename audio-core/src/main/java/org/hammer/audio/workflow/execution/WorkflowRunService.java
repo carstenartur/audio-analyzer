@@ -11,6 +11,7 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Supplier;
 import org.hammer.audio.workflow.collaboration.WorkflowSessionRegistry;
+import org.hammer.audio.workflow.collaboration.WorkflowSessionRegistry.SessionWorkflowSnapshot;
 import org.hammer.audio.workflow.execution.WorkflowRunException.Code;
 import org.hammer.audio.workflow.execution.WorkflowRunModels.Command;
 import org.hammer.audio.workflow.execution.WorkflowRunModels.ExecutionBackend;
@@ -58,6 +59,16 @@ public final class WorkflowRunService {
 
   /** Starts or idempotently returns the run associated with one start command. */
   public Snapshot start(Command command) {
+    return startWithInput(command, () -> inputFactory.capture(command));
+  }
+
+  /** Starts from an already authorized immutable live capture without resolving its id again. */
+  public Snapshot start(Command command, SessionWorkflowSnapshot captured) {
+    Objects.requireNonNull(captured, "captured");
+    return startWithInput(command, () -> inputFactory.capture(command, captured));
+  }
+
+  private Snapshot startWithInput(Command command, Supplier<Input> capture) {
     Objects.requireNonNull(command, "command");
     WorkflowRunRecord record;
     startGuard.lock();
@@ -66,7 +77,7 @@ public final class WorkflowRunService {
       if (existing != null) {
         return handleExistingCommand(command, existing);
       }
-      Input input = inputFactory.capture(command);
+      Input input = capture.get();
       validateBackend(input);
       record = new WorkflowRunRecord(input, executionBackend.mode(), wallClock);
       WorkflowRunRecord duplicateRun = recordsByRunId.putIfAbsent(input.runId(), record);

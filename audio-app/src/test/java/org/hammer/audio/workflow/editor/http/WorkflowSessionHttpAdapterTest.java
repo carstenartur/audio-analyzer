@@ -42,7 +42,13 @@ class WorkflowSessionHttpAdapterTest {
     eventHub = new WorkflowSessionEventHub(32, 8);
     registry = new WorkflowSessionRegistry(eventHub);
     mvc =
-        MockMvcBuilders.standaloneSetup(new WorkflowSessionHttpAdapter(registry))
+        MockMvcBuilders.standaloneSetup(
+                new WorkflowSessionHttpAdapter(
+                    registry, CollaborationIdentityTestSupport.identities()))
+            .defaultRequest(
+                get("/")
+                    .cookie(CollaborationIdentityTestSupport.cookies())
+                    .param("actorId", "actor.owner"))
             .setControllerAdvice(new WorkflowApiExceptionHandler())
             .setValidator(validator)
             .build();
@@ -148,7 +154,7 @@ class WorkflowSessionHttpAdapterTest {
   }
 
   @Test
-  void beanValidationAndMetadataMismatchHaveStableResponses() throws Exception {
+  void beanValidationAndIgnoredClientMetadataHaveStableResponses() throws Exception {
     mvc.perform(
             post("/workflow/sessions")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -178,8 +184,8 @@ class WorkflowSessionHttpAdapterTest {
                     """
                     {"actorId":"actor.guest","userId":"user.guest","displayName":"Changed"}
                     """))
-        .andExpect(status().isConflict())
-        .andExpect(jsonPath("$.code").value("ACTOR_METADATA_MISMATCH"));
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.participants[0].displayName").value("Guest"));
   }
 
   @Test

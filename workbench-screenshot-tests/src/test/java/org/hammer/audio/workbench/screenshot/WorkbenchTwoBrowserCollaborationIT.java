@@ -62,8 +62,8 @@ class WorkbenchTwoBrowserCollaborationIT {
       open(bob.page());
       createSession(alice.page(), PERSONAL_SESSION_ID, "SHARED_SESSION_PERSONAL_UNDO");
       joinSession(bob.page(), PERSONAL_SESSION_ID);
-      assertParticipants(alice.page(), "actor-e2e-alice", "actor-e2e-bob");
-      assertParticipants(bob.page(), "actor-e2e-alice", "actor-e2e-bob");
+      assertParticipants(alice.page(), alice.actorId(), bob.actorId());
+      assertParticipants(bob.page(), alice.actorId(), bob.actorId());
 
       alice.page().locator("[data-testid='palette-node-synthetic-signal-generator']").click();
       waitForRevision(alice.page(), 1);
@@ -76,12 +76,13 @@ class WorkbenchTwoBrowserCollaborationIT {
       String nodeTestId = aliceNode.getAttribute("data-testid");
       String nodeId = nodeTestId.substring("node-".length());
       aliceNode.click();
-      Locator remotePresence = bob.page().locator("[data-testid='presence-actor-e2e-alice']");
+      Locator remotePresence =
+          bob.page().locator("[data-testid='presence-" + alice.actorId() + "']");
       remotePresence.waitFor();
-      bob.page().waitForCondition(() -> remotePresence.innerText().contains("selection=" + nodeId));
+      bob.page().waitForCondition(() -> remotePresence.innerText().contains("Selected " + nodeId));
       String projectionJson = sessionProjectionJson(bob.page(), PERSONAL_SESSION_ID);
       assertFalse(projectionJson.contains("selection"));
-      assertFalse(projectionJson.contains("actor-e2e-alice"));
+      assertFalse(projectionJson.contains(alice.actorId()));
 
       Map<?, ?> staleResult = submitStaleOperation(bob.page(), PERSONAL_SESSION_ID);
       assertEquals(409, ((Number) staleResult.get("status")).intValue());
@@ -142,6 +143,51 @@ class WorkbenchTwoBrowserCollaborationIT {
     } finally {
       bob.close();
       alice.close();
+    }
+  }
+
+  @Test
+  void sameBrowserTabsGetDistinctActorsAndReloadResumesWithoutDuplicateMembership()
+      throws Throwable {
+    String scenario = "same-browser-client-identity";
+    try (WorkbenchBrowserHarness.ActorBrowser first =
+        harness.openActor("tab-fixture", "unused", "Same name")) {
+      open(first.page());
+      createSession(first.page(), "e2e-same-browser-tabs", "SHARED_SESSION_PERSONAL_UNDO");
+      String originalActor = first.actorId();
+      try (Page second = first.context().newPage()) {
+        open(second);
+        joinSession(second, "e2e-same-browser-tabs");
+        String secondActor =
+            (String)
+                second.evaluate(
+                    "JSON.parse(sessionStorage.getItem('audio-analyzer.workflow.actor')).actorId");
+        assertFalse(
+            originalActor.equals(secondActor),
+            "Two live tabs must have separate client attribution");
+        assertParticipants(first.page(), originalActor, secondActor);
+        assertParticipants(second, originalActor, secondActor);
+        assertFalse(
+            ((String) second.evaluate("document.cookie")).contains("aa_collab_"),
+            "Collaboration credentials must not be readable by browser scripts");
+        second.locator("[data-testid='run-current-revision']").click();
+        second.waitForCondition(
+            () -> "COMPLETED".equals(second.locator("[data-testid='run-state']").innerText()));
+        assertEquals(0, second.locator("[data-testid='run-error']").count());
+        first.page().reload();
+        waitForActiveSession(first.page(), "e2e-same-browser-tabs");
+        waitForLive(first.page());
+        assertEquals(
+            originalActor,
+            first
+                .page()
+                .evaluate(
+                    "JSON.parse(sessionStorage.getItem('audio-analyzer.workflow.actor')).actorId"));
+        assertEquals(2, first.page().locator("[data-testid='participant-list'] > li").count());
+      } catch (Throwable failure) {
+        harness.captureFailure(scenario, failure);
+        throw failure;
+      }
     }
   }
 
@@ -279,7 +325,9 @@ class WorkbenchTwoBrowserCollaborationIT {
         page.evaluate(
             """
             async sessionId => JSON.stringify(
-              await (await fetch(`/workflow/sessions/${encodeURIComponent(sessionId)}/projection`)).json()
+              await (await fetch(`/workflow/sessions/${encodeURIComponent(sessionId)}/projection`, {
+                headers: {'X-Workflow-Actor': JSON.parse(sessionStorage.getItem('audio-analyzer.workflow.actor')).actorId}
+              })).json()
             )
             """,
             sessionId);
@@ -298,7 +346,7 @@ class WorkbenchTwoBrowserCollaborationIT {
                   headers: {'Content-Type': 'application/json', Accept: 'application/json'},
                   body: JSON.stringify({
                     mode: 'SHARED_SESSION_PERSONAL_UNDO',
-                    actor: input.actor,
+                    actor: JSON.parse(sessionStorage.getItem('audio-analyzer.workflow.actor')),
                     expectedRevision: 0,
                     operation: {
                       type: 'CreateNode',

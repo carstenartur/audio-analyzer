@@ -29,7 +29,11 @@ The active session id is retained per browser tab in session storage when availa
 
 ## Actor and session lifecycle
 
-The browser stores `actorId`, `userId` and `displayName` per browser tab in session storage when available. Identity cannot change while a session is active because server membership, history capability selection and operation authorship use the actor id as a stable key.
+The browser obtains a server-issued actor from `POST /workflow/identity` before creating or joining a
+session. It stores only the public actor projection per tab; an HttpOnly cookie supplies credential
+proof. Subjects never enter session storage. Web Locks separate duplicated live tabs, and reconnect
+retains the original immutable attribution. See [collaboration identity](../collaboration-identity.md)
+for Principal binding, privacy, cookie and restart semantics.
 
 The collaboration panel maps directly to the lifecycle API:
 

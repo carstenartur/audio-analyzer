@@ -1,6 +1,7 @@
 package org.hammer.audio.workflow.editor.http;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -36,7 +37,13 @@ class WorkflowSessionUndoHttpAdapterTest {
     eventHub = new WorkflowSessionEventHub(32, 8);
     registry = new WorkflowSessionRegistry(eventHub);
     mvc =
-        MockMvcBuilders.standaloneSetup(new WorkflowSessionHttpAdapter(registry))
+        MockMvcBuilders.standaloneSetup(
+                new WorkflowSessionHttpAdapter(
+                    registry, CollaborationIdentityTestSupport.identities()))
+            .defaultRequest(
+                get("/")
+                    .cookie(CollaborationIdentityTestSupport.cookies())
+                    .param("actorId", "actor.owner"))
             .setControllerAdvice(new WorkflowApiExceptionHandler())
             .setValidator(validator)
             .build();

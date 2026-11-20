@@ -105,7 +105,7 @@ test('presence is separate, actor-scoped and removable', () => {
   ).state;
 
   assert.deepEqual(joined.projection, emptyProjection);
-  assert.deepEqual(joined.participants, [actorAlice, actorBob]);
+  assert.deepEqual(joined.participants, [actorAlice, { ...actorBob, lastSeen: '2026-07-18T12:00:00Z' }]);
   assert.equal(joined.presence['actor-bob'].attributes.cursorX, '12');
 
   const left = reduceSessionEvent(
@@ -142,8 +142,13 @@ test('structured command failures choose reconciliation reset or rejection', () 
   assert.equal(recoveryForProblemCode('WORKFLOW_SESSION_REVISION_CONFLICT'), 'reconcile');
   assert.equal(recoveryForProblemCode('WORKFLOW_SESSION_SEQUENCE_CONFLICT'), 'reconcile');
   assert.equal(recoveryForProblemCode('SESSION_NOT_FOUND'), 'reset');
+  assert.equal(recoveryForProblemCode('COLLABORATION_IDENTITY_REQUIRED'), 'reset');
   assert.equal(recoveryForProblemCode('DUPLICATE_OPERATION_ID'), 'reject');
   assert.equal(recoveryForProblemCode(null), 'reject');
+});
+
+test('lost transient membership after a server restart restores the same client', () => {
+  assert.equal(recoveryForProblemCode('ACTOR_NOT_JOINED'), 'reconcile');
 });
 
 test('stale presence expires without changing semantic state', () => {

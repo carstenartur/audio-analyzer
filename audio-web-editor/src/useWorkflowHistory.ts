@@ -302,7 +302,6 @@ export function useWorkflowHistory({
   }, [
     collaboration.actor.actorId,
     collaboration.actor.displayName,
-    collaboration.actor.userId,
     collaboration.connectionState,
     collaboration.revision,
     collaboration.session?.sessionId,

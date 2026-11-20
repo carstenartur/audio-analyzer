@@ -62,7 +62,7 @@ Open the local URL printed by the server.
 
 The initial graph is a read-only orientation example. To edit:
 
-1. Keep or change the generated actor identity.
+1. Optionally choose and save an unverified display name; the server issues the client identity.
 2. Create a session.
 3. Choose a collaboration mode.
 4. Wait until the connection reports `live`.

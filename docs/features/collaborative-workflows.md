@@ -140,3 +140,9 @@ For implementation details, see:
 - [Durable semantic undo and redo](../architecture/semantic-undo-redo.md)
 - [Hibernate-backed persistence](../workbench-hibernate-persistence.md)
 
+## Participant identity
+
+Participants now use [server-bound identities](../collaboration-identity.md). Rows distinguish
+verified accounts from anonymous or self-asserted pseudonyms, show role and connection health, and
+keep internal actor identifiers in diagnostics. Account handles are hidden unless the server privacy
+policy permits disclosure.

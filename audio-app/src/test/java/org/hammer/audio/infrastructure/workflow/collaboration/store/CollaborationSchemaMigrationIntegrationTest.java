@@ -61,9 +61,9 @@ class CollaborationSchemaMigrationIntegrationTest {
 
     assertTrue(migration.applied());
     assertCoreMigrationPrefix(database, migration);
-    assertEquals(3, migration.collaborationMigrationsExecuted());
+    assertEquals(4, migration.collaborationMigrationsExecuted());
     assertEquals(
-        List.of("1", "2", "3"),
+        List.of("1", "2", "3", "4"),
         migrationVersions(database, CollaborationSchemaMigrations.SCHEMA_HISTORY_TABLE));
 
     String sessionId = "migrated.session";
@@ -114,9 +114,9 @@ class CollaborationSchemaMigrationIntegrationTest {
     WorkflowSchemaMigrationResult migration = migrate(database, true);
     assertTrue(migration.applied());
     assertCoreMigrationPrefix(database, migration);
-    assertEquals(2, migration.collaborationMigrationsExecuted());
+    assertEquals(3, migration.collaborationMigrationsExecuted());
     assertEquals(
-        List.of("1", "2", "3"),
+        List.of("1", "2", "3", "4"),
         migrationVersions(database, CollaborationSchemaMigrations.SCHEMA_HISTORY_TABLE));
 
     try (HibernateSessionFactoryProvider provider = provider(database)) {

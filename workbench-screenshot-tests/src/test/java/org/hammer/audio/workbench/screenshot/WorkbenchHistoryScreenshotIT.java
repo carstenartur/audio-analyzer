@@ -73,6 +73,7 @@ class WorkbenchHistoryScreenshotIT {
       normalizeHistoryTimestamps(page);
 
       disableAnimations(page);
+      WorkbenchBrowserHarness.normalizeIdentityLabels(page);
       byte[] pngBytes = page.screenshot(new Page.ScreenshotOptions().setFullPage(false));
       ScreenshotPipeline.processScreenshot("collaboration-personal-undo-preview.png", pngBytes);
     } catch (Throwable failure) {
@@ -120,6 +121,7 @@ class WorkbenchHistoryScreenshotIT {
       normalizeHistoryTimestamps(reviewer.page());
 
       disableAnimations(reviewer.page());
+      WorkbenchBrowserHarness.normalizeIdentityLabels(reviewer.page());
       byte[] pngBytes = reviewer.page().screenshot(new Page.ScreenshotOptions().setFullPage(false));
       ScreenshotPipeline.processScreenshot("collaboration-shared-undo-preview.png", pngBytes);
     } catch (Throwable failure) {

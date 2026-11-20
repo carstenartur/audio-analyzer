@@ -24,6 +24,20 @@ public final class WorkflowApiExceptionHandler {
   private static final String CODE_PROPERTY = "code";
   private static final String SESSION_ID_PROPERTY = "sessionId";
 
+  /** Rejects missing or mismatched identity proof without disclosing credential details. */
+  @ExceptionHandler(CollaborationIdentityException.class)
+  public ProblemDetail handleIdentity(
+      CollaborationIdentityException exception, HttpServletRequest request) {
+    ProblemDetail problem =
+        problem(
+            HttpStatus.FORBIDDEN,
+            "collaboration-identity-required",
+            exception.getMessage(),
+            request);
+    problem.setProperty(CODE_PROPERTY, "COLLABORATION_IDENTITY_REQUIRED");
+    return problem;
+  }
+
   /** Maps typed collaboration-domain errors without inspecting exception-message text. */
   @ExceptionHandler(WorkflowSessionException.class)
   public ProblemDetail handleSessionException(
