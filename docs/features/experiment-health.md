@@ -88,6 +88,31 @@ under the same evidence lock as ZIP export, so downloaded history matches the ac
 The recording file SHA-256 includes the footer and matches the artifact inventory; the separately
 named verified-content SHA-256 covers only the bytes protected by the recording format's footer.
 
+### Microphone runtime examples
+
+These three views use fixed typed health and recording snapshots rendered by the packaged browser
+application. Capacity, throughput, timing, destination, warning timestamps and track values are
+example data and are shown without masks. They document state presentation and controls; the actual
+preflight and completed-simulation captures are in the
+[microphone experiment guide](microphone-experiments.md).
+
+![Recording runtime fixture with an active recording indicator, storage estimates and Stop and finalize enabled](../assets/screenshots/workbench/microphone-experiment-recording.png)
+
+**Recording — fixed runtime fixture.** The persistent strip and runtime card show recording progress,
+queue occupancy, throughput and the safe-duration estimate. Setup and Start are disabled while
+**Stop & finalize** remains available.
+
+![Degraded runtime fixture with low-storage and processing-budget warnings while recording continues](../assets/screenshots/workbench/microphone-experiment-degraded.png)
+
+**Degraded — fixed runtime fixture.** Low storage margin and repeated processing-budget overruns are
+visible together while recording continues. The capacity and remaining safe duration stay readable
+alongside the warning acknowledgements and stop action.
+
+![Incomplete runtime fixture with a dropped block, missing frames and Export incomplete evidence available](../assets/screenshots/workbench/microphone-experiment-incomplete.png)
+
+**Incomplete — fixed runtime fixture.** A dropped block leaves a gap in the finalized recording.
+The state and export action both say **Incomplete**, and Stop is disabled after finalization.
+
 ## Verification and screenshot coverage
 
 Behavior tests cover every shared lifecycle, explicit blockers, acknowledgement rules, latching,
@@ -96,15 +121,16 @@ browser test runs an actual deterministic microphone simulation and downloads it
 It also checks accessible control names, keyboard operation, visible focus, and computed text/focus
 contrast. Existing workbench screenshots wait for observed document health and the exact selected
 workflow revision before capture, with volatile observation times masked.
-Typed, fixed-time fixtures exercise recording/degraded/incomplete rendering without depending on CI
-disk pressure or available hardware. The screenshot pipeline captures these six names:
+The six microphone images distinguish actual application runs from fixed examples:
 
-- `microphone-experiment-ready.png`
-- `microphone-experiment-blocked.png`
-- `microphone-experiment-recording.png`
-- `microphone-experiment-degraded.png`
-- `microphone-experiment-incomplete.png`
-- `microphone-experiment-complete.png`
+|             Images              |                                               Data source                                                |                                                 Screenshot treatment                                                  |
+|---------------------------------|----------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------|
+| Ready, Blocked, Complete        | Actual packaged-app preflights and a completed simulation whose evidence ZIP is downloaded and inspected | Host-dependent capacity, throughput, runtime timing, paths, timestamps and recording digest are masked where present. |
+| Recording, Degraded, Incomplete | Fixed typed runtime snapshots, independent of CI disk pressure and connected hardware                    | Example values remain unmasked so storage, rate, safe-duration and recording-health readings can be inspected.        |
+
+The Complete image additionally hides a possible CI-load-dependent `processing.overruns` finding
+only during screenshot rendering. The actual run, its persisted health report and downloaded evidence
+retain their original data. The Degraded fixture documents the same warning visibly.
 
 Physical array wiring, device permissions, timing drift, room accuracy and sustained acquisition still
 require a real device and measured reference data. Software readiness reports the available evidence

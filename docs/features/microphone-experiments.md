@@ -31,7 +31,11 @@ recording, including its footer, and agree with its `SHA256SUMS` entry. The sepa
 completion marker, stored in the footer. These digests cover different bytes and must not be compared
 as if they had the same scope.
 
-The packaged-browser scenario captures `microphone-experiment-ready.png` for this state.
+![Ready simulation preflight with Start experiment enabled and recording not yet started](../assets/screenshots/workbench/microphone-experiment-ready.png)
+
+**Ready — actual preflight.** The packaged application has checked the saved simulation profile and
+current choices, and **Start experiment** is available. Masked regions cover host-dependent capacity,
+throughput, timing and destination fields; they are not measured examples for a particular device.
 
 ## Bind a real array and measured calibration
 
@@ -61,7 +65,11 @@ live acquisition. Live timing readiness uses the existing one-sample uncertainty
 expired or mismatched calibration. Simulation does not apply physical-device timing corrections to
 ideal simulated samples.
 
-The packaged-browser scenario captures `microphone-experiment-blocked.png` for the unavailable-host-device state.
+![Blocked live acquisition with an unavailable host device, profile findings and Start experiment disabled](../assets/screenshots/workbench/microphone-experiment-blocked.png)
+
+**Blocked — actual live-source preflight.** The packaged application reports the unavailable host
+capture device and a profile that is not ready for LIVE. The findings and disabled **Start experiment**
+remain visible. Host-dependent storage, path and observation-time fields are masked.
 
 ## Replay and recovery
 
@@ -106,11 +114,18 @@ silently become execution bindings for another snapshot.
 initial profile manifest and an explicit incomplete evidence status. Evidence download is unavailable
 if disk finalization cannot persist a truthful final manifest and hash inventory.
 
-The browser scenario captures `microphone-experiment-complete.png` after downloading and inspecting
-the actual simulation evidence. Fixed-time typed health fixtures additionally capture
-`microphone-experiment-recording.png`, `microphone-experiment-degraded.png` and
-`microphone-experiment-incomplete.png`; these test rendering and controls without requiring a
-particular CI disk failure or connected microphone.
+![Completed simulation with finalized recording metrics, readable track results and Export complete evidence available](../assets/screenshots/workbench/microphone-experiment-complete.png)
+
+**Complete — actual completed simulation.** The packaged application has finalized this run's
+recording and evidence. The browser scenario also downloads and inspects the evidence ZIP from the
+same run. Host-dependent capacity, throughput, runtime timing, destination, observation-time and
+recording-digest fields are masked. For this screenshot only, a possible `processing.overruns` warning
+that depends on CI load is hidden; this display normalization does not change the run, the persisted
+health report or the downloaded evidence.
+
+The [microphone runtime examples](experiment-health.md#microphone-runtime-examples) show recording,
+degraded and incomplete states using fixed typed snapshots. Their example capacity and timing values
+remain visible, and the degraded view includes the processing-overrun warning explicitly.
 
 ## Storage location and verification scope
 
