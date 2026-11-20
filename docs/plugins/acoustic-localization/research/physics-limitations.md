@@ -2,7 +2,7 @@
 
 > Limitations that bound what the `audio-experimental-acoustic` subproject
 > can reasonably claim. The list complements the implementation-level
-> limitations in [`../README.md`](../README.md#limitations-and-non-goals) by
+> [plugin interpretation rules](../README.md#interpretation-rules) by
 > grounding them in the physics and the sampling/signal-processing constraints
 > that apply regardless of the implementation language.
 
@@ -50,26 +50,31 @@ than a few bins cannot be reliably separated without sub-bin interpolation
 Doppler accuracy inherits the same limit: a velocity that shifts the observed
 frequency by less than one bin is, in the absence of parabolic refinement,
 indistinguishable from zero motion. The Doppler-resolution discussion in
-[`../README.md`](../README.md#frequency-resolution-requirements-for-doppler-estimation)
+[Physics and latency limits](../physics-and-latency-limits.md#snr-frequency-resolution-and-doppler-velocity-limits)
 expands on this.
 
 ## Synchronization precision requirements
 
-TDOA-based localization assumes a single shared sample clock across the
+TDOA-based localization needs synchronized samples or a measured timing model across the
 microphones. The sample period at 16 kHz is ≈62.5 µs, which corresponds to
-≈21 mm of equivalent path difference in air. A single-sample drift therefore
-already represents about 7 % of the largest geometric delay for the
-`defaultArray()` geometry; multi-sample drift collapses localization quickly.
+≈21 mm of equivalent path difference in air. For the 30 cm square `defaultArray()`, a single-sample
+drift represents about 7% of the delay across one side and 5% of the largest geometric delay across
+the 0.424 m diagonal; multi-sample drift quickly consumes this timing budget.
 This is the regime that Experiment I and RQ6 are designed to probe.
+
+The calibration layer implements static-offset and affine-drift corrections with explicit
+uncertainty bounds. It does not automatically combine independent USB devices, reconstruct their
+sample streams or continually re-estimate timing; see
+[unsupported synchronization work](../synchronization.md#what-remains-experimental-or-unsupported).
 
 ## Spatial resolution limits
 
 For a given array geometry, the localization resolution is bounded by:
 
-- the maximum inter-microphone delay, which for `defaultArray()` is on the
-  order of one sample at 16 kHz;
-- the integer-sample resolution of the current GCC-PHAT implementation,
-  before any sub-sample interpolation;
+- the maximum inter-microphone delay: for the 30 cm square `defaultArray()`, the diagonal is about
+  0.424 m, corresponding to about 20 samples at 16 kHz and 343 m/s;
+- integer-sample quantization in the default GCC-PHAT estimator, or the interpolation uncertainty
+  of the selectable sub-sample estimator;
 - the beamforming grid resolution supplied by the caller to
   `DelayAndSumBeamformer`.
 

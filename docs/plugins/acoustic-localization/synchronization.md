@@ -47,6 +47,14 @@ The implemented calibration foundation is deliberately hardware-neutral and CI-s
 6. Wrap the chosen TDOA implementation with `CalibratedTdoaEstimator` and configure the maximum acceptable timing error in samples.
 7. Inspect the synchronization assessment in every localization/tracking result.
 
+This is a programmatic foundation, not an automatic live-device calibration wizard. `observe(...)`
+correlates supplied channel samples; it does not remove acoustic path differences from an arbitrary
+loudspeaker position. `calibrate(...)` currently derives a residual estimate from correlation
+confidence and initializes jitter to zero, gain to one and polarity to non-inverted. Those defaults
+are not independent measurements of a physical device. Retain the raw reference events and measured
+uncertainty, and follow the [hardware calibration procedure](research/hardware/microphone-array-setup.md#calibration-procedure)
+before entering a profile in the live workflow.
+
 `SyntheticCalibrationFixture` provides deterministic common-pulse blocks for tests and simulation. CI proves recovery of known offsets and known drift without requiring live hardware.
 
 ## What remains experimental or unsupported
@@ -70,7 +78,11 @@ See [Physics and latency limits](physics-and-latency-limits.md) for the underlyi
 
 ## Timing precision requirements
 
-For a planar array of side `d`, a wavefront from a distant source crosses the array in at most `d / c` seconds (`c` ≈ 343 m/s). The current TDOA outputs use integer-sample delays; calibrated affine correction is rounded at the estimator boundary while residual/sub-sample uncertainty remains visible in the synchronization assessment.
+For microphone separation `d`, the maximum propagation-time difference is `d / c` seconds
+(`c` ≈ 343 m/s). The integer-sample GCC-PHAT baseline remains the standalone microphone workflow's
+default. The desktop simulation workbench additionally exposes `SUB_SAMPLE_GCC_PHAT`. Calibration
+retains a corrected delay in seconds while the legacy integer delay field is rounded;
+residual/sub-sample uncertainty remains visible in the synchronization assessment.
 
 Useful resolution therefore requires the smaller of:
 

@@ -1,167 +1,73 @@
 # Roadmap
 
-This roadmap lists open work from the current implemented baseline. Completed collaboration, persistence and UI foundations are documented in the README and architecture guides rather than repeated as future plans.
+This page describes the implemented baseline and the remaining product/research boundaries as of
+20 November 2026. Closed implementation issues are described in the feature guides, not listed as
+future work. The [current QA findings](docs/QA-FINDINGS.md) distinguish observed defects, source-audited
+limits and hardware checks that have not been performed.
 
-## Current baseline
+## Implemented baseline
 
-The repository currently provides:
+|                            Capability                            |                                        Maintained guide and evidence                                         |
+|------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------|
+| Signal inspection, recording, integrity inspection and recovery  | [Recording and replay](docs/features/recording-and-replay.md)                                                |
+| Simulation, configured host capture, replay, health and evidence | [Microphone experiments](docs/features/microphone-experiments.md)                                            |
+| Portable setup documents, plugin schemas and migrations          | [Portable experiment documents](docs/features/portable-experiment-documents.md)                              |
+| Server-issued identities and revision-safe collaboration         | [Collaboration](docs/features/collaborative-workflows.md), [identity policy](docs/collaboration-identity.md) |
+| Personal/shared semantic undo and redo                           | [Semantic history](docs/architecture/semantic-undo-redo.md)                                                  |
+| Hibernate/JGit persistence and full-process restart              | [Operations](docs/workbench-hibernate-persistence.md), [restart E2E](docs/durable-restart-e2e.md)            |
+| Exact checkpoint comparison and validated three-way merge        | [Semantic merge](docs/architecture/semantic-workflow-merge.md)                                               |
+| Combined generic/semantic history search and rebuild             | [History search](docs/features/workflow-history-search.md)                                                   |
+| Immutable source capture and deterministic audio computation     | [Generator/gain example](docs/architecture/deterministic-audio-workflow-example.md)                          |
+| Consumer-owned shared-storage upgrade contract                   | [Runtime contract](docs/workbench-hibernate-persistence.md#shared-persistence-runtime)                       |
 
-- desktop signal inspection, recording/replay and evidence export;
-- immutable workflow models and deterministic semantic operations;
-- packaged React Flow workflow editing;
-- session lifecycle, ordered SSE, presence and revision-safe commands;
-- durable personal/shared undo and redo with previews and conflicts;
-- Hibernate-backed session recovery, migrations and transactional outbox;
-- JGit-backed workflow checkpoint integration;
-- executable two-browser collaboration coverage for live convergence and undo/redo;
-- generated documentation screenshots for stable UI states.
+## Workflow integration boundaries
 
-This baseline is useful, but it is not yet the complete workflow platform described by epic #239.
+The browser portable-document workspace, live collaboration aggregate and stored Git checkpoints
+remain distinct sources. The browser currently has no command that exports its active collaboration
+graph as a complete `.audioexp` document. A live session also does not create a Git checkpoint through
+the standalone checkpoint button. Future integration should capture an explicit immutable source,
+preserve the complete document envelope and retain server-side authorization and attribution.
 
-## Priority 1 — complete cross-process durability evidence
+The production computation backend currently executes the documented synthetic sine/gain chain.
+Adding a catalog node to the UI does not make it executable. Additional typed executors should bring
+numerical tests, capability preflight and output evidence together.
 
-Issue #249 remains open after the live two-browser stage.
+## Experimental acoustic work
 
-The next stage must run the packaged application in durable Hibernate mode, stop the complete process and restart it against the same database. It should prove:
+Persisted geometry, measured calibration, single-device JavaSound capture, recording/replay and
+sub-sample GCC-PHAT in the simulation workbench are implemented. Remaining research work includes:
 
-- session, operation identity, revision and event sequence recovery;
-- actor history and undo/redo capability recovery;
-- command idempotency after restart;
-- pending transactional outbox dispatch after restart;
-- migration plus Hibernate `validate` startup;
-- checkpoint and old-commit loading when the checkpoint lifecycle is included;
-- useful browser, server and database diagnostics on failure.
+- measured accuracy and long-duration stability on synchronized physical arrays;
+- independent-device synchronization and continuous clock reconstruction;
+- room/search-envelope controls beyond the current standalone 3 × 2 m two-dimensional grid;
+- broader algorithm and real-recording benchmark evidence;
+- historical calibration time semantics for replay;
+- validated handling of reflections, difficult noise conditions and multi-source ambiguity.
 
-The test must continue using the shared `SessionFactory`, Hibernate-backed collaboration store and Hibernate-backed JGit store. It must not introduce raw JDBC or a parallel test persistence model.
+The [microphone guide](docs/features/microphone-experiments.md) states current parameter defaults,
+calibration requirements and replay limits. Species classification and safety claims require their
+own measured evidence.
 
-## Priority 2 — semantic diff and merge
+## Desktop and documentation hardening
 
-Issue #246 owns deterministic workflow comparison, three-way merge and conflict resolution.
+The complete [image inventory and visual review](docs/qa/documentation-visual-review-2026-11-20.md)
+distinguishes application captures from deterministic illustrations. Further release qualification
+should cover real devices, native installations, HiDPI, window resizing and representative long
+recordings. Browser snapshots do not establish those hardware/platform results.
 
-Required outcomes:
-
-- semantic rather than line-oriented diffs;
-- typed conflicts for modify/modify, delete/modify, delete/connect and stable-id collisions;
-- deterministic auto-merge for independent changes;
-- explicit auditable resolution choices;
-- validation before committing the resolved workflow;
-- a React Flow conflict panel without JGit/Hibernate knowledge;
-- exact resulting commit identity and reload.
-
-## Priority 3 — searchable workflow history
-
-Issue #247 owns rebuildable search projections over versioned workflow history.
-
-Required outcomes:
-
-- reuse of `jgit-storage-hibernate-search`;
-- generic commit/path/author/message/content search from the shared library;
-- Audio Analyzer-specific workflow/node/property projections only where necessary;
-- deterministic full rebuild from Git authority;
-- branch, author, time, workflow, node and property filters;
-- exact matching commit load;
-- clear index-unavailable versus history-lost behavior;
-- no second Hibernate/Search bootstrap or raw-JDBC search path.
-
-Search is derived state and must remain disposable without losing authoritative workflow history.
-
-## Priority 4 — execute immutable workflow snapshots truthfully
-
-Epic #248 and children #273–#275 own actual workflow execution.
-
-### #273 — run orchestration and lifecycle
-
-Introduce immutable source selection, stable run identity, expected-revision checks, backend ports, lifecycle, cancellation and REST contracts. The existing status-only dry run must remain labeled as simulation.
-
-### #274 — real deterministic audio computation
-
-Execute at least:
-
-```text
-Synthetic Signal Generator -> Gain
-```
-
-through a real backend and assert the numerical output and reproducibility fingerprint.
-
-### #275 — production run UX
-
-Add preflight, provenance, progress, cancellation, result and failure views to the React Flow workbench. Editing may continue, but it must never mutate the captured run input.
-
-The epic is complete only when simulation and actual computation are visibly distinct.
-
-## Product documentation and usability
-
-Documentation should continue to serve audio-processing users first:
-
-- maintain a short task-oriented README;
-- keep getting-started and feature guides synchronized with the packaged product;
-- keep plugin implementation material in dedicated development pages;
-- generate screenshots from integration scenarios;
-- reject screenshots with clipped controls, unreadable text or misleading empty states;
-- record a dated manual QA pass before release-facing claims.
-
-New stable UI states should receive selectors, assertions and generated documentation in the same change.
-
-## Desktop audio workbench
-
-Useful hardening work includes:
-
-- packaged-build QA for demo, capture, recording, replay and export;
-- HiDPI and common desktop-size review;
-- explicit handling of long labels and dynamic layout;
-- larger-recording memory and streaming guidance;
-- richer evidence metadata including software version and capture settings;
-- configurable pass/fail criteria for A/B reports.
+Useful extensions include configurable A/B acceptance thresholds and further actual UI captures for
+portable-document editing, profile calibration and recovery. Add these with executable scenarios
+when those interfaces change; do not substitute hand-drawn controls for an observed application state.
 
 ## Plugin ecosystem
 
-The stable plugin API should evolve conservatively:
-
-- publish a compatibility policy before promising third-party binary stability;
-- provide a minimal standalone reference plugin;
-- validate contribution id uniqueness and descriptor/documentation quality;
-- clarify runtime classpath packaging for external plugins;
-- prefer UI-independent contributions where web/headless use is expected;
-- avoid moving experimental acoustic assumptions into the stable API.
-
-## Experimental acoustic localization
-
-The localization module remains research-grade.
-
-Open research issues include:
-
-- 
-
-# 136 — synchronization and calibration framework;
-
-- 
-
-# 138 — algorithm improvements beyond baseline GCC-PHAT and grid beamforming;
-
-- 
-
-# 139 — complete real-world microphone-array workflow.
-
-Research priorities:
-
-1. make timing and geometry assumptions executable;
-2. add calibrated array profiles and offset/drift fixtures;
-3. improve confidence, sub-sample TDOA and reflection handling;
-4. expand real-recording benchmark evidence;
-5. document supported and unsupported hardware paths;
-6. avoid species or safety claims unsupported by calibrated experiments.
+Keep extension contracts independent of the host. Future third-party compatibility promises need a
+versioning policy and independent reference plugin. Versioned document contributions already have
+schema, migration and fixture contracts in the [plugin guide](docs/development/plugin-development.md).
 
 ## Release-quality gate
 
-A public release should require:
-
-- `./mvnw clean verify`;
-- CodeQL;
-- relevant Docker/Chromium integration workflows;
-- reproducible screenshot verification;
-- migration/schema-validation checks for persistent mode;
-- visual review of generated images;
-- a dated manual QA record;
-- explicit stable/experimental boundaries and known limitations.
-
-The roadmap should be updated when an issue closes so completed work moves into feature or architecture documentation rather than remaining presented as future intent.
+A release requires the full Maven verification, applicable packaged-browser/storage/native checks,
+visual image review, documented platform/hardware results and clear current limitations. Follow the
+[release checklist](docs/qa/release-readiness-checklist.md). A green automated build does not replace
+unperformed physical-device or manual platform acceptance.

@@ -361,13 +361,14 @@ public class AudioAnalyseFrame extends JFrame {
     mnFile.add(mntmStopRecording);
 
     JMenuItem mntmOpenRecording = new JMenuItem("Open recording...");
-    mntmOpenRecording.setToolTipText("Replay a previously captured .aar file as the audio source.");
+    mntmOpenRecording.setToolTipText(
+        "Replay a captured .aarec or legacy .aar recording as the audio source.");
     mntmOpenRecording.addActionListener(e -> openRecording());
     mnFile.add(mntmOpenRecording);
 
     JMenuItem mntmCompare = new JMenuItem("Compare two recordings...");
     mntmCompare.setToolTipText(
-        "Compare measurement, spectrum and diagnosis of two .aar recordings and render a"
+        "Compare measurement, spectrum and diagnosis of two AudioAnalyzer recordings and render a"
             + " Markdown A/B report.");
     mntmCompare.addActionListener(e -> compareRecordings());
     mnFile.add(mntmCompare);
@@ -1101,7 +1102,8 @@ public class AudioAnalyseFrame extends JFrame {
 
   private void openRecording() {
     JFileChooser chooser = new JFileChooser();
-    chooser.setFileFilter(new FileNameExtensionFilter("AudioAnalyzer recording (*.aar)", "aar"));
+    chooser.setFileFilter(
+        new FileNameExtensionFilter("AudioAnalyzer recording (*.aarec, *.aar)", "aarec", "aar"));
     if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) {
       return;
     }
@@ -1139,13 +1141,15 @@ public class AudioAnalyseFrame extends JFrame {
   private void compareRecordings() {
     JFileChooser chooserA = new JFileChooser();
     chooserA.setDialogTitle("Select recording A");
-    chooserA.setFileFilter(new FileNameExtensionFilter("AudioAnalyzer recording (*.aar)", "aar"));
+    chooserA.setFileFilter(
+        new FileNameExtensionFilter("AudioAnalyzer recording (*.aarec, *.aar)", "aarec", "aar"));
     if (chooserA.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) {
       return;
     }
     JFileChooser chooserB = new JFileChooser();
     chooserB.setDialogTitle("Select recording B");
-    chooserB.setFileFilter(new FileNameExtensionFilter("AudioAnalyzer recording (*.aar)", "aar"));
+    chooserB.setFileFilter(
+        new FileNameExtensionFilter("AudioAnalyzer recording (*.aarec, *.aar)", "aarec", "aar"));
     if (chooserB.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) {
       return;
     }

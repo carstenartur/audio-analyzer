@@ -14,6 +14,13 @@ replay/recovery and actual evidence export. These are views of the same host ser
 pipeline. Live is explicitly blocked when no suitable device/calibration exists. Simulation remains
 available for a reproducible first run without hardware.
 
+For a first physical run, complete the operator sequence in order: create a profile identity, enter
+measured channel positions, bind the discovered host device, set its capture format, apply measured
+calibration, **Validate & save profile**, set duration/recording, then **Check experiment readiness**
+and **Start experiment**. Let the run finalize or choose **Stop & finalize**, inspect its complete or
+incomplete status, and export its evidence before changing the setup. The steps below explain the
+domain evidence behind those controls; they are not an automatic hardware-calibration procedure.
+
 ## 1. Discover and select a capture device
 
 `JavaSoundCaptureDeviceDiscovery` enumerates input-capable JavaSound mixers and exposes API-neutral
@@ -44,6 +51,14 @@ The profile also declares a human-facing geometry family: stereo pair, linear, r
 custom. The family is descriptive; the measured microphone coordinates remain the localization
 truth.
 
+The current standalone acoustic provider searches a **3 × 2 m region**, `x = 0…3 m`, `y = 0…2 m`,
+using eight subdivisions per axis. Use a consistent origin for the array and independent reference
+positions. Editing microphone coordinates does not expand this candidate region. The provider also
+uses fixed 1024-frame blocks/FFT, a 150–2500 Hz search band, integer-sample GCC-PHAT and 343 m/s speed
+of sound. These implementation settings are described in the
+[standalone localization limits](../../../../features/microphone-experiments.md#standalone-localization-limits);
+they are not measurements of the room or guarantees of spatial accuracy.
+
 ## 3. Calibrate and validate synchronization
 
 Live localization requires a `MicrophoneArrayCalibration` for the exact geometry and channel
@@ -67,6 +82,19 @@ Before opening a live source, `MicrophoneArrayReadiness.assess(...)` checks:
 A rejected readiness result prevents `JavaSoundMicrophoneArraySource` from opening the device.
 Simulation and replay use deterministic shared-clock evidence unless their source provides a more
 specific synchronization assessment.
+
+The application accepts calibration measurements; it does not acquire them through a live wizard.
+Use the [calibration procedure](microphone-array-setup.md#calibration-procedure) to prepare evidence for
+the exact geometry, reference channel and capture format. In the browser, **Apply measured calibration
+to draft** must be followed by **Validate & save profile**. Changing geometry, channel mapping, device
+or format invalidates old calibration and requires saving the new setup before another preflight.
+
+There is a current replay-specific restriction: non-live preflight uses nominal timing, but the acoustic
+runner applies any supplied calibration and checks its expiry at the current wall clock. Historical
+replay can therefore be rejected after the original calibration expires, even if its preflight passed.
+The recording-time calibration is not automatically revalidated. Preserve the original evidence;
+editing the expiry date would change the experiment. This is verified by source inspection, not by a
+real-hardware run; see [historical replay](../../../../features/microphone-experiments.md#current-calibration-limit-for-historical-replay).
 
 ## 4. Capture through the common source abstraction
 
@@ -116,6 +144,18 @@ even if the mutable profile store has changed later.
 For workbench simulation runs, `WorkbenchScenarioRunner` now attaches a deterministic
 `LocalizationExperiment`. `WorkbenchExperimentExporter` emits both a machine-readable manifest and
 a Markdown hardware/profile summary. Live and replay integrations use the same types.
+
+For the managed microphone workflow, **Export complete evidence** / **Export incomplete evidence**
+downloads `experiment.manifest`, the requested recording, available localization reports, `health.txt`
+and `SHA256SUMS`. A simulation additionally includes its ground-truth benchmark; live/replay do not
+invent reference measurements. Keep these files together, verify the checksum inventory, then restore
+the exact profile when replaying on a different host. The operator guide includes
+[profile extraction and a complete evidence round trip](../../../../features/microphone-experiments.md#export-and-reopen-evidence).
+
+Replay also obeys the selected 1–3600-second duration. Choose enough seconds for the desired recorded
+frames and run a fresh preflight. Recovery preserves readable blocks and original frame indices;
+it does not fill missing samples. A recovered recording with continuity gaps remains blocked by the
+standalone replay preflight.
 
 ## Practical validation checklist
 

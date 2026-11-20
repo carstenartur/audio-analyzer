@@ -13,7 +13,7 @@ The canonical workflow of each session is held by one `WorkflowOperationLog`. Th
 
 The API is part of the existing Spring Boot workbench application and uses:
 
-- Spring Boot 4.1.0;
+- Spring Boot 4.1.1 (selected by the root `pom.xml`);
 - Spring MVC controllers;
 - Jakarta Bean Validation for request contracts;
 - Jackson 3 for JSON binding;
@@ -56,7 +56,11 @@ DELETE /workflow/sessions/{sessionId}
 ### Create
 
 Obtain an identity with `POST /workflow/identity` and `{ "displayName": "Alice" }` first.
-Retain its HttpOnly cookie and use the returned actor id in the examples below.
+Retain its HttpOnly cookie and use the returned actor id in the examples below. JSON calls select
+that client with `X-Workflow-Actor`; the matching cookie proves possession. A single-identity API
+client can omit the selector when exactly one collaboration cookie is present. Native EventSource
+uses the public `actorId` query parameter plus that cookie. Copying an actor ID does not authorize a
+second client.
 
 ```json
 {
@@ -72,7 +76,14 @@ Retain its HttpOnly cookie and use the returned actor id in the examples below.
 
 A successful creation returns `201 Created`, a `Location` header and the created session representation.
 
-`workflowId` and `workflowName` are optional. The initial session graph is empty; loading a stored workflow is integrated by the persistence work tracked in #240.
+`workflowId` and `workflowName` are optional. The initial session graph is empty. This create contract
+does not accept a stored commit or an open portable document as a seed. The standalone document/editor
+workspace and its checkpoint load/save actions remain separate from live-session editing.
+
+Choose `mode` before Create; it cannot be changed afterwards. A second client obtains its own
+identity, retains its own cookie and uses Join with the same session ID. It must not repeat Create
+for an existing ID. See the [two-browser walkthrough](../features/collaborative-workflows.md#first-shared-workflow-in-two-browsers)
+for the corresponding production UI procedure.
 
 ### Join
 
@@ -112,19 +123,25 @@ Errors use `application/problem+json`. Domain failures expose stable error codes
 |---------------------------------------------------------------------------|------------:|
 | Invalid JSON or failed Bean Validation                                    |         400 |
 | Invalid operation author                                                  |         400 |
+| Missing, expired or mismatched collaboration identity proof               |         403 |
 | Unknown session                                                           |         404 |
 | Duplicate session, private-session access or invalid lifecycle transition |         409 |
 | Wrong HTTP method                                                         |         405 |
 
 ## Running
 
-The API starts together with the workflow workbench:
+Build using [Getting started](../getting-started.md), then start the API and packaged workflow
+workbench together from the repository root:
 
-```text
-java -jar audio-app-0.0.4-SNAPSHOT-workbench.jar
+```bash
+java -jar audio-app/target/audio-app-0.1.0-SNAPSHOT-workbench.jar
 ```
 
-The default port is `8080` and can be changed with `--server.port=<port>`.
+The default port is `8080` and can be changed with `--server.port=<port>`. Open
+[http://localhost:8080/workbench](http://localhost:8080/workbench) for the UI. The default memory mode
+keeps session state only for this process. Use [Hibernate persistence](../workbench-hibernate-persistence.md)
+for session, identity and semantic-history recovery after restart; filesystem checkpoint storage
+does not persist those collaboration aggregates.
 
 ## Architectural boundary
 

@@ -24,10 +24,9 @@ import org.hammer.audio.ui.theme.PlotRenderTheme;
 public final class WaveformPanel extends JPanel {
 
   private static final Logger LOGGER = Logger.getLogger(WaveformPanel.class.getName());
-  private static final int LEFT_MARGIN = 48;
   private static final int RIGHT_MARGIN = 12;
   private static final int TOP_MARGIN = 20;
-  private static final int BOTTOM_MARGIN = 34;
+  private static final int BOTTOM_MARGIN = PlotRenderTheme.BOTTOM_AXIS_MARGIN;
 
   private AudioCaptureService audioCaptureService;
   private transient WaveformModel frozenModel;
@@ -179,19 +178,20 @@ public final class WaveformPanel extends JPanel {
     }
     int width = Math.max(1, getWidth());
     int height = Math.max(1, getHeight());
+    String[] amplitudeTicks = {"+1", "0", "-1"};
+    int leftMargin = PlotRenderTheme.leftAxisMargin(g2, amplitudeTicks);
     Rectangle plotBounds =
         new Rectangle(
-            LEFT_MARGIN,
+            leftMargin,
             TOP_MARGIN,
-            Math.max(1, width - LEFT_MARGIN - RIGHT_MARGIN),
+            Math.max(1, width - leftMargin - RIGHT_MARGIN),
             Math.max(1, height - TOP_MARGIN - BOTTOM_MARGIN));
     PlotRenderTheme.drawPlotBackground(g2, getWidth(), getHeight(), plotBounds);
     PlotRenderTheme.drawGrid(g2, plotBounds, 10, 8);
     PlotRenderTheme.drawTitle(g2, 10, 16, triggerEnabled ? "Waveform (triggered)" : "Waveform");
     PlotRenderTheme.drawXAxisLabel(g2, plotBounds, "Sample index");
-    PlotRenderTheme.drawYAxisLabel(g2, plotBounds, "Amplitude [-1..1]");
-    PlotRenderTheme.drawYTicks(
-        g2, plotBounds, new double[] {0.0d, 0.5d, 1.0d}, new String[] {"+1", "0", "-1"});
+    PlotRenderTheme.drawYAxisLabel(g2, plotBounds, "Amplitude [-1..1]", amplitudeTicks);
+    PlotRenderTheme.drawYTicks(g2, plotBounds, new double[] {0.0d, 0.5d, 1.0d}, amplitudeTicks);
 
     if (audioCaptureService == null) {
       LOGGER.warning("paintComponent: audioCaptureService is null");

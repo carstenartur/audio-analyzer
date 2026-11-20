@@ -62,15 +62,19 @@ Use this template for release-candidate manual QA. Copy it to a dated file, for 
 - [ ] Imported recording workbench handles empty/partial dataset — Result: / Notes:
 - [ ] Generator calibration path is visible and understandable — Result: / Notes:
 
-## Documentation screenshots
+## Documentation screenshots and illustrations
 
-- [ ] `docs/images/screenshot.png` — Regenerated: / Visual QA result: / Notes:
-- [ ] `docs/images/features/waveform-trigger.png` — Regenerated: / Visual QA result: / Notes:
-- [ ] `docs/images/features/spectrum-peak-hold.png` — Regenerated: / Visual QA result: / Notes:
-- [ ] `docs/images/features/recording-format.png` — Regenerated: / Visual QA result: / Notes:
-- [ ] `docs/images/features/ab-comparison.png` — Regenerated: / Visual QA result: / Notes:
-- [ ] Acoustic localization workbench screenshot — Regenerated: / Visual QA result: / Notes:
-- [ ] Imported recording workbench screenshot — Regenerated: / Visual QA result: / Notes:
+Copy the complete [current image inventory](documentation-visual-review-2026-11-20.md), then add any
+newly introduced image. Record one row per file; a historical pass does not cover a changed PNG.
+
+|  Image   |               Scenario/renderer               | Exact code revision | Regenerated? |   Visual result    |               Notes               |
+|----------|-----------------------------------------------|---------------------|--------------|--------------------|-----------------------------------|
+| filename | actual capture / typed fixture / illustration | commit SHA          | yes/no       | PASS/FAIL/DEFERRED | clipping, contrast, labels, scope |
+
+- [ ] All images in both documentation image directories are inventoried.
+- [ ] Every changed image has been opened and inspected at readable resolution.
+- [ ] Captions distinguish actual state, fixed fixtures and illustrations.
+- [ ] Browser scenario counts and skip counts are recorded.
 
 ## Documentation review
 

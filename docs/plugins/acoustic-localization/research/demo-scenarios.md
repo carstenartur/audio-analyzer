@@ -146,9 +146,11 @@ Show why a shared sample clock matters for TDOA-based localization.
 
 ### Setup
 
-Future demo — requires per-channel delay/drift injection that does not yet exist
-in `SampleClock`. Once available, run `singleSource()` while injecting a slow
-drift of e.g. 1 sample/second on one channel.
+Future interactive demo — the scenario dropdown does not expose per-channel delay/drift injection.
+The calibration foundation already has `SyntheticCalibrationFixture` and deterministic offset/drift
+tests. Connecting controlled clock error to a complete `singleSource()` localization demo remains
+work to do; `SampleClock` itself stores nominal timing. A proposed sweep could inject one sample per
+second on one channel and compare calibrated and uncalibrated results.
 
 ### Expected
 

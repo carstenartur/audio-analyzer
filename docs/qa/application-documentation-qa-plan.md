@@ -41,21 +41,14 @@ For each page verify:
 
 ### Screenshot inventory
 
-Regenerate and inspect:
+Use the complete [image inventory](documentation-visual-review-2026-11-20.md) and
+[screenshot checklist](screenshot-qa-checklist.md). It covers all nine Java2D illustrations and all
+11 browser images, including initial load, palette, collaboration/undo and six microphone states.
 
-- `docs/images/screenshot.png`
-- `docs/images/features/waveform-trigger.png`
-- `docs/images/features/spectrum-peak-hold.png`
-- `docs/images/features/recording-format.png`
-- `docs/images/features/ab-comparison.png`
-
-Additional screenshots should be added for:
-
-- acoustic localization simulation workbench;
-- imported recording workbench;
-- playback explorer controls;
-- generator calibration from imported dataset features;
-- plugin menu / contributed workbench discovery if the UI is stable enough.
+Java2D images are generated illustrations, not captures of Swing windows. For a new UI instruction,
+prefer an actual application/component capture from an executable scenario. Valuable future captures
+include document preview/edit/save, the profile/calibration editor, replay selection and recovery.
+A missing illustration is not a substitute for a complete text procedure with expected outcomes.
 
 ### Visual readability criteria
 
@@ -71,15 +64,13 @@ A documentation screenshot fails QA when any of these are visible:
 
 ### Automated checks
 
-The existing `DocImageRendererTest` only checks the dashboard screenshot dimensions and that some
-bright content exists. That is useful as a smoke test, but not enough for professional documentation.
-Add checks for:
+`DocImageRendererTest` covers all nine illustration generators. The visual review found that broad
+nonblank-region tests missed erased headers/tables and overlapping axis text; targeted regression
+assertions now protect those regions and separate text placement. Browser tests assert semantic state
+before capture and compare committed baselines. Neither mechanism replaces visual inspection.
 
-- all generated images, not only the dashboard screenshot;
-- expected dimensions for every image;
-- non-blank content for every major panel region;
-- text/layout guardrails where practical, e.g. measured text bounds must fit within intended cells;
-- CI regeneration check or documented manual regeneration command before release.
+For future changes, assert the relevant control/state or layout contract, regenerate the image,
+inspect it at readable resolution, and record executed/skip counts for packaged-browser tests.
 
 ### Manual application QA matrix
 
@@ -108,14 +99,10 @@ Before a release or public announcement, require:
 - critical documentation/readability issues are closed;
 - remaining research limitations are listed in `docs/QA-FINDINGS.md` or linked issues.
 
-## Known current risks from inspection
+## Current review and remaining acceptance
 
-- README and development docs contain hard-coded snapshot-version commands that can become stale.
-- `DocImageRenderer` renders fixed-size images with manual coordinates and no systematic text-fit
-  guard, so long labels can overlap or be clipped.
-- Only the dashboard screenshot currently has a minimal smoke test.
-- Feature screenshots and workbench screenshots need explicit visual QA before being used as
-  professional project material.
-- The repository cannot claim complete application QA until the Swing app and plugin workbenches are
-  exercised with a documented manual matrix.
-
+The [20 November review](documentation-visual-review-2026-11-20.md) records corrected documentation and
+image defects. Maintain links, artifact selectors and capability boundaries with the code. Complete
+manual device, HiDPI and native-platform checks with a dated matrix before making corresponding
+release claims. The current baseline does not establish physical microphone accuracy or Windows/macOS
+installation behavior.

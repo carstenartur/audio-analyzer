@@ -18,7 +18,7 @@ Workflow Modeling ──> Validation ──> Execution
         │
         └──> Versioning and Persistence
                    │
-                   └──> future rebuildable Search Projection
+                   └──> rebuildable Search Projection
 ```
 
 Dependency arrows point from a consumer to an allowed upstream contract. Infrastructure adapters implement ports owned by stable contexts; stable contexts never import infrastructure implementations.
@@ -30,7 +30,7 @@ Dependency arrows point from a consumer to an allowed upstream contract. Infrast
 | Audio Processing               | `audio-core`, `audio-geometry`, `audio-acquisition`, `audio-dsp` | Stable foundation     | Audio samples, formats, DSP and analysis snapshots                          |
 | Workflow Modeling              | `audio-core`                                                     | Stable foundation     | Immutable workflow graph and semantic operations                            |
 | Validation                     | `audio-core`                                                     | Stable foundation     | Structural and semantic workflow acceptance                                 |
-| Execution                      | `audio-core` contracts; concrete backend work remains            | Partial               | Immutable run model; current dry run is simulation only                     |
+| Execution                      | `audio-core` contracts, `audio-dsp` backend                      | Implemented slice     | Immutable run model; deterministic sine/gain computation                    |
 | Collaboration                  | `audio-core`, `audio-app`                                        | Implemented           | Session membership, operation order, revision, history and undo eligibility |
 | Versioning and Persistence     | `audio-core` facade, `audio-app`, shared JGit library            | Implemented           | Durable sessions/outbox and versioned workflow checkpoints                  |
 | Plugin Extension               | `audio-plugin-api`, host adapter in `audio-app`                  | Stable API foundation | Host-visible contribution metadata                                          |
@@ -209,7 +209,7 @@ Workflow/Collaboration ports
 
 - Workflow DSL in Git and durable collaboration rows are authoritative in their documented scopes.
 - The outbox is durable transport work, not a second workflow history.
-- Future search indexes are rebuildable derived state.
+- Search indexes are rebuildable derived state.
 - Audio Analyzer does not copy generic JGit DDL or internal storage code.
 - Production startup uses versioned migrations followed by `validate`, not implicit schema update.
 - Tests use the shared persistence path, not raw-JDBC alternatives.
@@ -227,13 +227,11 @@ Own immutable run input and lifecycle contracts:
 - `ExecutionContext`;
 - `ExecutionResult`;
 - deterministic run/provenance identifiers;
-- future backend and cancellation ports.
+- backend and cooperative cancellation ports.
 
 ### Current status
 
-The current `SnapshotExecutionService` dry run orders nodes and changes statuses. It is useful for contract testing but is not actual audio computation.
-
-Epic #248 and issues #273–#275 own truthful run orchestration, a real deterministic audio backend and production run UX.
+The legacy `SnapshotExecutionService` dry run remains a status-only contract-test path. Production uses the deterministic audio backend for a configured sine-source/gain chain, with immutable capture, capability preflight, cancellation, node results and output digests. See [the backend contract](deterministic-audio-workflow-backend.md) and [runnable example](deterministic-audio-workflow-example.md). The wider node catalog is not automatically executable.
 
 ### Rules
 

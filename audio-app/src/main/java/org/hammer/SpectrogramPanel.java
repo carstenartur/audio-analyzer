@@ -28,11 +28,9 @@ public final class SpectrogramPanel extends javax.swing.JPanel {
   private static final long serialVersionUID = 1L;
   private static final int FFT_SIZE = 1024;
   private static final int HISTORY_FRAMES = 256;
-  // Leaves room for frequency tick labels and the rotated Y-axis title.
-  private static final int LEFT_MARGIN = 52;
   private static final int RIGHT_MARGIN = 12;
   private static final int TOP_MARGIN = 18;
-  private static final int BOTTOM_MARGIN = 28;
+  private static final int BOTTOM_MARGIN = PlotRenderTheme.BOTTOM_AXIS_MARGIN;
   private static final float SAMPLE_RATE_TOLERANCE = 0.0001f;
 
   private AudioCaptureService audioCaptureService;
@@ -134,21 +132,29 @@ public final class SpectrogramPanel extends javax.swing.JPanel {
   }
 
   private void paintSpectrogram(Graphics2D g) {
+    pullLatestIntoHistory();
+    SpectrogramHistory history = analyzer == null ? null : analyzer.history();
+    String[] frequencyTicks = new String[0];
+    if (history != null && !history.isEmpty()) {
+      float nyquist = history.sampleRate() / 2.0f;
+      frequencyTicks =
+          new String[] {
+            String.format("%.0f Hz", nyquist), String.format("%.0f Hz", nyquist / 2.0f), "0 Hz"
+          };
+    }
     int width = getWidth();
     int height = getHeight();
-    int plotX = LEFT_MARGIN;
+    int plotX = PlotRenderTheme.leftAxisMargin(g, frequencyTicks);
     int plotY = TOP_MARGIN;
-    int plotWidth = Math.max(1, width - LEFT_MARGIN - RIGHT_MARGIN);
+    int plotWidth = Math.max(1, width - plotX - RIGHT_MARGIN);
     int plotHeight = Math.max(1, height - TOP_MARGIN - BOTTOM_MARGIN);
     Rectangle plotBounds = new Rectangle(plotX, plotY, plotWidth, plotHeight);
     PlotRenderTheme.drawPlotBackground(g, width, height, plotBounds);
     PlotRenderTheme.drawTitle(g, plotBounds.x, 14, frozen ? "Spectrogram (frozen)" : "Spectrogram");
 
-    pullLatestIntoHistory();
-    SpectrogramHistory history = analyzer == null ? null : analyzer.history();
     if (history == null || history.isEmpty()) {
       PlotRenderTheme.drawGrid(g, plotBounds, 8, 6);
-      drawAxisLabels(g, plotBounds, null);
+      drawAxisLabels(g, plotBounds, null, frequencyTicks);
       PlotRenderTheme.drawEmptyState(g, plotBounds, "No spectrogram data");
       return;
     }
@@ -168,7 +174,7 @@ public final class SpectrogramPanel extends javax.swing.JPanel {
           null);
     }
     PlotRenderTheme.drawGrid(g, plotBounds, 8, 6);
-    drawAxisLabels(g, plotBounds, history);
+    drawAxisLabels(g, plotBounds, history, frequencyTicks);
   }
 
   private void renderHeatmapInto(SpectrogramHistory history) {
@@ -241,18 +247,12 @@ public final class SpectrogramPanel extends javax.swing.JPanel {
     return v;
   }
 
-  private void drawAxisLabels(Graphics2D g, Rectangle plotBounds, SpectrogramHistory history) {
+  private void drawAxisLabels(
+      Graphics2D g, Rectangle plotBounds, SpectrogramHistory history, String[] frequencyTicks) {
     g.setColor(Color.WHITE);
-    PlotRenderTheme.drawYAxisLabel(g, plotBounds, "Frequency [Hz]");
+    PlotRenderTheme.drawYAxisLabel(g, plotBounds, "Frequency [Hz]", frequencyTicks);
     if (history != null) {
-      float nyquist = history.sampleRate() / 2.0f;
-      PlotRenderTheme.drawYTicks(
-          g,
-          plotBounds,
-          new double[] {0.0d, 0.5d, 1.0d},
-          new String[] {
-            String.format("%.0f Hz", nyquist), String.format("%.0f Hz", nyquist / 2.0f), "0 Hz"
-          });
+      PlotRenderTheme.drawYTicks(g, plotBounds, new double[] {0.0d, 0.5d, 1.0d}, frequencyTicks);
       PlotRenderTheme.drawXTicks(
           g, plotBounds, new double[] {0.0d, 0.5d, 1.0d}, spectrogramTimeLabels(history));
     }

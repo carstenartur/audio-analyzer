@@ -63,25 +63,30 @@ embedded database.
 
 The schema is split by owner and migration history:
 
-|             Owner             |                               Tables                                |             Flyway history table              |
-|-------------------------------|---------------------------------------------------------------------|-----------------------------------------------|
-| `jgit-storage-hibernate-core` | packs, refs/reftables and reflogs                                   | `jgit_storage_hibernate_core_schema_history`  |
-| Audio Analyzer                | collaboration session, accepted operations and transactional outbox | `audio_analyzer_collaboration_schema_history` |
+|              Owner              |                               Tables                                |               Flyway history table                |
+|---------------------------------|---------------------------------------------------------------------|---------------------------------------------------|
+| `jgit-storage-hibernate-core`   | packs, refs/reftables and reflogs                                   | `jgit_storage_hibernate_core_schema_history`      |
+| `jgit-storage-hibernate-search` | generic search projection and indexing metadata                     | `jgit_storage_hibernate_search_schema_history`    |
+| Audio Analyzer semantic search  | workflow-aware search projection                                    | `audio_analyzer_workflow_semantic_schema_history` |
+| Audio Analyzer                  | collaboration session, accepted operations and transactional outbox | `audio_analyzer_collaboration_schema_history`     |
 
 Audio Analyzer does not copy generic JGit DDL. `WorkflowSchemaMigrator` loads migration resources
-from the shared Core artifact and then applies the application-owned resources.
+from the shared Core and Search artifacts, then applies the application-owned semantic-search and
+collaboration resources. Each owner keeps its own Flyway history.
 
 The deterministic startup order is:
 
 ```text
 1. jgit-storage-hibernate Core migrations
-2. Audio Analyzer collaboration migrations
-3. Hibernate schema validation
-4. Session recovery and outbox dispatch startup
+2. jgit-storage-hibernate generic Search migrations
+3. Audio Analyzer semantic Search migrations
+4. Audio Analyzer collaboration migrations
+5. Hibernate schema validation
+6. Session recovery and outbox dispatch startup
 ```
 
 Spring Boot's single default Flyway instance is disabled with `spring.flyway.enabled=false` because
-combining both owners in one history table would destroy this boundary.
+combining these four owners in one history table would destroy this boundary.
 
 ## Clean production provisioning
 
@@ -102,7 +107,7 @@ spring.datasource.password=${AUDIO_ANALYZER_DATABASE_PASSWORD}
 Equivalent local H2 startup:
 
 ```bash
-java -jar audio-app/target/audio-app-0.1.0-SNAPSHOT-workbench.jar \
+java -jar audio-app/target/audio-app-*-workbench.jar \
   --workbench.persistence.mode=hibernate \
   --workbench.persistence.repository-name=audio-analyzer-workflows \
   --workbench.persistence.migrations.enabled=true \
@@ -114,22 +119,37 @@ java -jar audio-app/target/audio-app-0.1.0-SNAPSHOT-workbench.jar \
 ```
 
 Migration execution is opt-in. With `workbench.persistence.migrations.enabled=false`, the deployment
-must run the packaged Flyway resources externally before starting the application with `validate`.
+must run all four sets of packaged Flyway resources in the order above, with their individual
+history-table names, before starting the application with `validate`. Use the H2 or PostgreSQL
+locations selected by `WorkflowSchemaMigrator`; applying only Core and collaboration leaves the
+search schemas incomplete.
+
+For a first local test, create the `data` directory before running the H2 command. Open
+`http://localhost:8080/workbench`, stay outside a live collaboration session, enter a checkpoint
+message and choose **Save checkpoint**. **Refresh history** should show the new commit. Stop the
+server cleanly and restart with the same URL, repository name and data directory; the commit must
+still be available. Follow the [history walkthrough](features/workflow-history-search.md) for search,
+exact loading, comparison and restore. Live collaboration history is a separate persisted context;
+the checkpoint button does not save an attached session graph.
 
 `update`, `create` and `create-drop` are restricted to disposable development/test data. When the
 versioned migration phase is enabled, startup rejects every schema action except `validate`.
 
 ## Adopting schemas created before versioned migrations
 
-Two one-time flags exist for verified legacy schemas:
+Three one-time flags exist for verified legacy schemas:
 
 ```properties
 workbench.persistence.migrations.adopt-core-0.1.4=true
+workbench.persistence.migrations.adopt-search-0.1.4=true
 workbench.persistence.migrations.adopt-collaboration-pre-lease=true
 ```
 
-The Core flag baselines a schema that exactly matches `jgit-storage-hibernate-core` 0.1.4. The
-collaboration flag baselines the application schema at version 1, which represents the session,
+Enable the Core and Search flags only after independently verifying that their respective
+shared-library schemas match the legacy 0.1.4 contracts. The flags select a baseline version; they do
+not themselves prove that the existing schema matches that historical contract. Search adoption is independent of Core adoption. Application
+semantic search has its own version-zero baseline and no legacy-adoption flag. The collaboration
+flag baselines the application schema at version 1, which represents the session,
 operation and pre-lease outbox mappings from before issue #265. Flyway then applies version 2, adding:
 
 - optimistic `entity_version`;
@@ -144,10 +164,12 @@ Use the adoption flags only with this procedure:
 
 1. stop all writers and outbox dispatchers;
 2. take and verify a restorable database backup;
-3. compare the existing tables, columns, constraints and indexes with the immutable legacy fixtures
-   under `audio-app/src/test/resources/db/legacy/`;
+3. compare the existing tables, columns, constraints and indexes with the appropriate legacy contract:
+   use the collaboration fixtures under `audio-app/src/test/resources/db/legacy/` for the pre-lease
+   application schema, and the legacy contracts and migration resources in the respective Core and
+   Search library artifacts for their 0.1.4 schemas;
 4. start exactly one migration instance with the required adoption flag(s) and `schema-action=validate`;
-5. verify both Flyway history tables and application recovery;
+5. verify all four Flyway history tables and application recovery;
 6. remove the adoption flags before normal multi-instance startup.
 
 Do not use baselining to make an unknown or partially modified schema appear current. Flyway records a

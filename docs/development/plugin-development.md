@@ -92,22 +92,59 @@ The host loads providers from its runtime class loader. A plugin JAR must theref
 
 `AudioAnalyzerPlugin` exposes independent immutable contribution lists:
 
-|         Contribution         |                         Use it for                          |
-|------------------------------|-------------------------------------------------------------|
-| `AnalysisContribution`       | An analyzer, derived snapshot or post-processing capability |
-| `DemoSignalContribution`     | A deterministic signal users can select for experiments     |
-| `SignalSourceContribution`   | Microphone, synthetic, recording or dataset input           |
-| `ExperimentContribution`     | A named repeatable experimental scenario                    |
-| `PipelineContribution`       | A described DSP and analysis stage chain                    |
-| `SnapshotStreamContribution` | A per-frame result stream contract                          |
-| `VisualizationContribution`  | UI-independent visualization metadata                       |
-| `CalibrationContribution`    | A calibration procedure or persistent calibration state     |
-| `BenchmarkContribution`      | A quality metric and evaluation procedure                   |
-| `ExportFormatContribution`   | A serialization or report format                            |
-| `MenuContribution`           | A named action exposed by the host                          |
-| `ViewContribution`           | A lazily created Swing component                            |
+|           Contribution           |                                          Use it for                                           |
+|----------------------------------|-----------------------------------------------------------------------------------------------|
+| `AnalysisContribution`           | An analyzer, derived snapshot or post-processing capability                                   |
+| `DemoSignalContribution`         | A deterministic signal users can select for experiments                                       |
+| `SignalSourceContribution`       | Microphone, synthetic, recording or dataset input                                             |
+| `ExperimentContribution`         | A named repeatable experimental scenario                                                      |
+| `PipelineContribution`           | A described DSP and analysis stage chain                                                      |
+| `SnapshotStreamContribution`     | A per-frame result stream contract                                                            |
+| `VisualizationContribution`      | UI-independent visualization metadata                                                         |
+| `CalibrationContribution`        | A calibration procedure or persistent calibration state                                       |
+| `BenchmarkContribution`          | A quality metric and evaluation procedure                                                     |
+| `ExportFormatContribution`       | A serialization or report format                                                              |
+| `ExperimentDocumentContribution` | A namespaced portable setup section with schema, compatibility checks and explicit migrations |
+| `MenuContribution`               | A named action exposed by the host                                                            |
+| `ViewContribution`               | A lazily created Swing component                                                              |
 
 Return `List.of()` for unsupported contribution types. Do not return `null` or a mutable list.
+
+## Add a portable experiment-document section
+
+Override `AudioAnalyzerPlugin.experimentDocumentContributions()` when the plugin owns parameters
+that must travel with an `.audioexp` setup. Return immutable contributions with stable section IDs;
+the host namespaces each section under the plugin descriptor's stable ID. Implementations exchange
+the framework-neutral `DocumentValue` model with the host rather than parsing document JSON themselves.
+
+Keep these version identities independent:
+
+|           Identity            |                                                   Purpose                                                   |
+|-------------------------------|-------------------------------------------------------------------------------------------------------------|
+| `PluginDescriptor.version`    | Installed package compatibility with the document's exact version or supported version range                |
+| `schemaVersion`               | The shape of this section's parameter data; older supported versions need explicit adjacent migration steps |
+| `algorithmVersion`            | The computation/interpretation compatibility identifier, independent of package or parameter-schema changes |
+| `schemaId` and `schemaSha256` | The bundled local schema and its canonical digest; importing never retrieves remote schemas                 |
+
+For a complete example, copy and adapt
+[`GainDocumentContribution`](../../audio-experiment-document/src/main/java/org/hammer/audio/experiment/document/examples/GainDocumentContribution.java)
+into your plugin. It defines schema version 2, a `gainLinear` → `gain` migration, a schema digest,
+and semantic validation using only the stable plugin API. Register the contribution through your
+plugin's `experimentDocumentContributions()` method as well as registering the plugin itself with
+ServiceLoader. The example contribution is not installed in application hosts merely because its
+source exists in the repository.
+
+In a separate host-side test, register the plugin with `ExperimentDocumentService` and use
+`PluginDocumentTestKit.verifyFixture` to compare legacy input with expected canonical output.
+Check migration repeatability, normalization idempotence and diagnostic pointers. The checked-in
+legacy/migrated gain fixture pair expects plugin ID `gain-plugin` and section ID `gain-settings`.
+The standalone `ExperimentDocumentCli` uses an empty installed-plugin list, so it can inspect and
+preserve these sections but cannot demonstrate that installed-plugin migration by itself.
+
+The [portable document contract](../features/portable-experiment-documents.md#plugin-author-contract-and-fixture-kit)
+specifies supported schema keywords, callback limits, adjacent migration rules, required/optional
+compatibility behavior and fixture helpers. Read it before shipping a document contribution; the
+host preserves unsupported sections instead of dropping them or automatically installing code.
 
 ## Add a desktop view only when needed
 
@@ -143,10 +180,15 @@ Build the plugin JAR and place it on the runtime classpath together with the app
 DESKTOP_JAR=$(find audio-app/target -maxdepth 1 -type f \
   -name 'audio-app-*.jar' ! -name '*-workbench.jar' -print -quit)
 java -cp "$DESKTOP_JAR:audio-app/target/lib/*:path/to/measurement-plugin.jar" \
-  org.hammer.AudioAnalyseFrame
+  org.hammer.ExperimentWorkbenchLauncher
 ```
 
-`org.hammer.AudioAnalyseFrame` is the desktop main class configured in the current application JAR manifest. On Windows, use `;` as the classpath separator.
+`org.hammer.ExperimentWorkbenchLauncher` is the desktop main class configured in the current
+application JAR manifest. It installs the experiment-document actions and file-open handling as
+well as the desktop workbench. Append an `.audioexp` path after the class name to open its preview
+at startup. On Windows, use `;` as the classpath separator. This example extends the desktop runtime
+classpath; placing a JAR beside the executable Spring Boot workbench does not install it into that
+packaged application's classpath.
 
 ## Compatibility guidance
 

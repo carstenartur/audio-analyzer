@@ -5,6 +5,156 @@ They describe what an experiment is, which canonical workflow it uses, which por
 outputs it expects and which plugin-owned sections are required. They do **not** embed recordings,
 large datasets, credentials, local output directories or executable implementation references.
 
+## Choose the document surface
+
+Build and launch the application as described in [Getting started](../getting-started.md). The desktop
+document editor, browser document workspace and live collaboration session have separate state:
+
+|                  Surface                  |                                                                                    Supported document work                                                                                    |                                                                                  Current boundary                                                                                  |
+|-------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Desktop **File** menu and document editor | Open a complete document, edit its **Workflow** DSL, validate, save the complete envelope to a chosen copy, reopen it, inspect local bindings and export evidence                             | The complete JSON, experiment metadata, profiles and plugin parameters are inspection views; there is no general form editor for those fields.                                     |
+| Browser **Experiment document** panel     | Upload or drop a file, preview, open it into the standalone document workspace, retain independent copies, download canonical documents, inspect metadata and verify candidate local bindings | The panel has no workflow-DSL or document-metadata editor. **Save current document** exports the standalone workspace; **Save As normalized copy** normalizes the selected upload. |
+| Browser collaboration canvas              | Create or join a session, edit its graph, use semantic undo/redo and run an exact accepted revision                                                                                           | Creating a session starts a separate empty graph. It does not adopt the open `.audioexp` or a loaded checkpoint. Session edits are not included in the document panel's download.  |
+
+**A browser canvas edit → Save `.audioexp` round trip is not currently supported.** Joining a session
+changes the graph displayed on the canvas; leaving it restores the standalone editor projection.
+Neither action transfers changes between those states. Use the desktop workflow-DSL editor for the
+document-editing round trip below. Live-session checkpoints are also separate from the existing
+checkpoint controls; see [Collaborative workflows](collaborative-workflows.md).
+
+Opening or verifying a document does not execute it. The workflow executor consumes an exact graph
+revision or commit, while the microphone experiment screen consumes its own source settings and
+saved profile. Document profiles, asset bindings and output requests are not automatically supplied
+to either run path. See [Experiment health](experiment-health.md) for the displayed execution scope.
+
+## Desktop: open, edit, save and reopen
+
+This exercise uses the checked-in [minimal fixture](../examples/minimal.audioexp) and needs no audio
+hardware. It creates a new local copy from an existing setup; there is no blank-document wizard.
+
+1. From the repository root, launch the desktop JAR after building:
+
+   ```bash
+   java -jar audio-app/target/audio-app-0.1.0-SNAPSHOT.jar
+   ```
+2. Choose **File → Open experiment document…** and select `docs/examples/minimal.audioexp`.
+   Review the experiment name, complete JSON, compatibility diagnostics, hashes and differences in
+   **Preview experiment document**. The preview has not replaced the current document.
+3. Choose **Open document**. In the document editor, **Complete document** shows the retained
+   envelope and **Workflow** contains the editable DSL. For this exercise, change only the workflow
+   line `name: Portable example` to `name: Portable review`. Keep its indentation and workflow ID.
+   This changes the workflow name; the separate experiment name remains unchanged.
+4. Choose **Validate and apply workflow edit**. A valid draft updates the complete document and its
+   hashes. Profiles, plugin sections, assets, output requests and earlier provenance are retained;
+   modification provenance is updated. An invalid draft stays unsaved and does not replace the last
+   validated snapshot shown in **Complete document**.
+5. Choose **Save As…**, select a writable directory and a new filename such as
+   `portable-review.audioexp`. The target must differ from the imported original, including its
+   symbolic-link or hard-link aliases. The editor should show the selected path, a saved state and
+   the canonical hash. Later **Save** actions write this selected copy. Save also validates the
+   current draft, so it cannot silently save an earlier valid workflow instead of an invalid edit.
+6. Close the editor and use **File → Open experiment document…** to select `portable-review.audioexp`.
+   Verify the changed workflow name, retained document fields and saved hash in the new preview,
+   then open it. **File → Validate current experiment** reopens the editor for the current document.
+
+After reopening a saved file, that file becomes the protected imported original for the new editing
+session. Its first save again requires a distinct copy. This is deliberate source-file protection,
+not an in-place file editor. Close the earlier modeless editor before opening another document; a
+stale editor asks you to reopen it instead of applying edits to a newer session revision.
+
+If another document is dirty, Open offers **Save current and open**, **Discard current changes and
+open**, and **Cancel**. Save cancellation or failure keeps the current setup. **Import independent
+copy…** in the preview writes a separate complete canonical file without replacing the current
+document. An unsupported required plugin permits read-only inspection and **Save As…** of the
+preserved data, but disables workflow editing and ordinary Save.
+
+## Browser: preview, open, download and reopen
+
+This exercise uses the same minimal fixture and the standalone document workspace. On this server,
+document replacement is blocked while any collaboration session has joined participants, including
+private workspaces and sessions for other workflow IDs. Have those participants leave first, or use
+preview and independent-copy actions without replacing the workspace.
+
+1. Start the packaged web application from the repository root:
+
+   ```bash
+   java -jar audio-app/target/audio-app-0.1.0-SNAPSHOT-workbench.jar
+   ```
+
+   Open [http://localhost:8080/workbench](http://localhost:8080/workbench), or use the configured host
+   and port when the server runs elsewhere.
+
+2. Expand **Experiment document** in the left panel. Under **Portable setup**, choose
+   `docs/examples/minimal.audioexp`, or drop it onto the panel. Select **Preview / Validate**.
+
+3. Review **Changes to the current workflow**, **Complete setup, profiles, assets and provenance**,
+   **Required and installed plugin sections**, and **Diagnostics**. A compatible preview enables
+   **Open previewed document…**. A missing required plugin leaves inspection and independent-copy
+   actions available while Open remains disabled.
+
+4. Choose **Open previewed document…**, review the replacement, then **Open document**. If the
+   current workspace is dirty, use **Save current copy and open** or **Discard changes and open**,
+   or cancel. A successful open reloads the workbench and displays the imported standalone graph;
+   canvas editing still requires a separate collaboration session and will not edit this document.
+
+5. Expand **Experiment document** again and choose **Save current document**. Wait for the browser
+   to save the download, then choose **I saved this copy**. Until that acknowledgement the workspace
+   remains dirty. If the download was blocked or cancelled, choose **Cancel — keep current document**.
+   The acknowledgement applies only to the exact downloaded snapshot.
+
+6. Select the downloaded file under **Portable setup** and preview it again. Check its workflow,
+   complete document fields and canonical hash. Open it through the same confirmation if you want
+   it to become the current workspace document. Recent filenames are hints; they do not reopen files
+   without a new selection.
+
+For a non-replacing import, choose **Import independent copy** after preview. Expand **Independent
+workspace copies**, then use **Preview copy** or **Download copy**. These copies are held in the
+server process, with a maximum of 32; download them before stopping that process. A successful file
+download does not make a collaboration session persistent.
+
+**Save As normalized copy** acts on the selected upload and requires a preview. It does not include
+later changes in the standalone workspace and does not acknowledge **Save current document**.
+Use it to preserve a normalized or migrated candidate while keeping the current workspace intact.
+
+## Verify resources and export an evidence package
+
+The [full fixture](../examples/full.audioexp) includes `assets/input.wav` and
+`assets/calibration.json`, plus a requested `report.md`. It is an inspection and packaging example
+with synthetic calibration, not proof that a physical microphone setup is ready.
+
+1. On desktop, open the fixture and choose **Local bindings / Evidence…**. In the browser, preview
+   the fixture and expand **Local bindings and evidence package**. Browser paths refer to the server
+   machine, and the host must first configure [approved directories](#explicit-local-resources).
+2. Bind the `recording` asset to the fixture's `docs/examples/assets/input.wav` and
+   `calibration-evidence` to `docs/examples/assets/calibration.json`, using desktop file choosers or
+   absolute server-side paths in the browser. Select a writable local output directory for the
+   requested report. Uploading the `.audioexp` does not upload these assets.
+3. Choose **Verify local bindings**. Inspect every diagnostic. With no suitable selected capture
+   device, readiness can remain blocked even when the file hashes match. Only select a device,
+   physical channel mapping, synchronization and calibration confirmation when those facts are
+   established for the real setup; the fixture's synthetic calibration is not such evidence.
+4. Choose **Export evidence package…** on desktop and select a new ZIP path, or **Export evidence
+   package** in the browser and save the download. Compatible hardware is not required to package
+   historical evidence, but every included asset must pass its file checks.
+5. Inspect the ZIP: expect `experiment.audioexp`, the selected declared assets and
+   `evidence-manifest.json`. A requested result that exists in the chosen directory is included under
+   `results/`; an absent report is listed as unavailable. Export does not run a workflow or create
+   the requested report. Reopen the `.audioexp` through the document picker; the ZIP itself is not
+   an import format.
+
+Binding verification belongs to that preview. It is not saved as a local execution binding for a
+later document revision. The current-document health card can therefore still report
+`UNVERIFIED_FOR_CURRENT_SNAPSHOT` after a successful candidate check.
+
+|                                  What you see                                  |                                                                    Next action                                                                     |
+|--------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------|
+| Invalid JSON, schema, hash or portable path                                    | Keep the current setup; inspect the pointer/code and obtain a corrected source file. Do not repair only the hash to bypass validation.             |
+| Required plugin missing, incompatible algorithm or migration failure           | Inspect/export the preserved data; use a host with the compatible trusted plugin before applying it.                                               |
+| HTTP 412 or a changed-document/revision message                                | Preview the file and current state again, then review the new differences before confirming.                                                       |
+| Active collaboration blocks Open                                               | Have participants leave every active session on this server, or keep the candidate as an independent copy. Leaving does not export session graphs. |
+| HTTP 403 for a local path                                                      | Ask the host owner to approve that directory at startup, or use the desktop chooser. Browser confirmation cannot grant server filesystem access.   |
+| Missing file, size/digest mismatch, expired calibration or incompatible device | Correct the local selection or setup and verify again. Historical inspection remains available.                                                    |
+
 ## Public identity
 
 |         Property         |                             Value                             |
@@ -125,19 +275,21 @@ Parsing or preview failure leaves the current workflow and session unchanged.
 
 ## Open, import, edit, Save and Save As
 
-All surfaces share `ExperimentDocumentService`, and editable sessions retain the complete document.
-Changing the workflow preserves profiles, plugin sections, asset requirements, output requests and
-provenance. An incomplete desktop workflow draft remains dirty until it validates or is explicitly
-discarded; Save never substitutes an earlier valid workflow for an invalid current draft.
+All document adapters share `ExperimentDocumentService`, and document sessions retain the complete
+envelope. Desktop workflow edits and changes to the separate browser document workspace preserve
+profiles, plugin sections, asset requirements, output requests and provenance. Live collaboration
+graphs are outside that document workspace, as described above. An incomplete desktop workflow draft
+remains dirty until it validates or is explicitly discarded; Save never substitutes an earlier valid
+workflow for an invalid current draft.
 
-|        Operation        |                                                                          Behavior                                                                          |
-|-------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Preview / Validate      | Parse, validate, compare, resolve installed sections and compute explicit migrations without replacing the current setup.                                  |
-| Open                    | Show complete JSON, compatibility, local requirements and a semantic workflow diff, then require confirmation before replacing the current editable setup. |
-| Import independent copy | Preserve the complete incoming setup separately. Existing edits are retained; unknown required sections can be copied for inspection.                      |
-| Save                    | Save the selected local copy, or download the complete current browser document. A first desktop save requires a Save As destination.                      |
-| Save As / Normalize     | Write or download a canonical copy. Desktop and CLI reject the imported original and its symbolic/hard-link aliases as destinations.                       |
-| Execute                 | A separate explicit workflow operation; none of the document actions starts it.                                                                            |
+|        Operation        |                                                                         Behavior                                                                         |
+|-------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Preview / Validate      | Parse, validate, compare, resolve installed sections and compute explicit migrations without replacing the current setup.                                |
+| Open                    | Show complete JSON, compatibility, local requirements and a semantic workflow diff, then require confirmation before replacing the document workspace.   |
+| Import independent copy | Preserve the complete incoming setup separately. Existing edits are retained; unknown required sections can be copied for inspection.                    |
+| Save                    | Save the selected desktop copy, or download the complete standalone browser document. A first desktop save requires a Save As destination.               |
+| Save As / Normalize     | Desktop saves the current document; browser Normalize uses the selected upload. Desktop and CLI reject the imported original and its aliases as targets. |
+| Execute                 | A separate explicit workflow operation; none of the document actions starts it.                                                                          |
 
 Dirty replacement offers **Save current and open**, **Discard current changes and open**, and
 **Cancel** together. Save failure or cancellation leaves the current setup available. Browser copies
@@ -161,8 +313,9 @@ stale-state protection. Explicit discard never overrides a stale preview. Weak o
 preconditions are rejected. An acknowledged download clears document dirty status only for the exact
 snapshot downloaded; a later edit restores it.
 
-The single-user workflow cannot be replaced while a shared collaboration session has active
-participants. A retained session with no current participants does not block import.
+The single-user workflow cannot be replaced while any collaboration session on this server has
+joined participants, including private workspaces. A retained session with no current participants
+does not block import.
 
 Desktop and browser actions include keyboard Open/Save/Save As, complete copyable JSON, validation
 messages, plugin parameter tables, hashes, source mode, profiles and local requirements. The browser
@@ -195,7 +348,7 @@ output-directory access from a browser/API request. A host owner can approve dir
 
 ```bash
 java -Daudio.experiment-document.local-roots=/srv/audio/shared:/srv/audio/results \
-  -jar audio-app/target/audio-app-0.1.0-SNAPSHOT-web.jar
+  -jar audio-app/target/audio-app-0.1.0-SNAPSHOT-workbench.jar
 ```
 
 Use the operating system's path-list separator (`:` on Linux/macOS, `;` on Windows). Each configured
@@ -211,7 +364,7 @@ client request. Desktop file choosers are a local user action and do not require
 - byte size matches before hashing, then streaming SHA-256 matches;
 - recognized AAR1/AAR2, WAVE, FLAC, Ogg and JSON signatures match the declared media type; an
   unrecognized format requires explicit local media-type confirmation;
-- each requested output has a separately selected writable directory or writable existing ancestor;
+- requested outputs have an explicitly selected writable directory or writable existing ancestor;
 - selected hardware advertises the required PCM sample rate, sample width, signedness, byte order
   and capture channel count, without acquiring a line or opening the device;
 - logical channels have a unique, explicit physical-channel mapping and required synchronization
@@ -361,7 +514,17 @@ java -cp "audio-experiment-document/target/classes:$(cat audio-experiment-docume
   normalize docs/examples/minimal.audioexp /tmp/minimal-normalized.audioexp
 ```
 
-The CLI uses the same codec and plugin-resolution service as application adapters.
+The CLI uses the same codec and plugin-resolution service as application adapters, but constructs
+that service with an empty installed-plugin list. Adding a plugin JAR to this CLI classpath does not
+register its contributions. Required plugin sections therefore remain blocked/read-only, and the
+CLI preserves their data without running their migrations. `validate`/`inspect` returns exit code 1
+when execution compatibility is blocked, even if it prints `VALID` for the structurally valid
+document; malformed input also returns 1 and invalid arguments return 2. Successful normalization
+returns 0 and can export preserved unsupported data for inspection.
+
+To exercise an actual plugin migration, use an application host that registers the contribution or
+the [host-side fixture kit](#plugin-author-contract-and-fixture-kit). The checked-in legacy/migrated
+gain pair requires that test contribution; the standalone CLI does not install it automatically.
 
 ## REST API
 
@@ -424,6 +587,8 @@ CLI and REST API.
 
 - Import offers explicit replacement or a complete independent copy. Selective workflow merge uses
   the established workflow history/merge facilities; it is not exposed as a document import mode.
+- The browser document workspace, live collaboration graph and desktop document editor are separate.
+  There is no browser collaboration-to-document export or general document metadata/profile editor.
 - Local readiness uses advertised JavaSound capabilities and explicit mapping/calibration
   confirmations. A physical device capture/measurement remains a separate action.
 - Native Windows/macOS installation and file-manager behavior require platform smoke tests.

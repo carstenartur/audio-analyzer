@@ -191,9 +191,10 @@ Investigate sensitivity to per-channel clock mismatch.
 
 ### Setup
 
-Requires extending `SampleClock` (or wrapping `SimulatedMicrophoneArraySource`)
-with a per-channel sample-delay and drift parameter, neither of which currently
-exists. Synthetic injection would let us repeat Experiment A while varying:
+The timing-calibration foundation already includes controlled offset/drift fixtures and recovery
+tests. This proposed end-to-end localization sweep still needs a scenario/source wrapper that injects
+those errors across a complete run; the workbench scenario catalog does not currently expose it.
+The sweep would repeat Experiment A while varying:
 - a fixed sample offset on one channel;
 - a linear drift in samples per second on one channel.
 

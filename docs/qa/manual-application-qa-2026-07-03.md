@@ -1,5 +1,10 @@
 # Manual application QA evidence — 2026-07-03
 
+> Historical review of the revision/scope recorded below. It does not describe the current
+> implementation or certify current screenshots. See the
+> [20 November 2026 documentation and visual review](documentation-visual-review-2026-11-20.md)
+> and [current QA findings](../QA-FINDINGS.md) for the maintained status.
+
 This file was created from `docs/qa/manual-application-qa-template.md` as part of the issue #198
 PR 5 (Manual application QA evidence) QA pass. The pass was performed by the Copilot agent
 working in a headless CI-like environment. Interactive Swing application checks cannot be executed

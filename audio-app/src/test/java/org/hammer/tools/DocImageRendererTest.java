@@ -7,10 +7,62 @@ import java.awt.Color;
 import java.awt.Font;
 import java.awt.FontMetrics;
 import java.awt.Graphics2D;
+import java.awt.Rectangle;
 import java.awt.image.BufferedImage;
 import org.junit.jupiter.api.Test;
 
 class DocImageRendererTest {
+
+  @Test
+  void dashboardKeepsApplicationTitleAfterDrawingAllPanels() {
+    assertTrue(
+        hasTextPixels(DocImageRenderer.renderDashboardScreenshot(), new Rectangle(24, 16, 175, 24)),
+        "Drawing the waveform must preserve the already rendered application title");
+  }
+
+  @Test
+  void importedRecordingKeepsFeatureNamesAfterDrawingHarmonicChart() {
+    assertTrue(
+        hasTextPixels(
+            DocImageRenderer.renderImportedRecordingWorkbench(), new Rectangle(20, 85, 210, 24)),
+        "Drawing the right-hand chart must preserve the first feature row on the left");
+  }
+
+  @Test
+  void calibrationKeepsTitleAfterDrawingBars() {
+    assertTrue(
+        hasTextPixels(
+            DocImageRenderer.renderGeneratorCalibration(), new Rectangle(16, 12, 350, 20)),
+        "Drawing the chart must preserve its title");
+  }
+
+  @Test
+  void playbackReservesVisibleSpaceForTimeReadout() {
+    assertTrue(
+        hasTextPixels(DocImageRenderer.renderPlaybackExplorer(), new Rectangle(610, 288, 134, 24)),
+        "The playback time readout must fit before the right image margin");
+  }
+
+  @Test
+  void dashboardSpectrogramShowsEnergyAtSineFrequency() {
+    BufferedImage image = DocImageRenderer.renderDashboardScreenshot();
+    // The dashboard's 0–2 kHz detail plot must locate the generated 440 Hz signal to within
+    // one FFT bin (44.1 kHz / 1024), not paint a decorative band at an arbitrary height.
+    Rectangle plot = new Rectangle(108, 826, 950, 92);
+    int strongestRow = plot.y;
+    int strongestGreen = -1;
+    for (int y = plot.y; y < plot.y + plot.height; y++) {
+      int green = new Color(image.getRGB(500, y)).getGreen();
+      if (green > strongestGreen) {
+        strongestGreen = green;
+        strongestRow = y;
+      }
+    }
+    double renderedFrequency =
+        2000.0 * (plot.y + plot.height - 1 - strongestRow) / (plot.height - 1);
+    assertEquals(
+        440.0, renderedFrequency, 44100.0 / 1024, "Spectrogram must show the analyzed sine");
+  }
 
   // -------------------------------------------------------------------------
   // Dashboard screenshot (1600 × 1000)
@@ -324,6 +376,18 @@ class DocImageRendererTest {
       for (int x = x0; x < xEnd; x += 10) {
         Color color = new Color(image.getRGB(x, y));
         if (color.getRed() > 120 || color.getGreen() > 120 || color.getBlue() > 120) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  private static boolean hasTextPixels(BufferedImage image, Rectangle region) {
+    for (int y = region.y; y < region.y + region.height; y++) {
+      for (int x = region.x; x < region.x + region.width; x++) {
+        Color color = new Color(image.getRGB(x, y));
+        if (color.getRed() > 120 && color.getGreen() > 120 && color.getBlue() > 120) {
           return true;
         }
       }

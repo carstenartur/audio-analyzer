@@ -26,9 +26,11 @@ import org.hammer.audio.core.AudioFormatDescriptor;
 import org.hammer.audio.diagnosis.DiagnosisAnalyzer;
 import org.hammer.audio.diagnosis.DiagnosisFinding;
 import org.hammer.audio.diagnosis.DiagnosisSnapshot;
+import org.hammer.audio.recording.AudioBlockRecordingFormat;
 import org.hammer.audio.signal.SineGenerator;
 import org.hammer.audio.signal.SquareGenerator;
 import org.hammer.audio.spectrogram.SpectrogramAnalyzer;
+import org.hammer.audio.spectrogram.SpectrogramFrame;
 import org.hammer.audio.spectrogram.SpectrogramHistory;
 import org.hammer.audio.ui.theme.PlotRenderTheme;
 
@@ -62,15 +64,15 @@ public final class DocImageRenderer {
   private static final int DASHBOARD_SPECTROGRAM_HISTORY_FRAMES = 180;
   private static final int DASHBOARD_SPECTROGRAM_SEED_BLOCKS = 64;
   private static final int DASHBOARD_WAVEFORM_VISIBLE_SAMPLES = 2200;
-  private static final float SYNTHETIC_SPECTROGRAM_PULSE_BASE = 0.45f;
-  private static final float SYNTHETIC_SPECTROGRAM_PULSE_SWING = 0.55f;
-  private static final double SYNTHETIC_SPECTROGRAM_PULSE_PERIOD = 18.0;
-  private static final float SYNTHETIC_SPECTROGRAM_BAND_POSITION = 0.72f;
-  private static final float SYNTHETIC_SPECTROGRAM_BAND_WIDTH = 18f;
+  private static final double DASHBOARD_SPECTROGRAM_MAX_HZ = 2000.0;
   private static final AudioFormatDescriptor MONO_44K = new AudioFormatDescriptor(44100f, 1, 16);
   private static final int FFT = 1024;
+  private static final String[] AMPLITUDE_TICKS = {"+1", "0", "-1"};
+  private static final String[] MAGNITUDE_TICKS = {"0 dB", "-40 dB", "-80 dB"};
 
-  private DocImageRenderer() {}
+  private DocImageRenderer() {
+    // Static documentation-rendering utility.
+  }
 
   /**
    * @param args optional output directory; defaults to {@code docs/images/features}
@@ -121,15 +123,17 @@ public final class DocImageRenderer {
       g.fillRect(0, 0, DASHBOARD_W, DASHBOARD_H);
       drawAppChrome(g);
       drawControlBar(g, measurement, spectrum);
-      drawWaveform(g, new Rectangle(28, 150, 1544, 330), block);
+      int waveformMargin = PlotRenderTheme.leftAxisMargin(g, AMPLITUDE_TICKS);
+      int spectrumMargin = PlotRenderTheme.leftAxisMargin(g, MAGNITUDE_TICKS);
+      drawWaveform(g, new Rectangle(24 + waveformMargin, 190, 1548 - waveformMargin, 260), block);
       drawSpectrumPanel(
           g,
-          new Rectangle(28, 508, 754, 245),
+          new Rectangle(24 + spectrumMargin, 548, 758 - spectrumMargin, 174),
           spectrum,
           "Spectrum — 440 Hz sine demo",
           PlotRenderTheme.SPECTRUM_LINE);
       drawMeasurements(g, new Rectangle(810, 508, 762, 245), measurement);
-      drawSpectrogram(g, new Rectangle(28, 782, 1050, 180));
+      drawSpectrogram(g, new Rectangle(28, 782, 1050, 180), history);
       drawDiagnosis(g, new Rectangle(1104, 782, 468, 180), diagnosis);
     } finally {
       g.dispose();
@@ -184,12 +188,11 @@ public final class DocImageRenderer {
   }
 
   private static void drawWaveform(Graphics2D g, Rectangle plot, AudioBlock block) {
-    PlotRenderTheme.drawPlotBackground(g, plot.width, plot.height, plot);
+    PlotRenderTheme.drawPlotBackground(g, plot);
     PlotRenderTheme.drawGrid(g, plot, 16, 8);
-    PlotRenderTheme.drawTitle(g, plot.x + 12, plot.y + 22, "Waveform — reproducible 440 Hz sine");
-    PlotRenderTheme.drawYAxisLabel(g, plot, "Amplitude [-1..1]");
-    PlotRenderTheme.drawYTicks(
-        g, plot, new double[] {0.0d, 0.5d, 1.0d}, new String[] {"+1", "0", "-1"});
+    PlotRenderTheme.drawTitle(g, plot.x, plot.y - 34, "Waveform — reproducible 440 Hz sine");
+    PlotRenderTheme.drawYAxisLabel(g, plot, "Amplitude [-1..1]", AMPLITUDE_TICKS);
+    PlotRenderTheme.drawYTicks(g, plot, new double[] {0.0d, 0.5d, 1.0d}, AMPLITUDE_TICKS);
     PlotRenderTheme.drawXAxisLabel(g, plot, "Time [ms]");
     float[] samples = block.channelView(0);
     int visible = Math.min(samples.length, DASHBOARD_WAVEFORM_VISIBLE_SAMPLES);
@@ -204,7 +207,7 @@ public final class DocImageRenderer {
           String.format(Locale.ROOT, "%.1f ms", durationMs)
         });
     int centerY = plot.y + plot.height / 2;
-    int amplitude = plot.height / 2 - 38;
+    int amplitude = (plot.height - 1) / 2;
     Path2D path = new Path2D.Float();
     for (int i = 0; i < visible; i++) {
       double x = plot.x + (double) i * (plot.width - 1) / Math.max(1, visible - 1);
@@ -222,7 +225,7 @@ public final class DocImageRenderer {
     g.draw(path);
     g.setColor(PlotRenderTheme.TEXT_MUTED);
     g.setFont(PlotRenderTheme.LABEL_FONT);
-    g.drawString("Frozen demo buffer, amplitude 0.70, no clipping", plot.x + 12, plot.y + 44);
+    g.drawString("Frozen demo buffer, amplitude 0.70, no clipping", plot.x, plot.y - 16);
   }
 
   private static void drawMeasurements(
@@ -248,42 +251,50 @@ public final class DocImageRenderer {
     }
   }
 
-  private static void drawSpectrogram(Graphics2D g, Rectangle panel) {
-    drawPanelShell(g, panel, "Spectrogram / waterfall");
-    int x0 = panel.x + 20;
+  private static void drawSpectrogram(Graphics2D g, Rectangle panel, SpectrogramHistory history) {
+    drawPanelShell(g, panel, "Spectrogram — 0–2 kHz detail");
+    String[] frequencyTicks = {"2 kHz", "1 kHz", "0 Hz"};
+    int leftMargin = PlotRenderTheme.leftAxisMargin(g, frequencyTicks);
+    int x0 = panel.x + leftMargin;
     int y0 = panel.y + 44;
-    int w = panel.width - 40;
-    int h = panel.height - 64;
+    int w = panel.width - leftMargin - 20;
+    int h = panel.height - 44 - PlotRenderTheme.BOTTOM_AXIS_MARGIN;
+    float reference = 1e-6f;
+    for (SpectrogramFrame frame : history.snapshot()) {
+      for (float magnitude : frame.magnitudesView()) {
+        reference = Math.max(reference, magnitude);
+      }
+    }
     for (int x = 0; x < w; x++) {
-      float pulse =
-          SYNTHETIC_SPECTROGRAM_PULSE_BASE
-              + SYNTHETIC_SPECTROGRAM_PULSE_SWING
-                  * (float) Math.sin(x / SYNTHETIC_SPECTROGRAM_PULSE_PERIOD);
+      SpectrogramFrame frame = history.frameAt(x * (history.size() - 1) / Math.max(1, w - 1));
       for (int y = 0; y < h; y++) {
-        float band =
-            Math.max(
-                    0f,
-                    1f
-                        - Math.abs(y - h * SYNTHETIC_SPECTROGRAM_BAND_POSITION)
-                            / SYNTHETIC_SPECTROGRAM_BAND_WIDTH)
-                * pulse;
-        g.setColor(
-            new Color(
-                16,
-                Math.min(210, 55 + (int) (band * 155)),
-                Math.min(255, 90 + (int) (band * 165))));
+        double frequency = DASHBOARD_SPECTROGRAM_MAX_HZ * (h - 1 - y) / Math.max(1, h - 1);
+        int bin = Math.min(frame.binCount() - 1, (int) Math.round(frequency / frame.binWidthHz()));
+        double magnitude = PlotRenderTheme.normalizedMagnitude(frame.magnitude(bin) / reference);
+        g.setColor(new Color(16, 55 + (int) (magnitude * 155), 90 + (int) (magnitude * 165)));
         g.drawLine(x0 + x, y0 + y, x0 + x, y0 + y);
       }
     }
     Rectangle plot = new Rectangle(x0, y0, w, h);
     PlotRenderTheme.drawGrid(g, plot, 8, 4);
-    PlotRenderTheme.drawYAxisLabel(g, plot, "Frequency [Hz]");
-    PlotRenderTheme.drawYTicks(
-        g, plot, new double[] {0.0d, 0.5d, 1.0d}, new String[] {"22.1 kHz", "11.0 kHz", "0 Hz"});
+    PlotRenderTheme.drawYAxisLabel(g, plot, "Frequency [Hz]", frequencyTicks);
+    PlotRenderTheme.drawYTicks(g, plot, new double[] {0.0d, 0.5d, 1.0d}, frequencyTicks);
+    double durationSeconds =
+        (history.latest().sourceFrameIndex() - history.frameAt(0).sourceFrameIndex())
+            / (double) history.sampleRate();
     PlotRenderTheme.drawXTicks(
-        g, plot, new double[] {0.0d, 0.5d, 1.0d}, new String[] {"0.0 s", "0.5 s", "1.0 s"});
+        g,
+        plot,
+        new double[] {0.0d, 0.5d, 1.0d},
+        new String[] {
+          "0.00 s",
+          String.format(Locale.ROOT, "%.2f s", durationSeconds / 2.0),
+          String.format(Locale.ROOT, "%.2f s", durationSeconds)
+        });
     PlotRenderTheme.drawXAxisLabel(g, plot, "Time [s; older → newer]");
-    PlotRenderTheme.drawLabel(g, x0 + w - 132, y0 + 14, "Color: relative magnitude [-]");
+    String colorScale = "Color: -80 to 0 dB rel. peak";
+    int scaleWidth = g.getFontMetrics(PlotRenderTheme.LABEL_FONT).stringWidth(colorScale);
+    PlotRenderTheme.drawLabel(g, x0 + w - scaleWidth, panel.y + 28, colorScale);
   }
 
   private static void drawDiagnosis(Graphics2D g, Rectangle panel, DiagnosisSnapshot diagnosis) {
@@ -347,19 +358,19 @@ public final class DocImageRenderer {
     Graphics2D g = img.createGraphics();
     try {
       applyHints(g);
-      Rectangle plot = new Rectangle(48, 24, W - 64, H - 58);
+      int leftMargin = PlotRenderTheme.leftAxisMargin(g, AMPLITUDE_TICKS);
+      Rectangle plot = new Rectangle(leftMargin, 52, W - leftMargin - 16, H - 96);
       PlotRenderTheme.drawPlotBackground(g, W, H, plot);
       PlotRenderTheme.drawGrid(g, plot, 10, 8);
       PlotRenderTheme.drawTitle(g, plot.x, 16, "Waveform (triggered)");
-      PlotRenderTheme.drawYAxisLabel(g, plot, "Amplitude [-1..1]");
-      PlotRenderTheme.drawYTicks(
-          g, plot, new double[] {0.0d, 0.5d, 1.0d}, new String[] {"+1", "0", "-1"});
+      PlotRenderTheme.drawYAxisLabel(g, plot, "Amplitude [-1..1]", AMPLITUDE_TICKS);
+      PlotRenderTheme.drawYTicks(g, plot, new double[] {0.0d, 0.5d, 1.0d}, AMPLITUDE_TICKS);
       PlotRenderTheme.drawXAxisLabel(g, plot, "Sample index");
 
       float[] samples = view.samplesView();
       int n = samples.length;
       int centerY = plot.y + plot.height / 2;
-      int amplitude = plot.height / 2 - 8;
+      int amplitude = (plot.height - 1) / 2;
       int[] xs = new int[n];
       int[] ys = new int[n];
       for (int i = 0; i < n; i++) {
@@ -415,13 +426,13 @@ public final class DocImageRenderer {
     Graphics2D g = img.createGraphics();
     try {
       applyHints(g);
-      Rectangle plot = new Rectangle(52, 24, W - 68, H - 58);
+      int leftMargin = PlotRenderTheme.leftAxisMargin(g, MAGNITUDE_TICKS);
+      Rectangle plot = new Rectangle(leftMargin, 52, W - leftMargin - 16, H - 96);
       PlotRenderTheme.drawPlotBackground(g, W, H, plot);
       PlotRenderTheme.drawGrid(g, plot, 10, 8);
       PlotRenderTheme.drawTitle(g, plot.x, 16, "Spectrum (averaged + peak hold)");
-      PlotRenderTheme.drawYAxisLabel(g, plot, "Magnitude [dB rel. peak]");
-      PlotRenderTheme.drawYTicks(
-          g, plot, new double[] {0.0d, 0.5d, 1.0d}, new String[] {"0 dB", "-40 dB", "-80 dB"});
+      PlotRenderTheme.drawYAxisLabel(g, plot, "Magnitude [dB rel. peak]", MAGNITUDE_TICKS);
+      PlotRenderTheme.drawYTicks(g, plot, new double[] {0.0d, 0.5d, 1.0d}, MAGNITUDE_TICKS);
       PlotRenderTheme.drawXTicks(
           g, plot, new double[] {0.0d, 0.5d, 1.0d}, new String[] {"0 Hz", "11025 Hz", "22050 Hz"});
       PlotRenderTheme.drawXAxisLabel(g, plot, "Frequency [Hz]");
@@ -441,14 +452,22 @@ public final class DocImageRenderer {
         }
       }
       int floor = plot.y + plot.height - 1;
-      int top = plot.y + 36;
+      int top = plot.y;
       int[] xs = new int[bins];
       int[] ysLive = new int[bins];
       int[] ysPeak = new int[bins];
       for (int i = 0; i < bins; i++) {
         xs[i] = plot.x + (int) ((long) i * (plot.width - 1) / Math.max(1, bins - 1));
-        ysLive[i] = floor - (int) ((Math.abs(live[i]) / maxMag) * (floor - top));
-        ysPeak[i] = floor - (int) ((Math.abs(held[i]) / maxMag) * (floor - top));
+        ysLive[i] =
+            floor
+                - (int)
+                    (PlotRenderTheme.normalizedMagnitude(Math.abs(live[i]) / maxMag)
+                        * (floor - top));
+        ysPeak[i] =
+            floor
+                - (int)
+                    (PlotRenderTheme.normalizedMagnitude(Math.abs(held[i]) / maxMag)
+                        * (floor - top));
       }
       g.setColor(PlotRenderTheme.SPECTRUM_LINE);
       g.setStroke(PlotRenderTheme.TRACE_STROKE);
@@ -475,33 +494,71 @@ public final class DocImageRenderer {
       g.fillRect(0, 0, W, H);
       g.setColor(PlotRenderTheme.TEXT_PRIMARY);
       g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 14));
-      g.drawString("AudioAnalyzer .aar recording layout (big-endian)", 16, 26);
+      g.drawString(
+          "AudioAnalyzer ."
+              + AudioBlockRecordingFormat.FILE_EXTENSION
+              + " recording layout (big-endian)",
+          16,
+          24);
+      PlotRenderTheme.drawLabel(
+          g,
+          16,
+          42,
+          "Version "
+              + AudioBlockRecordingFormat.VERSION
+              + "; normalized float samples; streaming blocks with a completion footer");
 
-      int y = 56;
-      int x = 16;
-      int w = W - 32;
-      int rowH = 28;
-
-      drawBlock(g, x, y, w, rowH, "Header", PlotRenderTheme.SPECTRUM_LINE);
-      y += rowH;
-      drawField(g, x + 16, y, "u32 magic 'AAR1'", "u16 version", "u16 channels");
-      y += rowH;
-      drawField(g, x + 16, y, "f32 sampleRate", "u16 bitsPerSample", "u16 reserved=0");
-      y += rowH + 12;
-
-      drawBlock(g, x, y, w, rowH, "Frame record (repeats until EOF)", PlotRenderTheme.HIGHLIGHT);
-      y += rowH;
-      drawField(g, x + 16, y, "u32 frames", "i64 frameIndex", "i64 timestampNanos");
-      y += rowH;
-      drawField(g, x + 16, y, "f32 ch0 sample[0..frames)", "f32 ch1 sample[0..frames)", "...");
-      y += rowH + 8;
+      drawBlock(
+          g,
+          16,
+          56,
+          W - 32,
+          25,
+          "Header — AAR2, version 2, channels, sample rate, source bits, reserved",
+          PlotRenderTheme.SPECTRUM_LINE);
+      drawField(
+          g,
+          32,
+          86,
+          "Header: " + AudioBlockRecordingFormat.HEADER_BYTES + " bytes",
+          "f32 sample rate",
+          "u16 source sample bits");
+      drawBlock(
+          g,
+          16,
+          118,
+          W - 32,
+          25,
+          "Audio blocks — repeated in stream order",
+          PlotRenderTheme.SPECTRUM_LINE);
+      drawField(g, 32, 148, "u32 frame count", "i64 frame index", "i64 timestamp (ns)");
+      drawField(
+          g,
+          32,
+          176,
+          "float32 channel 0 samples",
+          "float32 channel 1 samples",
+          "... non-interleaved");
+      drawBlock(
+          g,
+          16,
+          208,
+          W - 32,
+          25,
+          "Footer — COMPLETE (-1) / INCOMPLETE (-2), END2",
+          PlotRenderTheme.HIGHLIGHT);
+      drawField(
+          g, 32, 238, "Block/frame totals", "Indexes, times, gaps, bytes", "SHA-256 (32 bytes)");
       g.setColor(PlotRenderTheme.TEXT_MUTED);
       g.setFont(PlotRenderTheme.LABEL_FONT);
-      g.drawString("Channels are stored non-interleaved within each frame record.", x + 4, y + 16);
       g.drawString(
-          "Reader/writer live in audio-dsp; the format is stable from version 1 onward.",
-          x + 4,
-          y + 32);
+          ".partial → .aarec after finalization; the footer status determines completeness.",
+          16,
+          282);
+      g.drawString(
+          "Legacy .aar / AAR1 has no footer: reaching EOF cannot prove a complete recording.",
+          16,
+          302);
     } finally {
       g.dispose();
     }
@@ -557,15 +614,22 @@ public final class DocImageRenderer {
       g.setColor(PlotRenderTheme.PANEL_BACKGROUND);
       g.fillRect(0, 0, W, H);
       int halfW = W / 2 - 4;
-      Rectangle leftPlot = new Rectangle(44, 24, halfW - 56, H - 58);
-      Rectangle rightPlot = new Rectangle(halfW + 52, 24, halfW - 56, H - 58);
+      int leftMargin = PlotRenderTheme.leftAxisMargin(g, MAGNITUDE_TICKS);
+      Rectangle leftPlot = new Rectangle(leftMargin, 48, halfW - leftMargin - 12, H - 112);
+      Rectangle rightPlot =
+          new Rectangle(halfW + leftMargin + 4, 48, halfW - leftMargin - 12, H - 112);
 
       drawSpectrumPanel(g, leftPlot, sa, "A — 440 Hz", PlotRenderTheme.SPECTRUM_LINE);
       drawSpectrumPanel(g, rightPlot, sb, "B — 880 Hz", PlotRenderTheme.WAVEFORM_RIGHT);
 
       g.setColor(PlotRenderTheme.HIGHLIGHT);
       g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 13));
-      g.drawString("|delta dominant freq| ~ 440 Hz", W / 2 - 96, H - 12);
+      String delta =
+          String.format(
+              Locale.ROOT,
+              "FFT peak difference: %.1f Hz",
+              Math.abs(strongestFrequency(sb) - strongestFrequency(sa)));
+      g.drawString(delta, (W - g.getFontMetrics().stringWidth(delta)) / 2, H - 12);
     } finally {
       g.dispose();
     }
@@ -577,10 +641,9 @@ public final class DocImageRenderer {
     g.setColor(PlotRenderTheme.PLOT_BACKGROUND);
     g.fillRect(plot.x, plot.y, plot.width, plot.height);
     PlotRenderTheme.drawGrid(g, plot, 10, 8);
-    PlotRenderTheme.drawTitle(g, plot.x + 8, plot.y + 16, title);
-    PlotRenderTheme.drawYAxisLabel(g, plot, "Magnitude [dB rel. peak]");
-    PlotRenderTheme.drawYTicks(
-        g, plot, new double[] {0.0d, 0.5d, 1.0d}, new String[] {"0 dB", "-40 dB", "-80 dB"});
+    PlotRenderTheme.drawTitle(g, plot.x, plot.y - 16, title);
+    PlotRenderTheme.drawYAxisLabel(g, plot, "Magnitude [dB rel. peak]", MAGNITUDE_TICKS);
+    PlotRenderTheme.drawYTicks(g, plot, new double[] {0.0d, 0.5d, 1.0d}, MAGNITUDE_TICKS);
     PlotRenderTheme.drawXTicks(
         g, plot, new double[] {0.0d, 0.5d, 1.0d}, new String[] {"0 Hz", "11025 Hz", "22050 Hz"});
     PlotRenderTheme.drawXAxisLabel(g, plot, "Frequency [Hz]");
@@ -593,12 +656,14 @@ public final class DocImageRenderer {
       }
     }
     int floor = plot.y + plot.height - 1;
-    int top = plot.y + 36;
+    int top = plot.y;
     int[] xs = new int[bins];
     int[] ys = new int[bins];
     for (int i = 0; i < bins; i++) {
       xs[i] = plot.x + (int) ((long) i * (plot.width - 1) / Math.max(1, bins - 1));
-      ys[i] = floor - (int) ((Math.abs(mag[i]) / max) * (floor - top));
+      ys[i] =
+          floor
+              - (int) (PlotRenderTheme.normalizedMagnitude(Math.abs(mag[i]) / max) * (floor - top));
     }
     g.setColor(color);
     g.setStroke(PlotRenderTheme.TRACE_STROKE);
@@ -704,7 +769,7 @@ public final class DocImageRenderer {
       }
 
       // Legend
-      int legendY = WB_H - 56;
+      int legendY = WB_H - 42;
       g.setFont(PlotRenderTheme.LABEL_FONT);
       g.setColor(new Color(104, 188, 255, 200));
       g.fillOval(16, legendY - 6, 10, 10);
@@ -780,18 +845,18 @@ public final class DocImageRenderer {
       g.drawString("Playback Explorer", 12, 23);
       g.setFont(PlotRenderTheme.LABEL_FONT);
       g.setColor(PlotRenderTheme.TEXT_MUTED);
-      g.drawString("demo-recording.aar  |  44 100 Hz / mono / 16-bit  |  0.09 s", 148, 23);
+      g.drawString("Generated 330 Hz sine  |  44 100 Hz / mono / 16-bit  |  0.09 s", 148, 23);
 
       // Waveform area
-      Rectangle plot = new Rectangle(48, 48, W - 64, H - 100);
-      PlotRenderTheme.drawPlotBackground(g, W, H, plot);
+      int leftMargin = PlotRenderTheme.leftAxisMargin(g, AMPLITUDE_TICKS);
+      Rectangle plot = new Rectangle(leftMargin, 64, W - leftMargin - 16, H - 148);
+      PlotRenderTheme.drawPlotBackground(g, plot);
       PlotRenderTheme.drawGrid(g, plot, 10, 6);
-      PlotRenderTheme.drawTitle(g, plot.x + 6, plot.y + 16, "Waveform — 330 Hz demo");
-      PlotRenderTheme.drawYAxisLabel(g, plot, "Amplitude [-1..1]");
-      PlotRenderTheme.drawYTicks(
-          g, plot, new double[] {0.0d, 0.5d, 1.0d}, new String[] {"+1", "0", "-1"});
+      PlotRenderTheme.drawTitle(g, plot.x, plot.y - 16, "Waveform — 330 Hz demo");
+      PlotRenderTheme.drawYAxisLabel(g, plot, "Amplitude [-1..1]", AMPLITUDE_TICKS);
+      PlotRenderTheme.drawYTicks(g, plot, new double[] {0.0d, 0.5d, 1.0d}, AMPLITUDE_TICKS);
       PlotRenderTheme.drawXAxisLabel(g, plot, "Time [ms]");
-      int n = Math.min(samples.length, 2048);
+      int n = samples.length;
       double durationMs = 1000.0d * (n - 1) / MONO_44K.sampleRate();
       PlotRenderTheme.drawXTicks(
           g,
@@ -803,7 +868,7 @@ public final class DocImageRenderer {
             String.format(Locale.ROOT, "%.1f ms", durationMs)
           });
       int centerY = plot.y + plot.height / 2;
-      int amplitude = plot.height / 2 - 12;
+      int amplitude = (plot.height - 1) / 2;
       Path2D path = new Path2D.Float();
       for (int i = 0; i < n; i++) {
         double x = plot.x + (double) i * (plot.width - 1) / Math.max(1, n - 1);
@@ -842,7 +907,10 @@ public final class DocImageRenderer {
 
       // Position slider track
       int trackX = 270;
-      int trackW = W - trackX - 16;
+      String timeReadout =
+          String.format(Locale.ROOT, "%.1f ms / %.1f ms", durationMs / 4.0d, durationMs);
+      int timeWidth = g.getFontMetrics(PlotRenderTheme.LABEL_FONT).stringWidth(timeReadout);
+      int trackW = W - trackX - timeWidth - 28;
       g.setColor(new Color(50, 61, 76));
       g.fillRoundRect(trackX, ctrlY + 14, trackW, 8, 4, 4);
       g.setColor(new Color(104, 188, 255, 160));
@@ -853,10 +921,7 @@ public final class DocImageRenderer {
       // Time readout
       g.setFont(PlotRenderTheme.LABEL_FONT);
       g.setColor(PlotRenderTheme.TEXT_MUTED);
-      g.drawString(
-          String.format(Locale.ROOT, "%.1f ms / %.1f ms", durationMs / 4.0d, durationMs),
-          trackX + trackW + 4,
-          ctrlY + 22);
+      g.drawString(timeReadout, trackX + trackW + 12, ctrlY + 22);
     } finally {
       g.dispose();
     }
@@ -878,9 +943,8 @@ public final class DocImageRenderer {
   /**
    * Renders the imported recording workbench screenshot.
    *
-   * <p>Shows a two-panel layout: on the left, a feature table listing extracted wingbeat feature
-   * values for a synthetic 380 Hz mosquito-like recording; on the right, a bar chart of the
-   * harmonic amplitude profile.
+   * <p>Shows a two-panel layout with explicitly fictional feature values and a harmonic amplitude
+   * profile. It does not report measurements from a dataset or a completed calibration.
    *
    * @return a 760 × 480 image
    */
@@ -897,11 +961,11 @@ public final class DocImageRenderer {
       g.fillRect(0, 0, W, 44);
       g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 14));
       g.setColor(PlotRenderTheme.TEXT_PRIMARY);
-      g.drawString("Imported Recording Workbench", 16, 28);
+      g.drawString("Imported-feature illustration", 16, 28);
       g.setFont(PlotRenderTheme.LABEL_FONT);
       g.setColor(PlotRenderTheme.TEXT_MUTED);
       g.drawString(
-          "Dataset: HumBugDB  |  Recording: rec_0042  |  Label: Culex quinquefasciatus", 16, 42);
+          "Invented example values — not a HumBugDB recording or a measured result", 16, 42);
 
       // Feature table (left panel)
       int tableX = 12;
@@ -958,15 +1022,17 @@ public final class DocImageRenderer {
       int chartW = W - chartX - 12;
       int chartY = 52;
       int chartH = (WB_H - 80) / 2 - 4;
-      Rectangle chartBounds = new Rectangle(chartX + 42, chartY + 24, chartW - 52, chartH - 44);
-      PlotRenderTheme.drawPlotBackground(g, W, WB_H, chartBounds);
+      String[] amplitudeTicks = {"1.0", "0.5", "0.0"};
+      int leftMargin = PlotRenderTheme.leftAxisMargin(g, amplitudeTicks);
+      Rectangle chartBounds =
+          new Rectangle(chartX + leftMargin, chartY + 24, chartW - leftMargin - 10, chartH - 44);
+      PlotRenderTheme.drawPlotBackground(g, chartBounds);
       PlotRenderTheme.drawGrid(g, chartBounds, 4, 5);
       g.setFont(PlotRenderTheme.TITLE_FONT);
       g.setColor(PlotRenderTheme.TEXT_PRIMARY);
-      g.drawString("Harmonic profile", chartX + 42, chartY + 16);
-      PlotRenderTheme.drawYAxisLabel(g, chartBounds, "Amplitude");
-      PlotRenderTheme.drawYTicks(
-          g, chartBounds, new double[] {0.0d, 0.5d, 1.0d}, new String[] {"1.0", "0.5", "0.0"});
+      g.drawString("Harmonic profile", chartBounds.x, chartY + 16);
+      PlotRenderTheme.drawYAxisLabel(g, chartBounds, "Amplitude", amplitudeTicks);
+      PlotRenderTheme.drawYTicks(g, chartBounds, new double[] {0.0d, 0.5d, 1.0d}, amplitudeTicks);
       PlotRenderTheme.drawXTicks(
           g,
           chartBounds,
@@ -978,8 +1044,8 @@ public final class DocImageRenderer {
       int barW = chartBounds.width / (barCount * 2);
       for (int i = 0; i < barCount; i++) {
         int bx = chartBounds.x + i * chartBounds.width / barCount + barW / 2;
-        int barHeight = (int) (harmonicAmps[i] * (chartBounds.height - 8));
-        int by = chartBounds.y + chartBounds.height - barHeight;
+        int barHeight = (int) Math.round(harmonicAmps[i] * (chartBounds.height - 1));
+        int by = chartBounds.y + chartBounds.height - 1 - barHeight;
         g.setColor(new Color(104, 188, 255, 180));
         g.fillRect(bx, by, barW, barHeight);
         g.setColor(PlotRenderTheme.SPECTRUM_LINE);
@@ -996,13 +1062,13 @@ public final class DocImageRenderer {
       g.drawRect(calBounds.x, calBounds.y, calBounds.width, calBounds.height);
       g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 12));
       g.setColor(PlotRenderTheme.TEXT_PRIMARY);
-      g.drawString("Calibration status", calBounds.x + 8, calBounds.y + 16);
+      g.drawString("Illustrative comparison", calBounds.x + 8, calBounds.y + 16);
       g.setFont(PlotRenderTheme.LABEL_FONT);
       g.setColor(new Color(102, 235, 187));
-      g.drawString("✓ Generator calibrated from this dataset", calBounds.x + 8, calBounds.y + 34);
+      g.drawString("Example only — no calibration performed", calBounds.x + 8, calBounds.y + 34);
       g.setColor(PlotRenderTheme.TEXT_MUTED);
-      g.drawString("Baseline vs real: 28 % mean rel. diff.", calBounds.x + 8, calBounds.y + 50);
-      g.drawString("Calibrated vs real: 9 % mean rel. diff.", calBounds.x + 8, calBounds.y + 66);
+      g.drawString("Example baseline difference: 28 %", calBounds.x + 8, calBounds.y + 50);
+      g.drawString("Example adjusted difference: 9 %", calBounds.x + 8, calBounds.y + 66);
 
       // Status bar
       g.setColor(new Color(35, 43, 55));
@@ -1010,7 +1076,7 @@ public final class DocImageRenderer {
       g.setFont(PlotRenderTheme.LABEL_FONT);
       g.setColor(PlotRenderTheme.TEXT_MUTED);
       g.drawString(
-          "12 recordings  |  Feature extraction: complete  |  Provenance: HumBugDB v1.0",
+          "Illustrative feature values  |  No imported dataset  |  No recorded validation",
           12,
           WB_H - 11);
     } finally {
@@ -1022,22 +1088,20 @@ public final class DocImageRenderer {
   /**
    * Renders the generator calibration screenshot.
    *
-   * <p>Displays grouped before/after bars for key wingbeat feature differences, illustrating how
-   * generator calibration reduces the gap between synthetic and real recordings.
+   * <p>Displays explicitly fictional before/after feature differences to explain the comparison
+   * layout. These values do not establish a calibration improvement on real recordings.
    *
    * @return a 760 × 480 image
    */
   public static BufferedImage renderGeneratorCalibration() {
-    // Hardcoded representative before/after calibration data (380 Hz mosquito-like baseline)
+    // Fictional example values, explicitly identified as such in the rendered illustration.
     String[] featureNames = {
       "freq", "centroid", "bandwidth", "AM", "drift", "jitter", "SNR", "duration"
     };
     double[] beforeDiffs = {0.62, 0.48, 0.35, 0.71, 0.55, 0.41, 0.28, 0.19};
     double[] afterDiffs = {0.12, 0.09, 0.14, 0.18, 0.22, 0.17, 0.10, 0.08};
-    double improvementPct = 72.0;
-    double meanBefore = 0.449;
-    double meanAfter = 0.138;
-    int corpusSize = 10;
+    double meanBefore = java.util.Arrays.stream(beforeDiffs).average().orElseThrow();
+    double meanAfter = java.util.Arrays.stream(afterDiffs).average().orElseThrow();
 
     BufferedImage img = createWbImage();
     Graphics2D g = img.createGraphics();
@@ -1048,31 +1112,23 @@ public final class DocImageRenderer {
 
       // Title bar
       g.setColor(new Color(31, 38, 48));
-      g.fillRect(0, 0, W, 44);
+      g.fillRect(0, 0, W, 60);
       g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 14));
       g.setColor(PlotRenderTheme.TEXT_PRIMARY);
-      g.drawString("Generator Calibration Result", 16, 28);
+      g.drawString("Calibration illustration — fictional values", 16, 28);
       g.setFont(PlotRenderTheme.LABEL_FONT);
       g.setColor(PlotRenderTheme.TEXT_MUTED);
-      g.drawString(
-          String.format(
-              Locale.ROOT,
-              "Baseline: 380 Hz mosquito-like  |  Improvement: %.0f %%",
-              improvementPct),
-          16,
-          42);
+      g.drawString("Example relative feature differences; no measured calibration result", 16, 48);
 
       // Bar chart area
-      int chartMarginLeft = 148;
-      Rectangle chart = new Rectangle(chartMarginLeft, 60, W - chartMarginLeft - 16, WB_H - 120);
-      PlotRenderTheme.drawPlotBackground(g, W, WB_H, chart);
+      String[] differenceTicks = {"100 %", "75 %", "50 %", "25 %", "0 %"};
+      int chartMarginLeft = PlotRenderTheme.leftAxisMargin(g, differenceTicks);
+      Rectangle chart = new Rectangle(chartMarginLeft, 82, W - chartMarginLeft - 16, 304);
+      PlotRenderTheme.drawPlotBackground(g, chart);
       PlotRenderTheme.drawGrid(g, chart, 5, 8);
-      PlotRenderTheme.drawYAxisLabel(g, chart, "Relative difference");
+      PlotRenderTheme.drawYAxisLabel(g, chart, "Relative difference", differenceTicks);
       PlotRenderTheme.drawYTicks(
-          g,
-          chart,
-          new double[] {0.0d, 0.25d, 0.5d, 0.75d, 1.0d},
-          new String[] {"0 %", "25 %", "50 %", "75 %", "≥100 %"});
+          g, chart, new double[] {0.0d, 0.25d, 0.5d, 0.75d, 1.0d}, differenceTicks);
 
       int n = featureNames.length;
       int groupW = chart.width / Math.max(1, n);
@@ -1082,25 +1138,20 @@ public final class DocImageRenderer {
         int gx = chart.x + i * groupW + barW / 2;
 
         // Before bar
-        int bHt = (int) (Math.min(1.0, beforeDiffs[i]) * (chart.height - 4));
-        int bY = chart.y + chart.height - bHt;
+        int bHt = (int) Math.round(Math.min(1.0, beforeDiffs[i]) * (chart.height - 1));
+        int bY = chart.y + chart.height - 1 - bHt;
         g.setColor(new Color(255, 100, 80, 180));
         g.fillRect(gx, bY, barW, bHt);
         g.setColor(new Color(255, 100, 80));
         g.drawRect(gx, bY, barW, bHt);
 
         // After bar
-        int aHt = (int) (Math.min(1.0, afterDiffs[i]) * (chart.height - 4));
-        int aY = chart.y + chart.height - aHt;
+        int aHt = (int) Math.round(Math.min(1.0, afterDiffs[i]) * (chart.height - 1));
+        int aY = chart.y + chart.height - 1 - aHt;
         g.setColor(new Color(102, 235, 187, 180));
         g.fillRect(gx + barW + 2, aY, barW, aHt);
         g.setColor(new Color(102, 235, 187));
         g.drawRect(gx + barW + 2, aY, barW, aHt);
-
-        // Feature name on left
-        g.setFont(PlotRenderTheme.LABEL_FONT);
-        g.setColor(PlotRenderTheme.TEXT_MUTED);
-        g.drawString(featureNames[i], 4, chart.y + (i + 1) * chart.height / n - 4);
       }
 
       // X axis: feature names
@@ -1111,9 +1162,9 @@ public final class DocImageRenderer {
       PlotRenderTheme.drawXTicks(g, chart, xPositions, featureNames);
 
       // Legend
-      int legendY = WB_H - 44;
+      int legendY = WB_H - 60;
       g.setColor(new Color(35, 43, 55));
-      g.fillRect(0, legendY, W, 44);
+      g.fillRect(0, legendY, W, 60);
       g.setColor(new Color(255, 100, 80, 180));
       g.fillRect(16, legendY + 12, 14, 14);
       g.setColor(new Color(255, 100, 80));
@@ -1133,12 +1184,11 @@ public final class DocImageRenderer {
       g.drawString(
           String.format(
               Locale.ROOT,
-              "Corpus: %d recordings  |  Mean Δ before: %.1f %%  →  after: %.1f %%",
-              corpusSize,
+              "Illustrative mean difference: %.1f %% before → %.1f %% after",
               meanBefore * 100.0,
               meanAfter * 100.0),
-          320,
-          legendY + 24);
+          16,
+          legendY + 48);
     } finally {
       g.dispose();
     }

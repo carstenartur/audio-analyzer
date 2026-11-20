@@ -3,6 +3,7 @@ package org.hammer.audio.ui.theme;
 import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Font;
+import java.awt.FontMetrics;
 import java.awt.Graphics2D;
 import java.awt.Rectangle;
 import java.awt.RenderingHints;
@@ -29,6 +30,12 @@ public final class PlotRenderTheme {
   public static final Font LABEL_FONT = new Font(Font.SANS_SERIF, Font.PLAIN, 12);
   public static final Font TITLE_FONT = new Font(Font.SANS_SERIF, Font.BOLD, 12);
 
+  /** Minimum left margin; use {@link #leftAxisMargin} to allow for the rendered tick labels. */
+  public static final int LEFT_AXIS_MARGIN = 80;
+
+  /** Space for separate tick-label and axis-title rows below a plot. */
+  public static final int BOTTOM_AXIS_MARGIN = 44;
+
   public static final BasicStroke GRID_STROKE = new BasicStroke(1f);
   public static final BasicStroke AXIS_STROKE = new BasicStroke(1.2f);
   public static final BasicStroke TRACE_STROKE =
@@ -42,8 +49,14 @@ public final class PlotRenderTheme {
   private static final double DB_FLOOR = -80.0d;
   private static final double MAG_EPSILON = 1.0e-7d;
   private static final int TICK_SIZE = 4;
+  private static final int TICK_LABEL_GAP = 4;
+  private static final int AXIS_TITLE_OUTER_PADDING = 4;
+  // Four clear pixels, plus one pixel per antialiased edge for fractional glyph bounds.
+  private static final int AXIS_TITLE_GAP = 6;
 
-  private PlotRenderTheme() {}
+  private PlotRenderTheme() {
+    // Static plotting theme and drawing helpers.
+  }
 
   /** Enables high quality 2D rendering hints. */
   public static void applyQualityRendering(Graphics2D g2) {
@@ -63,6 +76,11 @@ public final class PlotRenderTheme {
       Graphics2D g2, int width, int height, Rectangle plotBounds) {
     g2.setColor(PANEL_BACKGROUND);
     g2.fillRect(0, 0, width, height);
+    drawPlotBackground(g2, plotBounds);
+  }
+
+  /** Fills only the plot rectangle, preserving other panels on a shared canvas. */
+  public static void drawPlotBackground(Graphics2D g2, Rectangle plotBounds) {
     g2.setColor(PLOT_BACKGROUND);
     g2.fillRect(plotBounds.x, plotBounds.y, plotBounds.width, plotBounds.height);
   }
@@ -123,16 +141,44 @@ public final class PlotRenderTheme {
     g2.setColor(TEXT_MUTED);
     int textWidth = g2.getFontMetrics().stringWidth(label);
     int x = plotBounds.x + Math.max(0, (plotBounds.width - textWidth) / 2);
-    int y = plotBounds.y + plotBounds.height + 16;
+    int y = plotBounds.y + plotBounds.height + 34;
     g2.drawString(label, x, y);
   }
 
-  /** Draws a rotated Y-axis label in the left plot margin. */
-  public static void drawYAxisLabel(Graphics2D g2, Rectangle plotBounds, String label) {
+  /**
+   * Reserves separate columns for the rotated title, the widest tick label and the tick mark. Call
+   * this before constructing the plot rectangle, using the labels passed to {@link #drawYTicks} and
+   * {@link #drawYAxisLabel}.
+   */
+  public static int leftAxisMargin(Graphics2D g2, String[] tickLabels) {
+    FontMetrics metrics = g2.getFontMetrics(LABEL_FONT);
+    int tickWidth = 0;
+    for (String label : tickLabels) {
+      tickWidth = Math.max(tickWidth, metrics.stringWidth(label));
+    }
+    return Math.max(
+        LEFT_AXIS_MARGIN,
+        AXIS_TITLE_OUTER_PADDING
+            + metrics.getAscent()
+            + metrics.getDescent()
+            + AXIS_TITLE_GAP
+            + tickWidth
+            + TICK_LABEL_GAP
+            + TICK_SIZE);
+  }
+
+  /** Draws a rotated Y-axis label in the margin reserved by {@link #leftAxisMargin}. */
+  public static void drawYAxisLabel(
+      Graphics2D g2, Rectangle plotBounds, String label, String[] tickLabels) {
     g2.setFont(LABEL_FONT);
     g2.setColor(TEXT_MUTED);
-    int textWidth = g2.getFontMetrics().stringWidth(label);
-    int x = Math.max(10, plotBounds.x - 34);
+    FontMetrics metrics = g2.getFontMetrics();
+    int textWidth = metrics.stringWidth(label);
+    int x =
+        plotBounds.x
+            - leftAxisMargin(g2, tickLabels)
+            + AXIS_TITLE_OUTER_PADDING
+            + metrics.getAscent();
     int y = plotBounds.y + plotBounds.height / 2 + textWidth / 2;
     AffineTransform savedTransform = g2.getTransform();
     try {
@@ -187,7 +233,7 @@ public final class PlotRenderTheme {
       g2.drawLine(plotBounds.x - TICK_SIZE, y, plotBounds.x, y);
       g2.setColor(TEXT_MUTED);
       int textWidth = g2.getFontMetrics().stringWidth(labels[i]);
-      int labelX = Math.max(0, plotBounds.x - TICK_SIZE - 4 - textWidth);
+      int labelX = Math.max(0, plotBounds.x - TICK_SIZE - TICK_LABEL_GAP - textWidth);
       g2.drawString(labels[i], labelX, y + 4);
     }
   }
