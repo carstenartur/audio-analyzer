@@ -5,12 +5,13 @@ outbox delivery require an explicit persistence mode.
 
 ## Shared persistence runtime
 
-Audio Analyzer consumes the released migration-bearing storage library. The root `pom.xml` selects
-the shared storage, JGit and Hibernate ORM versions; `audio-app/pom.xml` selects Flyway:
+Maven resolves the Core and Search modules from Maven Central with its default settings.
+The root `pom.xml` selects the shared storage, JGit and Hibernate ORM versions.
+`audio-app/pom.xml` selects Flyway.
 
 ```text
-io.github.carstenartur:jgit-storage-hibernate-core:0.12.1
-io.github.carstenartur:jgit-storage-hibernate-search:0.12.1
+io.github.carstenartur:jgit-storage-hibernate-core:0.12.2
+io.github.carstenartur:jgit-storage-hibernate-search:0.12.2
 JGit 7.8.1.202611041320-r
 Hibernate ORM 7.4.14.Final
 Flyway 13.8.0
@@ -192,23 +193,6 @@ WorkflowPersistenceEntityContributor collaborationPersistenceEntities() {
 The resulting classes are added to the same application-managed `SessionFactory` as the generic JGit
 storage entities. This extension point does not copy or replace any mapping from
 `jgit-storage-hibernate-core`.
-
-## Anonymous artifact access
-
-`audio-app/pom.xml` resolves the shared library from its public, release-only Maven repository:
-
-```xml
-<repository>
-  <id>jgit-storage-hibernate-public</id>
-  <url>https://raw.githubusercontent.com/carstenartur/jgit-storage-hibernate/maven-repository/</url>
-  <releases><enabled>true</enabled></releases>
-  <snapshots><enabled>false</enabled></snapshots>
-</repository>
-```
-
-The repository permits anonymous downloads. Resolving these artifacts needs no Maven server
-credentials or package-read token. Keep the configured repository URL and release-only policy when
-updating the version selected by the root POM.
 
 ## Explicit filesystem fallback
 
