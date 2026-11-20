@@ -15,17 +15,20 @@ java -cp "audio-app/target/classes:audio-app/target/lib/*" \
 
 On Windows, use `;` instead of `:` in the classpath.
 
-## Image inventory
+## Complete image inventory
 
-- [ ] `docs/images/screenshot.png`
-- [ ] `docs/images/features/waveform-trigger.png`
-- [ ] `docs/images/features/spectrum-peak-hold.png`
-- [ ] `docs/images/features/recording-format.png`
-- [ ] `docs/images/features/ab-comparison.png`
-- [ ] `docs/images/features/simulation-workbench.png`
-- [ ] `docs/images/features/imported-recording-workbench.png`
-- [ ] `docs/images/features/playback-explorer.png`
-- [ ] `docs/images/features/generator-calibration.png`
+Use the [dated inventory and provenance record](documentation-visual-review-2026-11-20.md) as the
+starting list: **11 actual browser captures (including three explicit runtime fixtures)** and
+**9 Java2D illustrations**. Review both `docs/assets/screenshots/workbench/` and `docs/images/`,
+including files not embedded in a feature page. Add/remove inventory rows whenever the file set changes.
+
+For each image record its filename, source scenario/renderer, code revision, regeneration status,
+visual result and any remaining restriction. Do not mark a deferred visual inspection as passed.
+Historical review dates do not certify a changed image.
+
+The Java2D command above regenerates illustrations only. Browser captures require the
+[packaged-browser setup and verify/update procedure](../workbench-screenshot-pipeline.md#prepare-a-clean-checkout).
+Keep actual captures, fixed fixtures and conceptual illustrations labelled separately in captions.
 
 ## Visual checks
 

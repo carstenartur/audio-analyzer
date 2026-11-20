@@ -9,8 +9,8 @@ algorithm development, not for production mosquito tracking or species classific
 
 ## Workbench entry points
 
-Start the Swing app and open the **Plugins** menu. Under **Experimental Acoustic Localization** there
-are two main views:
+Launch the desktop host with [Getting started](../../getting-started.md#explore-a-signal-in-the-desktop-workbench)
+and open the **Plugins** menu. Under **Experimental Acoustic Localization** there are two plugin views:
 
 - **Acoustic Localization Workbench (experimental)** — deterministic simulation scenarios, tracking,
   playback and export.
@@ -20,18 +20,33 @@ are two main views:
 Both views run inside the host application. Stable plugin contracts stay in `audio-plugin-api`; the
 experimental implementation stays in `audio-experimental-acoustic`.
 
+For saved array profiles, live acquisition, `.aarec` replay and evidence ZIPs, open **Experiment >
+Microphone-array workflow…** or the browser route **`/workbench/experiment`**. The
+[microphone operator guide](../../features/microphone-experiments.md) covers that complete workflow.
+Its current fixed search region and DSP defaults differ from this configurable simulation view.
+
 ## Simulation workbench
 
 Use the simulation workbench when you need a reproducible localization run without live hardware.
 
 Typical workflow:
 
-1. choose a deterministic scenario;
-2. configure block size, FFT size, peak detection, frequency band, candidate grid and TDOA estimator;
-3. run the scenario;
-4. inspect the log and room map;
-5. step through completed frames with playback controls;
-6. export Markdown, CSV or JSON-lines evidence.
+1. Open **Plugins > Experimental Acoustic Localization > Open: Acoustic Localization Workbench
+   (experimental)** and select **single-source** for a first run.
+2. Keep the default parameters for the baseline; record any subsequent changes to block/FFT size,
+   peak detection, frequency band, candidate grid or TDOA estimator.
+3. Click **Run** and wait for the result. Inspect the frame log, room map and processing-budget output.
+4. Step through completed frames with the playback controls to compare tracks against the scenario's
+   known source positions. Playback inspects completed results; it is separate from acquiring audio.
+5. Open the **Markdown**, **CSV** or **JSON-lines** tab, select and copy its complete text, and save it
+   in your own `.md`, `.csv` or `.jsonl` file. Copy the **Benchmark** tab into a separate `.md` file when
+   needed. Retain the scenario and parameter summary with per-frame output so a later run can use the
+   same inputs and configuration.
+6. For an algorithm comparison, change one parameter or estimator, run the same scenario again and
+   save the second result separately. Keep machine-dependent timing separate from localization output.
+
+These copied plugin reports contain analysis results. To preserve generated input as an actual recording and
+replay it, use the [standalone simulation round trip](../../features/microphone-experiments.md#complete-a-first-simulation).
 
 The room map shows the room boundary, microphone positions, candidate grid, ground-truth positions
 where available and estimated tracks. Track IDs are stable within the run so identity persistence can
@@ -63,7 +78,8 @@ Common workbench parameters:
 - **Minimum SNR** — minimum peak-to-median ratio for accepting peaks.
 - **Frequency band** — lower and upper bound for peak search.
 - **Candidate grid** — number of 2D grid steps used by beamforming.
-- **TDOA estimator** — GCC-PHAT or cross-correlation.
+- **TDOA estimator** — integer-sample `GCC_PHAT` (default), interpolated `SUB_SAMPLE_GCC_PHAT`, or
+  `CROSS_CORRELATION`.
 
 Prefer small, deterministic parameter changes when comparing algorithms. Large changes can alter
 runtime budget, peak selection and tracking behavior at the same time.
@@ -88,14 +104,17 @@ Programmatic access is available through `WorkbenchRunResult.overBudgetFrameCoun
 
 ## Export formats
 
-After a simulation run, the workbench can export:
+After a simulation run, the workbench fills read-only report tabs:
 
 - **Markdown** — human-readable run summary, parameters, timing/budget statistics and tracked-source
   table;
 - **CSV** — one row per tracked source per frame, including position, confidence and budget flag;
 - **JSON-lines** — one JSON object per frame for offline processing.
 
-Use these exports as reviewable evidence in issues, PRs and benchmark notes.
+To save a report, open its tab, select and copy all text, then paste it into your own file with the
+corresponding `.md`, `.csv` or `.jsonl` extension. The **Benchmark** tab can be saved the same way as
+Markdown. There is no report-export button in this panel. Use the saved reports as reviewable evidence
+in issues, PRs and benchmark notes.
 
 ## Imported recording workbench
 
@@ -104,13 +123,18 @@ root and does not download data automatically.
 
 Typical workflow:
 
-1. open the imported-recording workbench from the plugin menu;
-2. select a local HumBugDB export directory;
-3. import metadata and WAV references into a `DatasetManifest`;
-4. inspect recordings, labels and metadata;
-5. replay feature extraction and rule-based classification for selected recordings;
-6. review dataset-level evaluation metrics and feature distributions;
-7. run generator calibration from extracted feature vectors where available.
+1. Open **Plugins > Experimental Acoustic Localization > Open: Imported Recording Workbench
+   (experimental)**.
+2. Use **Browse…** to select a local HumBugDB export root containing `data/metadata/*.csv` and its WAV
+   files, then click **Import**. This is a dataset importer, not the `.aarec` experiment replay action.
+3. Wait for import and evaluation, then inspect the manifest, analytics, feature histograms and
+   evaluation summary. Select an entry in **Recording** and use **Replay analysis** to inspect it.
+4. Select **Calibration scope** and choose **Run calibration** to compare/tune the synthetic generator
+   against extracted features. This calibrates a signal generator; it does not measure microphone
+   timing or make a live array ready.
+5. Retain the exact dataset release, labels, WAV files and configuration alongside any reported metric.
+   Follow the [evaluation baseline](evaluation-baseline.md) for the input structure, report meanings
+   and programmatic report generation.
 
 Users are responsible for obtaining datasets legally and respecting upstream licenses.
 
@@ -143,7 +167,7 @@ Implemented components:
 
 - multi-peak frequency detection with parabolic peak refinement;
 - cross-channel frequency clustering;
-- GCC-PHAT and cross-correlation TDOA estimation;
+- integer-sample and sub-sample GCC-PHAT, plus cross-correlation TDOA estimation;
 - delay-and-sum beamforming over 2D candidate grids;
 - Kalman-style tracking with identity persistence and confidence decay;
 - deterministic simulation with moving emitters, reflections and noise;
@@ -169,8 +193,10 @@ For credible real-world localization, prefer:
 - residual timing-error estimates;
 - rejection criteria when the timing error exceeds the spatial error budget.
 
-Independent USB microphones are not reliable by default. They need an explicit timing model for offset,
-drift and buffering jitter. That work is tracked in #136 and is not complete.
+Independent USB microphones are not reliable by default. The timing-calibration foundation can
+represent measured offsets, affine drift and uncertainty, but the current live workflow opens one
+multichannel JavaSound device. It does not aggregate several USB devices or continuously align their
+sample streams. See [what remains unsupported](synchronization.md#what-remains-experimental-or-unsupported).
 
 ## Synchronization limits
 
@@ -178,8 +204,12 @@ TDOA is very sensitive to timing. A one-sample error at 48 kHz corresponds to ro
 path difference in air. For small arrays and weak sources, clock drift, channel latency and buffering
 jitter can dominate the signal.
 
-The current `SampleClock` stores nominal timestamps. It does not compensate arbitrary inter-device
-drift or per-channel latency. Treat uncompensated multi-device recordings as demonstration-grade only.
+The current `SampleClock` stores nominal timestamps. `MicrophoneArrayCalibration` and
+`CalibratedTdoaEstimator` apply a measured timing model separately; they do not automatically compensate
+arbitrary buffering, cycle slips or changing drift. A replay using stored calibration currently checks
+expiry against the current wall clock, so a now-expired original profile can prevent historical replay.
+The [operator guide](../../features/microphone-experiments.md#current-calibration-limit-for-historical-replay)
+records that source-audited limit.
 
 ## Interpretation rules
 
@@ -205,10 +235,9 @@ Use these rules when reading results:
 
 Open research work includes:
 
-- sub-sample TDOA interpolation;
-- reflection-aware confidence and consistency checks;
+- stronger validation of sub-sample estimates under real noise and reflections;
+- calibrated uncertainty beyond the implemented peak diagnostics and TDOA consistency checks;
 - probabilistic multi-source tracking;
-- calibrated array profile files;
 - 3D geometry;
 - benchmark corpora with measured real-world recordings;
 - clearer uncertainty propagation into workbench visualizations.

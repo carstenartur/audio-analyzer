@@ -2,6 +2,7 @@
 
 This directory contains QA plans and evidence used to harden Audio Analyzer before public releases.
 
+- [Documentation and visual review, 20 November 2026](documentation-visual-review-2026-11-20.md)
 - [Application and documentation QA plan](application-documentation-qa-plan.md)
 - [Screenshot QA checklist](screenshot-qa-checklist.md)
 - [Manual application QA evidence template](manual-application-qa-template.md)

@@ -1,5 +1,10 @@
 # Experiment operations and document interchange QA — 2026-07-22
 
+> Historical review of the revision/scope recorded below. It does not describe the current
+> implementation or certify current screenshots. See the
+> [20 November 2026 documentation and visual review](documentation-visual-review-2026-11-20.md)
+> and [current QA findings](../QA-FINDINGS.md) for the maintained status.
+
 ## Scope
 
 This review examines the current `master` after PRs #303 and #304, with emphasis on the parts of

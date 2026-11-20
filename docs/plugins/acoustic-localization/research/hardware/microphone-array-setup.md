@@ -2,8 +2,8 @@
 
 Practical notes for building a real microphone array that mirrors the simulator
 defaults used by [`SimulationScenarios.defaultArray()`](../../../../../audio-experimental-acoustic/src/main/java/org/hammer/audio/experimental/acoustic/simulation/SimulationScenarios.java).
-These notes complement, and do not replace, the synchronization checklist in
-[`../../synchronization.md`](../../synchronization.md).
+These notes complement the [synchronization checklist](../../synchronization.md) and the maintained
+[microphone operator workflow](../../../../features/microphone-experiments.md).
 
 ## Reference geometry
 
@@ -23,14 +23,17 @@ The bundled simulator uses a planar 4-microphone array on a rigid frame:
   c ≈ 343 m/s.
 
 When you build the physical version, the coordinate frame must match the values
-above so the simulator scenarios remain a valid ground truth for comparison
-experiments.
+above for comparison with the bundled simulator geometry. The standalone provider searches
+`x = 0…3 m`, `y = 0…2 m`; moving the microphones does not resize that search region. A matching
+physical layout does not create ground truth automatically: measure the real source positions
+independently and retain those measurements with the recording.
 
 ## Hardware checklist
 
 - **Synchronous capture device.** Use one multichannel audio interface with a
-  single shared clock for precise TDOA — this is the only synchronization path
-  supported by the current plugin. An **experimental external proposal** for
+  single shared clock for TDOA. The current live workflow opens one JavaSound multichannel device;
+  the calibration framework separately models measured channel offsets and affine drift. It does
+  not combine several independent capture devices. An **experimental external proposal** for
   low-cost setups uses three stereo USB microphones (treated as locally
   synchronized pairs) with an ultrasonic reference beacon to estimate
   inter-device delay offset, clock drift and cycle slips; see
@@ -38,9 +41,9 @@ experiments.
   A 35–45 kHz beacon requires a capture chain that passes that band and a host
   sample rate of 96 kHz or higher (Nyquist), and beacon-based correction is
   **not implemented** in the current codebase.
-- **Rigid frame.** Mount all microphones on a single rigid board; submillimetre
-  position errors already swamp the integer-sample resolution of the current
-  TDOA implementation.
+- **Rigid frame.** Mount all microphones on a rigid support and measure their positions in the chosen
+  coordinate frame. Record position uncertainty alongside timing uncertainty; numerical coordinates
+  alone do not establish physical localization accuracy.
 - **Identical microphones.** Use the same model, batch and orientation; gain or
   phase mismatch directly maps to beamforming sidelobes.
 - **Cable routing.** Match cable lengths and avoid mains/ground loops; hum at
@@ -50,42 +53,61 @@ experiments.
 
 ## Calibration procedure
 
-1. Measure the actual microphone coordinates with a caliper or laser distance
-   tool and record them in meters, matching the scenario coordinate frame.
-2. Play a known click or chirp from a fixed loudspeaker at a measured position.
-3. Capture a short recording and feed it through `MosquitoLocalizationPipeline`
-   with the measured geometry; the reported position should match the
-   loudspeaker within the array spacing.
-4. If it does not, re-check microphone polarity (channel order), the sign of the
-   y-axis and per-channel sample offsets via cross-correlation of the calibration
-   signal.
+1. Measure microphone coordinates in metres, label the channel wiring and choose the reference
+   channel. The browser's simple calibration form requires channel 0 as reference at frame 0.
+2. Capture repeatable common reference events on every channel using the capture device's recording
+   tools or an acquisition integration. The standalone live-localization route requires calibration
+   before it starts; it is not a calibration-recording wizard. Retain the raw calibration audio,
+   sample rate, event frame indices, device settings and measurement times.
+3. Isolate the hardware timing offset from acoustic travel time. For an acoustic click/chirp, retain
+   the measured loudspeaker position and account for unequal propagation distances. The correlation
+   estimator does not infer those distances or automatically distinguish them from device delay.
+4. The programmatic `ArrayTimingCalibrationEstimator.observe(...)` estimates relative delay for one
+   common event. `calibrate(...)` uses two events with a known positive frame separation to fit an
+   offset and affine drift. The [synchronization guide](../../synchronization.md#deterministic-calibration-workflow)
+   describes these APIs and their deterministic test fixtures. A synthetic fixture demonstrates the
+   method; it is not measured calibration for a physical array.
+5. Evaluate residual/jitter, gain and polarity from the actual measurements. The estimator's
+   correlation-derived residual estimate, zero jitter and unit-gain defaults do not establish those
+   physical measurements. Keep the validity interval and uncertainty evidence with the result.
+6. Enter the measured values in **Edit geometry, device format and calibration** after all geometry,
+   device and format edits. If the timing fit uses another reference frame/channel, retain it in the
+   advanced portable definition instead of pasting its values unchanged into the frame-0 form.
+   Choose **Apply measured calibration to draft**, then **Validate & save profile** and perform a new
+   readiness check. The desktop exposes the measurements in **Edit profile settings…**.
+7. Run a recorded localization check against independent measured loudspeaker positions within the
+   search region. Compare reported tracks and synchronization diagnostics with those positions;
+   there is no guaranteed tolerance of one array spacing. Preserve the profile, raw input, reports
+   and reference measurements as described in the [evidence workflow](../../../../features/microphone-experiments.md#export-and-reopen-evidence).
 
 ## Synchronization budget
 
 A one-sample error at 16 kHz is ≈21 mm of equivalent path difference and at
-48 kHz still ≈7 mm. For a 30 cm array that is roughly 7% of the maximum
-geometric delay. Real microphone rigs should:
+48 kHz still ≈7 mm. For a 30 cm square array, the 16 kHz error is roughly 7% of the delay across one
+side and 5% of the maximum geometric delay across the 0.424 m diagonal. Real microphone rigs should:
 
 - capture calibration impulses before and after each session;
 - bound clock drift to less than one sample over the longest recording;
 - reject data when drift exceeds the localization error budget.
 
-The current `SampleClock` only stores nominal timestamps and does not compensate
-for drift, USB buffering jitter or per-channel latency. Drift compensation is
-called out as future work in
-[`../paper-outline.md`](../paper-outline.md#9-future-work).
+`SampleClock` stores nominal timestamps. The implemented calibration layer can correct measured
+static offsets and affine drift in the TDOA estimates, with explicit residual/jitter bounds. It does
+not automatically remove USB buffering jitter, detect cycle slips, resample independent streams or
+continuously re-estimate drift. See [unsupported synchronization work](../../synchronization.md#what-remains-experimental-or-unsupported).
 
 ## Mapping real recordings to simulator scenarios
 
 Each scenario in [`../simulation-datasets/`](../simulation-datasets/) carries
 explicit ground-truth positions, velocities and frequencies. A real-world rig
-that reproduces the simulator geometry can be benchmarked by:
+that reproduces the simulator geometry can support a future comparison experiment:
 
 1. Replaying the same emitter geometry with a loudspeaker on a motion stage.
-2. Recording with the synchronized array and saving the WAV to disk.
-3. Running the offline benchmark harness against both the simulator output and
-   the recorded WAV and computing the metrics in
-   [`../evaluation-metrics.md`](../evaluation-metrics.md) for each.
+2. Recording with the synchronized array and preserving the microphone workflow's `.aarec`, complete
+   profile and evidence ZIP, plus an independent reference trajectory.
+3. Implementing the explicit alignment/comparison of recorded estimates with that reference and
+   computing the metrics in [`../evaluation-metrics.md`](../evaluation-metrics.md).
 
-This is the procedure that Experiment J in [`../experiments.md`](../experiments.md)
-will eventually use.
+The current microphone workflow does not import WAV plus a reference trajectory as an automatic
+real-world benchmark. Its live/replay output explicitly reports benchmark ground truth as unavailable.
+The comparison above remains Experiment J in [`../experiments.md`](../experiments.md), separate from
+the implemented capture and evidence-export path.

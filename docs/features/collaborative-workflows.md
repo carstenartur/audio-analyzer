@@ -4,6 +4,169 @@ The web workbench lets multiple browser actors edit one canonical audio-processi
 
 ![Live server-owned collaboration session](../assets/screenshots/workbench/collaboration-session.png)
 
+## First shared workflow in two browsers
+
+Build the packaged application using [Getting started](../getting-started.md), then start one server
+from the repository root:
+
+```bash
+java -jar audio-app/target/audio-app-0.1.0-SNAPSHOT-workbench.jar
+```
+
+Open [http://localhost:8080/workbench](http://localhost:8080/workbench) in two separate browser
+profiles or browsers, called A and B below. Both must reach the same server; on different computers
+use that server's reachable address instead of each computer's `localhost`. Separate profiles make
+the two clients easy to distinguish. Fresh tabs also support independent clients; the
+[identity guide](../collaboration-identity.md) explains duplicated tabs and cookie lifetime.
+
+The default memory mode is sufficient for this exercise while the server stays running. Choose
+[Hibernate persistence](../workbench-hibernate-persistence.md) before starting the exercise if session
+state must survive a server restart. Filesystem checkpoint storage does not make collaboration
+identities or sessions durable.
+
+1. In browser A, find **Collaboration**. Enter an unused **Session id**, such as
+   `shared-audio-review`, and a **Workflow name**. Set **Mode** to **Shared session · personal undo**
+   **before** creating the session; the mode cannot change afterwards.
+2. Optionally enter `Alice` under **Display name** and select **Save display name**. A chosen display
+   name is an unverified pseudonym, unless the deployment separately supplies authenticated identity.
+   If this client already has an issued identity, the name is read-only. To choose another, use
+   **Start a new client identity** while outside a session; that does not inherit old ownership or undo.
+3. Select **Create session**. Wait until **Connection** reads `live`. The new session has an empty
+   graph, revision 0 and the creating client as owner. The orientation graph is not copied into it.
+4. In browser B, optionally save a different display name, enter the **same Session id**, then select
+   **Join session**. Do not create it a second time. The owner's chosen mode applies to the joined
+   session. Wait for `live` and confirm that both clients appear under **Participants**, with one row
+   marked **You** in each browser.
+5. In browser A's **Node palette**, select **Synthetic Signal Generator**. Wait for the node and the
+   new semantic revision in both browsers. In browser B, add **Gain** and again confirm that both
+   canvases converge. Selecting a node can appear as remote presence without changing the revision.
+6. In browser B, select **Undo** under **Semantic history**. Review the Gain creation, actor, time and
+   affected object in the fresh server preview, then select **Confirm undo** when it is safe. The Gain
+   disappears in both browsers and the revision advances. Select **Redo**, review, then **Confirm redo**
+   to restore it. Browser A's personal Undo targets A's own operation, not B's creation.
+7. Reload browser B. With its cookie and tab identity intact, it should rejoin the remembered session,
+   reach `live` and show the same graph, semantic revision and history capabilities. Continue with the
+   runnable example below, or keep the session open for more edits.
+
+## Connect, configure and run the shared graph
+
+Only the deterministic **Synthetic Signal Generator → Gain** path is currently executable by the
+production workflow backend. Other catalog entries can describe workflows but are not automatically
+executable. The run below is offline computation and does not acquire a microphone.
+
+1. With the two nodes above present, drag from the generator's right-hand **Synthetic Signal** output
+   handle (`signal-out`) to Gain's left-hand **Audio In** input (`audio-in`). Confirm the connection
+   appears in both browsers.
+2. Select the generator. In the right-hand **Parameters** panel, enter each **Property** and **Value**
+   below and select **Apply property** after each one. Wait for acceptance before the next edit. Then
+   select Gain and apply its property. New palette nodes do not supply these execution parameters
+   automatically; use `gain.factor`, not the generic input's initial `gain` text.
+
+   |            Node            |        Property         | Value  |
+   |----------------------------|-------------------------|--------|
+   | Synthetic Signal Generator | `signal.waveform`       | `sine` |
+   | Synthetic Signal Generator | `signal.frequency-hz`   | `1000` |
+   | Synthetic Signal Generator | `signal.phase-radians`  | `0`    |
+   | Synthetic Signal Generator | `signal.amplitude`      | `0.5`  |
+   | Synthetic Signal Generator | `signal.sample-rate-hz` | `8000` |
+   | Synthetic Signal Generator | `signal.channels`       | `1`    |
+   | Synthetic Signal Generator | `signal.frame-count`    | `8`    |
+   | Gain                       | `gain.factor`           | `2`    |
+
+3. Find **Immutable run** below the collaboration controls. Confirm **Current session** shows
+   the intended session and revision. Wait for **Selected workflow readiness** to report a successful
+   preflight for that exact graph. Missing parameters, disconnected required ports and unsupported
+   node types keep **Run current revision** disabled; correct the listed node-specific diagnostics.
+
+4. Select **Run current revision** once. Review its captured revision, fingerprint, backend mode,
+   progress and final state. The configured example should report `COMPUTATION` and a completed
+   result with per-node statuses and audio evidence. Later graph edits affect only future runs.
+
+5. Select **Export server result JSON** to retain the result, fingerprint and output evidence before
+   stopping the server. **Prepare another run** resets the run panel for another explicit start.
+   **Cancel run** is available while a run is active, but this eight-frame example may finish before
+   cancellation can be requested. An uncertain start offers **Retry same start command**.
+
+The [deterministic example](../architecture/deterministic-audio-workflow-example.md) gives the expected
+sample sequence. [Backend parameters and limits](../architecture/deterministic-audio-workflow-backend.md)
+and [run lifecycle](../architecture/workflow-run-lifecycle.md) describe the computation contract.
+Runs and completed run records are process-local, including in Hibernate mode. The run panel does
+not recover a durable job list after restart; retain the exported result when it matters.
+
+### Run a stored checkpoint
+
+With checkpoint storage configured, the same **Immutable run** panel can execute an existing stored
+graph. Enter its **History branch**, select **Refresh run sources**, then choose an exact
+**Historical commit**. Review the workflow ID and commit ID, wait for **Stored commit readiness**, and
+select **Run selected commit** when enabled. Inspect and export the result as above. This does not
+replace the current session or load the commit onto its canvas.
+
+The stored graph needs the same supported topology and explicit parameters. The empty minimal
+document used in the document/history tutorial is suitable for interchange, but is not this executable
+graph. An empty history list means the selected branch has no checkpoints; **Stored commit history
+unavailable** means the history endpoint cannot supply them. Neither condition prevents running a
+valid live-session graph.
+
+## Try shared undo
+
+To try the other undo policy, leave the current session in both browsers, use a new session ID and
+choose **Shared session · shared undo** before creation in A. Join browser B to that session. Have A
+add a node, then in B:
+
+1. Select the corresponding radio row under **Shared undo targets**. Inspect the operation and actor;
+   use **Load older operations** if needed.
+2. Select **Preview shared undo**. The server computes whether this particular inverse is safe at
+   the current revision.
+3. Review the affected objects and acknowledge **I understand that this changes the shared canonical
+   workflow for all participants**. Select **Confirm undo** only while the preview is safe.
+4. Check that the change reaches A. B, which accepted the undo, can select **Redo**, review the new
+   preview and confirm to reapply it. A new audited operation is added for each action.
+
+If later edits block the inverse, the preview lists the blockers and confirmation stays disabled.
+Coordinate the affected changes, reload history and request a new preview; a cached history row or
+an old preview cannot authorize an unsafe inverse.
+
+## Leave, return and preserve work
+
+**Leave session** removes only this client's membership and presence. The server retains the session
+for rejoining; the same client can enter its ID and select **Join session** again. Closing or changing
+browser storage can lose that client's selector or credential, so retain the same tab and cookies
+when preserving personal attribution. Credentials expire 30 days after issue; a new client identity
+does not recover another client's ownership or personal undo.
+
+The owner can use **Close session** to end it. In the browser, rejoin first if the owner has left and
+needs this control. Other participants cannot close it. An empty retained session does not block a
+standalone document import or history restore, but joined participants can.
+
+Three persistence actions have different scopes:
+
+|                        Action                        |                          What it preserves                           |                         What it does not do                         |
+|------------------------------------------------------|----------------------------------------------------------------------|---------------------------------------------------------------------|
+| Accepted session edits in Hibernate mode             | Recoverable session graph, semantic history and identity attribution | Create a Git checkpoint for each edit or export a portable document |
+| **Save checkpoint** outside collaboration            | A version of the separate standalone editor graph                    | Save the session just left; leaving reloads the standalone graph    |
+| **Save current document** in **Experiment document** | The complete standalone portable document workspace                  | Export the visible live-session graph or its edits                  |
+
+There is currently no UI transfer from a live collaboration graph to a portable document or stored
+checkpoint, and creating a session does not seed it from either one. Use the
+[desktop document workflow](portable-experiment-documents.md#desktop-open-edit-save-and-reopen) for
+an editable `.audioexp` round trip, and [version history](workflow-history-search.md) for checkpoints
+that already belong to the standalone editor. **Run selected commit** can execute a compatible
+stored graph without turning it into the live session.
+
+## When a step is blocked
+
+|                              Symptom                               |                                                       Next step                                                       |
+|--------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------|
+| Create/join disabled after typing a name                           | Select **Save display name** first.                                                                                   |
+| Session ID already exists                                          | Join that session, or choose another ID before creating a different session.                                          |
+| Private workspace cannot be joined                                 | Use its owner client, or create a shared session with the intended mode.                                              |
+| Connection is reconnecting; palette or history controls are paused | Wait for `live`; the client reloads canonical state and capabilities before editing resumes.                          |
+| Edit/undo reports a stale revision                                 | Review the refreshed graph and obtain a new preview before submitting the intended action again.                      |
+| Command result is uncertain                                        | Reload history or use **Retry same command**; retain the shown command ID.                                            |
+| Identity expired or no longer matches the signed-in account        | Follow the identity error and start a new client identity; previous ownership is not automatically transferred.       |
+| Run disabled                                                       | Read **Selected workflow readiness**, correct graph/parameter errors, and wait for preflight of the current revision. |
+| History search is absent                                           | Configure Hibernate persistence; the indexed drawer is not available in memory/filesystem modes.                      |
+
 ## What collaboration changes
 
 Without an active session, the initial workflow is a read-only example.
@@ -132,7 +295,9 @@ See [Two-browser collaboration end-to-end tests](../collaboration-e2e.md).
 - Yjs, when present, is not authoritative for nodes, edges or properties.
 - A cached history row is descriptive; only a fresh preview and command authorize an inverse.
 - Live-session checkpoint behavior remains separate from semantic editing.
-- Full durable process-restart E2E coverage is still tracked by issue #249.
+- Full durable process-restart E2E coverage is implemented; see
+  [durable restart evidence](../durable-restart-e2e.md). It verifies session/outbox and checkpoint
+  recovery separately and does not imply automatic live-session checkpoints or durable run jobs.
 
 For implementation details, see:
 

@@ -64,6 +64,7 @@ audio-geometry
 audio-acquisition           -> audio-core, audio-geometry
 audio-dsp                   -> audio-core
 audio-plugin-api            stable host contracts; no audio-* dependencies
+audio-experiment-document   -> audio-core, audio-plugin-api; portable document codec and lifecycle
 audio-experimental-acoustic -> stable audio modules + audio-plugin-api
 audio-web-editor            React/TypeScript source and packaged static assets
 audio-app                   -> stable modules; Swing host and Spring Boot workbench
@@ -77,8 +78,9 @@ The opt-in `workbench-screenshot-tests` module is added only by the `screenshot-
 - `audio-core` owns immutable audio types, ring-buffer contracts, workflow models, deterministic workflow operations and execution-domain contracts.
 - `audio-geometry` owns reusable 2D geometry and localization constraints.
 - `audio-acquisition` owns microphone metadata, channel/array descriptions, sources and clocks.
-- `audio-dsp` owns decoding, processors, FFT, analyzers, diagnosis and the `.aar` recording format.
+- `audio-dsp` owns decoding, processors, FFT, analyzers, diagnosis and the `.aarec` recording format with legacy `.aar` reading.
 - `audio-plugin-api` owns stable host-facing extension contracts.
+- `audio-experiment-document` owns portable setup validation, canonical hashes, plugin migrations and document sessions.
 - `audio-experimental-acoustic` owns localization, dataset, simulation and tracking research.
 - `audio-web-editor` owns the maintained React Flow client and reproducible production assets.
 - `audio-app` owns Swing rendering, JavaSound/demo wiring, Spring HTTP/SSE adapters, persistence integration, exports and plugin hosting.
@@ -204,7 +206,7 @@ Authoritative data is split deliberately:
 - live collaboration truth: durable session/operation state and canonical workflow projection;
 - version history: deterministic workflow DSL committed through `VersionedWorkflowStore`;
 - transport work: transactional outbox rows;
-- future search: rebuildable derived projections, never authority.
+- search: rebuildable generic and workflow-semantic projections, never authority.
 
 A live operation and its outbox row share one Hibernate transaction. A Git checkpoint remains a separate explicit application command unless a verified shared transaction contract says otherwise.
 
@@ -223,6 +225,7 @@ A plugin may contribute:
 - processing pipelines and snapshot streams;
 - visualization descriptions;
 - calibration and benchmark definitions;
+- versioned experiment-document sections, schemas and adjacent migrations;
 - exports, menu actions and optional Swing views.
 
 The host loads each plugin independently so one invalid provider does not prevent other plugins from loading.
@@ -261,11 +264,17 @@ Stable domain packages must not import Swing, Spring, JGit, Hibernate, Playwrigh
 
 ## Current open architecture work
 
-The collaborative workflow platform now covers durable restart, indexed history search, immutable execution, semantic undo/redo and deterministic three-way merge. The remaining open architecture and research slices are concentrated in the experimental acoustic-localization path:
+The platform implements durable restart, combined indexed history search, immutable execution,
+semantic undo/redo, three-way merge, portable documents and the standalone microphone workflow.
+The implementations retain explicit boundaries:
 
-- synchronization and microphone-array calibration (#136);
-- advanced measurable localization algorithms (#138);
-- the complete real-world hardware-to-localization workflow (#139).
+- the browser's portable document workspace and its active collaboration graph are separate sources;
+- the deterministic graph backend executes the documented generator/gain chain;
+- the standalone acoustic path has a fixed 2D search envelope and experimental timing/accuracy limits;
+- real hardware, independent-device capture and wider-room accuracy require separate validation.
+
+The [current QA findings](docs/QA-FINDINGS.md) identify source-audited restrictions and unperformed
+hardware checks. Closed implementation issues are not presented as future work.
 
 See [`ROADMAP.md`](ROADMAP.md).
 

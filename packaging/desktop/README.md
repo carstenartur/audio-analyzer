@@ -12,6 +12,18 @@ The image under `target/desktop/AudioAnalyzer` includes its own Java runtime. Th
 desktop launcher JAR and its runtime libraries; it excludes the web executable, reports and build
 diagnostics. It checks the desktop manifest before invoking `jpackage`.
 
+On Linux, start the app image with `target/desktop/AudioAnalyzer/bin/AudioAnalyzer`. To check its
+document launcher without installing a file association, pass a fixture path explicitly:
+
+```bash
+target/desktop/AudioAnalyzer/bin/AudioAnalyzer docs/examples/minimal.audioexp
+```
+
+Expect the desktop workbench and **Preview experiment document**. Continue with
+[open, edit, save and reopen](../../docs/features/portable-experiment-documents.md#desktop-open-edit-save-and-reopen)
+to verify a complete document round trip. An installed platform association adds the file-manager
+entry point to that same preview flow.
+
 ## Native installers
 
 Create installers on their target operating system using a JDK that includes `jpackage` and the
@@ -40,6 +52,11 @@ A file-manager open action passes the selected path to `ExperimentWorkbenchLaunc
 arguments and supported desktop open-file events enter the same document inspection workflow. The
 application shows the preview before the user chooses whether to apply the document; opening a file
 does not begin capture, execute a workflow or authorize local device/output bindings.
+
+After installing the native package, open an `.audioexp` from the file manager or use **Open with →
+AudioAnalyzer** if another application currently owns the extension. Review the preview, then choose
+**Open document**. The first save requires a different output filename; the imported file remains
+protected. To inspect an unsupported required plugin, use the read-only path and export a copy.
 
 For a release smoke test, install the native package, open `docs/examples/minimal.audioexp` through the
 file manager and confirm that the preview is shown. Repeat with a path containing spaces, the

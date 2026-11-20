@@ -29,6 +29,12 @@ public final class PlotRenderTheme {
   public static final Font LABEL_FONT = new Font(Font.SANS_SERIF, Font.PLAIN, 12);
   public static final Font TITLE_FONT = new Font(Font.SANS_SERIF, Font.BOLD, 12);
 
+  /** Space for a rotated axis title, frequency tick labels and their separating gaps. */
+  public static final int LEFT_AXIS_MARGIN = 80;
+
+  /** Space for separate tick-label and axis-title rows below a plot. */
+  public static final int BOTTOM_AXIS_MARGIN = 44;
+
   public static final BasicStroke GRID_STROKE = new BasicStroke(1f);
   public static final BasicStroke AXIS_STROKE = new BasicStroke(1.2f);
   public static final BasicStroke TRACE_STROKE =
@@ -43,7 +49,9 @@ public final class PlotRenderTheme {
   private static final double MAG_EPSILON = 1.0e-7d;
   private static final int TICK_SIZE = 4;
 
-  private PlotRenderTheme() {}
+  private PlotRenderTheme() {
+    // Static plotting theme and drawing helpers.
+  }
 
   /** Enables high quality 2D rendering hints. */
   public static void applyQualityRendering(Graphics2D g2) {
@@ -63,6 +71,11 @@ public final class PlotRenderTheme {
       Graphics2D g2, int width, int height, Rectangle plotBounds) {
     g2.setColor(PANEL_BACKGROUND);
     g2.fillRect(0, 0, width, height);
+    drawPlotBackground(g2, plotBounds);
+  }
+
+  /** Fills only the plot rectangle, preserving other panels on a shared canvas. */
+  public static void drawPlotBackground(Graphics2D g2, Rectangle plotBounds) {
     g2.setColor(PLOT_BACKGROUND);
     g2.fillRect(plotBounds.x, plotBounds.y, plotBounds.width, plotBounds.height);
   }
@@ -123,7 +136,7 @@ public final class PlotRenderTheme {
     g2.setColor(TEXT_MUTED);
     int textWidth = g2.getFontMetrics().stringWidth(label);
     int x = plotBounds.x + Math.max(0, (plotBounds.width - textWidth) / 2);
-    int y = plotBounds.y + plotBounds.height + 16;
+    int y = plotBounds.y + plotBounds.height + 34;
     g2.drawString(label, x, y);
   }
 
@@ -132,7 +145,7 @@ public final class PlotRenderTheme {
     g2.setFont(LABEL_FONT);
     g2.setColor(TEXT_MUTED);
     int textWidth = g2.getFontMetrics().stringWidth(label);
-    int x = Math.max(10, plotBounds.x - 34);
+    int x = Math.max(14, plotBounds.x - 64);
     int y = plotBounds.y + plotBounds.height / 2 + textWidth / 2;
     AffineTransform savedTransform = g2.getTransform();
     try {

@@ -11,14 +11,14 @@ or programmatically via `DatasetWingbeatEvaluationWorkflow`.
 
 ## Prerequisites
 
-- Java 21+ and Maven installed
+- Java 21+, Maven (or the repository wrapper), and a graphical desktop
 - A local copy of the HumBugDB export (see below)
 
 ## Obtaining the Dataset
 
 HumBugDB is available from the [HumBug Mosquito project](https://github.com/HumBug-Mosquito/HumBugDB)
-and the linked Zenodo release. The dataset uses a CC BY 4.0 licence; check the release notes before
-using it.
+and the linked Zenodo release. Keep the exact release identifier and its dataset licence with your
+results; the code repository's licence does not by itself establish the licence of every dataset export.
 
 After downloading and extracting, you should have a directory structure similar to:
 
@@ -35,19 +35,43 @@ humbugdb-root/
 
 **Status: Implemented**
 
-1. Build and launch the application: `./mvnw clean package && java -jar audio-app/target/audio-app-*.jar`
+Build from the repository root and explicitly select the desktop artifact. The same build also creates
+a `*-workbench.jar` for the browser host, so a glob matching both is not a desktop launch command:
+
+```bash
+./mvnw clean package
+DESKTOP_JAR=$(find audio-app/target -maxdepth 1 -type f \
+  -name 'audio-app-*.jar' ! -name '*-workbench.jar' -print -quit)
+java -jar "$DESKTOP_JAR"
+```
+
+On Windows use `mvnw.cmd` and launch the unclassified `audio-app-<version>.jar`; see
+[Getting started](../../getting-started.md).
+
+1. Launch the desktop application using the command above.
 2. Open **Plugins > Experimental Acoustic Localization > Open: Imported Recording Workbench (experimental)**
 3. Click **Browse…** and navigate to your local `humbugdb-root` directory.
 4. Click **Import** to load the dataset into a `DatasetManifest`.
+5. Wait for the import and analysis to finish. Inspect the manifest, select a **Recording**, and click
+   **Replay analysis** for its features and baseline classifier output.
+6. Choose a **Calibration scope**, then **Run calibration** when comparing the synthetic generator
+   with the imported feature distribution. This is generator calibration, not array timing calibration.
 
-After import, the workbench displays four panels:
+After import, the workbench displays six report areas:
 
-|        Panel         |                                           Content                                           |
-|----------------------|---------------------------------------------------------------------------------------------|
-| Manifest             | Recording list with duration, sample rate and labels                                        |
-| Analytics            | Dataset analytics: recording count, label distribution, sample-rate and duration statistics |
-| Recording inspection | Per-recording feature extraction and classifier output                                      |
-| Evaluation summary   | Accuracy, per-label precision/recall and confusion matrix                                   |
+|         Panel         |                                           Content                                           |
+|-----------------------|---------------------------------------------------------------------------------------------|
+| Manifest              | Recording list with duration, sample rate and labels                                        |
+| Analytics             | Dataset analytics: recording count, label distribution, sample-rate and duration statistics |
+| Recording inspection  | Per-recording feature extraction and classifier output                                      |
+| Evaluation summary    | Accuracy, per-label precision/recall and confusion matrix                                   |
+| Feature histograms    | Distributions of the extracted recording features                                           |
+| Generator calibration | Before/after feature comparisons for the selected calibration scope                         |
+
+An import error is shown in the manifest area. Check that the chosen directory is the export root,
+the metadata CSVs exist, and the referenced local WAV files are available. This panel does not download
+missing data or import experiment `.aarec` recordings. Preserve the dataset version, labels and input
+files to repeat an evaluation. The code route below exposes report strings for saving alongside them.
 
 ### From Code
 

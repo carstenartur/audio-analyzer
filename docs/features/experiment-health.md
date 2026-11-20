@@ -83,6 +83,20 @@ processing budget and plugin versions. Its complete/incomplete decision also ins
 recording, checks cancellation and required artifacts, and persists the actual manifest and hash
 inventory before enabling evidence export. See [microphone experiments](microphone-experiments.md)
 and [recording and replay](recording-and-replay.md).
+
+Read a successful state in the scope of the requested run. A five-second replay can finish with complete
+evidence for those five seconds while the source file is longer. Compare intended duration and processed
+frames with the recording's frame count before claiming that the entire input was analyzed. The current
+standalone acoustic provider also uses a fixed 3 × 2 m search region and fixed DSP settings; readiness
+does not establish that a different physical room or frequency range is covered. The
+[standalone limits](microphone-experiments.md#standalone-localization-limits) state those values.
+
+Historical calibration has a further current limitation: replay readiness uses nominal non-live timing,
+but the runner applies a supplied profile's calibration against the current wall clock. An expired
+profile can therefore pass preflight and be rejected during processing. This is a source-audited
+implementation limit, not a hardware test result; see
+[historical replay](microphone-experiments.md#current-calibration-limit-for-historical-replay).
+
 The localization provider declares its required report filenames separately from the reports it
 actually produces. The acoustic provider requires `localization.csv` and `summary.md`, plus
 `benchmark.md` when benchmark evidence is available. The host checks that every declared report was
@@ -92,6 +106,20 @@ Acknowledgements made after finalization rewrite the persisted health report and
 under the same evidence lock as ZIP export, so downloaded history matches the acknowledged state.
 The recording file SHA-256 includes the footer and matches the artifact inventory; the separately
 named verified-content SHA-256 covers only the bytes protected by the recording format's footer.
+
+For an operator, the next step follows the visible condition:
+
+|                            Condition                             |                                                                                               Next step                                                                                                |
+|------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Edited profile or changed source choices                         | Save the profile and run a new readiness check before starting                                                                                                                                         |
+| Blocking source, format, calibration or replay-integrity finding | Resolve the named condition; acknowledgement cannot authorize Start                                                                                                                                    |
+| Acknowledgeable runtime warning                                  | Inspect its detail, record acknowledgement if appropriate, and continue monitoring; history remains                                                                                                    |
+| Early stop, missing blocks or incomplete recording               | Export available incomplete evidence and preserve the source before recovery                                                                                                                           |
+| Finalization failed and evidence export unavailable              | In the browser, use **Export diagnostic snapshot**; in the desktop microphone workflow, copy the health text and evidence history. Retain managed files; no completed evidence download is established |
+
+The [operator guide](microphone-experiments.md#replay-and-recovery) explains which recovered inputs can
+be replayed. A new valid footer does not remove retained frame gaps or turn a failed original run into
+complete historical evidence.
 
 ### Microphone runtime examples
 

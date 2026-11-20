@@ -9,7 +9,10 @@ These pages explain user-visible behavior in more depth than the project README.
 
 ## Reproduce and compare an experiment
 
-- [Recording and replay](recording-and-replay.md) — capture produced `AudioBlock`s into a `.aar` file and replay them through the same analysis pipeline.
+- [Microphone experiments](microphone-experiments.md) — run a simulation or configured live/replay source, monitor recording and export evidence.
+- [Experiment readiness and runtime health](experiment-health.md) — understand configuration blockers, runtime warnings and complete/incomplete evidence.
+- [Recording and replay](recording-and-replay.md) — capture `AudioBlock`s into a verified `.aarec` file, inspect or recover recordings, and replay them through the analysis pipeline.
+- [Portable experiment documents](portable-experiment-documents.md) — validate, open, edit, save and reopen portable setups, with separate desktop and browser instructions.
 - [A/B comparison](ab-comparison.md) — compare two recordings and render a Markdown report for QA, regression notes or experiment records.
 - [Workflow history search](workflow-history-search.md) — search indexed checkpoint messages, paths and workflow DSL, then load the exact matching commit.
 

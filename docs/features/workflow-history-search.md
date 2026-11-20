@@ -1,28 +1,110 @@
 # Workflow history search
 
-Audio Analyzer provides three complementary ways to query versioned workflow history.
+Use **Search version history** to find exact stored workflow checkpoints, compare them and restore
+an earlier graph as a new audited commit. This searches Git checkpoints, not the individual edits in
+a collaboration session's **Semantic history** panel.
+
+## Prerequisites and a first pair of checkpoints
+
+1. Build the packaged application using [Getting started](../getting-started.md). Start it with the
+   local H2 or PostgreSQL configuration in [Hibernate-backed persistence](../workbench-hibernate-persistence.md).
+   Supply the explicit data source, enable migrations and keep Hibernate schema validation enabled.
+   The indexed drawer is unavailable in the default `memory` mode and in `filesystem` mode.
+2. Open [http://localhost:8080/workbench](http://localhost:8080/workbench), or the configured host and
+   port. Leave any collaboration session before loading or restoring historical state. Search and
+   comparison are read-only and can still be used while collaborating.
+3. If the branch already has checkpoints, continue with the search below. For a small first example,
+   use the [portable document desktop exercise](portable-experiment-documents.md#desktop-open-edit-save-and-reopen)
+   to create `portable-review.audioexp` from `docs/examples/minimal.audioexp`, keeping the workflow ID.
+4. Outside collaboration, use **Experiment document** to preview and open the original minimal
+   fixture. In the right-hand **Checkpoint** section, set **Branch** to `main`, enter the message
+   `Portable baseline` and select **Save checkpoint**. Expect a saved commit ID and a history entry.
+   This persists the standalone graph; it does not archive the complete portable envelope.
+5. Preview and open `portable-review.audioexp`, resolving any dirty-document prompt deliberately.
+   Save another checkpoint on `main` with message `Portable review`. Both checkpoints have workflow
+   ID `example.workflow`, but the second has the changed workflow name. Keep the `.audioexp` copies
+   separately to retain profiles, plugin data, assets and provenance as a complete setup.
+
+**Save checkpoint** is disabled during collaboration. Leaving a session restores the standalone
+editor graph; it does not transfer the session's edits to checkpoint history. Creating a new session
+also does not adopt a loaded checkpoint. See [state and persistence boundaries](collaborative-workflows.md#leave-return-and-preserve-work).
+
+## Search, inspect and load an exact version
+
+1. Select **Search version history**. Set **Authoritative branch to search, rebuild and operate on**
+   to `main`, or the branch that owns your checkpoints. The field applies to search, compare, restore
+   and rebuild; it is not just a maintenance setting.
+2. For the fixture example, enter `Portable` in **Full-text query**, `example.workflow` in
+   **Exact workflow ID**, and a result limit of at least 2. Leave unrelated filters blank. Select
+   **Search combined indexes**. Expect both checkpoint messages with exact commit identity, author,
+   time, changed-path and workflow evidence.
+3. Refine a query with **Exact node type**, **Exact node ID**, **Workflow name or node label**, or
+   **Exact property key/value** when those facts exist in your graph. For example, `gain` is the
+   exact type of a catalog Gain node, and `gain.factor` is its execution parameter key. The minimal
+   fixture has no nodes, so a Gain filter correctly removes its results. All supplied filters must
+   match the same commit; the final result limit is applied after semantic candidate filtering.
+4. To inspect one matching graph on the canvas, retain any unsaved standalone document first with
+   **Save current document** and its download acknowledgement. Select that result's **Load exact
+   version**. The workbench reloads with the exact stored graph. Loading does not move the branch
+   HEAD, create a restore commit or join a collaboration session.
+5. After reload, reopen **Search version history** and repeat the query if needed. To return to the
+   newer graph, load its exact result; to change the branch's current version, use restore below.
+
+Time bounds use the browser's local date/time and are sent as inclusive instants. **Exact author
+email** matches stored commit evidence, not a collaboration display name. **Changed-path terms**
+uses path components, so `workflow` can match `workflow.dsl`. Start with a blank query and only the
+branch when diagnosing unexpectedly empty results, then add filters one at a time.
+
+## Compare and restore
+
+Under **Compare and restore exact versions**, choose two search results in **Before commit** and
+**After commit**, then select **Compare exact commits**. Both must be reachable from the selected
+branch and have the same workflow ID. Comparison does not change the canvas or history. For the
+name-only fixture example, the heading shows `Portable example → Portable review` and the changes
+include `WORKFLOW_FIELD_CHANGED` for `example.workflow` at `name`. The API includes the complete
+before/after graph projections as well as its typed changes.
+
+To make an earlier version current on the branch:
+
+1. Save any standalone document you need to retain. Leave collaboration; active joined participants
+   on the affected workflow must also leave before the server allows restore. Historical load and
+   restore replace the standalone graph; they do not provide the document Open save/discard dialog.
+2. Select the desired **Version to restore** from the search results and select **Restore as new
+   commit**. This button submits the restore; there is no additional preview confirmation dialog.
+3. The client reads the current branch HEAD and submits it as the expected HEAD. Success creates a
+   new commit containing the selected historical graph, then loads that new commit and reloads the
+   workbench. The older and later commits remain in history.
+4. Search again or use **Refresh history** to inspect the new restore commit. If the branch advanced
+   concurrently, review the latest history and deliberately retry. A rejected stale restore does
+   not move the branch backward.
+
+## Empty results and recoverable failures
+
+|                           Symptom                            |                                                                    What to check or do                                                                     |
+|--------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| No **Search version history** control                        | Confirm the server is running in Hibernate mode with indexed-history configuration. A browser reload does not enable persistence.                          |
+| No matching checkpoints                                      | Check branch, exact IDs/types and filters; confirm **Save checkpoint** actually succeeded. Session operations are not Git checkpoints.                     |
+| Checkpoint exists but its derived search evidence is missing | Select the correct branch and **Rebuild missing projections**, then search again. Rebuild reads authoritative Git history and does not create checkpoints. |
+| Invalid time bounds                                          | Enter valid browser-local times with the lower bound no later than the upper bound.                                                                        |
+| Load/restore asks you to leave collaboration                 | Leave the session before replacing the standalone graph. Restore can also be blocked by other active members of the affected workflow.                     |
+| `STALE_WORKFLOW_HEAD`                                        | Search/refresh current history, review the new HEAD and submit a new deliberate restore.                                                                   |
+| Semantic evidence changed during a query                     | Retry against the current projections; use rebuild if the projection is incomplete.                                                                        |
+
+## Search model
+
+Audio Analyzer provides complementary domain and indexed search contracts.
 
 - `WorkflowHistorySearch` in `audio-core` performs exact semantic queries over a bounded set of already loaded authoritative workflow snapshots.
 - `IndexedWorkflowHistorySearch` uses the shared `jgit-storage-hibernate-search` projection for repeated compound queries over commit messages, authors, changed paths, commit time and changed `workflow.dsl` content.
 - `IndexedWorkflowSemanticHistorySearch` uses an Audio Analyzer-owned branch-aware projection for workflow ids/names, node ids/types/labels and selected workflow/node metadata.
+- `IndexedWorkflowCombinedHistorySearch` applies semantic candidate selection before generic filtering, ranking and the final limit. The production drawer uses this combined contract.
 
 Every indexed result contains the exact Git commit identifier. The matching workflow is loaded through `VersionedWorkflowStore.loadAtCommit`; neither Lucene projection becomes workflow authority.
 
-```text
-checkpoint -> Hibernate-backed JGit commit and ref update
-           -> best-effort generic CommitIndexer upsert
-           -> best-effort branch-semantic reconciliation
-
-generic query  -> one bounded CommitHistoryQuery
-               -> generic GitHistorySearchService
-               -> exact CommitId
-
-semantic query -> branch + exact workflow/node/property predicates
-               -> application semantic projection
-               -> exact CommitId
-
-exact CommitId -> authoritative workflow snapshot from Git
-```
+Checkpoint creation updates authoritative Git history and then the rebuildable generic and semantic
+projections. A combined query selects all exact branch-reachable semantic candidate commit IDs,
+applies generic predicates and ranking within that set, and limits only the final results. Loading
+uses the resulting exact commit ID to read the authoritative workflow snapshot from Git.
 
 ## Projection ownership
 
@@ -92,6 +174,8 @@ The production panel supports:
 - exact author-email filtering;
 - analyzed changed-path terms;
 - inclusive lower and upper commit-time bounds entered in local browser time and transmitted as instants;
+- branch reachability and exact workflow id, node id and node type filters;
+- workflow-name/node-label full-text expressions and exact correlated metadata key/value filters;
 - bounded result counts from 1 to 200;
 - explicit idempotent rebuild from an authoritative branch;
 - exact commit identity, author, timestamp and changed-path evidence per result;
@@ -99,7 +183,8 @@ The production panel supports:
 - comparing two exact result commits reachable from the selected branch;
 - restoring one exact result as a **new audit commit** on the selected branch.
 
-All supplied generic predicates execute in one bounded server-side query. The client does not intersect independently truncated result lists.
+Generic predicates and the full semantic candidate set execute in one bounded server-side query.
+The client does not intersect independently truncated result lists.
 
 Changed paths use a dedicated, language-neutral analyzer in the shared projection. It splits path punctuation and lowercases components, so `workflow` matches `workflow.dsl`. Language-specific stemming is separately configurable for commit-message fields in `jgit-storage-hibernate`; it is not applied to paths, identifiers or changed source text.
 
@@ -111,7 +196,10 @@ Comparison is read-only. Both commits must be reachable from the requested branc
 - full transport-safe graph projections for both states;
 - ordered semantic change atoms produced by `WorkflowDiff`.
 
-Full graph projections are included because node labels, workflow names and other visible fields may differ even when the current `WorkflowDiff` atom model does not yet assign a dedicated change subtype.
+`WorkflowDiff` includes workflow name/metadata, node type/label/ports and edge endpoint field changes,
+alongside additions/removals and metadata parameter changes. The HTTP projection uses
+`WORKFLOW_FIELD_CHANGED`, `NODE_FIELD_CHANGED` and `EDGE_FIELD_CHANGED` for those field atoms. Full
+before/after graph projections remain available for inspecting the complete states.
 
 ```text
 POST /workflow/history/compare
@@ -167,6 +255,32 @@ GET /workflow/history/index
 
 Every filter is optional. Blank full text with structured filters uses the shared relational newest-first query path; a non-blank expression combines the remaining predicates as filters.
 
+## Combined HTTP API used by the drawer
+
+```text
+POST /workflow/history/combined/query
+Content-Type: application/json
+```
+
+```json
+{
+  "generic": {
+    "text": "Portable",
+    "limit": 20
+  },
+  "semantic": {
+    "branch": "main",
+    "workflowId": "example.workflow"
+  }
+}
+```
+
+The generic object also accepts `authorEmail`, `pathText`, `from` and `to`; the semantic object also
+accepts `nodeId`, `nodeType`, `labelText`, `propertyKey` and `propertyValue`. `branch` is the required
+reachability boundary. Each response hit includes nested generic commit evidence and semantic
+evidence for that same exact commit. See [the combined query plan](../architecture/workflow-history-search.md)
+for the full contract and its correctness evidence.
+
 ## Semantic HTTP API
 
 Search domain semantics for commits reachable from one branch:
@@ -195,8 +309,15 @@ A negative limit means all commits reachable from the branch head. The operation
 
 ## Query-composition boundary
 
-The generic and semantic search endpoints remain intentionally separate. Intersecting two independently limited result lists would produce incorrect omissions. A future combined endpoint must either execute one bounded server-side plan or use an explicitly continued commit-id candidate plan before ranking and limiting.
+The specialized generic and semantic endpoints remain available for their own bounded queries. The
+implemented combined endpoint composes the complete semantic candidate set with generic ranking
+before applying the final limit; it does not intersect two independently truncated hit lists. An
+explicitly empty candidate set returns no hits. If semantic evidence changes during composition, the
+query fails explicitly so the caller can retry instead of receiving partly evidenced results.
 
 ## Current boundary
 
-No JGit, Hibernate, Hibernate Search or Lucene type crosses into `audio-core`, the frontend or HTTP response models. Remaining issue #247 work is the correctness-preserving combined generic/semantic query plan and semantic filter controls in the production drawer.
+No JGit, Hibernate, Hibernate Search or Lucene type crosses into `audio-core`, the frontend or HTTP
+response models. Combined generic/semantic queries and semantic controls in the production drawer
+are implemented. Version search still operates on explicit checkpoints, not live collaboration edits
+or durable run records.

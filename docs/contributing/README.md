@@ -16,7 +16,10 @@ For the high-level project structure and dependency rules see
 | `audio-geometry`              | **Stable**       | 2D positions, rays and localization geometry primitives.                                                        |
 | `audio-acquisition`           | **Stable**       | `Microphone`, `MicrophoneArray`, `MultiChannelAudioSource`, `SampleClock` (no JavaSound / no Swing).            |
 | `audio-dsp`                   | **Stable**       | DSP pipeline, FFT, analyzers (`RmsPeak`, `Spectrum`, `StereoDelay`, `Spectrogram`, `Diagnosis`), generators.    |
+| `audio-plugin-api`            | **Stable**       | Host-facing plugin contributions, including versioned experiment sections.                                      |
+| `audio-experiment-document`   | **Stable**       | Portable experiment codec, schema validation, migrations, session lifecycle and CLI.                            |
 | `audio-experimental-acoustic` | **Experimental** | Wingbeat tracking, GCC-PHAT/cross-correlation TDOA, delay-and-sum beamformer, 2D room simulator. Research code. |
+| `audio-web-editor`            | Application      | React Flow UI source and reproducible production assets.                                                        |
 | `audio-app`                   | Application      | Swing UI, JavaSound capture wiring, demo capture service, CSV / PNG / evidence-bundle export, entry point.      |
 
 Stable modules must not depend on `audio-app` or `audio-experimental-acoustic`. The

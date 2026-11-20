@@ -7,9 +7,38 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.awt.Graphics2D;
 import java.awt.Rectangle;
 import java.awt.image.BufferedImage;
+import java.util.function.Consumer;
 import org.junit.jupiter.api.Test;
 
 class PlotRenderThemeTest {
+
+  @Test
+  void xAxisTitleHasItsOwnLineBelowTickLabels() {
+    Rectangle plot = new Rectangle(80, 24, 200, 100);
+    Rectangle ticks =
+        renderedBounds(
+            g ->
+                PlotRenderTheme.drawXTicks(g, plot, new double[] {0.5}, new String[] {"11025 Hz"}));
+    Rectangle title =
+        renderedBounds(g -> PlotRenderTheme.drawXAxisLabel(g, plot, "Frequency [Hz]"));
+
+    assertTrue(title.y >= ticks.y + ticks.height + 4, "Axis title must not overlap tick labels");
+    assertTrue(title.y + title.height <= 168, "Axis title must fit within the bottom margin");
+  }
+
+  @Test
+  void yAxisTitleHasItsOwnColumnBeforeFrequencyTicks() {
+    Rectangle plot = new Rectangle(80, 24, 200, 100);
+    Rectangle ticks =
+        renderedBounds(
+            g ->
+                PlotRenderTheme.drawYTicks(g, plot, new double[] {0.5}, new String[] {"22.1 kHz"}));
+    Rectangle title =
+        renderedBounds(g -> PlotRenderTheme.drawYAxisLabel(g, plot, "Frequency [Hz]"));
+
+    assertTrue(title.x + title.width + 4 <= ticks.x, "Axis title must not overlap frequency ticks");
+    assertTrue(title.x >= 4, "Axis title must remain inside the left image margin");
+  }
 
   @Test
   void magnitudeToDb_appliesFloorForVerySmallValues() {
@@ -86,5 +115,27 @@ class PlotRenderThemeTest {
       }
     }
     return false;
+  }
+
+  private static Rectangle renderedBounds(Consumer<Graphics2D> drawing) {
+    BufferedImage image = new BufferedImage(320, 180, BufferedImage.TYPE_INT_ARGB);
+    Graphics2D graphics = image.createGraphics();
+    try {
+      PlotRenderTheme.applyQualityRendering(graphics);
+      drawing.accept(graphics);
+    } finally {
+      graphics.dispose();
+    }
+    Rectangle bounds = null;
+    for (int y = 0; y < image.getHeight(); y++) {
+      for (int x = 0; x < image.getWidth(); x++) {
+        if ((image.getRGB(x, y) >>> 24) != 0) {
+          Rectangle pixel = new Rectangle(x, y, 1, 1);
+          bounds = bounds == null ? pixel : bounds.union(pixel);
+        }
+      }
+    }
+    assertTrue(bounds != null, "The drawing must contain visible pixels");
+    return bounds;
   }
 }

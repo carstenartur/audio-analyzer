@@ -68,8 +68,8 @@ that need a reproducible end-to-end pipeline rather than a closed black box.
 
 - Beamforming approaches — implemented at the simplest level by
   `DelayAndSumBeamformer`, which scores caller-supplied candidate grids.
-- GCC-PHAT — implemented in `GccPhatTdoaEstimator` with PHAT weighting and
-  integer-sample delays (sub-sample refinement is future work).
+- GCC-PHAT — implemented by the integer-sample `GccPhatTdoaEstimator` baseline and the selectable
+  `SubSampleGccPhatTdoaEstimator`, with interpolated delays and peak-ambiguity diagnostics.
 - Generic TDOA localization — covered by the `TdoaEstimator` interface and the
   cross-correlation reference implementation.
 
@@ -78,7 +78,7 @@ that need a reproducible end-to-end pipeline rather than a closed black box.
 - Insect wingbeat analysis — motivates `WingbeatFrequencyTracker` and the
   narrowband simulator scenarios.
 - Acoustic species classification — explicitly out of scope; see
-  [`README.md` limitations](../README.md#limitations-and-non-goals).
+  [plugin interpretation rules](../README.md#interpretation-rules).
 
 ### 2.3 Doppler tracking
 
@@ -136,8 +136,9 @@ arrival is:
 ```
 
 where `d_i, d_j` are the Euclidean distances from the source to each microphone
-and `c` is the speed of sound. The current `GccPhatTdoaEstimator` returns
-integer-sample delays; sub-sample interpolation is listed as future work.
+and `c` is the speed of sound. `GccPhatTdoaEstimator` returns integer-sample delays;
+`SubSampleGccPhatTdoaEstimator` is the implemented interpolated alternative available in the desktop
+simulation workbench. The standalone microphone workflow currently uses the integer-sample default.
 
 ### 4.2 Doppler shift
 
@@ -209,7 +210,9 @@ Default 4-microphone planar array from `SimulationScenarios.defaultArray()`:
 
 - Spacing: ≈30 cm in x, 30 cm in y.
 - Sample rate: 16 kHz (matches `SimulationScenarios.SAMPLE_RATE`).
-- Synchronization: one shared `SampleClock`; drift modelling is future work.
+- Simulation synchronization: one shared `SampleClock`. A separate implemented calibration layer
+  models measured channel offsets and affine drift; automatic multi-device clock recovery remains
+  outside the live workflow.
 
 ### 5.3 Source configuration
 
@@ -262,11 +265,13 @@ Headline metrics:
 
 ## 8. Limitations
 
-Mirrors the canonical list in [`../README.md`](../README.md#limitations-and-non-goals):
+See the current [plugin interpretation rules](../README.md#interpretation-rules) and
+[synchronization limits](../README.md#synchronization-limits):
 
 - indoor reflections handled only with a simple specular model;
-- single shared sample clock; no drift compensation;
-- integer-sample TDOA resolution;
+- live acquisition opens one multichannel device; no automatic independent-device clock recovery;
+- integer-sample TDOA in the standalone workflow; the selectable sub-sample alternative still needs
+  measured accuracy validation;
 - sensitivity to low SNR, especially for sub-sample motion;
 - narrowband ambiguity between sources with overlapping fundamentals.
 
@@ -274,7 +279,7 @@ Mirrors the canonical list in [`../README.md`](../README.md#limitations-and-non-
 
 ## 9. Future work
 
-- adaptive beamforming and sub-sample GCC-PHAT interpolation;
+- adaptive beamforming and stronger physical validation of the implemented sub-sample GCC-PHAT;
 - ML-based species classification (explicitly out of scope today);
 - outdoor tracking and 3D arrays;
 - GPU acceleration of beamforming heatmaps;

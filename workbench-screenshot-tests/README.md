@@ -2,13 +2,18 @@
 
 This opt-in Maven module runs the packaged Spring Boot workbench through Testcontainers and Java Playwright. It owns executable documentation screenshots, two-browser collaboration scenarios and the durable full-process restart scenario.
 
-Run the complete browser suite with:
+From a clean checkout, first build the packaged application/reactor dependencies and install the
+pinned Chromium runtime using the [complete setup procedure](../docs/workbench-screenshot-pipeline.md#prepare-a-clean-checkout).
+Java 21+ and a working Docker daemon are required. Then run the complete browser suite from the root:
 
 ```bash
-mvn -B -Pscreenshot-tests -pl workbench-screenshot-tests verify
+./mvnw -B -Pscreenshot-tests -pl workbench-screenshot-tests -DupdateScreenshots=false verify
 ```
 
 The default Maven reactor remains Docker-free because this module is activated only by the `screenshot-tests` profile.
+
+Inspect Failsafe's test and skip counts. A green command with assumption-based skips does not verify
+the screenshots. Baseline updates require explicit `-DupdateScreenshots=true` and visual review.
 
 The durable restart scenario uses two independent application containers against the same mounted file-backed H2 database. It verifies collaboration recovery, idempotent operation retry, Hibernate-backed JGit checkpoint history and pending outbox publication after restart.
 

@@ -21,10 +21,10 @@ import org.hammer.audio.ui.theme.PlotRenderTheme;
 public class PhaseDiagramCanvas extends JPanel {
 
   private static final Logger LOGGER = Logger.getLogger(PhaseDiagramCanvas.class.getName());
-  private static final int LEFT_MARGIN = 44;
+  private static final int LEFT_MARGIN = PlotRenderTheme.LEFT_AXIS_MARGIN;
   private static final int RIGHT_MARGIN = 12;
   private static final int TOP_MARGIN = 20;
-  private static final int BOTTOM_MARGIN = 34;
+  private static final int BOTTOM_MARGIN = PlotRenderTheme.BOTTOM_AXIS_MARGIN;
 
   private AudioCaptureService audioCaptureService;
 

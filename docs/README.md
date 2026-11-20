@@ -5,6 +5,9 @@ Audio Analyzer is both an audio-processing workbench and a platform for reproduc
 ## Start here
 
 - [Getting started](getting-started.md) — build the project, launch the desktop or web workbench and run a first deterministic experiment.
+- [Microphone experiments](features/microphone-experiments.md) — complete simulation, live setup, replay/recovery and evidence workflows.
+- [Portable experiment documents](features/portable-experiment-documents.md) — open, edit, save and reopen a setup on the supported desktop/browser paths.
+- [Experiment readiness and runtime health](features/experiment-health.md) — understand blockers, warnings, recording capacity and final evidence.
 - [Feature guides](features/README.md) — focused guides for signal inspection, recording, comparison and collaborative workflows.
 - [Collaborative workflows](features/collaborative-workflows.md) — create sessions, edit a shared graph and use semantic undo/redo safely.
 - [Experimental acoustic localization](plugins/acoustic-localization.md) — research capabilities, evidence and current physical limitations.
@@ -42,7 +45,8 @@ Plugin implementation details intentionally live outside the project README. The
 - [Quality gates and coverage](quality.md)
 - [Workbench screenshot pipeline](workbench-screenshot-pipeline.md)
 - [Application and documentation QA plan](qa/application-documentation-qa-plan.md)
-- [Experiment operations and document interchange QA](qa/experiment-operations-and-interchange-qa-2026-07-22.md)
+- [Documentation and visual QA, 20 November 2026](qa/documentation-visual-review-2026-11-20.md)
+- [Historical experiment operations review, July 2026](qa/experiment-operations-and-interchange-qa-2026-07-22.md)
 - [Release-readiness checklist](qa/release-readiness-checklist.md)
 - [Current QA findings](QA-FINDINGS.md)
 
@@ -64,6 +68,6 @@ Public documentation follows four rules:
 
 1. Describe implemented behavior, not intended behavior.
 2. Distinguish stable platform capabilities from experimental research.
-3. Generate user-interface screenshots from executable integration scenarios.
+3. Generate user-interface screenshots from executable scenarios, label illustrations and test fixtures, and review all images visually.
 4. Link detailed architecture and development material instead of turning the README into an API manual.
 

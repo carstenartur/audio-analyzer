@@ -1,10 +1,13 @@
 # A/B comparison of recordings
 
-Audio Analyzer can compare two `.aar` recordings and render a Markdown report with measurement,
+Audio Analyzer can compare two current `.aarec` recordings or legacy `.aar` inputs and render a Markdown report with measurement,
 spectrum and diagnosis differences. The report is intended for QA notes, regression evidence and bug
 reports.
 
 ![A/B comparison spectra](../images/features/ab-comparison.png)
+
+This generated illustration compares deterministic example spectra; it is not a screenshot of the
+file chooser or report dialog. Inspect each recording's integrity before using it as experimental evidence.
 
 ## When to use it
 

@@ -29,10 +29,10 @@ public final class SpectrogramPanel extends javax.swing.JPanel {
   private static final int FFT_SIZE = 1024;
   private static final int HISTORY_FRAMES = 256;
   // Leaves room for frequency tick labels and the rotated Y-axis title.
-  private static final int LEFT_MARGIN = 52;
+  private static final int LEFT_MARGIN = PlotRenderTheme.LEFT_AXIS_MARGIN;
   private static final int RIGHT_MARGIN = 12;
   private static final int TOP_MARGIN = 18;
-  private static final int BOTTOM_MARGIN = 28;
+  private static final int BOTTOM_MARGIN = PlotRenderTheme.BOTTOM_AXIS_MARGIN;
   private static final float SAMPLE_RATE_TOLERANCE = 0.0001f;
 
   private AudioCaptureService audioCaptureService;

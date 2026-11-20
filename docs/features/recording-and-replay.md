@@ -5,6 +5,12 @@ file and can replay the recording through the same analysis pipeline later. Lega
 remain readable, but they cannot prove that recording ended cleanly because version 1 had no
 completion footer.
 
+The steps below use the desktop experiment host launched by the
+[current desktop startup command](../getting-started.md#explore-a-signal-in-the-desktop-workbench).
+For the browser's microphone-array experiment, use the separate
+[simulation, live, replay and evidence workflow](microphone-experiments.md). Its replay preflight is
+stricter than the generic desktop signal viewer.
+
 ## Use cases
 
 Use recording and replay to:
@@ -17,7 +23,8 @@ Use recording and replay to:
 
 ## Recording a session
 
-1. Start a capture source: live input, deterministic demo mode or replay.
+1. Select a capture source and start it. For a first hardware-free round trip, choose **Demo mode**,
+   select a sine signal and enable **Start/Stop**. Confirm that the waveform changes before recording.
 2. Choose **File > Start recording...**.
 3. Select a destination `.aarec` file.
 4. Review the storage preflight result. Recording is refused before the target is created when the
@@ -25,6 +32,12 @@ Use recording and replay to:
 5. Continue analyzing normally.
 6. Watch the persistent **Experiment recording** strip.
 7. Choose **File > Stop recording** or use the strip's Stop action.
+8. Wait for finalization and read the completion summary. Confirm written frames/blocks, zero drops
+   and gaps, the final state and the destination. Stop recording finalizes the recording; it does not
+   by itself stop the underlying signal source.
+9. Inspect the new file with **File > Inspect or recover recording...**. A normal new recording should
+   report version 2 and `COMPLETE`. Preserve an incomplete result and its warning history if the run
+   did not finish cleanly; a filename ending in `.aarec` is not proof of complete capture.
 
 The recording strip shows:
 
@@ -87,9 +100,17 @@ For the complete microphone-array workflow, use
 3. The active capture service is stopped and replaced by a replay service.
 4. Waveform, spectrum, spectrogram, phase, diagnosis and measurement panels process the replayed
    blocks as normal input.
+5. Observe the signal until EOF. Reopen the same file to repeat the analysis. To compare parameter or
+   software changes, retain the input file and record the configuration/version used in each pass.
 
 Replay does not loop automatically. When the file is exhausted, replay stops. Reopen the file to run
 it again.
+
+The desktop **File > Open recording...** chooser accepts `.aarec` and legacy `.aar`. This path
+replays a signal without restoring microphone geometry, a portable experiment document or a
+collaborative graph. For array localization, select the matching profile and the intended replay
+duration in [Recording replay](microphone-experiments.md#replay-and-recovery); its default five-second
+limit can otherwise analyze only a prefix of a longer input.
 
 ## File identity
 
@@ -139,13 +160,30 @@ complete blocks without presenting them as successful evidence.
 
 ## Non-destructive recovery
 
-**File > Inspect or recover recording...** previews integrity, format version, block/frame counts,
-continuity gaps and SHA-256. For explicitly incomplete, recoverable, truncated or corrupt input it can copy every complete
-readable block into a separate finalized `.aarec` file. The source bytes are never modified.
+1. Choose **File > Inspect or recover recording...** and select the original recording. For a remaining
+   `.partial` file, use the chooser's **All Files** filter or enter its filename directly.
+2. Read the integrity, format version, block/frame counts, continuity gaps and SHA-256. Save this
+   inspection information with the original file before recovery.
+3. For explicitly incomplete, recoverable, truncated or corrupt input, accept the offered recovery
+   action and choose a **different** `.aarec` destination. Recovery copies complete readable blocks;
+   an invalid header or an input with no complete blocks can prevent recovery.
+4. Inspect the recovered file again. Its valid footer proves that the new container finalized; its
+   frame indices and any continuity gaps still describe the original samples. Reopen it through
+   **File > Open recording...** when it is a readable finalized file.
+5. If using the recovered input in the microphone experiment workflow, import/select the new file
+   and repeat **Check experiment readiness**. Any retained continuity gap remains a blocker there.
+
+The source bytes are never modified. Recovery preserves frame indices, so it does not close a gap
+caused by a dropped block. The standalone microphone workflow also offers recovery for
+`LEGACY_UNVERIFIED` input so it can inspect a new verified version-2 container; the generic desktop
+inspection dialog permits clean legacy replay directly and does not offer that conversion action.
 
 Recovery proves the integrity of the new container; it does not recreate samples that were never
-written. Provenance should therefore retain the original inspection result and source digest in an
-experiment evidence package.
+written. Provenance should therefore retain the original inspection result and source file digest in
+an experiment evidence package. The managed microphone recovery path writes an inspection sidecar
+and includes it in later replay evidence. The generic desktop recovery dialog does not assemble that
+evidence package for you. See [Export and reopen evidence](microphone-experiments.md#export-and-reopen-evidence)
+for profile restoration, inventory verification and the complete replay round trip.
 
 ## Programmatic use
 
