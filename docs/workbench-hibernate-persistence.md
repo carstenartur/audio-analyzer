@@ -9,6 +9,40 @@ Maven resolves the Core and Search modules from Maven Central with its default s
 The root `pom.xml` selects the shared storage, JGit and Hibernate ORM versions.
 `audio-app/pom.xml` selects Flyway.
 
+The application intentionally selects both `jgit-storage-hibernate-core` and
+`jgit-storage-hibernate-search`. Search is an explicit application dependency, not an accidental
+transitive of Core. H2 and PostgreSQL are the selected database drivers; the Spring Boot runtime
+and Hibernate ORM are also selected by the application.
+
+The executable consumer contract can be invoked from any working directory:
+
+```bash
+JGIT_STORAGE_HIBERNATE_CONTRACT_MODE=baseline \
+  /path/to/audio-analyzer/.github/jgit-storage-hibernate-contract.sh
+```
+
+For a library candidate, first substitute its version into the consuming POM declarations, then
+set `JGIT_STORAGE_HIBERNATE_CONTRACT_MODE=candidate` and
+`JGIT_STORAGE_HIBERNATE_CANDIDATE_VERSION` before invoking the same script. Every declared storage
+module must resolve to that candidate; one matching artifact cannot hide another older module.
+
+The contract verifies and installs the application reactor with Java 21, runs the normal unit-test
+selection without the PostgreSQL container scenarios, and skips the separate Failsafe integration
+phase. It saves the runtime dependency tree plus the complete resolved artifact list, and compares
+every resolved runtime coordinate against the reviewed application-owned list
+in `.github/jgit-storage-hibernate-runtime-allowlist.txt`. Intentional runtime additions require
+updating that list; dependency version changes do not. Benchmark and test artifacts remain forbidden
+even if mistakenly added to the list. The archive check also inspects nested JARs and rejects packaged
+libraries absent from the resolved runtime. Spring Boot's own version-matched jarmode helper is the
+explicit packaging addition.
+
+Finally, the contract starts the packaged workbench with a new temporary H2 database, runs the
+released migrations and Hibernate validation, saves a real workflow checkpoint, reads its history
+and reloads it without changing the projection. It uses no external database or credentials.
+Dependency evidence, package names, runtime logs, the saved checkpoint/history/projection and
+machine-readable results remain in
+`target/jgit-storage-hibernate-contract/`. The normal Maven build retains its existing test selection.
+
 ```text
 io.github.carstenartur:jgit-storage-hibernate-core:0.12.2
 io.github.carstenartur:jgit-storage-hibernate-search:0.12.2
@@ -68,7 +102,7 @@ spring.datasource.password=${AUDIO_ANALYZER_DATABASE_PASSWORD}
 Equivalent local H2 startup:
 
 ```bash
-java -jar audio-app/target/audio-app-0.0.4-SNAPSHOT-workbench.jar \
+java -jar audio-app/target/audio-app-0.1.0-SNAPSHOT-workbench.jar \
   --workbench.persistence.mode=hibernate \
   --workbench.persistence.repository-name=audio-analyzer-workflows \
   --workbench.persistence.migrations.enabled=true \
@@ -200,7 +234,7 @@ The old local bare-repository implementation remains available under an unambigu
 name:
 
 ```bash
-java -jar audio-app/target/audio-app-0.0.4-SNAPSHOT-workbench.jar \
+java -jar audio-app/target/audio-app-0.1.0-SNAPSHOT-workbench.jar \
   --workbench.persistence.mode=filesystem \
   --workbench.persistence.filesystem.path=./data/workbench.git
 ```
