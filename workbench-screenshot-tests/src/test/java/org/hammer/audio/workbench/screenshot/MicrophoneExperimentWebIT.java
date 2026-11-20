@@ -95,7 +95,7 @@ class MicrophoneExperimentWebIT {
       page.waitForCondition(
           () ->
               page.locator("[data-testid='experiment-health-state']").innerText().equals("READY"));
-      assertTrue(page.locator("[data-testid='experiment-start']").isEnabled());
+      assertThat(page.locator("[data-testid='experiment-start']")).isEnabled();
       screenshots.put("microphone-experiment-ready.png", screenshot(page));
 
       page.locator("[data-testid='experiment-source-mode']").selectOption("LIVE");
@@ -106,6 +106,10 @@ class MicrophoneExperimentWebIT {
               page.locator("[data-testid='experiment-health-state']")
                   .innerText()
                   .equals("BLOCKED"));
+      // Polling can expose the server preview before POST /preflight finishes in the client.
+      // Wait for the busy fieldset to clear after local preflight/storage/reviewed are committed,
+      // so screenshot masks and pixels both observe the finalized layout.
+      assertThat(page.locator("[data-testid='experiment-preflight']")).isEnabled();
       assertTrue(page.locator("[data-testid='finding-source.live-device']").isVisible());
       assertFalse(page.locator("[data-testid='experiment-start']").isEnabled());
       screenshots.put("microphone-experiment-blocked.png", screenshot(page));
@@ -197,7 +201,7 @@ class MicrophoneExperimentWebIT {
       page.waitForCondition(
           () ->
               page.locator("[data-testid='experiment-health-state']").innerText().equals("READY"));
-      assertTrue(page.locator("[data-testid='experiment-start']").isEnabled());
+      assertThat(page.locator("[data-testid='experiment-start']")).isEnabled();
       assertContrast(page.locator("[data-testid='experiment-health-state']"));
       assertContrast(page.locator(".experiment-help").first());
       assertContrast(page.getByLabel("Source mode", new Page.GetByLabelOptions().setExact(true)));
@@ -211,6 +215,7 @@ class MicrophoneExperimentWebIT {
               page.locator("[data-testid='experiment-health-state']")
                   .innerText()
                   .equals("BLOCKED"));
+      assertThat(preflight).isEnabled();
       assertFalse(page.locator("[data-testid='experiment-start']").isEnabled());
       assertContrast(page.locator("[data-testid='experiment-health-state']"));
       assertContrast(page.locator("[data-testid='finding-source.live-device'] strong"));

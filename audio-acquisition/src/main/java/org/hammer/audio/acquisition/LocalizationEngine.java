@@ -3,6 +3,7 @@ package org.hammer.audio.acquisition;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Consumer;
 
 /**
@@ -65,6 +66,7 @@ public interface LocalizationEngine {
    *
    * @param index zero-based processed block index
    * @param processingNanos processing duration
+   * @param processingBudgetNanos actual processing deadline used by the implementation
    * @param synchronization actual calibration/timing assessment
    * @param reliableTdoa whether physical delay consistency passed
    * @param tracks latest estimated positions
@@ -72,6 +74,7 @@ public interface LocalizationEngine {
   record Frame(
       int index,
       long processingNanos,
+      long processingBudgetNanos,
       SynchronizationAssessment synchronization,
       boolean reliableTdoa,
       List<Track> tracks) {
@@ -84,10 +87,16 @@ public interface LocalizationEngine {
   /**
    * Final compute evidence with an honest benchmark-availability flag.
    *
+   * <p>Declare required reports independently of the reports successfully generated. Hosts use this
+   * declaration to distinguish complete evidence from missing output; an empty declaration cannot
+   * establish complete standalone localization evidence. Each declared name must be a portable
+   * filename. Providers may choose their own report names and formats.
+   *
    * @param experiment experiment/profile/calibration identity actually used
    * @param blocks processed blocks
    * @param overruns blocks exceeding the real-time budget
    * @param benchmarkAvailable whether reference ground truth permitted benchmarking
+   * @param requiredArtifacts reports required for complete evidence, independent of generated keys
    * @param artifacts generated UTF-8 reports keyed by portable filename
    */
   record Result(
@@ -95,9 +104,12 @@ public interface LocalizationEngine {
       long blocks,
       long overruns,
       boolean benchmarkAvailable,
+      Set<String> requiredArtifacts,
       Map<String, String> artifacts) {
-    // Artifact content is fixed at completion.
+    // Preserve the expected-output contract even when a provider omits a report or later mutates
+    // inputs.
     public Result {
+      requiredArtifacts = Set.copyOf(requiredArtifacts);
       artifacts = Map.copyOf(artifacts);
     }
   }

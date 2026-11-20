@@ -58,7 +58,7 @@ public final class MicrophoneExperimentPanel extends JPanel implements AutoClose
   private final JTextArea definition = new JTextArea(18, 64);
   private final JTextArea health = readOnlyArea();
   private final JTextArea evidence = readOnlyArea();
-  private final JLabel status = new JLabel("NOT CONFIGURED — choose a source and review readiness");
+  private final JTextArea status = runtimeStatusArea();
   private final JButton check = new JButton("Check readiness");
   private final JButton startButton = new JButton("Start experiment");
   private final JButton stop = new JButton("Stop & finalize");
@@ -81,7 +81,12 @@ public final class MicrophoneExperimentPanel extends JPanel implements AutoClose
     this.service = service;
     setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
     getAccessibleContext().setAccessibleName("Microphone experiment workflow");
-    add(status, BorderLayout.NORTH);
+    add(
+        new JScrollPane(
+            status,
+            JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED,
+            JScrollPane.HORIZONTAL_SCROLLBAR_NEVER),
+        BorderLayout.NORTH);
     JTabbedPane tabs = new JTabbedPane();
     tabs.addTab("1. Source and profile", setupPanel());
     tabs.addTab(
@@ -264,27 +269,27 @@ public final class MicrophoneExperimentPanel extends JPanel implements AutoClose
     if (preflight != null && !running) {
       return;
     }
-    String recording =
-        snapshot.recording() == null
-            ? ""
-            : " · "
-                + snapshot.recording().state()
-                + " · "
-                + snapshot.recording().bytesWritten()
-                + " bytes · usable "
-                + snapshot.recording().storage().usableBytes()
-                + " · safe seconds "
-                + snapshot.recording().storage().estimatedSafeSecondsRemaining()
-                + " · dropped "
-                + snapshot.recording().droppedBlocks();
-    status.setText(snapshot.health().state() + " · " + snapshot.health().stage() + recording);
+    status.setText(
+        snapshot.health().experimentName()
+            + " · "
+            + snapshot.health().state()
+            + " · "
+            + snapshot.health().stage()
+            + " · Intended: "
+            + snapshot.health().facts().getOrDefault("intended.seconds", "unknown")
+            + " s\n"
+            + RecordingStatusText.summary(snapshot.recording()));
+    status.setCaretPosition(0);
     status.setForeground(
         snapshot.recording() != null
                 && snapshot.recording().state()
                     == org.hammer.audio.recording.runtime.RecordingState.RECORDING
-            ? new Color(255, 105, 105)
+            ? new Color(255, 160, 160)
             : javax.swing.UIManager.getColor("Label.foreground"));
-    health.setText(describe(snapshot.health()));
+    health.setText(
+        describe(snapshot.health())
+            + "\n\nRecording runtime:\n"
+            + RecordingStatusText.details(snapshot.recording()));
     trackModel.setRowCount(0);
     snapshot
         .tracks()
@@ -512,6 +517,15 @@ public final class MicrophoneExperimentPanel extends JPanel implements AutoClose
     area.setEditable(false);
     area.setLineWrap(true);
     area.setWrapStyleWord(true);
+    return area;
+  }
+
+  private static JTextArea runtimeStatusArea() {
+    JTextArea area = new JTextArea("NOT CONFIGURED — choose a source and review readiness", 8, 0);
+    area.setEditable(false);
+    area.setLineWrap(true);
+    area.setWrapStyleWord(true);
+    area.getAccessibleContext().setAccessibleName("Experiment runtime status");
     return area;
   }
 

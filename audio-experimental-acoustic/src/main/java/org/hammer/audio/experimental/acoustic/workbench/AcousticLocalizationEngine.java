@@ -3,6 +3,7 @@ package org.hammer.audio.experimental.acoustic.workbench;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.function.Consumer;
 import org.hammer.audio.acquisition.LocalizationEngine;
@@ -12,6 +13,7 @@ import org.hammer.audio.acquisition.MultiChannelAudioSource;
 import org.hammer.audio.experimental.acoustic.plugin.AcousticLocalizationPlugin;
 import org.hammer.audio.experimental.acoustic.simulation.SimulationScenarios;
 import org.hammer.audio.experimental.acoustic.simulation.SimulationScenarios.SimulationScenario;
+import org.hammer.audio.experimental.acoustic.tracking.FrameSchedule;
 
 /** ServiceLoader adapter that exposes the established acoustic runner to any host surface. */
 public final class AcousticLocalizationEngine implements LocalizationEngine {
@@ -55,6 +57,12 @@ public final class AcousticLocalizationEngine implements LocalizationEngine {
       Options options,
       Consumer<Frame> progress)
       throws IOException {
+    long processingBudgetNanos =
+        new FrameSchedule(
+                source.format().sampleRate(),
+                options.blockFrames(),
+                WorkbenchScenarioRunner.PIPELINE_MAX_LOAD_FRACTION)
+            .maxProcessingNanos();
     WorkbenchRunResult result =
         WorkbenchScenarioRunner.runSource(
             source,
@@ -70,6 +78,7 @@ public final class AcousticLocalizationEngine implements LocalizationEngine {
                     new Frame(
                         index,
                         snapshot.processingNanos(),
+                        processingBudgetNanos,
                         snapshot.synchronization(),
                         snapshot.tdoaConsistency().reliable(),
                         snapshot.tracks().stream()
@@ -92,6 +101,9 @@ public final class AcousticLocalizationEngine implements LocalizationEngine {
         result.blockCount(),
         result.overBudgetFrameCount(),
         result.benchmarkReport() != null,
+        result.benchmarkReport() == null
+            ? Set.of("localization.csv", "summary.md")
+            : Set.of("localization.csv", "summary.md", "benchmark.md"),
         artifacts);
   }
 

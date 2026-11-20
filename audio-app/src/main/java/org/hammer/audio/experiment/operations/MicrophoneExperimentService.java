@@ -14,6 +14,7 @@ import java.util.Map;
 import java.util.ServiceLoader;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -80,14 +81,16 @@ public final class MicrophoneExperimentService implements AutoCloseable {
   private static final String RUNTIME = "runtime";
   private static final String CAPTURE_STATE = "source.captureState";
   private static final String EDIT_PROFILE = "edit-profile";
+  private static final String INSPECT_DIAGNOSTICS = "inspect-diagnostics";
   private static final String PREFLIGHT_COMPONENT = "preflight";
+  private static final String PERFORMANCE_COMPONENT = "performance";
+  private static final String PROCESSING_OVERRUNS = "processing.overruns";
   private final Path directory;
   private final Clock clock;
   private final Supplier<List<CaptureDeviceDescriptor>> deviceDiscovery;
   private final DirectoryMicrophoneArrayProfileStore profiles;
   private final ManagedExperimentRecordings recordings;
-  private final LocalizationEngine engine =
-      ServiceLoader.load(LocalizationEngine.class).findFirst().orElse(null);
+  private final LocalizationEngine engine;
   private final MicrophoneArrayProfileCodec profileCodec = new MicrophoneArrayProfileCodec();
   private final ExecutorService executor =
       Executors.newSingleThreadExecutor(
@@ -108,9 +111,22 @@ public final class MicrophoneExperimentService implements AutoCloseable {
   /** Create a service with explicit external boundaries for deterministic tests. */
   public MicrophoneExperimentService(
       Path directory, Clock clock, Supplier<List<CaptureDeviceDescriptor>> deviceDiscovery) {
+    this(
+        directory,
+        clock,
+        deviceDiscovery,
+        ServiceLoader.load(LocalizationEngine.class).findFirst().orElse(null));
+  }
+
+  MicrophoneExperimentService(
+      Path directory,
+      Clock clock,
+      Supplier<List<CaptureDeviceDescriptor>> deviceDiscovery,
+      LocalizationEngine engine) {
     this.directory = directory.toAbsolutePath().normalize();
     this.clock = clock;
     this.deviceDiscovery = deviceDiscovery;
+    this.engine = engine;
     profiles = new DirectoryMicrophoneArrayProfileStore(this.directory.resolve("profiles"));
     recordings = new ManagedExperimentRecordings(this.directory);
   }
@@ -603,11 +619,7 @@ public final class MicrophoneExperimentService implements AutoCloseable {
     run.facts.put(
         "elapsed.sampleSeconds",
         Double.toString(run.source.framesRead() / run.source.format().sampleRate()));
-    run.facts.put("processing.lastNanos", Long.toString(snapshot.processingNanos()));
-    run.facts.put(
-        "processing.budgetNanos",
-        Long.toString(
-            (long) (BLOCK_FRAMES * 1_000_000_000.0 / run.source.format().sampleRate() * 0.8)));
+    updateProcessingHealth(run, snapshot);
     run.tracks =
         snapshot.tracks().stream()
             .map(track -> new TrackPoint(track.id(), track.x(), track.y(), track.confidence()))
@@ -634,7 +646,7 @@ public final class MicrophoneExperimentService implements AutoCloseable {
               "TDOA pair evidence is inconsistent",
               "Inspect geometry, calibration, reflections and signal quality.",
               RUNTIME,
-              "inspect-diagnostics"));
+              INSPECT_DIAGNOSTICS));
     }
     RecordingStatus recording = run.recorder == null ? null : run.recorder.status();
     if (recording != null
@@ -662,6 +674,36 @@ public final class MicrophoneExperimentService implements AutoCloseable {
             false,
             false));
     run.health.update(RUNTIME, findings, clock.instant());
+  }
+
+  private void updateProcessingHealth(ActiveRun run, LocalizationEngine.Frame snapshot) {
+    run.facts.put("processing.lastNanos", Long.toString(snapshot.processingNanos()));
+    run.facts.put("processing.budgetNanos", Long.toString(snapshot.processingBudgetNanos()));
+    if (snapshot.processingNanos() > snapshot.processingBudgetNanos()) {
+      run.processingOverruns++;
+    }
+    updateProcessingHealth(run, snapshot.index() + 1L, run.processingOverruns);
+  }
+
+  private void updateProcessingHealth(ActiveRun run, long blocks, long overruns) {
+    run.facts.put(PROCESSING_OVERRUNS, Long.toString(overruns));
+    List<ExperimentHealthFinding> findings =
+        overruns >= Math.max(3L, blocks / 5L)
+            ? List.of(
+                finding(
+                    PROCESSING_OVERRUNS,
+                    Severity.WARNING,
+                    "Processing repeatedly exceeded its real-time budget",
+                    overruns
+                        + " of "
+                        + blocks
+                        + " blocks exceeded budget. Inspect algorithm settings before a live run.",
+                    PERFORMANCE_COMPONENT,
+                    INSPECT_DIAGNOSTICS))
+            : List.of();
+    // Clear the current condition on recovery; the aggregator retains its warning and review.
+    // A stable message preserves acknowledgement while only the running counts change.
+    run.health.update(PERFORMANCE_COMPONENT, findings, clock.instant());
   }
 
   private void inspectSignal(ActiveRun run, List<ExperimentHealthFinding> findings) {
@@ -726,30 +768,9 @@ public final class MicrophoneExperimentService implements AutoCloseable {
     run.facts.put(
         "benchmark.status",
         result.benchmarkAvailable() ? "AVAILABLE" : "Unavailable: no reference ground truth");
-    run.facts.put("processing.overruns", Long.toString(result.overruns()));
-    if (result.overruns() >= Math.max(3L, result.blocks() / 5L)) {
-      run.health.update(
-          "performance",
-          List.of(
-              finding(
-                  "processing.overruns",
-                  Severity.WARNING,
-                  "Processing repeatedly exceeded its real-time budget",
-                  result.overruns()
-                      + " of "
-                      + result.blocks()
-                      + " blocks exceeded budget. Inspect algorithm settings before a live run.",
-                  "performance",
-                  "inspect-diagnostics")),
-          clock.instant());
-    }
+    updateProcessingHealth(run, result.blocks(), result.overruns());
     run.facts.put(CAPTURE_STATE, "STOPPED");
-    for (Map.Entry<String, String> artifact : result.artifacts().entrySet()) {
-      if (!artifact.getKey().matches("[A-Za-z0-9][A-Za-z0-9._-]{0,80}")) {
-        throw new IOException("Plugin output filename is not portable: " + artifact.getKey());
-      }
-      Files.writeString(run.directory.resolve(artifact.getKey()), artifact.getValue());
-    }
+    complete &= writeResultArtifacts(run, result);
     if ("REPLAY".equals(run.configuration.sourceMode())) {
       Path input = recordings.path(run.configuration.recordingId());
       Files.copy(input, run.directory.resolve("input.aarec"));
@@ -770,6 +791,50 @@ public final class MicrophoneExperimentService implements AutoCloseable {
     } finally {
       run.evidenceLock.unlock();
     }
+  }
+
+  private boolean writeResultArtifacts(ActiveRun run, LocalizationEngine.Result result)
+      throws IOException {
+    Set<String> generated = new TreeSet<>();
+    for (Map.Entry<String, String> artifact : result.artifacts().entrySet()) {
+      if (!artifact.getKey().matches("[A-Za-z0-9][A-Za-z0-9._-]{0,80}")) {
+        throw new IOException("Plugin output filename is not portable: " + artifact.getKey());
+      }
+      Path path = run.directory.resolve(artifact.getKey());
+      Files.writeString(path, artifact.getValue());
+      if (Files.isRegularFile(path)) {
+        generated.add(artifact.getKey());
+      }
+    }
+    Set<String> required = new TreeSet<>(result.requiredArtifacts());
+    Set<String> missing = new TreeSet<>(required);
+    missing.removeAll(generated);
+    String generatedNames = String.join(", ", generated);
+    String missingNames = String.join(", ", missing);
+    run.facts.put("artifacts.required", String.join(", ", required));
+    run.facts.put("artifacts.generated", generatedNames);
+    run.facts.put("artifacts.missing", missingNames);
+    boolean complete = !required.isEmpty() && missing.isEmpty();
+    List<ExperimentHealthFinding> findings = new ArrayList<>();
+    if (!complete) {
+      findings.add(
+          finding(
+              "evidence.artifacts",
+              Severity.ERROR,
+              required.isEmpty()
+                  ? "Required analysis reports were not declared"
+                  : "Required analysis reports are missing",
+              (required.isEmpty()
+                      ? "The localization provider returned no required report filenames."
+                      : "Missing required reports: " + missingNames + '.')
+                  + " Persisted reports: "
+                  + generatedNames
+                  + ". Existing files remain available as incomplete evidence.",
+              "artifacts",
+              INSPECT_DIAGNOSTICS));
+    }
+    run.health.update("artifacts", findings, clock.instant());
+    return complete;
   }
 
   private static boolean recordingEvidenceComplete(ActiveRun run) throws IOException {
@@ -803,7 +868,7 @@ public final class MicrophoneExperimentService implements AutoCloseable {
                 run.cancelled.get() ? "Experiment stopped before completion" : "Experiment failed",
                 exception.toString(),
                 "failure",
-                "inspect-diagnostics")),
+                INSPECT_DIAGNOSTICS)),
         clock.instant());
     try {
       if (run.source != null) {
@@ -1090,6 +1155,8 @@ public final class MicrophoneExperimentService implements AutoCloseable {
     private final AtomicBoolean cancelled = new AtomicBoolean();
     private final ReentrantLock evidenceLock = new ReentrantLock();
     private final Instant createdAt;
+    // Only the processing executor mutates this counter; views read the published facts.
+    private long processingOverruns;
     private volatile ExperimentHealthState state = ExperimentHealthState.NOT_CONFIGURED;
     private volatile String stage = "DEFINED";
     private volatile SourceCaptureSession source;

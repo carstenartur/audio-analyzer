@@ -83,6 +83,11 @@ processing budget and plugin versions. Its complete/incomplete decision also ins
 recording, checks cancellation and required artifacts, and persists the actual manifest and hash
 inventory before enabling evidence export. See [microphone experiments](microphone-experiments.md)
 and [recording and replay](recording-and-replay.md).
+The localization provider declares its required report filenames separately from the reports it
+actually produces. The acoustic provider requires `localization.csv` and `summary.md`, plus
+`benchmark.md` when benchmark evidence is available. The host checks that every declared report was
+persisted; a missing report or an empty requirement declaration keeps the evidence incomplete.
+Other providers can declare different portable report names without inheriting acoustic filenames.
 Acknowledgements made after finalization rewrite the persisted health report and checksum inventory
 under the same evidence lock as ZIP export, so downloaded history matches the acknowledged state.
 The recording file SHA-256 includes the footer and matches the artifact inventory; the separately
