@@ -2,6 +2,9 @@
 # Consumer-owned compatibility contract for jgit-storage-hibernate candidates.
 set -euo pipefail
 
+checkout_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+cd -- "$checkout_dir"
+
 mode=${JGIT_STORAGE_HIBERNATE_CONTRACT_MODE:-candidate}
 candidate_version=${JGIT_STORAGE_HIBERNATE_CANDIDATE_VERSION:-}
 evidence_dir=target/jgit-storage-hibernate-contract
@@ -37,61 +40,35 @@ else
   maven=(mvn)
 fi
 
-# Build the actual application and every reactor module it needs. External-system
-# integration tests are deliberately separate: this contract protects embedding,
-# workflow-history, persistence, packaging and runtime linkage without requiring
-# unrelated credentials or services.
-set -o pipefail
+# Install the reactor so the subsequent standalone dependency-tree invocation
+# resolves exactly the modules just verified. PostgreSQL container tests remain
+# in the normal build; this focused contract needs only the embedded H2 runtime.
+# Keep Surefire's unit-test naming patterns: an exclusion-only -Dtest would also
+# run Failsafe's *IT classes before the executable application has been packaged.
+python3 .github/scripts/test_jgit_runtime_contract.py
 "${maven[@]}" -B -ntp -nsu \
   -pl audio-app -am \
   -DskipITs=true \
-  verify 2>&1 | tee "$evidence_dir/maven-verify.log"
+  '-Dtest=Test*,*Test,*Tests,*TestCase,!**/*PostgreSql*' \
+  -Dsurefire.failIfNoSpecifiedTests=false \
+  install 2>&1 | tee "$evidence_dir/maven-verify.log"
 
 "${maven[@]}" -B -ntp -nsu \
   -pl audio-app \
-  -Dincludes=io.github.carstenartur \
-  -DoutputType=text \
-  -DoutputFile="$PWD/$evidence_dir/dependency-tree.txt" \
+  -Dscope=runtime -DoutputType=json \
+  -DoutputFile="$PWD/$evidence_dir/dependency-tree.json" \
   dependency:tree
 
-test -s "$evidence_dir/dependency-tree.txt"
-if grep -Fq 'jgit-storage-hibernate-benchmarks' "$evidence_dir/dependency-tree.txt"; then
-  echo "Benchmark artifacts must not enter the Audio Analyzer runtime." >&2
-  exit 1
+"${maven[@]}" -B -ntp -nsu \
+  -pl audio-app \
+  -DincludeScope=runtime -DoutputAbsoluteArtifactFilename=false \
+  -DoutputFile="$PWD/$evidence_dir/runtime-dependencies.txt" \
+  dependency:list
+
+checks=(--checkout "$checkout_dir" --evidence "$evidence_dir")
+if [[ "$mode" == "candidate" ]]; then
+  checks+=(--candidate "$candidate_version")
 fi
-
-if [[ "$mode" == "candidate" ]] \
-    && ! grep -Fq ":$candidate_version" "$evidence_dir/dependency-tree.txt"; then
-  echo "The resolved Audio Analyzer tree does not contain candidate $candidate_version." >&2
-  cat "$evidence_dir/dependency-tree.txt" >&2
-  exit 1
-fi
-
-mapfile -t application_jars < <(
-  find audio-app/target -maxdepth 1 -type f -name '*.jar' \
-    ! -name '*-sources.jar' ! -name '*-javadoc.jar' | sort
-)
-if [[ ${#application_jars[@]} -eq 0 ]]; then
-  echo "The storage contract did not produce an Audio Analyzer application JAR." >&2
-  exit 1
-fi
-printf '%s\n' "${application_jars[@]}" > "$evidence_dir/application-jars.txt"
-
-for archive in "${application_jars[@]}"; do
-  if jar tf "$archive" | grep -Eq '(^|/)jgit/storage/hibernate/benchmark/'; then
-    echo "Benchmark classes leaked into $archive." >&2
-    exit 1
-  fi
-done
-
-cat > "$evidence_dir/result.json" <<EOF
-{
-  "consumer": "audio-analyzer",
-  "mode": "$mode",
-  "candidateVersion": "$candidate_version",
-  "java": "$java_specification",
-  "contract": "audio-app reactor verification, dependency resolution and packaged-runtime leakage check"
-}
-EOF
+python3 .github/scripts/verify_jgit_runtime_contract.py "${checks[@]}"
 
 printf 'Audio Analyzer jgit-storage-hibernate contract passed in %s mode.\n' "$mode"

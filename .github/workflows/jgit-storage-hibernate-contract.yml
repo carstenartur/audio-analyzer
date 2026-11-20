@@ -6,18 +6,20 @@ on:
     branches: [ master ]
     paths:
       - '.github/jgit-storage-hibernate-contract.sh'
+      - '.github/jgit-storage-hibernate-runtime-allowlist.txt'
+      - '.github/scripts/*jgit*contract.py'
       - '.github/workflows/jgit-storage-hibernate-contract.yml'
       - 'pom.xml'
-      - 'audio-core/**'
-      - 'audio-app/**'
+      - 'audio-*/**'
   push:
     branches: [ master ]
     paths:
       - '.github/jgit-storage-hibernate-contract.sh'
+      - '.github/jgit-storage-hibernate-runtime-allowlist.txt'
+      - '.github/scripts/*jgit*contract.py'
       - '.github/workflows/jgit-storage-hibernate-contract.yml'
       - 'pom.xml'
-      - 'audio-core/**'
-      - 'audio-app/**'
+      - 'audio-*/**'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -53,7 +55,9 @@ jobs:
         run: |
           set -euo pipefail
           bash -n .github/jgit-storage-hibernate-contract.sh
-          .github/jgit-storage-hibernate-contract.sh
+          contract_path="$PWD/.github/jgit-storage-hibernate-contract.sh"
+          cd "${RUNNER_TEMP:?}"
+          "$contract_path"
 
       - name: Upload contract evidence
         if: always()
