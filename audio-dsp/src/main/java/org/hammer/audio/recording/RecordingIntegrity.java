@@ -6,6 +6,8 @@ public enum RecordingIntegrity {
   LEGACY_UNVERIFIED,
   /** Version-2 footer, counters and SHA-256 digest are valid. */
   COMPLETE,
+  /** The footer and checksum are valid, but the experiment stopped early or lost samples. */
+  INCOMPLETE,
   /** Complete frame records were recovered but the final footer is absent. */
   RECOVERABLE_INCOMPLETE,
   /**

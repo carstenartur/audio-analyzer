@@ -5,15 +5,32 @@ import java.nio.file.FileStore;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.util.List;
 import java.util.Objects;
 
 /** Recording-storage probe backed by {@link FileStore}. */
 public final class FileStoreRecordingStorageProbe implements RecordingStorageProbe {
 
-  static final long MINIMUM_WARNING_BYTES = 256L * 1024L * 1024L;
-  static final long MINIMUM_CRITICAL_BYTES = 64L * 1024L * 1024L;
-  static final long WARNING_SECONDS = 300L;
-  static final long CRITICAL_SECONDS = 30L;
+  private final RecordingStoragePolicy policy;
+  private final StoreLookup stores;
+
+  /** Obtain a backing store; injectable for deterministic capacity and quota tests. */
+  @FunctionalInterface
+  public interface StoreLookup {
+    /** Resolve the store containing the destination's existing parent. */
+    FileStore find(Path existingParent) throws IOException;
+  }
+
+  /** Use production filesystem queries and configured recording margins. */
+  public FileStoreRecordingStorageProbe() {
+    this(RecordingStoragePolicy.configured(), Files::getFileStore);
+  }
+
+  /** Use an explicit capacity policy and filesystem boundary. */
+  public FileStoreRecordingStorageProbe(RecordingStoragePolicy policy, StoreLookup stores) {
+    this.policy = Objects.requireNonNull(policy, "policy");
+    this.stores = Objects.requireNonNull(stores, "stores");
+  }
 
   @Override
   public RecordingStorageStatus probe(
@@ -26,31 +43,17 @@ public final class FileStoreRecordingStorageProbe implements RecordingStoragePro
     Objects.requireNonNull(destination, "destination");
     Objects.requireNonNull(checkedAt, "checkedAt");
     Path normalized = destination.toAbsolutePath().normalize();
-    Path existing = nearestExistingPath(normalized);
-    FileStore store = Files.getFileStore(existing);
+    Path existing = nearestExistingPath(normalized.getParent());
+    FileStore store = stores.find(existing);
     long usable = store.getUsableSpace();
     long unallocated = store.getUnallocatedSpace();
     long total = store.getTotalSpace();
-    Path writablePath = Files.isDirectory(existing) ? existing : existing.getParent();
-    boolean writable = writablePath != null && Files.isWritable(writablePath);
-    double effectiveRate =
-        measuredBytesPerSecond > 0.0 ? measuredBytesPerSecond : expectedBytesPerSecond;
-    long remainingSeconds = effectiveRate > 0.0 ? (long) Math.floor(usable / effectiveRate) : -1L;
-    long warningBytes =
-        Math.max(MINIMUM_WARNING_BYTES, safeMultiply(expectedBytesPerSecond, WARNING_SECONDS));
-    long criticalBytes =
-        Math.max(MINIMUM_CRITICAL_BYTES, safeMultiply(expectedBytesPerSecond, CRITICAL_SECONDS));
-    RecordingStorageLevel level;
-    if (!writable
-        || usable <= criticalBytes
-        || (remainingSeconds >= 0 && remainingSeconds <= CRITICAL_SECONDS)) {
-      level = RecordingStorageLevel.CRITICAL;
-    } else if (usable <= warningBytes
-        || (remainingSeconds >= 0 && remainingSeconds <= WARNING_SECONDS)) {
-      level = RecordingStorageLevel.WARNING;
-    } else {
-      level = RecordingStorageLevel.NORMAL;
-    }
+    boolean writable =
+        !store.isReadOnly() && Files.isDirectory(existing) && Files.isWritable(existing);
+    long remainingSeconds =
+        policy.safeSeconds(usable, measuredBytesPerSecond, expectedBytesPerSecond);
+    RecordingStorageLevel level =
+        policy.level(writable, usable, measuredBytesPerSecond, expectedBytesPerSecond);
     return new RecordingStorageStatus(
         normalized,
         store.name(),
@@ -65,7 +68,10 @@ public final class FileStoreRecordingStorageProbe implements RecordingStoragePro
         remainingSeconds,
         level,
         checkedAt,
-        "");
+        "",
+        policy,
+        checkedAt,
+        List.of());
   }
 
   private static Path nearestExistingPath(Path path) throws IOException {
@@ -77,13 +83,5 @@ public final class FileStoreRecordingStorageProbe implements RecordingStoragePro
       throw new IOException("No existing ancestor for recording destination: " + path);
     }
     return candidate;
-  }
-
-  private static long safeMultiply(double bytesPerSecond, long seconds) {
-    if (bytesPerSecond <= 0.0 || !Double.isFinite(bytesPerSecond)) {
-      return 0L;
-    }
-    double value = bytesPerSecond * seconds;
-    return value >= Long.MAX_VALUE ? Long.MAX_VALUE : (long) Math.ceil(value);
   }
 }

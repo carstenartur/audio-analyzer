@@ -1,0 +1,15 @@
+.experiment-health { border: 1px solid #65728a; border-radius: 6px; padding: 10px; margin: 12px 0; background: #182033; color: #e2e7f2; overflow-wrap: anywhere; }
+.experiment-health h3 { margin: 0 0 8px; }
+.experiment-health__state { display: block; padding: 6px; border: 1px solid currentColor; border-radius: 4px; }
+.experiment-health__state--blocked, .experiment-health__state--failed, .experiment-health__state--incomplete { color: #ffb1b1; }
+.experiment-health__state--ready, .experiment-health__state--completed { color: #b6ecb3; }
+.experiment-health__state--ready_with_warnings, .experiment-health__state--degraded { color: #ffdfa3; }
+.experiment-health__summary, .experiment-health__details { margin: 10px 0; }
+.experiment-health__summary > div, .experiment-health__details > div { padding: 4px 0; border-bottom: 1px solid #39435a; }
+.experiment-health dt { color: #c3d2ec; font-weight: 600; }
+.experiment-health dd { margin-left: 0; }
+.experiment-health__findings { padding-left: 18px; }
+.experiment-health__findings li { margin: 8px 0; }
+.experiment-health details { margin: 8px 0; }
+.experiment-health summary { cursor: pointer; }
+.experiment-health button:focus-visible, .experiment-health summary:focus-visible { outline: 3px solid #b8d8ff; outline-offset: 3px; }

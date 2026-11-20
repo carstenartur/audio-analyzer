@@ -73,7 +73,9 @@ class WorkbenchHistoryScreenshotIT {
       normalizeHistoryTimestamps(page);
 
       disableAnimations(page);
-      byte[] pngBytes = page.screenshot(new Page.ScreenshotOptions().setFullPage(false));
+      WorkbenchHealthScreenshots.awaitReadiness(page, 2L);
+      WorkbenchBrowserHarness.normalizeIdentityLabels(page);
+      byte[] pngBytes = page.screenshot(WorkbenchHealthScreenshots.options(page));
       ScreenshotPipeline.processScreenshot("collaboration-personal-undo-preview.png", pngBytes);
     } catch (Throwable failure) {
       harness.captureFailure(scenario, failure);
@@ -120,7 +122,10 @@ class WorkbenchHistoryScreenshotIT {
       normalizeHistoryTimestamps(reviewer.page());
 
       disableAnimations(reviewer.page());
-      byte[] pngBytes = reviewer.page().screenshot(new Page.ScreenshotOptions().setFullPage(false));
+      WorkbenchHealthScreenshots.awaitReadiness(reviewer.page(), 1L);
+      WorkbenchBrowserHarness.normalizeIdentityLabels(reviewer.page());
+      byte[] pngBytes =
+          reviewer.page().screenshot(WorkbenchHealthScreenshots.options(reviewer.page()));
       ScreenshotPipeline.processScreenshot("collaboration-shared-undo-preview.png", pngBytes);
     } catch (Throwable failure) {
       harness.captureFailure(scenario, failure);

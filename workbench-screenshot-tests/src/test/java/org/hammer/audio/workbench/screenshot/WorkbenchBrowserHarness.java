@@ -1,11 +1,13 @@
 package org.hammer.audio.workbench.screenshot;
 
+import com.microsoft.playwright.APIResponse;
 import com.microsoft.playwright.Browser;
 import com.microsoft.playwright.BrowserContext;
 import com.microsoft.playwright.BrowserType;
 import com.microsoft.playwright.Page;
 import com.microsoft.playwright.Playwright;
 import com.microsoft.playwright.Tracing;
+import com.microsoft.playwright.options.RequestOptions;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
@@ -15,8 +17,10 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import org.testcontainers.containers.GenericContainer;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Reusable packaged-application harness for isolated Playwright browser actors.
@@ -82,10 +86,37 @@ final class WorkbenchBrowserHarness implements AutoCloseable {
             new Browser.NewContextOptions()
                 .setViewportSize(VIEWPORT_WIDTH, VIEWPORT_HEIGHT)
                 .setAcceptDownloads(false));
+    APIResponse issued =
+        context
+            .request()
+            .post(
+                baseUrl() + "/workflow/identity",
+                RequestOptions.create().setData(Map.of("displayName", displayName)));
+    if (!issued.ok()) {
+      context.close();
+      throw new IllegalStateException("Could not issue browser identity: " + issued.status());
+    }
+    String identityJson = issued.text();
+    return openIdentity(context, identityJson);
+  }
+
+  ActorBrowser resumeActor(IdentitySnapshot snapshot) {
+    BrowserContext context =
+        browser.newContext(
+            new Browser.NewContextOptions()
+                .setViewportSize(VIEWPORT_WIDTH, VIEWPORT_HEIGHT)
+                .setAcceptDownloads(false)
+                .setStorageState(snapshot.storageState()));
+    return openIdentity(context, snapshot.identityJson());
+  }
+
+  private ActorBrowser openIdentity(BrowserContext context, String identityJson) {
+    String issuedActorId = new JsonMapper().readTree(identityJson).get("actorId").asText();
     context.addInitScript(
-        "window.sessionStorage.setItem('audio-analyzer.workflow.actor', JSON.stringify("
-            + actorJson(actorId, userId, displayName)
-            + "));");
+        "if (!window.sessionStorage.getItem('audio-analyzer.workflow.actor')) {"
+            + "window.sessionStorage.setItem('audio-analyzer.workflow.actor', JSON.stringify("
+            + identityJson
+            + "));}");
     context
         .tracing()
         .start(new Tracing.StartOptions().setScreenshots(true).setSnapshots(true).setSources(true));
@@ -93,7 +124,7 @@ final class WorkbenchBrowserHarness implements AutoCloseable {
     Page page = context.newPage();
     page.setDefaultTimeout(DEFAULT_TIMEOUT_MILLIS);
     page.setDefaultNavigationTimeout(DEFAULT_TIMEOUT_MILLIS);
-    ActorBrowser actor = new ActorBrowser(actorId, context, page);
+    ActorBrowser actor = new ActorBrowser(issuedActorId, context, page);
     page.onConsoleMessage(
         message -> actor.diagnostic("console[" + message.type() + "]: " + message.text()));
     page.onPageError(error -> actor.diagnostic("page-error: " + error));
@@ -108,6 +139,26 @@ final class WorkbenchBrowserHarness implements AutoCloseable {
                     + request.failure()));
     actors.add(actor);
     return actor;
+  }
+
+  /** Normalizes only screenshot text, never the actual server identity or credential. */
+  static void normalizeIdentityLabels(Page page) {
+    page.evaluate(
+        """
+        () => {
+          const panel = document.querySelector('[data-testid="collaboration-panel"]');
+          if (!panel) return;
+          const walker = document.createTreeWalker(panel, NodeFilter.SHOW_TEXT);
+          while (walker.nextNode()) {
+            walker.currentNode.textContent = walker.currentNode.textContent
+              .replace(/ · [0-9A-F]{6}\\b/g, ' · CLIENT')
+              .replace(/actor\\.[a-f0-9-]{36}/g, 'client (masked)');
+          }
+          panel.querySelectorAll('time').forEach(element => {
+            element.textContent = '19 Jul 2026, 12:00 UTC';
+          });
+        }
+        """);
   }
 
   void captureFailure(String scenario, Throwable failure) {
@@ -175,24 +226,6 @@ final class WorkbenchBrowserHarness implements AutoCloseable {
     return Path.of(configured).toAbsolutePath();
   }
 
-  private static String actorJson(String actorId, String userId, String displayName) {
-    return "{actorId:'"
-        + javascript(actorId)
-        + "',userId:'"
-        + javascript(userId)
-        + "',displayName:'"
-        + javascript(displayName)
-        + "'}";
-  }
-
-  private static String javascript(String value) {
-    return Objects.requireNonNull(value, "value")
-        .replace("\\", "\\\\")
-        .replace("'", "\\'")
-        .replace("\r", "\\r")
-        .replace("\n", "\\n");
-  }
-
   private static String stackTrace(Throwable failure) {
     StringWriter output = new StringWriter();
     failure.printStackTrace(new PrintWriter(output));
@@ -212,6 +245,9 @@ final class WorkbenchBrowserHarness implements AutoCloseable {
     return accumulated;
   }
 
+  /** In-memory browser credentials used only to carry the same client across a process restart. */
+  record IdentitySnapshot(String storageState, String identityJson) {}
+
   /** One isolated browser actor and its diagnostics. */
   final class ActorBrowser implements AutoCloseable {
     private final String actorId;
@@ -225,6 +261,12 @@ final class WorkbenchBrowserHarness implements AutoCloseable {
       this.actorId = actorId;
       this.context = context;
       this.page = page;
+    }
+
+    IdentitySnapshot identitySnapshot() {
+      return new IdentitySnapshot(
+          context.storageState(),
+          (String) page.evaluate("sessionStorage.getItem('audio-analyzer.workflow.actor')"));
     }
 
     String actorId() {

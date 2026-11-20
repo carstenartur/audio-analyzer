@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.BiConsumer;
 import org.hammer.audio.workflow.Workflow;
 import org.hammer.audio.workflow.WorkflowOperation;
 import org.hammer.audio.workflow.collaboration.WorkflowSessionException.Code;
@@ -131,6 +132,24 @@ public final class WorkflowSessionRegistry {
   /** Returns the current server-authoritative workflow. */
   public Workflow workflow(String sessionId) {
     return requireSession(sessionId).workflow();
+  }
+
+  /** Captures immutable metadata and workflow under the same lock as membership authorization. */
+  public SessionWorkflowSnapshot authorizedWorkflow(String sessionId, OperationActor actor) {
+    return requireSession(sessionId).authorizedWorkflow(Objects.requireNonNull(actor, "actor"));
+  }
+
+  /** Authorizes and subscribes to one session instance without a close/recreate gap. */
+  public WorkflowSessionEventHub.Subscription subscribe(
+      String sessionId,
+      OperationActor actor,
+      long afterSequence,
+      BiConsumer<SessionSnapshot, WorkflowSessionEvent> listener) {
+    return requireSession(sessionId)
+        .subscribe(
+            Objects.requireNonNull(actor, "actor"),
+            afterSequence,
+            Objects.requireNonNull(listener, "listener"));
   }
 
   /** Applies an actor-authored semantic operation at the current server revision. */
@@ -346,6 +365,22 @@ public final class WorkflowSessionRegistry {
       requireNotBlank(workflowId, "workflowId");
       if (revision < 0 || sequence < revision) {
         throw new IllegalArgumentException("Invalid session revision/event sequence");
+      }
+    }
+  }
+
+  /**
+   * An immutable workflow and the exact session metadata that authorized its capture.
+   *
+   * @param session metadata and membership at the capture instant
+   * @param workflow immutable workflow captured under the same session lock
+   */
+  public record SessionWorkflowSnapshot(SessionSnapshot session, Workflow workflow) {
+    public SessionWorkflowSnapshot {
+      Objects.requireNonNull(session, "session");
+      Objects.requireNonNull(workflow, "workflow");
+      if (!session.workflowId().equals(workflow.id())) {
+        throw new IllegalArgumentException("Session and captured workflow ids must match");
       }
     }
   }

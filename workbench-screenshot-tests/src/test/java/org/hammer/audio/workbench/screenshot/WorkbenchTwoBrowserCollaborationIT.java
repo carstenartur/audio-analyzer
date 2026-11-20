@@ -10,6 +10,7 @@ import com.microsoft.playwright.Page;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -62,8 +63,8 @@ class WorkbenchTwoBrowserCollaborationIT {
       open(bob.page());
       createSession(alice.page(), PERSONAL_SESSION_ID, "SHARED_SESSION_PERSONAL_UNDO");
       joinSession(bob.page(), PERSONAL_SESSION_ID);
-      assertParticipants(alice.page(), "actor-e2e-alice", "actor-e2e-bob");
-      assertParticipants(bob.page(), "actor-e2e-alice", "actor-e2e-bob");
+      assertParticipants(alice.page(), alice.actorId(), bob.actorId());
+      assertParticipants(bob.page(), alice.actorId(), bob.actorId());
 
       alice.page().locator("[data-testid='palette-node-synthetic-signal-generator']").click();
       waitForRevision(alice.page(), 1);
@@ -76,12 +77,13 @@ class WorkbenchTwoBrowserCollaborationIT {
       String nodeTestId = aliceNode.getAttribute("data-testid");
       String nodeId = nodeTestId.substring("node-".length());
       aliceNode.click();
-      Locator remotePresence = bob.page().locator("[data-testid='presence-actor-e2e-alice']");
+      Locator remotePresence =
+          bob.page().locator("[data-testid='presence-" + alice.actorId() + "']");
       remotePresence.waitFor();
-      bob.page().waitForCondition(() -> remotePresence.innerText().contains("selection=" + nodeId));
+      bob.page().waitForCondition(() -> remotePresence.innerText().contains("Selected " + nodeId));
       String projectionJson = sessionProjectionJson(bob.page(), PERSONAL_SESSION_ID);
       assertFalse(projectionJson.contains("selection"));
-      assertFalse(projectionJson.contains("actor-e2e-alice"));
+      assertFalse(projectionJson.contains(alice.actorId()));
 
       Map<?, ?> staleResult = submitStaleOperation(bob.page(), PERSONAL_SESSION_ID);
       assertEquals(409, ((Number) staleResult.get("status")).intValue());
@@ -142,6 +144,61 @@ class WorkbenchTwoBrowserCollaborationIT {
     } finally {
       bob.close();
       alice.close();
+    }
+  }
+
+  @Test
+  void sameBrowserTabsGetDistinctActorsAndReloadResumesWithoutDuplicateMembership()
+      throws Throwable {
+    String scenario = "same-browser-client-identity";
+    try (WorkbenchBrowserHarness.ActorBrowser first =
+        harness.openActor("tab-fixture", "unused", "Same name")) {
+      open(first.page());
+      createSession(first.page(), "e2e-same-browser-tabs", "SHARED_SESSION_PERSONAL_UNDO");
+      String originalActor = first.actorId();
+      try (Page second = first.context().newPage()) {
+        open(second);
+        joinSession(second, "e2e-same-browser-tabs");
+        String secondActor =
+            (String)
+                second.evaluate(
+                    "JSON.parse(sessionStorage.getItem('audio-analyzer.workflow.actor')).actorId");
+        assertFalse(
+            originalActor.equals(secondActor),
+            "Two live tabs must have separate client attribution");
+        assertParticipants(first.page(), originalActor, secondActor);
+        assertParticipants(second, originalActor, secondActor);
+        assertFalse(
+            ((String) second.evaluate("document.cookie")).contains("aa_collab_"),
+            "Collaboration credentials must not be readable by browser scripts");
+        buildExecutableWorkflow(second, "e2e-same-browser-tabs");
+        waitForRevision(first.page(), 11);
+        waitForRevision(second, 11);
+        clickWhenEnabled(second, "[data-testid='run-current-revision']");
+        Locator runState = second.locator("[data-testid='run-state']");
+        Locator runError = second.locator("[data-testid='run-error']");
+        second.waitForCondition(
+            () ->
+                runError.count() > 0
+                    || (runState.count() > 0
+                        && List.of("COMPLETED", "FAILED", "CANCELLED")
+                            .contains(runState.innerText())));
+        assertEquals(0, runError.count(), () -> runError.innerText());
+        assertEquals("COMPLETED", runState.innerText());
+        first.page().reload();
+        waitForActiveSession(first.page(), "e2e-same-browser-tabs");
+        waitForLive(first.page());
+        assertEquals(
+            originalActor,
+            first
+                .page()
+                .evaluate(
+                    "JSON.parse(sessionStorage.getItem('audio-analyzer.workflow.actor')).actorId"));
+        assertEquals(2, first.page().locator("[data-testid='participant-list'] > li").count());
+      } catch (Throwable failure) {
+        harness.captureFailure(scenario, failure);
+        throw failure;
+      }
     }
   }
 
@@ -224,6 +281,46 @@ class WorkbenchTwoBrowserCollaborationIT {
     waitForLive(page);
   }
 
+  private static void buildExecutableWorkflow(Page page, String sessionId) {
+    page.evaluate(
+        """
+        async sessionId => {
+          const actor = JSON.parse(sessionStorage.getItem('audio-analyzer.workflow.actor'));
+          const operations = [
+            {type: 'CreateNode', catalogType: 'synthetic-signal-generator', nodeId: 'node.tabs.source'},
+            {type: 'CreateNode', catalogType: 'gain', nodeId: 'node.tabs.gain'}
+          ];
+          const properties = [
+            ['node.tabs.source', 'signal.waveform', 'sine'],
+            ['node.tabs.source', 'signal.frequency-hz', '1000'],
+            ['node.tabs.source', 'signal.phase-radians', '0'],
+            ['node.tabs.source', 'signal.amplitude', '0.5'],
+            ['node.tabs.source', 'signal.sample-rate-hz', '8000'],
+            ['node.tabs.source', 'signal.channels', '1'],
+            ['node.tabs.source', 'signal.frame-count', '4096'],
+            ['node.tabs.gain', 'gain.factor', '0.5']
+          ];
+          for (const [targetId, propertyKey, newValue] of properties) {
+            operations.push({type: 'UpdateProperty', target: 'NODE', targetId, propertyKey, newValue});
+          }
+          operations.push({type: 'ConnectPorts', edge: {
+            id: 'edge.tabs.source-gain', sourceNodeId: 'node.tabs.source', sourcePortId: 'signal-out',
+            targetNodeId: 'node.tabs.gain', targetPortId: 'audio-in'
+          }});
+          for (let revision = 0; revision < operations.length; revision++) {
+            const response = await fetch(`/workflow/sessions/${encodeURIComponent(sessionId)}/operations`, {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json', 'X-Workflow-Actor': actor.actorId},
+              body: JSON.stringify({mode: 'SHARED_SESSION_PERSONAL_UNDO', actor, expectedRevision: revision,
+                operation: {...operations[revision], operationId: `operation.tabs.${revision}`}})
+            });
+            if (!response.ok) throw new Error(`Executable fixture rejected: ${response.status} ${await response.text()}`);
+          }
+        }
+        """,
+        sessionId);
+  }
+
   private static void waitForActiveSession(Page page, String sessionId) {
     Locator activeSession = page.locator("[data-testid='active-session-id']");
     activeSession.waitFor();
@@ -279,7 +376,9 @@ class WorkbenchTwoBrowserCollaborationIT {
         page.evaluate(
             """
             async sessionId => JSON.stringify(
-              await (await fetch(`/workflow/sessions/${encodeURIComponent(sessionId)}/projection`)).json()
+              await (await fetch(`/workflow/sessions/${encodeURIComponent(sessionId)}/projection`, {
+                headers: {'X-Workflow-Actor': JSON.parse(sessionStorage.getItem('audio-analyzer.workflow.actor')).actorId}
+              })).json()
             )
             """,
             sessionId);
@@ -298,7 +397,7 @@ class WorkbenchTwoBrowserCollaborationIT {
                   headers: {'Content-Type': 'application/json', Accept: 'application/json'},
                   body: JSON.stringify({
                     mode: 'SHARED_SESSION_PERSONAL_UNDO',
-                    actor: input.actor,
+                    actor: JSON.parse(sessionStorage.getItem('audio-analyzer.workflow.actor')),
                     expectedRevision: 0,
                     operation: {
                       type: 'CreateNode',

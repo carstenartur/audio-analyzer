@@ -13,6 +13,7 @@ public final class WorkflowRunException extends RuntimeException {
   public enum Code {
     DUPLICATE_START_COMMAND,
     SOURCE_UNAVAILABLE,
+    SOURCE_FINGERPRINT_MISMATCH,
     UNKNOWN_RUN,
     VALIDATION_FAILED,
     UNSUPPORTED_NODE,

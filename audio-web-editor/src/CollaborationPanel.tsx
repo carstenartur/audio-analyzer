@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type { ActorIdentity, CollaborationMode } from './api';
+import './collaboration-identity.css';
+import { participantPresentation, visiblePresence } from './participantIdentity.mjs';
 import { useWorkflowHistory } from './useWorkflowHistory';
 import type { WorkflowSessionController } from './useWorkflowSession';
 import { WorkflowHistoryPanel } from './WorkflowHistoryPanel';
@@ -52,11 +54,17 @@ export function CollaborationPanel({ controller }: CollaborationPanelProps) {
   const [workflowName, setWorkflowName] = useState('Shared audio workflow');
   const [mode, setMode] = useState<CollaborationMode>('SHARED_SESSION_PERSONAL_UNDO');
   const [actorDraft, setActorDraft] = useState<ActorIdentity>(controller.actor);
+  const [now, setNow] = useState(Date.now());
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionPending, setActionPending] = useState(false);
   const restoreAttempted = useRef(false);
   const previouslyActive = useRef(false);
   const history = useWorkflowHistory({ collaboration: controller });
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 5_000);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     if (restoreAttempted.current) {
@@ -99,8 +107,6 @@ export function CollaborationPanel({ controller }: CollaborationPanelProps) {
 
   const identityDirty = useMemo(
     () =>
-      actorDraft.actorId !== controller.actor.actorId ||
-      actorDraft.userId !== controller.actor.userId ||
       actorDraft.displayName !== controller.actor.displayName,
     [actorDraft, controller.actor],
   );
@@ -173,25 +179,12 @@ export function CollaborationPanel({ controller }: CollaborationPanelProps) {
             />
           </label>
           <label className="field">
-            Actor id
-            <input
-              data-testid="actor-id-input"
-              value={actorDraft.actorId}
-              onChange={(event) => setActorDraft({ ...actorDraft, actorId: event.target.value })}
-            />
-          </label>
-          <label className="field">
-            User id
-            <input
-              data-testid="user-id-input"
-              value={actorDraft.userId}
-              onChange={(event) => setActorDraft({ ...actorDraft, userId: event.target.value })}
-            />
-          </label>
-          <label className="field">
             Display name
             <input
               data-testid="display-name-input"
+              maxLength={120}
+              placeholder="Optional pseudonym"
+              readOnly={Boolean(controller.actor.actorId)}
               value={actorDraft.displayName}
               onChange={(event) => setActorDraft({ ...actorDraft, displayName: event.target.value })}
             />
@@ -203,11 +196,22 @@ export function CollaborationPanel({ controller }: CollaborationPanelProps) {
             onClick={saveIdentity}
             type="button"
           >
-            Save actor identity
+            Save display name
           </button>
-          {identityDirty ? (
-            <p className="help-text">Save the actor identity before creating or joining a session.</p>
+          {controller.actor.actorId ? (
+            <button className="action-button" type="button" data-testid="new-identity-button"
+              onClick={() => controller.resetIdentity()} disabled={actionPending}>
+              Start a new client identity
+            </button>
           ) : null}
+          {identityDirty ? (
+            <p className="help-text">Save the display name before creating or joining a session.</p>
+          ) : null}
+          <p className="help-text">
+            {controller.actor.actorId
+              ? 'This client keeps its name and attribution when reconnecting.'
+              : 'Anonymous names are unverified. Account identity comes from your server sign-in.'}
+          </p>
           <div className="collaboration__actions">
             <button
               className="action-button"
@@ -298,11 +302,29 @@ export function CollaborationPanel({ controller }: CollaborationPanelProps) {
           <WorkflowHistoryPanel collaboration={controller} history={history} />
           <h3>Participants</h3>
           <ul className="participant-list" data-testid="participant-list">
-            {controller.participants.map((participant) => (
-              <li key={participant.actorId} data-testid={`participant-${participant.actorId}`}>
-                {participant.displayName} <span className="help-text">({participant.actorId})</span>
-              </li>
-            ))}
+            {controller.participants.map((participant) => {
+              const row = participantPresentation(participant, controller.actor.actorId, controller.connectionState, now);
+              return (
+                <li key={participant.actorId} data-testid={`participant-${participant.actorId}`}>
+                  <strong>{row.label}</strong>{row.isYou ? <span> · You</span> : null}
+                  <div className="help-text">
+                    {participant.role.toLowerCase()} · {row.status}
+                  </div>
+                  <div>
+                    <span className={`identity-badge identity-badge--${participant.verified ? 'verified' : 'unverified'}`}>
+                      {row.identityLabel}
+                    </span>
+                  </div>
+                  {row.status !== 'live' && row.lastSeen ? (
+                    <div className="help-text">Last seen <time dateTime={row.lastSeen}>{new Date(row.lastSeen).toLocaleString()}</time></div>
+                  ) : null}
+                  <details>
+                    <summary className="help-text">Client diagnostics</summary>
+                    <code>{participant.actorId}</code>
+                  </details>
+                </li>
+              );
+            })}
           </ul>
           <h3>Remote presence</h3>
           {controller.remotePresence.length === 0 ? (
@@ -311,11 +333,9 @@ export function CollaborationPanel({ controller }: CollaborationPanelProps) {
             <ul className="presence-list" data-testid="remote-presence-list">
               {controller.remotePresence.map((sample) => (
                 <li key={sample.actor.actorId} data-testid={`presence-${sample.actor.actorId}`}>
-                  <strong>{sample.actor.displayName}</strong>
+                  <strong>{sample.actor.displayName} · {sample.actor.participantCode}</strong>
                   <div className="help-text">
-                    {Object.entries(sample.attributes)
-                      .map(([key, value]) => `${key}=${value}`)
-                      .join(', ')}
+                    {visiblePresence(sample.attributes).join(' · ') || 'Connected'}
                   </div>
                 </li>
               ))}

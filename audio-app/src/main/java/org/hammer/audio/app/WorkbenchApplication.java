@@ -28,7 +28,8 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
     scanBasePackages = {
       "org.hammer.audio.app",
       "org.hammer.audio.experiment.document.http",
-      "org.hammer.audio.workflow.editor.http"
+      "org.hammer.audio.workflow.editor.http",
+      "org.hammer.audio.workflow.execution.http"
     })
 public class WorkbenchApplication {
 

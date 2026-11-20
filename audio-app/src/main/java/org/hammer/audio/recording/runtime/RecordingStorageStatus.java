@@ -2,6 +2,8 @@ package org.hammer.audio.recording.runtime;
 
 import java.nio.file.Path;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -21,6 +23,9 @@ import java.util.Objects;
  * @param level normalized storage severity
  * @param checkedAt capacity observation time
  * @param errorMessage capacity-query diagnostic, otherwise empty
+ * @param policy applied byte/time thresholds and reserve
+ * @param lastSuccessfulCheck last successful capacity observation, or null when never successful
+ * @param warningHistory significant capacity warnings retained across healthy checks
  */
 public record RecordingStorageStatus(
     Path destination,
@@ -36,7 +41,10 @@ public record RecordingStorageStatus(
     long estimatedSafeSecondsRemaining,
     RecordingStorageLevel level,
     Instant checkedAt,
-    String errorMessage) {
+    String errorMessage,
+    RecordingStoragePolicy policy,
+    Instant lastSuccessfulCheck,
+    List<RecordingStorageEvent> warningHistory) {
 
   // Validate required fields and normalize optional text.
   public RecordingStorageStatus {
@@ -46,6 +54,8 @@ public record RecordingStorageStatus(
     Objects.requireNonNull(level, "level");
     Objects.requireNonNull(checkedAt, "checkedAt");
     errorMessage = errorMessage == null ? "" : errorMessage;
+    Objects.requireNonNull(policy, "policy");
+    warningHistory = List.copyOf(warningHistory);
   }
 
   /** Unknown snapshot used before the first asynchronous capacity probe completes. */
@@ -64,7 +74,10 @@ public record RecordingStorageStatus(
         -1L,
         RecordingStorageLevel.UNKNOWN,
         now,
-        "Capacity has not been checked yet.");
+        "Capacity has not been checked yet.",
+        RecordingStoragePolicy.configured(),
+        null,
+        List.of());
   }
 
   /** Snapshot used when a runtime capacity refresh cannot inspect the backing store. */
@@ -89,11 +102,45 @@ public record RecordingStorageStatus(
         -1L,
         RecordingStorageLevel.UNKNOWN,
         now,
-        errorMessage);
+        errorMessage,
+        RecordingStoragePolicy.configured(),
+        null,
+        List.of());
   }
 
   /** Returns whether recording should stop before exhausting the backing store. */
   public boolean critical() {
     return level == RecordingStorageLevel.CRITICAL;
+  }
+
+  /** Retain warning transitions and the last successful check when a capacity query fails. */
+  public RecordingStorageStatus continuing(RecordingStorageStatus previous) {
+    List<RecordingStorageEvent> history = new ArrayList<>(previous.warningHistory());
+    if (level != RecordingStorageLevel.NORMAL
+        && (history.isEmpty()
+            || previous.level() != level
+            || !previous.errorMessage().equals(errorMessage))) {
+      history.add(
+          new RecordingStorageEvent(
+              level, checkedAt, usableBytes, estimatedSafeSecondsRemaining, errorMessage));
+    }
+    return new RecordingStorageStatus(
+        destination,
+        storeName,
+        storeType,
+        writable,
+        usableBytes,
+        unallocatedBytes,
+        totalBytes,
+        bytesWritten,
+        measuredBytesPerSecond,
+        expectedBytesPerSecond,
+        estimatedSafeSecondsRemaining,
+        level,
+        checkedAt,
+        errorMessage,
+        previous.policy(),
+        level == RecordingStorageLevel.UNKNOWN ? previous.lastSuccessfulCheck() : checkedAt,
+        history);
   }
 }

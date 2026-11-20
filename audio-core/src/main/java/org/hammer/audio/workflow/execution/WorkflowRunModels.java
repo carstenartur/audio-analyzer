@@ -108,11 +108,21 @@ public interface WorkflowRunModels {
    *
    * @param startCommandId stable transport-retry identity
    * @param source exact workflow source to capture
+   * @param expectedFingerprint reviewed canonical SHA-256, or null for legacy callers
    */
-  record Command(String startCommandId, Source source) {
+  record Command(String startCommandId, Source source, String expectedFingerprint) {
     public Command {
       StableExecutionIds.requireStable(startCommandId, "startCommandId");
       Objects.requireNonNull(source, "source");
+      if (expectedFingerprint != null && !expectedFingerprint.matches("[0-9a-f]{64}")) {
+        throw new IllegalArgumentException(
+            "expectedFingerprint must be a canonical SHA-256 digest");
+      }
+    }
+
+    /** Preserve existing callers that have not supplied a reviewed fingerprint. */
+    public Command(String startCommandId, Source source) {
+      this(startCommandId, source, null);
     }
   }
 
@@ -188,6 +198,20 @@ public interface WorkflowRunModels {
         throw new IllegalArgumentException(
             "Stored-commit inputs require commitId and no semanticRevision");
       }
+    }
+  }
+
+  /**
+   * Reviewed exact workflow input without dispatching or retaining an execution.
+   *
+   * @param input immutable source, validation and execution plan
+   * @param mode actual configured backend capability
+   */
+  record Preflight(Input input, Mode mode) {
+    // Require the same immutable input and mode used by normal execution.
+    public Preflight {
+      Objects.requireNonNull(input, "input");
+      Objects.requireNonNull(mode, "mode");
     }
   }
 

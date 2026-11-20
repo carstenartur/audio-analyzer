@@ -8,17 +8,22 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.time.Clock;
 import java.util.List;
 import org.hammer.audio.workflow.Workflow;
 import org.hammer.audio.workflow.collaboration.CollaborationMode;
 import org.hammer.audio.workflow.collaboration.OperationActor;
 import org.hammer.audio.workflow.collaboration.WorkflowSessionRegistry;
+import org.hammer.audio.workflow.collaboration.identity.InMemoryCollaborationIdentityStore;
+import org.hammer.audio.workflow.editor.http.CollaborationIdentityService;
 import org.hammer.audio.workflow.editor.http.WorkflowApiExceptionHandler;
 import org.hammer.audio.workflow.execution.SimulationWorkflowExecutionBackend;
 import org.hammer.audio.workflow.execution.WorkflowRunService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
@@ -33,7 +38,14 @@ class WorkflowRunHttpAdapterTest {
     LocalValidatorFactoryBean validator = new LocalValidatorFactoryBean();
     validator.afterPropertiesSet();
     WorkflowSessionRegistry sessions = new WorkflowSessionRegistry();
-    OperationActor owner = new OperationActor("actor.owner", "user.owner", "Owner");
+    var identities =
+        new CollaborationIdentityService(
+            new InMemoryCollaborationIdentityStore(), false, Clock.systemUTC());
+    var response = new MockHttpServletResponse();
+    var publicActor = identities.issue(new MockHttpServletRequest(), response, null, "Owner");
+    var request = new MockHttpServletRequest();
+    request.setCookies(response.getCookies());
+    OperationActor owner = identities.requireActor(request, publicActor.actorId());
     sessions.create(
         "session.test",
         CollaborationMode.PRIVATE_WORKSPACE,
@@ -43,7 +55,11 @@ class WorkflowRunHttpAdapterTest {
         new WorkflowRunService(
             sessions, null, new SimulationWorkflowExecutionBackend(), Runnable::run);
     mvc =
-        MockMvcBuilders.standaloneSetup(new WorkflowRunHttpAdapter(runs))
+        MockMvcBuilders.standaloneSetup(new WorkflowRunHttpAdapter(runs, sessions, identities))
+            .defaultRequest(
+                get("/")
+                    .cookie(response.getCookies())
+                    .header(CollaborationIdentityService.ACTOR_HEADER, publicActor.actorId()))
             .setControllerAdvice(
                 new WorkflowRunHttpExceptionHandler(), new WorkflowApiExceptionHandler())
             .setValidator(validator)

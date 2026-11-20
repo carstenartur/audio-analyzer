@@ -221,6 +221,8 @@ public final class RecordingTap {
           incomplete.set(true);
           stopReason = "Recording stopped before the destination filesystem was exhausted.";
           requestStopFromWorker();
+          discardPendingBlocks();
+          break;
         }
         publishStatus(
             stopRequested.get() ? RecordingState.STOPPING : RecordingState.RECORDING, false);
@@ -247,7 +249,20 @@ public final class RecordingTap {
       writer.abort();
       return;
     }
-    writer.close();
+    if (incomplete.get() || droppedBlocks.get() > 0L || writer.continuityGapCount() > 0L) {
+      writer.finishIncomplete();
+    } else {
+      writer.close();
+    }
+  }
+
+  private void discardPendingBlocks() throws InterruptedException {
+    AudioBlock pending = queue.poll(0L, TimeUnit.MILLISECONDS);
+    while (pending != null) {
+      droppedBlocks.incrementAndGet();
+      droppedFrames.addAndGet(pending.frames());
+      pending = queue.poll(0L, TimeUnit.MILLISECONDS);
+    }
   }
 
   private void abortWriter() {
@@ -265,18 +280,20 @@ public final class RecordingTap {
 
   private void refreshStorage(long bytesWritten) {
     try {
-      storageStatus.set(
+      RecordingStorageStatus next =
           storageProbe.probe(
-              file, bytesWritten, measuredBytesPerSecond, expectedBytesPerSecond, Instant.now()));
+              file, bytesWritten, measuredBytesPerSecond, expectedBytesPerSecond, Instant.now());
+      storageStatus.updateAndGet(next::continuing);
     } catch (IOException exception) {
-      storageStatus.set(
+      RecordingStorageStatus unavailable =
           RecordingStorageStatus.unavailable(
               file,
               bytesWritten,
               measuredBytesPerSecond,
               expectedBytesPerSecond,
               Instant.now(),
-              exception.getMessage()));
+              exception.getMessage());
+      storageStatus.updateAndGet(unavailable::continuing);
     }
   }
 
@@ -298,6 +315,17 @@ public final class RecordingTap {
       }
       throw new IOException("Recording failed", terminalFailure);
     }
+  }
+
+  /** Finalize captured blocks with a durable incomplete footer when the experiment ends early. */
+  public void stopIncomplete(String reason) throws IOException {
+    if (isClosed()) {
+      return;
+    }
+    incomplete.set(true);
+    stopReason =
+        reason == null || reason.isBlank() ? "Experiment ended before completion." : reason;
+    stop();
   }
 
   private void requestStopFromWorker() {
@@ -358,6 +386,9 @@ public final class RecordingTap {
   }
 
   private void publishStatus(RecordingState state, boolean force, String errorMessage) {
+    if (currentStatus.get().terminal()) {
+      return;
+    }
     long nowNanos = System.nanoTime();
     long previous = lastStatusPublishedNanos.get();
     if (!force && previous != 0L && nowNanos - previous < STATUS_INTERVAL_NANOS) {

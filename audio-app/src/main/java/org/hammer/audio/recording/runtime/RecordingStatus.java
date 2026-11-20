@@ -68,7 +68,10 @@ public record RecordingStatus(
 
   /** Returns whether all received blocks were written without a continuity gap. */
   public boolean completeSoFar() {
-    return droppedBlocks == 0L && continuityGapCount == 0L && state != RecordingState.FAILED;
+    return droppedBlocks == 0L
+        && continuityGapCount == 0L
+        && state != RecordingState.FAILED
+        && state != RecordingState.INCOMPLETE;
   }
 
   /** Returns whether this is a terminal status. */

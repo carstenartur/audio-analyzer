@@ -57,6 +57,7 @@ export interface WorkflowRunCommand {
   sessionId: string | null;
   expectedRevision: number | null;
   commitId: string | null;
+  expectedFingerprint: string | null;
 }
 
 export interface WorkflowRunState {

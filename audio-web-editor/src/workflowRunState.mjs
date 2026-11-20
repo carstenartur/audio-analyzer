@@ -12,7 +12,8 @@
  *   startCommandId: string,
  *   sessionId: string | null,
  *   expectedRevision: number | null,
- *   commitId: string | null
+ *   commitId: string | null,
+ *   expectedFingerprint: string | null
  * }} RunCommand
  */
 /**
@@ -94,37 +95,43 @@ export function emptyWorkflowRunState() {
  * @param {string} commandId stable idempotency identity
  * @param {string} sessionId exact collaboration session
  * @param {number} expectedRevision exact displayed semantic revision
+ * @param {string | null} [expectedFingerprint] reviewed canonical workflow digest, if available
  * @returns {Readonly<RunCommand>} immutable live-session command
  */
-export function createLiveRunCommand(commandId, sessionId, expectedRevision) {
+export function createLiveRunCommand(commandId, sessionId, expectedRevision, expectedFingerprint = null) {
   requireIdentifier(commandId, 'startCommandId');
   requireIdentifier(sessionId, 'sessionId');
   if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0) {
     throw new Error('Live workflow runs require a non-negative expected revision');
   }
+  requireFingerprint(expectedFingerprint);
   return Object.freeze({
     sourceKind: /** @type {'LIVE_SESSION'} */ ('LIVE_SESSION'),
     startCommandId: commandId,
     sessionId,
     expectedRevision,
     commitId: null,
+    expectedFingerprint,
   });
 }
 
 /**
  * @param {string} commandId stable idempotency identity
  * @param {string} commitId exact historical commit
+ * @param {string | null} [expectedFingerprint] reviewed canonical workflow digest, if available
  * @returns {Readonly<RunCommand>} immutable historical command
  */
-export function createStoredRunCommand(commandId, commitId) {
+export function createStoredRunCommand(commandId, commitId, expectedFingerprint = null) {
   requireIdentifier(commandId, 'startCommandId');
   requireIdentifier(commitId, 'commitId');
+  requireFingerprint(expectedFingerprint);
   return Object.freeze({
     sourceKind: /** @type {'STORED_COMMIT'} */ ('STORED_COMMIT'),
     startCommandId: commandId,
     sessionId: null,
     expectedRevision: null,
     commitId,
+    expectedFingerprint,
   });
 }
 
@@ -133,19 +140,30 @@ export function createStoredRunCommand(commandId, commitId) {
  * @returns {Record<string, unknown>} exact REST request body
  */
 export function runStartRequest(command) {
+  const reviewed = command.expectedFingerprint === null || command.expectedFingerprint === undefined
+    ? {} : { expectedFingerprint: command.expectedFingerprint };
   if (command.sourceKind === 'LIVE_SESSION') {
     return {
       startCommandId: command.startCommandId,
       sourceKind: command.sourceKind,
       sessionId: command.sessionId,
       expectedRevision: command.expectedRevision,
+      ...reviewed,
     };
   }
   return {
     startCommandId: command.startCommandId,
     sourceKind: command.sourceKind,
     commitId: command.commitId,
+    ...reviewed,
   };
+}
+
+/** @param {string | null} fingerprint optional canonical SHA-256 reviewed by the operator */
+function requireFingerprint(fingerprint) {
+  if (fingerprint !== null && !/^[0-9a-f]{64}$/.test(fingerprint)) {
+    throw new Error('Reviewed workflow fingerprint must be a canonical SHA-256 digest');
+  }
 }
 
 /** @param {RunLifecycleState} state lifecycle state */

@@ -44,6 +44,40 @@ hidden: dropped blocks and frames are counted and the terminal result becomes `I
 The capacity estimate is advisory. Filesystem quotas, network mounts and concurrent writers can
 change after a successful check, so write failures are still handled and shown explicitly.
 
+## Configurable storage policy
+
+Preflight and runtime use the same `RecordingStoragePolicy`. The probe resolves the destination's
+nearest existing parent, checks `FileStore.isReadOnly()` and writability, and obtains usable,
+unallocated and total space. Expected growth includes normalized float samples and the container's
+20-byte block header at the configured block size. Runtime uses the greater of expected and measured
+rates, reserves the critical byte floor, and displays unknown capacity distinctly from zero space.
+
+|           Java system property            |   Default |                      Meaning                       |
+|-------------------------------------------|----------:|----------------------------------------------------|
+| `audio.recording.storage.warningBytes`    | 268435456 | Warn below 256 MiB usable                          |
+| `audio.recording.storage.criticalBytes`   |  67108864 | Stop below 64 MiB usable                           |
+| `audio.recording.storage.warningSeconds`  |       300 | Warn below five minutes of safe recording          |
+| `audio.recording.storage.criticalSeconds` |        30 | Stop below 30 seconds of safe recording            |
+| `audio.recording.storage.safetyMargin`    |       0.1 | Additional duration margin in experiment preflight |
+
+Both byte and time thresholds apply. Thresholds must be finite, non-negative and correctly ordered.
+A failed query retains the last successful check time and appends a visible warning event; it is not
+reported as a successful zero-space check. Capacity and source timestamps expose stale observations.
+The persistent recording strip uses a red recording indicator plus text, storage severity and warning
+history count. The final summary includes bytes, duration, drops/gaps, stop reason and warning history.
+
+At critical capacity, the writer stops accepting new input, counts/discards queued blocks and writes
+an **INCOMPLETE** footer while the reserved margin is still available. The marker participates in the
+SHA-256, so changing it into a complete marker cannot pass checksum validation. Strict replay rejects
+this file; inspection and non-destructive recovery remain available. Previous readers reject the new
+incomplete marker safely while all valid existing complete version-2 recordings remain readable.
+
+Swing preflight, recorder startup and finalization run on background workers. Runtime snapshots can
+be rendered without filesystem access from either the capture thread or the Swing event thread.
+
+For the complete microphone-array workflow, use
+[Microphone experiments](microphone-experiments.md).
+
 ## Replaying a session
 
 1. Inspect the source when its integrity is uncertain by choosing
@@ -85,14 +119,16 @@ A version 2 file contains:
 
 A path-backed writer writes to a sibling `.partial` file. Only a successfully flushed footer causes
 the partial file to be moved to the requested `.aarec` target; atomic move is used when supported.
-Consequently, the presence of the final target means clean container finalization, while source
-continuity is reported separately.
+Consequently, the presence of the final target means clean container finalization, but the footer still distinguishes complete evidence from an explicitly incomplete stop.
+The final filename alone does not prove completeness.
 
 ## Integrity states
 
 Inspection distinguishes:
 
 - `COMPLETE` — version 2 footer, counters and SHA-256 are valid;
+- `INCOMPLETE` — the footer and checksum are valid, but low space, an early experiment stop,
+  dropped blocks or a continuity gap prevented complete evidence;
 - `LEGACY_UNVERIFIED` — a version 1 file ended cleanly at a block boundary but has no footer;
 - `RECOVERABLE_INCOMPLETE` — complete version 2 blocks exist, but no footer was written;
 - `TRUNCATED` — input ended inside a block or footer;
@@ -104,7 +140,7 @@ complete blocks without presenting them as successful evidence.
 ## Non-destructive recovery
 
 **File > Inspect or recover recording...** previews integrity, format version, block/frame counts,
-continuity gaps and SHA-256. For recoverable, truncated or corrupt input it can copy every complete
+continuity gaps and SHA-256. For explicitly incomplete, recoverable, truncated or corrupt input it can copy every complete
 readable block into a separate finalized `.aarec` file. The source bytes are never modified.
 
 Recovery proves the integrity of the new container; it does not recreate samples that were never

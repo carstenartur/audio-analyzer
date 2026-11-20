@@ -17,6 +17,8 @@ import org.hammer.audio.core.AudioBlock;
 import org.hammer.audio.core.AudioFormatDescriptor;
 
 /** Live JavaSound adapter for the common synchronized multichannel source contract. */
+// Device open/close must be mutually exclusive, including when Stop interrupts a blocked read.
+@SuppressWarnings("PMD.AvoidSynchronizedAtMethodLevel")
 public final class JavaSoundMicrophoneArraySource implements MultiChannelAudioSource {
 
   private final MicrophoneArrayProfile profile;
@@ -24,9 +26,9 @@ public final class JavaSoundMicrophoneArraySource implements MultiChannelAudioSo
   private final SampleDecoder decoder;
   private final AudioLineProvider lineProvider;
 
-  private TargetDataLine line;
+  private volatile TargetDataLine line;
   private long nextFrameIndex;
-  private boolean closed;
+  private volatile boolean closed;
 
   /**
    * Open a live source for the device selected in the profile.
@@ -74,6 +76,7 @@ public final class JavaSoundMicrophoneArraySource implements MultiChannelAudioSo
   }
 
   @Override
+  @SuppressWarnings("PMD.CloseResource") // Borrowed field; close() owns and releases the line.
   public Optional<AudioBlock> readBlock(int frames) throws IOException {
     if (frames <= 0) {
       throw new IllegalArgumentException("frames must be > 0");
@@ -82,8 +85,12 @@ public final class JavaSoundMicrophoneArraySource implements MultiChannelAudioSo
       return Optional.empty();
     }
     ensureOpen();
+    TargetDataLine currentLine = line;
+    if (currentLine == null || closed) {
+      return Optional.empty();
+    }
     byte[] data = new byte[Math.multiplyExact(frames, decoder.frameSize())];
-    int byteCount = readUpTo(data);
+    int byteCount = readUpTo(data, currentLine);
     int decodedFrames = decoder.framesIn(byteCount);
     if (decodedFrames == 0) {
       return Optional.empty();
@@ -96,7 +103,7 @@ public final class JavaSoundMicrophoneArraySource implements MultiChannelAudioSo
   }
 
   @Override
-  public void close() {
+  public synchronized void close() {
     closed = true;
     if (line == null) {
       return;
@@ -107,8 +114,8 @@ public final class JavaSoundMicrophoneArraySource implements MultiChannelAudioSo
     line = null;
   }
 
-  private void ensureOpen() {
-    if (line != null) {
+  private synchronized void ensureOpen() {
+    if (line != null || closed) {
       return;
     }
     AudioFormatDescriptor format = configuration.format();
@@ -123,10 +130,10 @@ public final class JavaSoundMicrophoneArraySource implements MultiChannelAudioSo
     line.start();
   }
 
-  private int readUpTo(byte[] data) throws IOException {
+  private int readUpTo(byte[] data, TargetDataLine currentLine) throws IOException {
     int total = 0;
     while (total < data.length && !closed) {
-      int count = line.read(data, total, data.length - total);
+      int count = currentLine.read(data, total, data.length - total);
       if (count < 0) {
         break;
       }

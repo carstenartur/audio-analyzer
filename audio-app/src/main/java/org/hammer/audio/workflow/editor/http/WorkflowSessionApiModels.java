@@ -10,10 +10,7 @@ import java.util.Map;
 import java.util.Objects;
 import org.hammer.audio.workflow.Workflow;
 import org.hammer.audio.workflow.collaboration.CollaborationMode;
-import org.hammer.audio.workflow.collaboration.OperationActor;
 import org.hammer.audio.workflow.collaboration.PresenceState;
-import org.hammer.audio.workflow.collaboration.RedoWorkflowCommand;
-import org.hammer.audio.workflow.collaboration.UndoWorkflowCommand;
 import org.hammer.audio.workflow.collaboration.WorkflowHistoryCommandResult;
 import org.hammer.audio.workflow.collaboration.WorkflowSessionEvent;
 import org.hammer.audio.workflow.collaboration.WorkflowSessionRegistry.SessionSnapshot;
@@ -40,17 +37,14 @@ public final class WorkflowSessionApiModels {
   }
 
   /**
-   * Actor identity supplied by the transport/authentication boundary.
+   * Legacy request shape carrying only a client selector; all attribution is resolved server-side.
    *
    * @param actorId stable actor identifier within collaboration history
-   * @param userId stable authenticated user identifier
+   * @param userId legacy ignored subject field; identity is resolved from a server credential
    * @param displayName human-readable actor name
    */
-  public record ActorRequest(
-      @NotBlank String actorId, @NotBlank String userId, @NotBlank String displayName) {
-    OperationActor toDomain() {
-      return new OperationActor(actorId, userId, displayName);
-    }
+  public record ActorRequest(@NotBlank String actorId, String userId, String displayName) {
+    // Immutable transport projection; authority is resolved separately.
   }
 
   /**
@@ -83,14 +77,11 @@ public final class WorkflowSessionApiModels {
    * Request for joining an existing session.
    *
    * @param actorId stable actor identifier within collaboration history
-   * @param userId stable authenticated user identifier
+   * @param userId legacy ignored subject field; identity is resolved from a server credential
    * @param displayName human-readable actor name
    */
-  public record JoinSessionRequest(
-      @NotBlank String actorId, @NotBlank String userId, @NotBlank String displayName) {
-    OperationActor toDomain() {
-      return new OperationActor(actorId, userId, displayName);
-    }
+  public record JoinSessionRequest(@NotBlank String actorId, String userId, String displayName) {
+    // Immutable transport projection; authority is resolved separately.
   }
 
   /**
@@ -154,11 +145,6 @@ public final class WorkflowSessionApiModels {
     public UndoCommandRequest {
       Objects.requireNonNull(actor, ACTOR_FIELD);
     }
-
-    UndoWorkflowCommand toDomain() {
-      return new UndoWorkflowCommand(
-          commandId, actor.toDomain(), expectedRevision, targetOperationId, previewId);
-    }
   }
 
   /**
@@ -176,11 +162,6 @@ public final class WorkflowSessionApiModels {
       @NotBlank String targetUndoOperationId) {
     public RedoCommandRequest {
       Objects.requireNonNull(actor, ACTOR_FIELD);
-    }
-
-    RedoWorkflowCommand toDomain() {
-      return new RedoWorkflowCommand(
-          commandId, actor.toDomain(), expectedRevision, targetUndoOperationId);
     }
   }
 
@@ -277,7 +258,7 @@ public final class WorkflowSessionApiModels {
    * Request for non-semantic cursor, selection, or viewport presence state.
    *
    * @param actor actor publishing the state
-   * @param observedAt client observation time, or {@code null} to use server time
+   * @param observedAt legacy client timestamp, ignored in favor of server time
    * @param attributes transport-neutral presence attributes
    */
   public record PresenceRequest(
@@ -287,11 +268,6 @@ public final class WorkflowSessionApiModels {
     public PresenceRequest {
       Objects.requireNonNull(actor, ACTOR_FIELD);
       attributes = Map.copyOf(Objects.requireNonNull(attributes, "attributes"));
-    }
-
-    PresenceState toDomain() {
-      Instant timestamp = observedAt == null ? Instant.now() : observedAt;
-      return new PresenceState(actor.actorId(), timestamp, attributes);
     }
   }
 
@@ -342,9 +318,13 @@ public final class WorkflowSessionApiModels {
       attributes = Map.copyOf(Objects.requireNonNull(attributes, "attributes"));
     }
 
-    static SessionEventResponse from(WorkflowSessionEvent event) {
+    static SessionEventResponse from(
+        WorkflowSessionEvent event, CollaborationIdentityService identities, String ownerId) {
       ActorResponse actorResponse =
-          event.actor() == null ? null : ActorResponse.from(event.actor());
+          event.actor() == null
+              ? null
+              : identities.project(
+                  event.actor(), event.actor().actorId().equals(ownerId) ? "OWNER" : "EDITOR");
       WorkflowProjection workflowProjection =
           event.workflow() == null ? null : WorkflowProjection.fromWorkflow(event.workflow());
       return new SessionEventResponse(
@@ -357,7 +337,9 @@ public final class WorkflowSessionApiModels {
           actorResponse,
           event.operationId(),
           workflowProjection,
-          event.attributes());
+          event.type() == WorkflowSessionEvent.Type.PRESENCE_UPDATED
+              ? CollaborationPresence.allowListed(event.attributes())
+              : event.attributes());
     }
   }
 
@@ -365,13 +347,24 @@ public final class WorkflowSessionApiModels {
    * Stable actor representation returned by the API.
    *
    * @param actorId stable collaboration actor identifier
-   * @param userId stable authenticated user identifier
    * @param displayName human-readable actor name
+   * @param provenance server-assigned account provenance
+   * @param verified whether the server authenticated the account
+   * @param accountHandle optional handle permitted by server privacy policy
+   * @param role server-assigned session role
+   * @param participantCode public short disambiguator
+   * @param lastSeen most recent server-observed activity, absent after a restart until reconnect
    */
-  public record ActorResponse(String actorId, String userId, String displayName) {
-    static ActorResponse from(OperationActor actor) {
-      return new ActorResponse(actor.actorId(), actor.userId(), actor.displayName());
-    }
+  public record ActorResponse(
+      String actorId,
+      String displayName,
+      String provenance,
+      boolean verified,
+      String accountHandle,
+      String role,
+      String participantCode,
+      Instant lastSeen) {
+    // Immutable transport projection; authority is resolved separately.
   }
 
   /**
@@ -401,13 +394,19 @@ public final class WorkflowSessionApiModels {
       participants = List.copyOf(Objects.requireNonNull(participants, "participants"));
     }
 
-    static SessionResponse from(SessionSnapshot snapshot) {
+    static SessionResponse from(SessionSnapshot snapshot, CollaborationIdentityService identities) {
       return new SessionResponse(
           snapshot.sessionId(),
           snapshot.mode(),
-          ActorResponse.from(snapshot.owner()),
+          identities.project(snapshot.owner(), "OWNER"),
           snapshot.createdAt(),
-          snapshot.participants().stream().map(ActorResponse::from).toList(),
+          snapshot.participants().stream()
+              .map(
+                  actor ->
+                      identities.project(
+                          actor,
+                          actor.actorId().equals(snapshot.owner().actorId()) ? "OWNER" : "EDITOR"))
+              .toList(),
           snapshot.operationCount(),
           snapshot.workflowId(),
           snapshot.revision(),

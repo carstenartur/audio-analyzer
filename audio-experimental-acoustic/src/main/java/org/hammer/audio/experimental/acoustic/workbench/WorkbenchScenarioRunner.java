@@ -1,5 +1,6 @@
 package org.hammer.audio.experimental.acoustic.workbench;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -12,9 +13,12 @@ import org.hammer.audio.acquisition.LocalizationExperiment;
 import org.hammer.audio.acquisition.LocalizationExperimentStage;
 import org.hammer.audio.acquisition.LocalizationInputMode;
 import org.hammer.audio.acquisition.MicrophoneArray;
+import org.hammer.audio.acquisition.MicrophoneArrayCalibration;
 import org.hammer.audio.acquisition.MicrophoneArrayLayout;
 import org.hammer.audio.acquisition.MicrophoneArrayProfile;
+import org.hammer.audio.acquisition.MultiChannelAudioSource;
 import org.hammer.audio.core.AudioBlock;
+import org.hammer.audio.experimental.acoustic.CalibratedTdoaEstimator;
 import org.hammer.audio.experimental.acoustic.CrossCorrelationTdoaEstimator;
 import org.hammer.audio.experimental.acoustic.DelayAndSumBeamformer;
 import org.hammer.audio.experimental.acoustic.FrequencyBand;
@@ -86,9 +90,48 @@ public final class WorkbenchScenarioRunner {
     Objects.requireNonNull(scenario, "scenario");
     Objects.requireNonNull(parameters, "parameters");
 
-    try (SimulatedMicrophoneArraySource source = scenario.newSource()) {
+    try {
+      return runSource(
+          scenario.newSource(),
+          scenario,
+          simulationExperiment(scenario, parameters),
+          parameters,
+          callback);
+    } catch (java.io.IOException exception) {
+      throw new IllegalStateException("Unexpected source failure in simulation", exception);
+    }
+  }
+
+  /**
+   * Run simulation, verified replay or live capture through the same calibrated tracking pipeline.
+   * The supplied source is always closed; replay/live never receive simulated benchmark evidence.
+   */
+  public static WorkbenchRunResult runSource(
+      MultiChannelAudioSource source,
+      SimulationScenario context,
+      LocalizationExperiment experiment,
+      WorkbenchParameters parameters,
+      ProgressCallback callback)
+      throws java.io.IOException {
+    Objects.requireNonNull(source, "source");
+    Objects.requireNonNull(experiment, "experiment");
+    try (source) {
+      if (source.format().channels() != experiment.profile().array().channels()
+          || !source
+              .microphoneArray()
+              .microphones()
+              .equals(experiment.profile().array().microphones())) {
+        throw new IllegalArgumentException(
+            "Source channel map and geometry do not match the experiment profile.");
+      }
       MicrophoneArray array = source.microphoneArray();
-      TrackingPipeline pipeline = buildPipeline(scenario, parameters);
+      TrackingPipeline pipeline =
+          buildPipeline(
+              context,
+              parameters,
+              experiment.inputMode() == LocalizationInputMode.SIMULATION
+                  ? null
+                  : experiment.profile().calibration());
 
       List<TrackingSnapshot> snapshots = new ArrayList<>();
       long totalProcessingNanos = 0L;
@@ -99,7 +142,7 @@ public final class WorkbenchScenarioRunner {
           break;
         }
         AudioBlock block = source.readBlock(parameters.blockSize()).orElse(null);
-        if (block == null || block.frames() < parameters.blockSize()) {
+        if (block == null || block.frames() == 0) {
           break;
         }
         TrackingSnapshot snapshot = pipeline.process(block, array);
@@ -112,15 +155,15 @@ public final class WorkbenchScenarioRunner {
       }
 
       return new WorkbenchRunResult(
-          scenario,
+          context,
           parameters,
           snapshots,
           totalProcessingNanos,
-          computeBenchmarkReport(scenario, snapshots),
+          experiment.inputMode() == LocalizationInputMode.SIMULATION
+              ? computeBenchmarkReport(context, snapshots)
+              : null,
           pipeline.schedule(),
-          simulationExperiment(scenario, parameters));
-    } catch (java.io.IOException exception) {
-      throw new IllegalStateException("Unexpected close failure on simulation source", exception);
+          experiment);
     }
   }
 
@@ -167,12 +210,28 @@ public final class WorkbenchScenarioRunner {
 
   /** Construct a {@link TrackingPipeline} from the given scenario and workbench parameters. */
   static TrackingPipeline buildPipeline(SimulationScenario scenario, WorkbenchParameters params) {
+    return buildPipeline(scenario, params, null);
+  }
+
+  private static TrackingPipeline buildPipeline(
+      SimulationScenario scenario,
+      WorkbenchParameters params,
+      MicrophoneArrayCalibration calibration) {
     FrequencyBand band = new FrequencyBand(params.bandMinHz(), params.bandMaxHz());
     MultiPeakDetector detector =
         new MultiPeakDetector(params.fftSize(), band, params.maxPeaks(), params.minSnr());
     FrequencyClusterer clusterer =
         new FrequencyClusterer(params.clusteringToleranceHz(), 0.0, 2, 4);
     TdoaEstimator tdoaEstimator = buildTdoaEstimator(params);
+    if (calibration != null) {
+      tdoaEstimator =
+          new CalibratedTdoaEstimator(
+              tdoaEstimator,
+              calibration,
+              Clock.systemUTC(),
+              1.0,
+              SimulatedMicrophoneArraySource.DEFAULT_SPEED_OF_SOUND_METERS_PER_SECOND);
+    }
     DelayAndSumBeamformer beamformer =
         new DelayAndSumBeamformer(
             SimulatedMicrophoneArraySource.DEFAULT_SPEED_OF_SOUND_METERS_PER_SECOND);

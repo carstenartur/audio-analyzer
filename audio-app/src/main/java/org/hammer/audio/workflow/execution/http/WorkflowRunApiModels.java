@@ -2,6 +2,7 @@ package org.hammer.audio.workflow.execution.http;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.PositiveOrZero;
 import java.time.Instant;
 import java.util.List;
@@ -30,13 +31,25 @@ public interface WorkflowRunApiModels {
    * @param sessionId live collaboration-session identifier, otherwise {@code null}
    * @param expectedRevision exact live semantic revision, otherwise {@code null}
    * @param commitId exact stored workflow commit, otherwise {@code null}
+   * @param expectedFingerprint reviewed canonical SHA-256, or null for legacy callers
    */
   record StartRunRequest(
       @NotBlank String startCommandId,
       @NotNull SourceKind sourceKind,
       String sessionId,
       @PositiveOrZero Long expectedRevision,
-      String commitId) {
+      String commitId,
+      @Pattern(regexp = "[0-9a-f]{64}") String expectedFingerprint) {
+
+    /** Preserve existing callers that have not supplied a reviewed fingerprint. */
+    public StartRunRequest(
+        String startCommandId,
+        SourceKind sourceKind,
+        String sessionId,
+        Long expectedRevision,
+        String commitId) {
+      this(startCommandId, sourceKind, sessionId, expectedRevision, commitId, null);
+    }
 
     Command toCommand() {
       Objects.requireNonNull(sourceKind, "sourceKind");
@@ -45,7 +58,7 @@ public interface WorkflowRunApiModels {
             case LIVE_SESSION -> liveSource();
             case STORED_COMMIT -> storedSource();
           };
-      return new Command(startCommandId, source);
+      return new Command(startCommandId, source, expectedFingerprint);
     }
 
     private LiveSessionSource liveSource() {

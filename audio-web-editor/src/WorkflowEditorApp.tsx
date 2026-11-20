@@ -18,6 +18,7 @@ import 'reactflow/dist/style.css';
 
 import { CollaborationPanel } from './CollaborationPanel';
 import { ExperimentDocumentPanel } from './ExperimentDocumentPanel';
+import { ExperimentDocumentHealthPanel } from './ExperimentDocumentHealthPanel';
 import {
   getJson,
   postJson,
@@ -439,6 +440,8 @@ export default function WorkflowEditorApp() {
 
       <aside className="workbench__panel workbench__panel--left" data-testid="node-palette">
         <ExperimentDocumentPanel />
+        <ExperimentDocumentHealthPanel />
+        <p><a className="action-button" href="/workbench/experiment" data-testid="open-microphone-experiment">Open microphone experiment workflow</a></p>
         <CollaborationPanel controller={collaboration} />
         <h2>Node palette</h2>
         <p className="help-text">

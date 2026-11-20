@@ -36,12 +36,12 @@ function timestamp(value: string): string {
 function actorLabel(collaboration: WorkflowSessionController, actorId: string): string {
   const participant = collaboration.participants.find((candidate) => candidate.actorId === actorId);
   if (participant !== undefined) {
-    return `${participant.displayName} (${actorId})`;
+    return `${participant.displayName} · ${participant.participantCode}`;
   }
   if (collaboration.session?.owner.actorId === actorId) {
-    return `${collaboration.session.owner.displayName} (${actorId})`;
+    return `${collaboration.session.owner.displayName} · ${collaboration.session.owner.participantCode}`;
   }
-  return actorId;
+  return 'Earlier participant';
 }
 
 function isEditableTarget(target: EventTarget | null): boolean {
@@ -69,7 +69,7 @@ function OperationFacts({
       </div>
       <div>
         <dt>Actor</dt>
-        <dd>{actorLabel(collaboration, operation.actorId)}</dd>
+        <dd>{operation.actor ? `${operation.actor.displayName} · ${operation.actor.participantCode}` : actorLabel(collaboration, operation.actorId)}</dd>
       </div>
       <div>
         <dt>Accepted</dt>
@@ -95,7 +95,7 @@ function OperationFacts({
   );
 }
 
-function BlockingList({ blockers }: { blockers: BlockingOperationResponse[] }) {
+function BlockingList({ blockers, collaboration }: { blockers: BlockingOperationResponse[]; collaboration: WorkflowSessionController }) {
   if (blockers.length === 0) {
     return null;
   }
@@ -105,7 +105,7 @@ function BlockingList({ blockers }: { blockers: BlockingOperationResponse[] }) {
       <ul>
         {blockers.map((blocker) => (
           <li key={blocker.operationId}>
-            <code>{blocker.operationId}</code> by <code>{blocker.actorId}</code>
+            <code>{blocker.operationId}</code> by <span>{actorLabel(collaboration, blocker.actorId)}</span>
             <div>Objects: {blocker.conflictingObjectIds.join(', ')}</div>
           </li>
         ))}
@@ -347,14 +347,14 @@ export function WorkflowHistoryPanel({
         <div className="history-warning" data-testid="personal-undo-unavailable">
           <strong>Undo unavailable: {capabilities.personalUndo.status}</strong>
           <p>{policy.personalUndoReason}</p>
-          <BlockingList blockers={capabilities.personalUndo.blockingOperations} />
+          <BlockingList collaboration={collaboration} blockers={capabilities.personalUndo.blockingOperations} />
         </div>
       ) : null}
       {capabilities?.redo != null && !capabilities.redo.available ? (
         <div className="history-warning" data-testid="redo-unavailable">
           <strong>Redo unavailable: {capabilities.redo.status}</strong>
           <p>{policy.redoReason}</p>
-          <BlockingList blockers={capabilities.redo.blockingOperations} />
+          <BlockingList collaboration={collaboration} blockers={capabilities.redo.blockingOperations} />
         </div>
       ) : null}
 
@@ -377,7 +377,7 @@ export function WorkflowHistoryPanel({
                     />
                     <span>
                       <strong>{operation.operationType}</strong> ·{' '}
-                      {actorLabel(collaboration, operation.actorId)} ·{' '}
+                      {operation.actor ? `${operation.actor.displayName} · ${operation.actor.participantCode}` : actorLabel(collaboration, operation.actorId)} ·{' '}
               <time className="history-timestamp" dateTime={operation.occurredAt}>
                 {timestamp(operation.occurredAt)}
               </time>
@@ -457,7 +457,7 @@ export function WorkflowHistoryPanel({
         <div className="history-error" data-testid="history-problem">
           <strong>{history.problem.title ?? history.problem.code ?? 'History request failed'}</strong>
           <p>{history.problem.detail ?? 'The server rejected the history request.'}</p>
-          <BlockingList blockers={problemBlockers} />
+          <BlockingList collaboration={collaboration} blockers={problemBlockers} />
           <button
             className="action-button action-button--secondary"
             onClick={history.clearProblem}
@@ -511,7 +511,7 @@ export function WorkflowHistoryPanel({
                 <dd>{preview.value.affectedObjectIds.join(', ') || 'None reported'}</dd>
               </div>
             </dl>
-            <BlockingList blockers={previewBlockers} />
+            <BlockingList collaboration={collaboration} blockers={previewBlockers} />
             {mode === 'SHARED_SESSION_SHARED_UNDO' && preview.kind === 'UNDO' ? (
               <label className="history-shared-confirmation">
                 <input

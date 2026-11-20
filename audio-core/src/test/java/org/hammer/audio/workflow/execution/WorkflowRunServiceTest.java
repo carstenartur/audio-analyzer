@@ -52,6 +52,92 @@ class WorkflowRunServiceTest {
       new OperationActor("actor.owner", "user.owner", "Owner");
 
   @org.junit.jupiter.api.Test
+  void readinessPreflightChecksTheExactSourceWithoutDispatchingOrRetainingARun() {
+    AtomicInteger dispatched = new AtomicInteger();
+    WorkflowRunService service =
+        service(
+            sessionsWithEmptyWorkflow(),
+            null,
+            new SimulationWorkflowExecutionBackend(),
+            ignored -> dispatched.incrementAndGet());
+
+    var ready =
+        service.preflight(
+            new Command("command.preflight", new LiveSessionSource("session.test", 0)));
+
+    assertEquals(Mode.SIMULATION, ready.mode());
+    assertEquals(0L, ready.input().semanticRevision());
+    assertEquals(64, ready.input().fingerprint().length());
+    assertTrue(service.runs().isEmpty());
+    assertEquals(0, dispatched.get());
+    assertThrows(
+        WorkflowSessionRevisionConflictException.class,
+        () ->
+            service.preflight(
+                new Command("command.stale-preflight", new LiveSessionSource("session.test", 1))));
+  }
+
+  @org.junit.jupiter.api.Test
+  void recreatedSessionAtSameRevisionCannotUseAnotherGraphReadinessFingerprint() {
+    WorkflowSessionRegistry sessions = sessionsWithEmptyWorkflow();
+    AtomicInteger dispatched = new AtomicInteger();
+    WorkflowRunService service =
+        service(
+            sessions,
+            null,
+            new SimulationWorkflowExecutionBackend(),
+            ignored -> dispatched.incrementAndGet());
+    LiveSessionSource source = new LiveSessionSource("session.test", 0);
+    String reviewed =
+        service.preflight(new Command("command.review", source)).input().fingerprint();
+    sessions.close("session.test", OWNER.actorId());
+    sessions.create(
+        "session.test",
+        CollaborationMode.PRIVATE_WORKSPACE,
+        OWNER,
+        new Workflow("workflow.test", "Replacement graph", List.of(), List.of()));
+
+    WorkflowRunException rejected =
+        assertThrows(
+            WorkflowRunException.class,
+            () -> service.start(new Command("command.reviewed", source, reviewed)));
+
+    assertEquals(Code.SOURCE_FINGERPRINT_MISMATCH, rejected.code());
+    assertEquals(0, dispatched.get());
+    assertTrue(service.runs().isEmpty());
+    // Existing callers remain supported when they do not opt into reviewed fingerprint matching.
+    assertEquals(State.QUEUED, service.start(new Command("command.legacy", source)).state());
+    assertEquals(1, dispatched.get());
+  }
+
+  @org.junit.jupiter.api.Test
+  void reviewedIdempotentRetryUsesCapturedFingerprintAfterSourceClosure() {
+    WorkflowSessionRegistry sessions = sessionsWithEmptyWorkflow();
+    AtomicInteger dispatched = new AtomicInteger();
+    WorkflowRunService service =
+        service(
+            sessions,
+            null,
+            new SimulationWorkflowExecutionBackend(),
+            ignored -> dispatched.incrementAndGet());
+    LiveSessionSource source = new LiveSessionSource("session.test", 0);
+    String reviewed =
+        service.preflight(new Command("command.review", source)).input().fingerprint();
+    Command command = new Command("command.retry-reviewed", source, reviewed);
+    Snapshot captured = service.start(command);
+    sessions.close("session.test", OWNER.actorId());
+
+    assertEquals(captured, service.start(command));
+    WorkflowRunException rejected =
+        assertThrows(
+            WorkflowRunException.class,
+            () -> service.start(new Command(command.startCommandId(), source, "f".repeat(64))));
+    assertEquals(Code.SOURCE_FINGERPRINT_MISMATCH, rejected.code());
+    assertEquals(1, dispatched.get());
+    assertEquals(1, service.runs().size());
+  }
+
+  @org.junit.jupiter.api.Test
   void executesExactLiveRevisionAsClearlyLabelledSimulation() {
     WorkflowSessionRegistry sessions = sessionsWithEmptyWorkflow();
     WorkflowRunService service =
@@ -67,6 +153,35 @@ class WorkflowRunServiceTest {
     assertEquals(
         ExecutionStatus.COMPLETED,
         service.result(run.runId()).reproducibilityBundle().result().overallStatus());
+  }
+
+  @org.junit.jupiter.api.Test
+  void authorizedCaptureRejectsDifferentSessionOrRevisionBeforeDispatch() {
+    WorkflowSessionRegistry sessions = sessionsWithEmptyWorkflow();
+    WorkflowSessionRegistry.SessionWorkflowSnapshot captured =
+        sessions.authorizedWorkflow("session.test", OWNER);
+    AtomicInteger dispatched = new AtomicInteger();
+    WorkflowRunService service =
+        service(
+            sessions,
+            null,
+            new SimulationWorkflowExecutionBackend(),
+            task -> dispatched.incrementAndGet());
+
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            service.start(
+                new Command("command.wrong-session", new LiveSessionSource("session.other", 0)),
+                captured));
+    assertThrows(
+        WorkflowSessionRevisionConflictException.class,
+        () ->
+            service.start(
+                new Command("command.wrong-revision", new LiveSessionSource("session.test", 1)),
+                captured));
+    assertTrue(service.runs().isEmpty());
+    assertEquals(0, dispatched.get());
   }
 
   @org.junit.jupiter.api.Test

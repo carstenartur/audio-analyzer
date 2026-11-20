@@ -5,6 +5,15 @@ reproducible localization evidence. It uses the same acquisition-domain concepts
 replay, so moving an experiment between source modes does not require a second geometry or metadata
 model.
 
+## Operator entry points
+
+Open **`/workbench/experiment`** in the browser or **Experiment > Microphone-array workflow…** in the
+desktop experiment host. The [microphone experiment operator guide](../../../../features/microphone-experiments.md)
+walks through source selection, saved geometry, measured calibration, preflight, runtime monitoring,
+replay/recovery and actual evidence export. These are views of the same host service and source
+pipeline. Live is explicitly blocked when no suitable device/calibration exists. Simulation remains
+available for a reproducible first run without hardware.
+
 ## 1. Discover and select a capture device
 
 `JavaSoundCaptureDeviceDiscovery` enumerates input-capable JavaSound mixers and exposes API-neutral
@@ -85,7 +94,8 @@ ordered lifecycle is:
 5. `BENCHMARKED` — outputs have been compared with available evidence;
 6. `EXPORTED` — manifests and reports have been written.
 
-Stages advance one step at a time. Additional metadata is stored in deterministic key order, for
+The operations dashboard distinguishes readiness, acquiring/localizing, finalization and exported
+evidence; the final manifest retains the resolved stage and explicit completeness facts. Additional metadata is stored in deterministic key order, for
 example operator id, recording hash, environment description or software revision.
 
 ## 6. Persist profiles and reproducibility evidence

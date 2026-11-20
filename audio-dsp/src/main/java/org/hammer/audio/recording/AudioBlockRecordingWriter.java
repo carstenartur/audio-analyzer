@@ -43,6 +43,7 @@ public final class AudioBlockRecordingWriter implements Closeable {
   private long payloadBytes;
   private boolean closed;
   private boolean finalized;
+  private boolean incomplete;
 
   /** Open an atomic path-backed writer. */
   public static AudioBlockRecordingWriter open(Path file) throws IOException {
@@ -202,6 +203,12 @@ public final class AudioBlockRecordingWriter implements Closeable {
     }
   }
 
+  /** Finalize recoverable samples while preserving incomplete evidence in the checksum footer. */
+  public void finishIncomplete() throws IOException {
+    incomplete = true;
+    close();
+  }
+
   /** Returns whether the completion footer was written successfully. */
   public boolean finalized() {
     return finalized;
@@ -217,7 +224,10 @@ public final class AudioBlockRecordingWriter implements Closeable {
   }
 
   private void writeFooter() throws IOException {
-    out.writeInt(AudioBlockRecordingFormat.FOOTER_MARKER);
+    out.writeInt(
+        incomplete || continuityGapCount > 0L
+            ? AudioBlockRecordingFormat.INCOMPLETE_FOOTER_MARKER
+            : AudioBlockRecordingFormat.FOOTER_MARKER);
     out.flush();
     digestStream.on(false);
     byte[] checksum = digestStream.getMessageDigest().digest();

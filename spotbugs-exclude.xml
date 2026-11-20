@@ -16,6 +16,33 @@
 -->
 
 <FindBugsFilter>
+  <!-- These views are constructed with live application services; they do not copy or serialize
+       that shared service graph. Only their immutable status DTOs are exported as evidence. -->
+  <Match>
+    <Class name="org.hammer.MicrophoneExperimentPanel"/>
+    <Method name="&lt;init&gt;"/>
+    <Bug pattern="EI_EXPOSE_REP2"/>
+  </Match>
+  <Match>
+    <Class name="org.hammer.audio.app.ExperimentOperationsHttpAdapter"/>
+    <Method name="&lt;init&gt;"/>
+    <Bug pattern="EI_EXPOSE_REP2"/>
+  </Match>
+  <Match>
+    <Class name="org.hammer.audio.app.ExperimentHealthHttpAdapter"/>
+    <Method name="&lt;init&gt;"/>
+    <Bug pattern="EI_EXPOSE_REP2"/>
+  </Match>
+  <!-- These panels are recreated from the current document/device catalogue when opened.
+       Java serialization is not used to restore their transient live suppliers or device values. -->
+  <Match>
+    <Class name="org.hammer.ExperimentDocumentHealthPanel"/>
+    <Bug pattern="SE_TRANSIENT_FIELD_NOT_RESTORED"/>
+  </Match>
+  <Match>
+    <Class name="org.hammer.MicrophoneProfileEditorPanel"/>
+    <Bug pattern="SE_TRANSIENT_FIELD_NOT_RESTORED"/>
+  </Match>
   <!-- Suppress EI_EXPOSE_REP warnings for WaveformModel - defensive copies are used -->
   <Match>
     <Class name="org.hammer.audio.WaveformModel"/>

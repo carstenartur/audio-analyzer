@@ -49,7 +49,9 @@ public final class RecordingPreflight {
     if (descriptor == null) {
       throw new IOException("Audio source has no format descriptor; start/configure it first.");
     }
-    return storageProbe.probe(destination, 0L, 0.0, expectedBytesPerSecond(descriptor), checkedAt);
+    int frames = service.getExpectedBlockFrames();
+    return storageProbe.probe(
+        destination, 0L, 0.0, expectedBytesPerSecond(descriptor, frames), checkedAt);
   }
 
   static void requireReady(RecordingStorageStatus preflight) throws IOException {
@@ -65,8 +67,14 @@ public final class RecordingPreflight {
     }
   }
 
-  private static double expectedBytesPerSecond(AudioFormatDescriptor descriptor) {
+  /**
+   * Exact float payload plus the container's 20-byte record header at the configured block size.
+   */
+  public static double expectedBytesPerSecond(AudioFormatDescriptor descriptor, int blockFrames) {
+    if (blockFrames < 1) {
+      throw new IllegalArgumentException("blockFrames must be positive");
+    }
     double samplePayload = descriptor.sampleRate() * descriptor.channels() * Float.BYTES;
-    return samplePayload * 1.02;
+    return samplePayload + descriptor.sampleRate() * 20.0 / blockFrames;
   }
 }

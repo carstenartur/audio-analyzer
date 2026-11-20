@@ -1,5 +1,6 @@
 package org.hammer;
 
+import java.awt.Color;
 import java.awt.FlowLayout;
 import java.awt.event.ActionListener;
 import java.nio.file.Path;
@@ -27,6 +28,7 @@ public final class RecordingStatusPanel extends JPanel {
   private final JLabel rate = new JLabel("0 B/s");
   private final JLabel remaining = new JLabel("remaining: unknown");
   private final JLabel completeness = new JLabel("complete");
+  private final JLabel storage = new JLabel("Storage: unknown");
   private final JButton stopButton = new JButton("Stop recording");
 
   /** Create an initially idle status strip. */
@@ -40,9 +42,12 @@ public final class RecordingStatusPanel extends JPanel {
     add(free);
     add(rate);
     add(remaining);
+    add(storage);
     add(completeness);
     add(stopButton);
     stopButton.setEnabled(false);
+    getAccessibleContext().setAccessibleName("Recording health and storage");
+    storage.getAccessibleContext().setAccessibleName("Storage warning and observation time");
     setVisible(false);
   }
 
@@ -60,6 +65,8 @@ public final class RecordingStatusPanel extends JPanel {
     Objects.requireNonNull(status, "status");
     setVisible(true);
     state.setText(stateLabel(status.state()));
+    state.setForeground(
+        status.state() == RecordingState.RECORDING ? new Color(220, 55, 55) : getForeground());
     elapsed.setText(formatDuration(status.elapsed()));
     Path fileName = status.destination().getFileName();
     destination.setText(fileName == null ? status.destination().toString() : fileName.toString());
@@ -76,6 +83,13 @@ public final class RecordingStatusPanel extends JPanel {
     completeness.setToolTipText(detail(status));
     stopButton.setEnabled(!status.terminal() && status.state() != RecordingState.STOPPING);
     RecordingStorageLevel storageLevel = status.storage().level();
+    storage.setText(
+        "Storage: " + storageLevel + " · warnings " + status.storage().warningHistory().size());
+    storage.setToolTipText(
+        "Last successful check: "
+            + status.storage().lastSuccessfulCheck()
+            + "; "
+            + status.storage().errorMessage());
     state.setToolTipText(
         storageLevel == RecordingStorageLevel.NORMAL
             ? "Recording storage is healthy."

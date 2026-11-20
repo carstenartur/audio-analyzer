@@ -37,7 +37,7 @@ class WorkflowSearchSchemaMigrationTest {
         result.searchMigrationsExecuted() >= 3,
         "An upstream candidate must retain every released search migration");
     assertEquals(1, result.semanticMigrationsExecuted());
-    assertEquals(3, result.collaborationMigrationsExecuted());
+    assertEquals(4, result.collaborationMigrationsExecuted());
     assertEquals(1, tableCount(dataSource, "git_commit_index"));
     assertEquals(1, tableCount(dataSource, "workflow_semantic_index"));
     assertEquals(1, tableCount(dataSource, "jgit_storage_hibernate_search_schema_history"));

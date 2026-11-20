@@ -62,8 +62,8 @@ class WorkbenchInitialLoadIT {
   private static final String EXPECTED_STATUS_PREFIX = "Loaded:";
   private static final String ACTOR_INIT_SCRIPT =
       "window.sessionStorage.setItem('audio-analyzer.workflow.actor',"
-          + " JSON.stringify({actorId:'actor-docs',userId:'user-docs',"
-          + "displayName:'Documentation User'}));";
+          + " JSON.stringify({actorId:'',provenance:'ANONYMOUS',verified:false,accountHandle:null,role:'EDITOR',participantCode:'',lastSeen:null,displayName:'Documentation"
+          + " User'}));";
 
   private GenericContainer<?> container;
   private Playwright playwright;
@@ -174,7 +174,8 @@ class WorkbenchInitialLoadIT {
           "Status message must indicate successful load, got: " + statusText);
 
       // Capture full-page screenshot
-      byte[] pngBytes = page.screenshot(new Page.ScreenshotOptions().setFullPage(false));
+      WorkbenchHealthScreenshots.awaitReadiness(page, null);
+      byte[] pngBytes = page.screenshot(WorkbenchHealthScreenshots.options(page));
 
       // Process screenshot: write to docs (update mode) or compare against baseline (verify mode)
       ScreenshotPipeline.processScreenshot("initial-load.png", pngBytes);
@@ -213,6 +214,7 @@ class WorkbenchInitialLoadIT {
 
       // Capture palette screenshot
       Locator palette = page.locator("[data-testid='node-palette']");
+      WorkbenchHealthScreenshots.awaitReadiness(page, null);
       byte[] pngBytes = palette.screenshot();
 
       ScreenshotPipeline.processScreenshot("node-palette.png", pngBytes);

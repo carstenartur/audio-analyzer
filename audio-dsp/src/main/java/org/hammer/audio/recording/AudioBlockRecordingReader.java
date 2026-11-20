@@ -167,8 +167,10 @@ public final class AudioBlockRecordingReader implements Closeable {
       }
       return handleUnexpectedEnd("end of file reached before version-2 footer", exception);
     }
-    if (!legacy && frames == AudioBlockRecordingFormat.FOOTER_MARKER) {
-      return readAndValidateFooter();
+    if (!legacy
+        && (frames == AudioBlockRecordingFormat.FOOTER_MARKER
+            || frames == AudioBlockRecordingFormat.INCOMPLETE_FOOTER_MARKER)) {
+      return readAndValidateFooter(frames == AudioBlockRecordingFormat.INCOMPLETE_FOOTER_MARKER);
     }
     if (frames < 0 || frames > AudioBlockRecordingFormat.MAX_FRAMES_PER_BLOCK) {
       return handleCorruption("invalid frame count: " + frames, null);
@@ -239,7 +241,8 @@ public final class AudioBlockRecordingReader implements Closeable {
     payloadBytes = Math.addExact(payloadBytes, 20L + 4L * format.channels() * frames);
   }
 
-  private Optional<AudioBlock> readAndValidateFooter() throws IOException {
+  private Optional<AudioBlock> readAndValidateFooter(boolean explicitlyIncomplete)
+      throws IOException {
     digestStream.on(false);
     byte[] calculatedChecksum = digestStream.getMessageDigest().digest();
     try {
@@ -275,12 +278,18 @@ public final class AudioBlockRecordingReader implements Closeable {
       }
       inspection =
           createInspection(
-              RecordingIntegrity.COMPLETE,
+              explicitlyIncomplete ? RecordingIntegrity.INCOMPLETE : RecordingIntegrity.COMPLETE,
               toHex(calculatedChecksum),
-              continuityGapCount == 0L
-                  ? "Recording finalized cleanly."
-                  : "Recording finalized with source-frame discontinuities.");
+              explicitlyIncomplete
+                  ? "Recording finalized as incomplete; samples or intended duration are missing."
+                  : continuityGapCount == 0L
+                      ? "Recording finalized cleanly."
+                      : "Recording finalized with source-frame discontinuities.");
       ended = true;
+      if (explicitlyIncomplete && !allowIncomplete) {
+        throw new IOException(
+            "Recording is finalized but incomplete; inspect or recover it before replay.");
+      }
       return Optional.empty();
     } catch (EOFException exception) {
       return handleTruncation("recording ended inside completion footer", exception);
