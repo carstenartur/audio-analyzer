@@ -1,8 +1,8 @@
 package org.hammer.audio.experiment.document;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.networknt.schema.Error;
+import com.networknt.schema.InputFormat;
 import com.networknt.schema.Schema;
 import com.networknt.schema.SchemaRegistry;
 import com.networknt.schema.SpecificationVersion;
@@ -22,7 +22,8 @@ final class ExperimentDocumentSchema {
   static void validate(JsonNode document) throws ExperimentDocumentException {
     List<Error> errors =
         SCHEMA.validate(
-            document,
+            document.toString(),
+            InputFormat.JSON,
             context ->
                 context.executionConfig(
                     config -> config.formatAssertionsEnabled(true).failFast(true)));
@@ -40,7 +41,6 @@ final class ExperimentDocumentSchema {
       if (input == null) {
         throw new IllegalStateException("Bundled experiment schema is missing");
       }
-      JsonNode schema = new ObjectMapper().readTree(input);
       SchemaRegistry registry =
           SchemaRegistry.withDefaultDialect(
               SpecificationVersion.DRAFT_2020_12,
@@ -52,7 +52,7 @@ final class ExperimentDocumentSchema {
                                 throw new IllegalArgumentException(
                                     "External schema retrieval is disabled");
                               })));
-      return registry.getSchema(schema);
+      return registry.getSchema(input);
     } catch (IOException exception) {
       throw new IllegalStateException("Cannot read bundled experiment schema", exception);
     }
