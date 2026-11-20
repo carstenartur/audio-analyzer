@@ -9,6 +9,7 @@
   <artifactId>audio-app</artifactId>
   <name>Audio Analyzer App</name>
   <properties>
+    <argLine/>
     <flyway.version>13.8.0</flyway.version>
     <postgresql.version>42.7.13</postgresql.version>
     <testcontainers.version>2.0.5</testcontainers.version>
@@ -176,6 +177,12 @@
   <build>
     <plugins>
       <plugin>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <argLine>@{argLine} -javaagent:${org.mockito:mockito-core:jar}</argLine>
+        </configuration>
+      </plugin>
+      <plugin>
         <artifactId>maven-jar-plugin</artifactId>
         <configuration>
           <archive>
@@ -208,6 +215,13 @@
         <artifactId>maven-dependency-plugin</artifactId>
         <version>3.11.0</version>
         <executions>
+          <execution>
+            <id>test-agent-paths</id>
+            <goals>
+              <goal>properties</goal>
+            </goals>
+            <phase>initialize</phase>
+          </execution>
           <execution>
             <id>copy-runtime-dependencies</id>
             <goals>
