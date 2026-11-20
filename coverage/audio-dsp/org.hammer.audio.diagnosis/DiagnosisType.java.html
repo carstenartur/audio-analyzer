@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>DiagnosisType.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer DSP and Analysis</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.diagnosis</a> &gt; <span class="el_source">DiagnosisType.java</span></div><h1>DiagnosisType.java</h1><pre class="source lang-java linenums">package org.hammer.audio.diagnosis;
+
+/** Categorical type of a {@link DiagnosisFinding}. */
+<span class="fc" id="L4">public enum DiagnosisType {</span>
+  /** A clear single dominant tone is present. */
+<span class="fc" id="L6">  DOMINANT_TONE,</span>
+  /** Energy concentrated around 50 Hz (typical European mains frequency). */
+<span class="fc" id="L8">  MAINS_HUM_50HZ,</span>
+  /** Energy concentrated around 60 Hz (typical North American mains frequency). */
+<span class="fc" id="L10">  MAINS_HUM_60HZ,</span>
+  /** Hard clipping detected: at least one sample reached full scale. */
+<span class="fc" id="L12">  CLIPPING,</span>
+  /** Broadband, near-flat spectrum without a clear tone (noise-like signal). */
+<span class="fc" id="L14">  BROADBAND_NOISE,</span>
+  /** Short-lived, high-frequency energy bursts visible in the recent history. */
+<span class="fc" id="L16">  INTERMITTENT_HIGH_FREQUENCY_BURST,</span>
+  /** Dominant peak drifts over time, indicating a sweep, chirp or moving source. */
+<span class="fc" id="L18">  DRIFTING_PEAK,</span>
+  /** Signal too quiet or otherwise too low-confidence to draw conclusions. */
+<span class="fc" id="L20">  LOW_CONFIDENCE_SILENCE</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

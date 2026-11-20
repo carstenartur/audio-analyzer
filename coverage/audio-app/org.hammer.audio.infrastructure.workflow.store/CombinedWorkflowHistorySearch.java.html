@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>CombinedWorkflowHistorySearch.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.infrastructure.workflow.store</a> &gt; <span class="el_source">CombinedWorkflowHistorySearch.java</span></div><h1>CombinedWorkflowHistorySearch.java</h1><pre class="source lang-java linenums">package org.hammer.audio.infrastructure.workflow.store;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import org.hammer.audio.workflow.history.WorkflowCombinedHistoryQuery;
+import org.hammer.audio.workflow.history.WorkflowCombinedHistoryResult;
+import org.hammer.audio.workflow.history.WorkflowHistoryTextResult;
+import org.hammer.audio.workflow.history.WorkflowSemanticHistoryResult;
+import org.hammer.audio.workflow.store.CommitId;
+
+/** Composes semantic candidates with generic ranking and final limiting. */
+final class CombinedWorkflowHistorySearch {
+
+  private final GenericWorkflowHistoryProjection genericProjection;
+  private final WorkflowSemanticHistoryProjection semanticProjection;
+
+  CombinedWorkflowHistorySearch(
+      GenericWorkflowHistoryProjection genericProjection,
+<span class="fc" id="L21">      WorkflowSemanticHistoryProjection semanticProjection) {</span>
+<span class="fc" id="L22">    this.genericProjection = Objects.requireNonNull(genericProjection, &quot;genericProjection&quot;);</span>
+<span class="fc" id="L23">    this.semanticProjection = Objects.requireNonNull(semanticProjection, &quot;semanticProjection&quot;);</span>
+<span class="fc" id="L24">  }</span>
+
+  List&lt;WorkflowCombinedHistoryResult&gt; search(WorkflowCombinedHistoryQuery query) {
+<span class="fc" id="L27">    Objects.requireNonNull(query, &quot;query&quot;);</span>
+<span class="fc" id="L28">    List&lt;CommitId&gt; candidates = semanticProjection.candidateCommitIds(query.semanticFilter());</span>
+<span class="fc" id="L29">    List&lt;WorkflowHistoryTextResult&gt; commits =</span>
+<span class="fc" id="L30">        genericProjection.searchWithinCandidates(query.genericQuery(), candidates);</span>
+<span class="fc" id="L31">    Map&lt;String, WorkflowSemanticHistoryResult&gt; evidence =</span>
+<span class="fc" id="L32">        semanticProjection.evidence(</span>
+<span class="fc" id="L33">            query.semanticFilter().branch(),</span>
+<span class="fc" id="L34">            commits.stream().map(WorkflowHistoryTextResult::commitId).toList());</span>
+<span class="fc" id="L35">    List&lt;WorkflowCombinedHistoryResult&gt; results = new ArrayList&lt;&gt;(commits.size());</span>
+<span class="fc bfc" id="L36" title="All 2 branches covered.">    for (WorkflowHistoryTextResult commit : commits) {</span>
+<span class="fc" id="L37">      WorkflowSemanticHistoryResult semantics = evidence.get(commit.commitId().value());</span>
+<span class="pc bpc" id="L38" title="1 of 2 branches missed.">      if (semantics == null) {</span>
+<span class="nc" id="L39">        throw new IllegalStateException(</span>
+            &quot;Semantic history projection changed while composing commit &quot;
+<span class="nc" id="L41">                + commit.commitId().value()</span>
+                + &quot;; retry the query&quot;);
+      }
+<span class="fc" id="L44">      results.add(new WorkflowCombinedHistoryResult(commit, semantics));</span>
+<span class="fc" id="L45">    }</span>
+<span class="fc" id="L46">    return List.copyOf(results);</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

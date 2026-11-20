@@ -1,0 +1,185 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ExperimentLocalBindingService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experiment Document</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experiment.document</a> &gt; <span class="el_source">ExperimentLocalBindingService.java</span></div><h1>ExperimentLocalBindingService.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experiment.document;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Objects;
+import java.util.Set;
+import org.hammer.audio.plugin.document.DocumentDiagnostic;
+
+/** Verifies portable asset/output requirements against explicitly selected local resources. */
+@SuppressWarnings(&quot;PMD.LooseCoupling&quot;)
+public final class ExperimentLocalBindingService {
+
+  private final java.time.Clock clock;
+
+  /** Use the current time when assessing calibration validity. */
+  public ExperimentLocalBindingService() {
+<span class="fc" id="L20">    this(java.time.Clock.systemUTC());</span>
+<span class="fc" id="L21">  }</span>
+
+  /** Supply a clock for deterministic calibration validity checks. */
+<span class="fc" id="L24">  public ExperimentLocalBindingService(java.time.Clock clock) {</span>
+<span class="fc" id="L25">    this.clock = Objects.requireNonNull(clock, &quot;clock&quot;);</span>
+<span class="fc" id="L26">  }</span>
+
+  /**
+   * Inspect local bindings without modifying the document, selected files or output directory.
+   *
+   * &lt;p&gt;Asset hashes are streamed and may be expensive; callers must not invoke this method on a UI
+   * or realtime thread.
+   */
+  public ExperimentLocalBindingPreview inspect(
+      ExperimentDocumentPreview documentPreview, ExperimentLocalBindings bindings) {
+<span class="fc" id="L36">    Objects.requireNonNull(documentPreview, &quot;documentPreview&quot;);</span>
+<span class="fc" id="L37">    Objects.requireNonNull(bindings, &quot;bindings&quot;);</span>
+<span class="fc" id="L38">    ArrayList&lt;DocumentDiagnostic&gt; diagnostics = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L39">    Set&lt;String&gt; requiredAssetIds = new HashSet&lt;&gt;();</span>
+<span class="fc bfc" id="L40" title="All 2 branches covered.">    for (int index = 0; index &lt; documentPreview.document().assets().size(); index++) {</span>
+<span class="fc" id="L41">      ExperimentDocument.AssetReference asset = documentPreview.document().assets().get(index);</span>
+<span class="fc" id="L42">      requiredAssetIds.add(asset.id());</span>
+<span class="fc" id="L43">      inspectAsset(asset, index, bindings, diagnostics);</span>
+    }
+<span class="fc" id="L45">    bindings.assetPaths().keySet().stream()</span>
+<span class="fc bfc" id="L46" title="All 2 branches covered.">        .filter(assetId -&gt; !requiredAssetIds.contains(assetId))</span>
+<span class="fc" id="L47">        .forEach(</span>
+            assetId -&gt;
+<span class="fc" id="L49">                diagnostics.add(</span>
+<span class="fc" id="L50">                    warning(</span>
+<span class="fc" id="L51">                        &quot;/localBindings/assets/&quot; + escape(assetId),</span>
+                        &quot;unused-asset-binding&quot;,
+                        &quot;Local asset binding does not match a document requirement&quot;)));
+<span class="fc" id="L54">    inspectOutputDirectory(documentPreview.document(), bindings, diagnostics);</span>
+<span class="fc" id="L55">    ExperimentCaptureReadiness.inspect(</span>
+<span class="fc" id="L56">        documentPreview.document(), bindings.capture(), clock.instant(), diagnostics);</span>
+<span class="fc" id="L57">    boolean hasErrors =</span>
+<span class="pc bpc" id="L58" title="1 of 2 branches missed.">        diagnostics.stream().anyMatch(item -&gt; item.severity() == DocumentDiagnostic.Severity.ERROR);</span>
+<span class="pc bpc" id="L59" title="2 of 6 branches missed.">    boolean ready = !hasErrors &amp;&amp; documentPreview.executionAllowed() &amp;&amp; !documentPreview.readOnly();</span>
+<span class="fc" id="L60">    return new ExperimentLocalBindingPreview(bindings, diagnostics, ready);</span>
+  }
+
+  private static void inspectAsset(
+      ExperimentDocument.AssetReference asset,
+      int index,
+      ExperimentLocalBindings bindings,
+      ArrayList&lt;DocumentDiagnostic&gt; diagnostics) {
+<span class="fc" id="L68">    String pointer = &quot;/assets/&quot; + index;</span>
+<span class="fc" id="L69">    Path local = bindings.assetPath(asset.id()).orElse(null);</span>
+<span class="fc bfc" id="L70" title="All 2 branches covered.">    if (local == null) {</span>
+<span class="fc" id="L71">      diagnostics.add(</span>
+<span class="fc" id="L72">          error(</span>
+              pointer + &quot;/localBinding&quot;,
+              &quot;asset-binding-missing&quot;,
+<span class="fc" id="L75">              &quot;No local file is selected for asset &quot; + asset.id()));</span>
+<span class="fc" id="L76">      return;</span>
+    }
+<span class="pc bpc" id="L78" title="1 of 2 branches missed.">    if (!Files.isRegularFile(local)) {</span>
+<span class="nc" id="L79">      diagnostics.add(</span>
+<span class="nc" id="L80">          error(</span>
+              pointer + &quot;/localBinding&quot;,
+              &quot;asset-file-unavailable&quot;,
+              &quot;Selected local asset is not a regular file&quot;));
+<span class="nc" id="L84">      return;</span>
+    }
+    try {
+<span class="fc" id="L87">      long size = Files.size(local);</span>
+<span class="fc bfc" id="L88" title="All 2 branches covered.">      if (size != asset.sizeBytes()) {</span>
+<span class="fc" id="L89">        diagnostics.add(</span>
+<span class="fc" id="L90">            error(</span>
+                pointer + &quot;/sizeBytes&quot;,
+                &quot;asset-size-mismatch&quot;,
+                &quot;Selected local asset size does not match the portable requirement&quot;));
+<span class="fc" id="L94">        return;</span>
+      }
+<span class="fc" id="L96">      String detected = ExperimentAssetMediaType.detect(local);</span>
+<span class="pc bpc" id="L97" title="3 of 4 branches missed.">      if (!asset.mediaType().equals(detected)</span>
+          &amp;&amp; !(detected == null
+<span class="nc bnc" id="L99" title="All 2 branches missed.">              &amp;&amp; asset.mediaType().equals(bindings.confirmedMediaTypes().get(asset.id())))) {</span>
+<span class="nc" id="L100">        diagnostics.add(</span>
+<span class="nc" id="L101">            error(</span>
+                pointer + &quot;/mediaType&quot;,
+                &quot;asset-media-type-mismatch&quot;,
+<span class="nc bnc" id="L104" title="All 2 branches missed.">                detected == null</span>
+<span class="nc" id="L105">                    ? &quot;Confirm the media type of this local asset explicitly&quot;</span>
+<span class="nc" id="L106">                    : &quot;Local asset content does not match its declared media type&quot;));</span>
+      }
+<span class="fc" id="L108">      String sha256 = DocumentHashes.sha256(local);</span>
+<span class="fc bfc" id="L109" title="All 2 branches covered.">      if (!sha256.equals(asset.sha256())) {</span>
+<span class="fc" id="L110">        diagnostics.add(</span>
+<span class="fc" id="L111">            error(</span>
+                pointer + &quot;/sha256&quot;,
+                &quot;asset-hash-mismatch&quot;,
+                &quot;Selected local asset SHA-256 does not match the portable requirement&quot;));
+      }
+<span class="nc" id="L116">    } catch (IOException exception) {</span>
+<span class="nc" id="L117">      diagnostics.add(</span>
+<span class="nc" id="L118">          error(</span>
+              pointer + &quot;/localBinding&quot;,
+              &quot;asset-query-failed&quot;,
+<span class="nc" id="L121">              &quot;Could not inspect selected local asset: &quot; + safeMessage(exception)));</span>
+<span class="fc" id="L122">    }</span>
+<span class="fc" id="L123">  }</span>
+
+  private static void inspectOutputDirectory(
+      ExperimentDocument document,
+      ExperimentLocalBindings bindings,
+      ArrayList&lt;DocumentDiagnostic&gt; diagnostics) {
+<span class="fc bfc" id="L129" title="All 2 branches covered.">    if (document.outputs().isEmpty()) {</span>
+<span class="fc" id="L130">      return;</span>
+    }
+<span class="fc" id="L132">    Path selected = bindings.selectedOutputDirectory().orElse(null);</span>
+<span class="fc bfc" id="L133" title="All 2 branches covered.">    if (selected == null) {</span>
+<span class="fc" id="L134">      diagnostics.add(</span>
+<span class="fc" id="L135">          error(</span>
+              &quot;/localBindings/outputDirectory&quot;,
+              &quot;output-binding-missing&quot;,
+              &quot;Select a local output directory for the requested outputs&quot;));
+<span class="fc" id="L139">      return;</span>
+    }
+<span class="pc bpc" id="L141" title="2 of 4 branches missed.">    if (Files.exists(selected) &amp;&amp; !Files.isDirectory(selected)) {</span>
+<span class="nc" id="L142">      diagnostics.add(</span>
+<span class="nc" id="L143">          error(</span>
+              &quot;/localBindings/outputDirectory&quot;,
+              &quot;output-not-directory&quot;,
+              &quot;Selected output path is not a directory&quot;));
+<span class="nc" id="L147">      return;</span>
+    }
+<span class="fc" id="L149">    Path existing = nearestExistingAncestor(selected);</span>
+<span class="pc bpc" id="L150" title="3 of 6 branches missed.">    if (existing == null || !Files.isDirectory(existing) || !Files.isWritable(existing)) {</span>
+<span class="nc" id="L151">      diagnostics.add(</span>
+<span class="nc" id="L152">          error(</span>
+              &quot;/localBindings/outputDirectory&quot;,
+              &quot;output-not-writable&quot;,
+              &quot;Selected output directory or its nearest existing ancestor is not writable&quot;));
+    }
+<span class="fc" id="L157">  }</span>
+
+  private static Path nearestExistingAncestor(Path path) {
+<span class="fc" id="L160">    Path current = path;</span>
+<span class="pc bpc" id="L161" title="2 of 4 branches missed.">    while (current != null &amp;&amp; !Files.exists(current)) {</span>
+<span class="nc" id="L162">      current = current.getParent();</span>
+    }
+<span class="fc" id="L164">    return current;</span>
+  }
+
+  private static String escape(String value) {
+<span class="fc" id="L168">    return value.replace(&quot;~&quot;, &quot;~0&quot;).replace(&quot;/&quot;, &quot;~1&quot;);</span>
+  }
+
+  private static String safeMessage(IOException exception) {
+<span class="nc bnc" id="L172" title="All 2 branches missed.">    return exception.getMessage() == null</span>
+<span class="nc" id="L173">        ? exception.getClass().getSimpleName()</span>
+<span class="nc" id="L174">        : exception.getMessage();</span>
+  }
+
+  private static DocumentDiagnostic error(String pointer, String code, String message) {
+<span class="fc" id="L178">    return new DocumentDiagnostic(DocumentDiagnostic.Severity.ERROR, pointer, code, message);</span>
+  }
+
+  private static DocumentDiagnostic warning(String pointer, String code, String message) {
+<span class="fc" id="L182">    return new DocumentDiagnostic(DocumentDiagnostic.Severity.WARNING, pointer, code, message);</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

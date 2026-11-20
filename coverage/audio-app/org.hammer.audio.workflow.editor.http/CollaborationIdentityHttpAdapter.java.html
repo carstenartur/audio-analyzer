@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>CollaborationIdentityHttpAdapter.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.editor.http</a> &gt; <span class="el_source">CollaborationIdentityHttpAdapter.java</span></div><h1>CollaborationIdentityHttpAdapter.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.editor.http;
+
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import java.util.Objects;
+import org.hammer.audio.workflow.editor.http.WorkflowSessionApiModels.ActorResponse;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RestController;
+
+/** Boots or resumes a browser's collaboration identity using an HttpOnly credential cookie. */
+@RestController
+public final class CollaborationIdentityHttpAdapter {
+  private final CollaborationIdentityService identities;
+
+<span class="fc" id="L16">  public CollaborationIdentityHttpAdapter(CollaborationIdentityService identities) {</span>
+<span class="fc" id="L17">    this.identities = Objects.requireNonNull(identities, &quot;identities&quot;);</span>
+<span class="fc" id="L18">  }</span>
+
+  /** Client input is limited to a pseudonym and an optional credential-backed resume selector. */
+  @PostMapping(&quot;/workflow/identity&quot;)
+  public ActorResponse identity(
+      @RequestBody IdentityRequest input,
+      HttpServletRequest request,
+      HttpServletResponse response) {
+<span class="fc" id="L26">    return identities.issue(request, response, input.actorId(), input.displayName());</span>
+  }
+
+  /**
+   * Optional pseudonym and existing credential-backed client selector.
+   *
+   * @param actorId optional existing client selector
+   * @param displayName optional pseudonym
+   */
+<span class="fc" id="L35">  public record IdentityRequest(String actorId, String displayName) {</span>
+    // Immutable transport projection; authority is resolved separately.
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

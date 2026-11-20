@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>GainDocumentContribution.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experiment Document</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experiment.document.examples</a> &gt; <span class="el_source">GainDocumentContribution.java</span></div><h1>GainDocumentContribution.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experiment.document.examples;
+
+import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
+import org.hammer.audio.plugin.document.DocumentDiagnostic;
+import org.hammer.audio.plugin.document.DocumentValidationResult;
+import org.hammer.audio.plugin.document.DocumentValue;
+import org.hammer.audio.plugin.document.ExperimentDocumentContribution;
+import org.hammer.audio.plugin.document.ExperimentSectionMigration;
+
+/** Copyable plugin-author example using only the framework-neutral stable plugin API. */
+<span class="fc" id="L13">public final class GainDocumentContribution implements ExperimentDocumentContribution {</span>
+  private static final String SCHEMA =
+      &quot;{\&quot;additionalProperties\&quot;:false,\&quot;properties\&quot;:{\&quot;gain\&quot;:{\&quot;description\&quot;:\&quot;Linear gain;&quot;
+          + &quot; algorithm&quot;
+          + &quot; gain/2\&quot;,\&quot;minimum\&quot;:0,\&quot;type\&quot;:\&quot;number\&quot;}},\&quot;required\&quot;:[\&quot;gain\&quot;],\&quot;type\&quot;:\&quot;object\&quot;}&quot;;
+
+  @Override
+  public String sectionId() {
+<span class="fc" id="L21">    return &quot;gain-settings&quot;;</span>
+  }
+
+  @Override
+  public int schemaVersion() {
+<span class="fc" id="L26">    return 2;</span>
+  }
+
+  @Override
+  public String algorithmVersion() {
+<span class="fc" id="L31">    return &quot;gain/2&quot;;</span>
+  }
+
+  @Override
+  public String name() {
+<span class="fc" id="L36">    return &quot;Example gain&quot;;</span>
+  }
+
+  @Override
+  public String description() {
+<span class="fc" id="L41">    return &quot;Versioned gain parameters with an explicit legacy alias migration&quot;;</span>
+  }
+
+  @Override
+  public boolean requiredForExecution() {
+<span class="fc" id="L46">    return false;</span>
+  }
+
+  @Override
+  public String schemaId() {
+<span class="fc" id="L51">    return &quot;urn:audio-analyzer:example:gain-settings:2&quot;;</span>
+  }
+
+  @Override
+  public String schemaJson() {
+<span class="fc" id="L56">    return SCHEMA;</span>
+  }
+
+  @Override
+  public String schemaSha256() {
+<span class="fc" id="L61">    return &quot;32a8d7454d439f756c2b85dc940546db8c1a46357865142c561c726198b3d13f&quot;;</span>
+  }
+
+  @Override
+  public List&lt;ExperimentSectionMigration&gt; migrations() {
+<span class="fc" id="L66">    return List.of(new LegacyGainMigration());</span>
+  }
+
+  @Override
+  public DocumentValidationResult validateAndNormalize(DocumentValue value) {
+<span class="nc bnc" id="L71" title="All 2 branches missed.">    if (!(value instanceof DocumentValue.ObjectValue object)</span>
+<span class="nc bnc" id="L72" title="All 2 branches missed.">        || !(object.fields().get(&quot;gain&quot;) instanceof DocumentValue.NumberValue gain)) {</span>
+<span class="nc" id="L73">      throw new IllegalArgumentException(&quot;Gain parameters must contain a numeric gain field&quot;);</span>
+    }
+<span class="nc bnc" id="L75" title="All 2 branches missed.">    if (gain.value().compareTo(java.math.BigDecimal.valueOf(10_000)) &gt; 0) {</span>
+<span class="nc" id="L76">      return new DocumentValidationResult(</span>
+          value,
+<span class="nc" id="L78">          List.of(</span>
+              new DocumentDiagnostic(
+                  DocumentDiagnostic.Severity.ERROR,
+                  &quot;/gain&quot;,
+                  &quot;gain-too-large&quot;,
+                  &quot;Gain exceeds the example algorithm range&quot;)));
+    }
+<span class="nc" id="L85">    return DocumentValidationResult.valid(value);</span>
+  }
+
+  private static final class LegacyGainMigration implements ExperimentSectionMigration {
+    @Override
+    public int fromVersion() {
+<span class="fc" id="L91">      return 1;</span>
+    }
+
+    @Override
+    public int toVersion() {
+<span class="fc" id="L96">      return 2;</span>
+    }
+
+    @Override
+    // Each migration owns its sorted copy; no mutable map is shared between callbacks.
+    @SuppressWarnings(&quot;PMD.UseConcurrentHashMap&quot;)
+    public DocumentValue migrate(DocumentValue source) {
+<span class="pc bpc" id="L103" title="1 of 2 branches missed.">      if (!(source instanceof DocumentValue.ObjectValue object)) {</span>
+<span class="nc" id="L104">        throw new IllegalArgumentException(&quot;Legacy gain parameters must be an object&quot;);</span>
+      }
+<span class="fc" id="L106">      Map&lt;String, DocumentValue&gt; fields = new TreeMap&lt;&gt;(object.fields());</span>
+<span class="fc" id="L107">      DocumentValue legacy = fields.remove(&quot;gainLinear&quot;);</span>
+<span class="pc bpc" id="L108" title="2 of 4 branches missed.">      if (legacy != null &amp;&amp; fields.putIfAbsent(&quot;gain&quot;, legacy) != null) {</span>
+<span class="nc" id="L109">        throw new IllegalArgumentException(&quot;Ambiguous legacy gain fields&quot;);</span>
+      }
+<span class="fc" id="L111">      return DocumentValue.object(fields);</span>
+    }
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

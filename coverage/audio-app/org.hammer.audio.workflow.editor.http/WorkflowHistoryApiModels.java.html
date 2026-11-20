@@ -1,0 +1,335 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WorkflowHistoryApiModels.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.editor.http</a> &gt; <span class="el_source">WorkflowHistoryApiModels.java</span></div><h1>WorkflowHistoryApiModels.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.editor.http;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
+import java.time.Instant;
+import java.util.List;
+import java.util.Objects;
+import java.util.function.Function;
+import org.hammer.audio.workflow.collaboration.CollaborationMode;
+import org.hammer.audio.workflow.collaboration.WorkflowHistoryCapabilities;
+import org.hammer.audio.workflow.collaboration.WorkflowHistoryDescriptor;
+import org.hammer.audio.workflow.collaboration.WorkflowHistoryPage;
+import org.hammer.audio.workflow.collaboration.WorkflowRedoPreview;
+import org.hammer.audio.workflow.collaboration.WorkflowUndoPreview;
+import org.hammer.audio.workflow.editor.http.WorkflowSessionApiModels.ActorRequest;
+import org.hammer.audio.workflow.editor.http.WorkflowSessionApiModels.ActorResponse;
+
+/** Request and response models for durable semantic workflow history discovery. */
+public final class WorkflowHistoryApiModels {
+
+  static final int DEFAULT_HISTORY_LIMIT = 50;
+
+  private WorkflowHistoryApiModels() {
+    // Utility class.
+  }
+
+  /**
+   * Request for one stable newest-first history page.
+   *
+   * @param actor joined actor requesting history
+   * @param beforeRevision optional exclusive semantic-revision cursor
+   * @param limit optional page size between 1 and 100
+   */
+  public record HistoryQueryRequest(
+      @Valid @NotNull ActorRequest actor,
+      @Positive Long beforeRevision,
+      @Min(1) @Max(100) Integer limit) {
+
+<span class="fc" id="L43">    public HistoryQueryRequest {</span>
+<span class="fc" id="L44">      Objects.requireNonNull(actor, &quot;actor&quot;);</span>
+<span class="fc" id="L45">    }</span>
+
+    int resolvedLimit() {
+<span class="pc bpc" id="L48" title="1 of 2 branches missed.">      return limit == null ? DEFAULT_HISTORY_LIMIT : limit;</span>
+    }
+  }
+
+  /**
+   * Request for actor-scoped undo and redo capabilities.
+   *
+   * @param actor joined actor requesting current capabilities
+   */
+  public record HistoryCapabilitiesRequest(@Valid @NotNull ActorRequest actor) {
+<span class="fc" id="L58">    public HistoryCapabilitiesRequest {</span>
+<span class="fc" id="L59">      Objects.requireNonNull(actor, &quot;actor&quot;);</span>
+<span class="fc" id="L60">    }</span>
+  }
+
+  /**
+   * Request for a revision-bound redo preview.
+   *
+   * @param actor joined actor requesting the preview
+   * @param targetUndoOperationId accepted actor-owned undo operation to preview
+   */
+  public record RedoPreviewRequest(
+      @Valid @NotNull ActorRequest actor, @NotBlank String targetUndoOperationId) {
+<span class="fc" id="L71">    public RedoPreviewRequest {</span>
+<span class="fc" id="L72">      Objects.requireNonNull(actor, &quot;actor&quot;);</span>
+<span class="fc" id="L73">    }</span>
+  }
+
+  /**
+   * Stable transport representation of one accepted semantic operation.
+   *
+   * @param operationId stable accepted-operation identifier
+   * @param operationType semantic operation type
+   * @param actorId actor that authored the operation
+   * @param occurredAt operation occurrence timestamp
+   * @param revision semantic revision produced by the operation
+   * @param sequence durable event sequence assigned to the operation
+   * @param commandKind normal, undo or redo command category
+   * @param commandId stable command idempotency identity
+   * @param targetOperationId undo/redo target, otherwise {@code null}
+   * @param affectedObjectIds affected semantic object identifiers
+   * @param reconstructible whether the complete semantic body is available
+   * @param activeUndoTarget whether the operation is currently an active undo target
+   * @param activeRedoTarget whether the operation is currently an active redo target
+   * @param actor durable privacy-aware attribution, absent for legacy history
+   */
+  public record HistoryEntryResponse(
+      String operationId,
+      String operationType,
+      String actorId,
+      Instant occurredAt,
+      long revision,
+      long sequence,
+      WorkflowHistoryDescriptor.CommandKind commandKind,
+      String commandId,
+      String targetOperationId,
+      List&lt;String&gt; affectedObjectIds,
+      boolean reconstructible,
+      boolean activeUndoTarget,
+      boolean activeRedoTarget,
+      ActorResponse actor) {
+
+<span class="fc" id="L110">    public HistoryEntryResponse {</span>
+<span class="fc" id="L111">      affectedObjectIds =</span>
+<span class="fc" id="L112">          List.copyOf(Objects.requireNonNull(affectedObjectIds, &quot;affectedObjectIds&quot;));</span>
+<span class="fc" id="L113">    }</span>
+
+    static HistoryEntryResponse from(
+        WorkflowHistoryDescriptor descriptor, Function&lt;String, ActorResponse&gt; actors) {
+<span class="fc" id="L117">      return new HistoryEntryResponse(</span>
+<span class="fc" id="L118">          descriptor.operationId(),</span>
+<span class="fc" id="L119">          descriptor.operationType(),</span>
+<span class="fc" id="L120">          descriptor.actorId(),</span>
+<span class="fc" id="L121">          descriptor.occurredAt(),</span>
+<span class="fc" id="L122">          descriptor.revision(),</span>
+<span class="fc" id="L123">          descriptor.sequence(),</span>
+<span class="fc" id="L124">          descriptor.commandKind(),</span>
+<span class="fc" id="L125">          descriptor.commandId(),</span>
+<span class="fc" id="L126">          descriptor.targetOperationId(),</span>
+<span class="fc" id="L127">          descriptor.affectedObjectIds(),</span>
+<span class="fc" id="L128">          descriptor.reconstructible(),</span>
+<span class="fc" id="L129">          descriptor.activeUndoTarget(),</span>
+<span class="fc" id="L130">          descriptor.activeRedoTarget(),</span>
+<span class="fc" id="L131">          actors.apply(descriptor.actorId()));</span>
+    }
+  }
+
+  /**
+   * Stable newest-first durable history page.
+   *
+   * @param operations immutable history entries
+   * @param nextBeforeRevision exclusive cursor for the next older page, or {@code null}
+   * @param currentRevision current session revision at query time
+   */
+  public record HistoryPageResponse(
+      List&lt;HistoryEntryResponse&gt; operations, Long nextBeforeRevision, long currentRevision) {
+
+<span class="fc" id="L145">    public HistoryPageResponse {</span>
+<span class="fc" id="L146">      operations = List.copyOf(Objects.requireNonNull(operations, &quot;operations&quot;));</span>
+<span class="fc" id="L147">    }</span>
+
+    static HistoryPageResponse from(
+        WorkflowHistoryPage page, Function&lt;String, ActorResponse&gt; actors) {
+<span class="fc" id="L151">      return new HistoryPageResponse(</span>
+<span class="fc" id="L152">          page.operations().stream()</span>
+<span class="fc" id="L153">              .map(operation -&gt; HistoryEntryResponse.from(operation, actors))</span>
+<span class="fc" id="L154">              .toList(),</span>
+<span class="fc" id="L155">          page.nextBeforeRevision(),</span>
+<span class="fc" id="L156">          page.currentRevision());</span>
+    }
+  }
+
+  /**
+   * Actor-scoped current undo or redo target.
+   *
+   * @param operation selected immutable history operation
+   * @param status authoritative current availability
+   * @param available whether the action is currently executable
+   * @param blockingOperations later semantic operations blocking execution
+   */
+  public record HistoryActionResponse(
+      HistoryEntryResponse operation,
+      WorkflowHistoryCapabilities.ActionStatus status,
+      boolean available,
+      List&lt;BlockingOperationResponse&gt; blockingOperations) {
+
+<span class="fc" id="L174">    public HistoryActionResponse {</span>
+<span class="fc" id="L175">      Objects.requireNonNull(operation, &quot;operation&quot;);</span>
+<span class="fc" id="L176">      Objects.requireNonNull(status, &quot;status&quot;);</span>
+<span class="fc" id="L177">      blockingOperations =</span>
+<span class="fc" id="L178">          List.copyOf(Objects.requireNonNull(blockingOperations, &quot;blockingOperations&quot;));</span>
+<span class="fc" id="L179">    }</span>
+
+    static HistoryActionResponse from(
+        WorkflowHistoryCapabilities.Action action, Function&lt;String, ActorResponse&gt; actors) {
+<span class="fc bfc" id="L183" title="All 2 branches covered.">      if (action == null) {</span>
+<span class="fc" id="L184">        return null;</span>
+      }
+<span class="fc" id="L186">      return new HistoryActionResponse(</span>
+<span class="fc" id="L187">          HistoryEntryResponse.from(action.operation(), actors),</span>
+<span class="fc" id="L188">          action.status(),</span>
+<span class="fc" id="L189">          action.available(),</span>
+<span class="fc" id="L190">          action.blockingOperations().stream().map(BlockingOperationResponse::from).toList());</span>
+    }
+  }
+
+  /**
+   * Actor-scoped current history capabilities.
+   *
+   * @param mode immutable collaboration mode
+   * @param revision semantic revision at query time
+   * @param personalUndoPermitted whether the mode permits personal undo
+   * @param personalUndo current personal-undo target, or {@code null}
+   * @param redo current actor-owned redo target, or {@code null}
+   * @param sharedUndoPermitted whether explicit shared-target undo is permitted
+   */
+<span class="fc" id="L204">  public record HistoryCapabilitiesResponse(</span>
+      CollaborationMode mode,
+      long revision,
+      boolean personalUndoPermitted,
+      HistoryActionResponse personalUndo,
+      HistoryActionResponse redo,
+      boolean sharedUndoPermitted) {
+
+    static HistoryCapabilitiesResponse from(
+        WorkflowHistoryCapabilities capabilities, Function&lt;String, ActorResponse&gt; actors) {
+<span class="fc" id="L214">      return new HistoryCapabilitiesResponse(</span>
+<span class="fc" id="L215">          capabilities.mode(),</span>
+<span class="fc" id="L216">          capabilities.revision(),</span>
+<span class="fc" id="L217">          capabilities.personalUndoPermitted(),</span>
+<span class="fc" id="L218">          HistoryActionResponse.from(capabilities.personalUndo(), actors),</span>
+<span class="fc" id="L219">          HistoryActionResponse.from(capabilities.redo(), actors),</span>
+<span class="fc" id="L220">          capabilities.sharedUndoPermitted());</span>
+    }
+  }
+
+  /**
+   * Machine-readable later operation blocking undo or redo.
+   *
+   * @param operationId stable accepted-operation identifier
+   * @param actorId actor that authored the blocker
+   * @param conflictingObjectIds semantic object identifiers shared with the target
+   */
+  public record BlockingOperationResponse(
+      String operationId, String actorId, List&lt;String&gt; conflictingObjectIds) {
+
+<span class="nc" id="L234">    public BlockingOperationResponse {</span>
+<span class="nc" id="L235">      conflictingObjectIds =</span>
+<span class="nc" id="L236">          List.copyOf(Objects.requireNonNull(conflictingObjectIds, &quot;conflictingObjectIds&quot;));</span>
+<span class="nc" id="L237">    }</span>
+
+    static BlockingOperationResponse from(WorkflowUndoPreview.BlockingOperation blocker) {
+<span class="nc" id="L240">      return new BlockingOperationResponse(</span>
+<span class="nc" id="L241">          blocker.operationId(), blocker.actorId(), blocker.conflictingObjectIds());</span>
+    }
+  }
+
+  /**
+   * Stable timestamp-aware undo preview response.
+   *
+   * @param previewId identity bound to revision, target and blockers
+   * @param targetOperationId selected accepted operation
+   * @param targetActorId actor that authored the target
+   * @param operationType semantic operation type
+   * @param targetOccurredAt target operation occurrence timestamp
+   * @param affectedObjectIds affected semantic object identifiers
+   * @param revision revision at which the preview is valid
+   * @param safe whether no later operation blocks execution
+   * @param blockingOperations later semantic blockers
+   */
+  public record UndoPreviewResponse(
+      String previewId,
+      String targetOperationId,
+      String targetActorId,
+      String operationType,
+      Instant targetOccurredAt,
+      List&lt;String&gt; affectedObjectIds,
+      long revision,
+      boolean safe,
+      List&lt;BlockingOperationResponse&gt; blockingOperations) {
+
+<span class="fc" id="L269">    public UndoPreviewResponse {</span>
+<span class="fc" id="L270">      affectedObjectIds =</span>
+<span class="fc" id="L271">          List.copyOf(Objects.requireNonNull(affectedObjectIds, &quot;affectedObjectIds&quot;));</span>
+<span class="fc" id="L272">      blockingOperations =</span>
+<span class="fc" id="L273">          List.copyOf(Objects.requireNonNull(blockingOperations, &quot;blockingOperations&quot;));</span>
+<span class="fc" id="L274">    }</span>
+
+    static UndoPreviewResponse from(WorkflowUndoPreview preview) {
+<span class="fc" id="L277">      return new UndoPreviewResponse(</span>
+<span class="fc" id="L278">          preview.previewId(),</span>
+<span class="fc" id="L279">          preview.targetOperationId(),</span>
+<span class="fc" id="L280">          preview.targetActorId(),</span>
+<span class="fc" id="L281">          preview.operationType(),</span>
+<span class="fc" id="L282">          preview.targetOccurredAt(),</span>
+<span class="fc" id="L283">          preview.affectedObjectIds(),</span>
+<span class="fc" id="L284">          preview.revision(),</span>
+<span class="fc" id="L285">          preview.safe(),</span>
+<span class="fc" id="L286">          preview.blockingOperations().stream().map(BlockingOperationResponse::from).toList());</span>
+    }
+  }
+
+  /**
+   * Stable timestamp-aware redo preview response.
+   *
+   * @param previewId identity bound to revision, target and blockers
+   * @param targetUndoOperationId selected accepted undo operation
+   * @param targetActorId actor that authored the undo operation
+   * @param operationType semantic operation type of the undo operation
+   * @param targetOccurredAt undo operation occurrence timestamp
+   * @param affectedObjectIds affected semantic object identifiers
+   * @param revision revision at which the preview is valid
+   * @param safe whether no later operation blocks execution
+   * @param blockingOperations later semantic blockers
+   */
+  public record RedoPreviewResponse(
+      String previewId,
+      String targetUndoOperationId,
+      String targetActorId,
+      String operationType,
+      Instant targetOccurredAt,
+      List&lt;String&gt; affectedObjectIds,
+      long revision,
+      boolean safe,
+      List&lt;BlockingOperationResponse&gt; blockingOperations) {
+
+<span class="fc" id="L314">    public RedoPreviewResponse {</span>
+<span class="fc" id="L315">      affectedObjectIds =</span>
+<span class="fc" id="L316">          List.copyOf(Objects.requireNonNull(affectedObjectIds, &quot;affectedObjectIds&quot;));</span>
+<span class="fc" id="L317">      blockingOperations =</span>
+<span class="fc" id="L318">          List.copyOf(Objects.requireNonNull(blockingOperations, &quot;blockingOperations&quot;));</span>
+<span class="fc" id="L319">    }</span>
+
+    static RedoPreviewResponse from(WorkflowRedoPreview preview) {
+<span class="fc" id="L322">      return new RedoPreviewResponse(</span>
+<span class="fc" id="L323">          preview.previewId(),</span>
+<span class="fc" id="L324">          preview.targetUndoOperationId(),</span>
+<span class="fc" id="L325">          preview.targetActorId(),</span>
+<span class="fc" id="L326">          preview.operationType(),</span>
+<span class="fc" id="L327">          preview.targetOccurredAt(),</span>
+<span class="fc" id="L328">          preview.affectedObjectIds(),</span>
+<span class="fc" id="L329">          preview.revision(),</span>
+<span class="fc" id="L330">          preview.safe(),</span>
+<span class="fc" id="L331">          preview.blockingOperations().stream().map(BlockingOperationResponse::from).toList());</span>
+    }
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

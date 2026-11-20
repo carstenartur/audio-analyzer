@@ -1,0 +1,193 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>Fft.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer DSP and Analysis</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.analysis</a> &gt; <span class="el_source">Fft.java</span></div><h1>Fft.java</h1><pre class="source lang-java linenums">package org.hammer.audio.analysis;
+
+/**
+ * Pure-Java in-place radix-2 Cooley-Tukey FFT.
+ *
+ * &lt;p&gt;This is a deliberately small, dependency-free FFT implementation suitable as the default
+ * spectrum backend. It supports power-of-two sizes only; callers are expected to pad or window
+ * input as needed.
+ *
+ * &lt;p&gt;&lt;strong&gt;Performance characteristics&lt;/strong&gt;: O(N log N), O(N) extra memory (twiddle tables
+ * and bit-reversed index table cached per instance for reuse across calls). The implementation is
+ * single-threaded; create one {@code Fft} per thread or guard externally.
+ *
+ * &lt;p&gt;The architecture is more important than absolute FFT performance here: callers wanting more
+ * speed should plug in a different {@link AnalysisModule} backed by a native or vectorized FFT
+ * library while keeping the rest of the platform unchanged.
+ *
+ * @author refactoring
+ */
+public final class Fft {
+
+  private final int size;
+  private final int log2Size;
+  private final float[] cosTable;
+  private final float[] sinTable;
+  private final int[] bitReverseIndex;
+
+  /**
+   * Create a new FFT of the given size.
+   *
+   * @param size FFT size; must be a power of two and {@code &gt;= 2}
+   * @throws IllegalArgumentException if {@code size} is not a positive power of two
+   */
+<span class="fc" id="L34">  public Fft(int size) {</span>
+<span class="fc bfc" id="L35" title="All 4 branches covered.">    if (size &lt; 2 || (size &amp; (size - 1)) != 0) {</span>
+<span class="fc" id="L36">      throw new IllegalArgumentException(&quot;size must be a power of two &gt;= 2, was &quot; + size);</span>
+    }
+<span class="fc" id="L38">    this.size = size;</span>
+<span class="fc" id="L39">    this.log2Size = Integer.numberOfTrailingZeros(size);</span>
+
+    // Precompute twiddle factors for sub-FFTs of every power-of-two stride up to size/2.
+<span class="fc" id="L42">    cosTable = new float[size / 2];</span>
+<span class="fc" id="L43">    sinTable = new float[size / 2];</span>
+<span class="fc bfc" id="L44" title="All 2 branches covered.">    for (int i = 0; i &lt; size / 2; i++) {</span>
+<span class="fc" id="L45">      double angle = -2.0 * Math.PI * i / size;</span>
+<span class="fc" id="L46">      cosTable[i] = (float) Math.cos(angle);</span>
+<span class="fc" id="L47">      sinTable[i] = (float) Math.sin(angle);</span>
+    }
+
+    // Precompute bit-reverse permutation.
+<span class="fc" id="L51">    bitReverseIndex = new int[size];</span>
+<span class="fc bfc" id="L52" title="All 2 branches covered.">    for (int i = 0; i &lt; size; i++) {</span>
+<span class="fc" id="L53">      bitReverseIndex[i] = Integer.reverse(i) &gt;&gt;&gt; (32 - log2Size);</span>
+    }
+<span class="fc" id="L55">  }</span>
+
+  /**
+   * @return the FFT size
+   */
+  public int size() {
+<span class="nc" id="L61">    return size;</span>
+  }
+
+  /**
+   * Forward in-place FFT on real input; produces complex output in {@code (re, im)} form.
+   *
+   * @param re real part array of length {@link #size()}; on return contains real components of the
+   *     transform
+   * @param im imaginary part array of length {@link #size()}; treated as zero on input (caller may
+   *     pass a zero-filled array). On return contains imaginary components of the transform.
+   * @throws IllegalArgumentException if array lengths do not match {@link #size()}
+   */
+  public void forward(float[] re, float[] im) {
+<span class="pc bpc" id="L74" title="1 of 4 branches missed.">    if (re.length != size || im.length != size) {</span>
+<span class="fc" id="L75">      throw new IllegalArgumentException(</span>
+          &quot;re/im length must equal FFT size &quot;
+              + size
+              + &quot; (got &quot;
+              + re.length
+              + &quot;/&quot;
+              + im.length
+              + &quot;)&quot;);
+    }
+
+    // Bit-reverse permutation
+<span class="fc bfc" id="L86" title="All 2 branches covered.">    for (int i = 0; i &lt; size; i++) {</span>
+<span class="fc" id="L87">      int j = bitReverseIndex[i];</span>
+<span class="fc bfc" id="L88" title="All 2 branches covered.">      if (j &gt; i) {</span>
+<span class="fc" id="L89">        float tmpRe = re[i];</span>
+<span class="fc" id="L90">        re[i] = re[j];</span>
+<span class="fc" id="L91">        re[j] = tmpRe;</span>
+<span class="fc" id="L92">        float tmpIm = im[i];</span>
+<span class="fc" id="L93">        im[i] = im[j];</span>
+<span class="fc" id="L94">        im[j] = tmpIm;</span>
+      }
+    }
+
+    // Butterfly stages
+<span class="fc bfc" id="L99" title="All 2 branches covered.">    for (int stageSize = 2; stageSize &lt;= size; stageSize &lt;&lt;= 1) {</span>
+<span class="fc" id="L100">      int halfStage = stageSize &gt;&gt; 1;</span>
+<span class="fc" id="L101">      int step = size / stageSize;</span>
+<span class="fc bfc" id="L102" title="All 2 branches covered.">      for (int k = 0; k &lt; size; k += stageSize) {</span>
+<span class="fc" id="L103">        int twiddleIdx = 0;</span>
+<span class="fc bfc" id="L104" title="All 2 branches covered.">        for (int j = 0; j &lt; halfStage; j++) {</span>
+<span class="fc" id="L105">          float wRe = cosTable[twiddleIdx];</span>
+<span class="fc" id="L106">          float wIm = sinTable[twiddleIdx];</span>
+<span class="fc" id="L107">          int idxA = k + j;</span>
+<span class="fc" id="L108">          int idxB = idxA + halfStage;</span>
+<span class="fc" id="L109">          float aRe = re[idxA];</span>
+<span class="fc" id="L110">          float aIm = im[idxA];</span>
+<span class="fc" id="L111">          float bRe = re[idxB];</span>
+<span class="fc" id="L112">          float bIm = im[idxB];</span>
+<span class="fc" id="L113">          float tRe = wRe * bRe - wIm * bIm;</span>
+<span class="fc" id="L114">          float tIm = wRe * bIm + wIm * bRe;</span>
+<span class="fc" id="L115">          re[idxA] = aRe + tRe;</span>
+<span class="fc" id="L116">          im[idxA] = aIm + tIm;</span>
+<span class="fc" id="L117">          re[idxB] = aRe - tRe;</span>
+<span class="fc" id="L118">          im[idxB] = aIm - tIm;</span>
+<span class="fc" id="L119">          twiddleIdx += step;</span>
+        }
+      }
+    }
+<span class="fc" id="L123">  }</span>
+
+  /**
+   * Compute the one-sided magnitude spectrum (DC, ..., Nyquist).
+   *
+   * &lt;p&gt;Writes {@code size/2 + 1} bins. Bin {@code i} corresponds to frequency {@code i * sampleRate
+   * / size}. This is the form used by {@link SpectrumAnalyzer} and is what most UI / analysis code
+   * needs because the upper half of a real-input FFT is just the conjugate of the lower half and
+   * carries no extra information.
+   *
+   * @param re real part array of length {@link #size()}
+   * @param im imaginary part array of length {@link #size()}
+   * @param magnitudes output array; must have length {@code size/2 + 1}
+   * @throws IllegalArgumentException if {@code magnitudes.length != size/2 + 1}
+   */
+  public void magnitudesOneSided(float[] re, float[] im, float[] magnitudes) {
+<span class="fc" id="L139">    int expected = size / 2 + 1;</span>
+<span class="fc bfc" id="L140" title="All 2 branches covered.">    if (magnitudes.length != expected) {</span>
+<span class="fc" id="L141">      throw new IllegalArgumentException(</span>
+          &quot;magnitudes.length must be size/2+1 (&quot; + expected + &quot;), was &quot; + magnitudes.length);
+    }
+<span class="fc" id="L144">    fillMagnitudes(re, im, magnitudes, expected);</span>
+<span class="fc" id="L145">  }</span>
+
+  /**
+   * Compute the full two-sided magnitude spectrum (DC, ..., Nyquist, ..., just-below-DC).
+   *
+   * &lt;p&gt;Writes {@code size} bins. Useful when you need symmetric output (e.g. for direct convolution
+   * multiplication or for callers that handle both halves of the spectrum explicitly).
+   *
+   * @param re real part array of length {@link #size()}
+   * @param im imaginary part array of length {@link #size()}
+   * @param magnitudes output array; must have length {@code size}
+   * @throws IllegalArgumentException if {@code magnitudes.length != size}
+   */
+  public void magnitudesTwoSided(float[] re, float[] im, float[] magnitudes) {
+<span class="fc bfc" id="L159" title="All 2 branches covered.">    if (magnitudes.length != size) {</span>
+<span class="fc" id="L160">      throw new IllegalArgumentException(</span>
+          &quot;magnitudes.length must be size (&quot; + size + &quot;), was &quot; + magnitudes.length);
+    }
+<span class="fc" id="L163">    fillMagnitudes(re, im, magnitudes, size);</span>
+<span class="fc" id="L164">  }</span>
+
+  /**
+   * Compute magnitudes from complex output. Length-driven dispatcher: if {@code magnitudes.length
+   * == size/2 + 1} this writes a one-sided spectrum, if it equals {@link #size()} a two-sided
+   * spectrum. Prefer the explicit {@link #magnitudesOneSided} / {@link #magnitudesTwoSided} methods
+   * for clarity.
+   *
+   * @param re real array of length {@link #size()}
+   * @param im imaginary array of length {@link #size()}
+   * @param magnitudes output array of length {@code size/2 + 1} (one-sided spectrum) or {@link
+   *     #size()} (two-sided). Length determines what gets returned.
+   */
+  public void magnitudes(float[] re, float[] im, float[] magnitudes) {
+<span class="fc" id="L178">    int n = magnitudes.length;</span>
+<span class="fc bfc" id="L179" title="All 4 branches covered.">    if (n != size &amp;&amp; n != size / 2 + 1) {</span>
+<span class="fc" id="L180">      throw new IllegalArgumentException(&quot;magnitudes length must be size or size/2+1, was &quot; + n);</span>
+    }
+<span class="fc" id="L182">    fillMagnitudes(re, im, magnitudes, n);</span>
+<span class="fc" id="L183">  }</span>
+
+  private static void fillMagnitudes(float[] re, float[] im, float[] magnitudes, int n) {
+<span class="fc bfc" id="L186" title="All 2 branches covered.">    for (int i = 0; i &lt; n; i++) {</span>
+<span class="fc" id="L187">      float r = re[i];</span>
+<span class="fc" id="L188">      float ii = im[i];</span>
+<span class="fc" id="L189">      magnitudes[i] = (float) Math.sqrt(r * r + ii * ii);</span>
+    }
+<span class="fc" id="L191">  }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

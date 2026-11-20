@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ActiveAudioCaptureRegistry.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio</a> &gt; <span class="el_source">ActiveAudioCaptureRegistry.java</span></div><h1>ActiveAudioCaptureRegistry.java</h1><pre class="source lang-java linenums">package org.hammer.audio;
+
+import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
+
+/**
+ * Process-local registry for the capture service currently running in the desktop application.
+ *
+ * &lt;p&gt;This is an application-infrastructure bridge for host controls such as experiment recording;
+ * it is not part of the audio-domain model and does not replace dependency injection inside views.
+ */
+public final class ActiveAudioCaptureRegistry {
+
+<span class="fc" id="L14">  private static final AtomicReference&lt;AudioCaptureService&gt; ACTIVE = new AtomicReference&lt;&gt;();</span>
+
+  private ActiveAudioCaptureRegistry() {
+    // utility class
+  }
+
+  /** Mark a service active after its producer has started successfully. */
+  public static void activate(AudioCaptureService service) {
+<span class="fc" id="L22">    ACTIVE.set(java.util.Objects.requireNonNull(service, &quot;service&quot;));</span>
+<span class="fc" id="L23">  }</span>
+
+  /** Remove a service only if it is still the active instance. */
+  public static void deactivate(AudioCaptureService service) {
+<span class="fc" id="L27">    ACTIVE.compareAndSet(service, null);</span>
+<span class="fc" id="L28">  }</span>
+
+  /** Return the currently running desktop capture service, if any. */
+  public static Optional&lt;AudioCaptureService&gt; current() {
+<span class="nc" id="L32">    AudioCaptureService service = ACTIVE.get();</span>
+<span class="nc bnc" id="L33" title="All 4 branches missed.">    if (service == null || !service.isRunning()) {</span>
+<span class="nc" id="L34">      return Optional.empty();</span>
+    }
+<span class="nc" id="L36">    return Optional.of(service);</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

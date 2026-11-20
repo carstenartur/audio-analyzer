@@ -1,0 +1,204 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ReproducibilityBundleExporter.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.export</a> &gt; <span class="el_source">ReproducibilityBundleExporter.java</span></div><h1>ReproducibilityBundleExporter.java</h1><pre class="source lang-java linenums">package org.hammer.audio.export;
+
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import org.hammer.audio.workflow.Node;
+import org.hammer.audio.workflow.execution.ExecutionResult;
+import org.hammer.audio.workflow.execution.ExecutionSnapshot;
+import org.hammer.audio.workflow.execution.ExecutionStatus;
+import org.hammer.audio.workflow.execution.ReproducibilityBundle;
+
+/**
+ * Writes a {@link ReproducibilityBundle} as a versioned directory of plain-text artifacts.
+ *
+ * &lt;p&gt;Given a parent directory and an immutable {@link ReproducibilityBundle} payload, creates a
+ * {@code run-YYYYMMDD-HHMMSS} sub-directory containing:
+ *
+ * &lt;ul&gt;
+ *   &lt;li&gt;{@code metadata.json} — bundle-level metadata: snapshot ID, workflow ID, commit ID,
+ *       creation timestamp, overall execution status and node count.
+ *   &lt;li&gt;{@code execution-result.json} — per-run outcome: execution ID, plan ID, started/completed
+ *       instants, overall status and per-node terminal statuses.
+ *   &lt;li&gt;{@code workflow-nodes.csv} — one row per workflow node: node ID, type and label.
+ * &lt;/ul&gt;
+ *
+ * &lt;p&gt;All methods are pure I/O functions. No workflow DSL serialisation, no Swing/UI code and no
+ * JGit internals are used here. The class is intentionally kept narrow; new artifact types can be
+ * added without changing the exporter contract.
+ *
+ * &lt;p&gt;Duplicate bundle names in the same parent directory are resolved by appending a numeric suffix
+ * (e.g. {@code run-20240101-120000-1}), matching the behaviour of {@link EvidenceBundleExporter}.
+ */
+public final class ReproducibilityBundleExporter {
+
+<span class="fc" id="L44">  private static final DateTimeFormatter DIR_TIMESTAMP =</span>
+<span class="fc" id="L45">      DateTimeFormatter.ofPattern(&quot;yyyyMMdd-HHmmss&quot;, Locale.ROOT);</span>
+
+  private final ZoneId zoneId;
+
+  /** Creates an exporter using the system default time zone. */
+  public ReproducibilityBundleExporter() {
+<span class="fc" id="L51">    this(ZoneId.systemDefault());</span>
+<span class="fc" id="L52">  }</span>
+
+  /**
+   * Creates an exporter with a fixed time zone used to format the bundle directory name.
+   *
+   * @param zoneId time zone for the directory timestamp
+   */
+<span class="fc" id="L59">  public ReproducibilityBundleExporter(ZoneId zoneId) {</span>
+<span class="fc bfc" id="L60" title="All 2 branches covered.">    if (zoneId == null) {</span>
+<span class="fc" id="L61">      throw new IllegalArgumentException(&quot;zoneId must not be null&quot;);</span>
+    }
+<span class="fc" id="L63">    this.zoneId = zoneId;</span>
+<span class="fc" id="L64">  }</span>
+
+  /**
+   * Writes a reproducibility bundle to a new sub-directory under {@code parentDirectory}.
+   *
+   * @param parentDirectory directory under which the bundle directory is created
+   * @param bundle reproducibility evidence to export
+   * @return the path to the created bundle directory
+   * @throws IOException if writing any artifact fails
+   * @throws IllegalArgumentException if bundle is null
+   */
+  public Path export(Path parentDirectory, ReproducibilityBundle bundle) throws IOException {
+<span class="fc bfc" id="L76" title="All 2 branches covered.">    if (parentDirectory == null) {</span>
+<span class="fc" id="L77">      throw new IllegalArgumentException(&quot;parentDirectory must not be null&quot;);</span>
+    }
+<span class="fc bfc" id="L79" title="All 2 branches covered.">    if (bundle == null) {</span>
+<span class="fc" id="L80">      throw new IllegalArgumentException(&quot;bundle must not be null&quot;);</span>
+    }
+
+<span class="fc" id="L83">    Files.createDirectories(parentDirectory);</span>
+<span class="fc" id="L84">    Instant timestamp = bundle.result().completedAt();</span>
+<span class="fc" id="L85">    String baseName = &quot;run-&quot; + LocalDateTime.ofInstant(timestamp, zoneId).format(DIR_TIMESTAMP);</span>
+<span class="fc" id="L86">    Path bundleDir = parentDirectory.resolve(baseName);</span>
+<span class="fc" id="L87">    int suffix = 1;</span>
+<span class="fc bfc" id="L88" title="All 2 branches covered.">    while (Files.exists(bundleDir)) {</span>
+<span class="fc" id="L89">      bundleDir = parentDirectory.resolve(baseName + &quot;-&quot; + suffix);</span>
+<span class="fc" id="L90">      suffix++;</span>
+    }
+<span class="fc" id="L92">    Files.createDirectory(bundleDir);</span>
+
+<span class="fc" id="L94">    writeMetadata(bundleDir.resolve(&quot;metadata.json&quot;), bundle);</span>
+<span class="fc" id="L95">    writeExecutionResult(bundleDir.resolve(&quot;execution-result.json&quot;), bundle.result());</span>
+<span class="fc" id="L96">    writeWorkflowNodes(bundleDir.resolve(&quot;workflow-nodes.csv&quot;), bundle.snapshot());</span>
+
+<span class="fc" id="L98">    return bundleDir;</span>
+  }
+
+  private static void writeMetadata(Path file, ReproducibilityBundle bundle) throws IOException {
+<span class="fc" id="L102">    ExecutionSnapshot snapshot = bundle.snapshot();</span>
+<span class="fc" id="L103">    ExecutionResult result = bundle.result();</span>
+<span class="fc" id="L104">    try (PrintWriter w = new PrintWriter(Files.newBufferedWriter(file, StandardCharsets.UTF_8))) {</span>
+<span class="fc" id="L105">      w.println(&quot;{&quot;);</span>
+<span class="fc" id="L106">      w.printf(Locale.ROOT, &quot;  \&quot;snapshotId\&quot;: \&quot;%s\&quot;,%n&quot;, escape(snapshot.snapshotId()));</span>
+<span class="fc" id="L107">      w.printf(Locale.ROOT, &quot;  \&quot;workflowId\&quot;: \&quot;%s\&quot;,%n&quot;, escape(snapshot.workflowId()));</span>
+<span class="fc" id="L108">      w.printf(Locale.ROOT, &quot;  \&quot;snapshotCreatedAt\&quot;: \&quot;%s\&quot;,%n&quot;, snapshot.createdAt());</span>
+<span class="fc bfc" id="L109" title="All 2 branches covered.">      if (bundle.commitId() != null) {</span>
+<span class="fc" id="L110">        w.printf(Locale.ROOT, &quot;  \&quot;commitId\&quot;: \&quot;%s\&quot;,%n&quot;, escape(bundle.commitId().value()));</span>
+      } else {
+<span class="fc" id="L112">        w.printf(Locale.ROOT, &quot;  \&quot;commitId\&quot;: null,%n&quot;);</span>
+      }
+<span class="fc bfc" id="L114" title="All 2 branches covered.">      if (bundle.commitInfo() != null) {</span>
+<span class="fc" id="L115">        w.printf(</span>
+            Locale.ROOT,
+            &quot;  \&quot;commitAuthor\&quot;: \&quot;%s\&quot;,%n&quot;,
+<span class="fc" id="L118">            escape(bundle.commitInfo().metadata().author()));</span>
+<span class="fc" id="L119">        w.printf(</span>
+            Locale.ROOT,
+            &quot;  \&quot;commitMessage\&quot;: \&quot;%s\&quot;,%n&quot;,
+<span class="fc" id="L122">            escape(bundle.commitInfo().metadata().message()));</span>
+<span class="fc" id="L123">        w.printf(</span>
+            Locale.ROOT,
+            &quot;  \&quot;commitTimestamp\&quot;: \&quot;%s\&quot;,%n&quot;,
+<span class="fc" id="L126">            bundle.commitInfo().metadata().timestamp());</span>
+      }
+<span class="fc" id="L128">      w.printf(Locale.ROOT, &quot;  \&quot;overallStatus\&quot;: \&quot;%s\&quot;,%n&quot;, result.overallStatus());</span>
+<span class="fc" id="L129">      w.printf(Locale.ROOT, &quot;  \&quot;nodeCount\&quot;: %d%n&quot;, snapshot.nodes().size());</span>
+<span class="fc" id="L130">      w.println(&quot;}&quot;);</span>
+    }
+<span class="fc" id="L132">  }</span>
+
+  private static void writeExecutionResult(Path file, ExecutionResult result) throws IOException {
+<span class="fc" id="L135">    try (PrintWriter w = new PrintWriter(Files.newBufferedWriter(file, StandardCharsets.UTF_8))) {</span>
+<span class="fc" id="L136">      w.println(&quot;{&quot;);</span>
+<span class="fc" id="L137">      w.printf(Locale.ROOT, &quot;  \&quot;executionId\&quot;: \&quot;%s\&quot;,%n&quot;, escape(result.executionId()));</span>
+<span class="fc" id="L138">      w.printf(Locale.ROOT, &quot;  \&quot;planId\&quot;: \&quot;%s\&quot;,%n&quot;, escape(result.planId()));</span>
+<span class="fc" id="L139">      w.printf(Locale.ROOT, &quot;  \&quot;startedAt\&quot;: \&quot;%s\&quot;,%n&quot;, result.startedAt());</span>
+<span class="fc" id="L140">      w.printf(Locale.ROOT, &quot;  \&quot;completedAt\&quot;: \&quot;%s\&quot;,%n&quot;, result.completedAt());</span>
+<span class="fc" id="L141">      w.printf(Locale.ROOT, &quot;  \&quot;overallStatus\&quot;: \&quot;%s\&quot;,%n&quot;, result.overallStatus());</span>
+<span class="fc" id="L142">      w.println(&quot;  \&quot;nodeStatuses\&quot;: {&quot;);</span>
+<span class="fc" id="L143">      List&lt;Map.Entry&lt;String, ExecutionStatus&gt;&gt; entries =</span>
+<span class="fc" id="L144">          result.nodeStatuses().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList();</span>
+<span class="fc bfc" id="L145" title="All 2 branches covered.">      for (int i = 0; i &lt; entries.size(); i++) {</span>
+<span class="fc" id="L146">        Map.Entry&lt;String, ExecutionStatus&gt; entry = entries.get(i);</span>
+<span class="fc bfc" id="L147" title="All 2 branches covered.">        String comma = (i &lt; entries.size() - 1) ? &quot;,&quot; : &quot;&quot;;</span>
+<span class="fc" id="L148">        w.printf(</span>
+<span class="fc" id="L149">            Locale.ROOT, &quot;    \&quot;%s\&quot;: \&quot;%s\&quot;%s%n&quot;, escape(entry.getKey()), entry.getValue(), comma);</span>
+      }
+<span class="fc" id="L151">      w.println(&quot;  }&quot;);</span>
+<span class="fc" id="L152">      w.println(&quot;}&quot;);</span>
+    }
+<span class="fc" id="L154">  }</span>
+
+  private static void writeWorkflowNodes(Path file, ExecutionSnapshot snapshot) throws IOException {
+<span class="fc" id="L157">    try (PrintWriter w = new PrintWriter(Files.newBufferedWriter(file, StandardCharsets.UTF_8))) {</span>
+<span class="fc" id="L158">      w.println(&quot;nodeId,type,label&quot;);</span>
+<span class="pc bpc" id="L159" title="1 of 2 branches missed.">      for (Node node : snapshot.nodes()) {</span>
+<span class="nc" id="L160">        w.printf(</span>
+            Locale.ROOT,
+            &quot;%s,%s,%s%n&quot;,
+<span class="nc" id="L163">            escapeCsv(node.id()),</span>
+<span class="nc" id="L164">            escapeCsv(node.type()),</span>
+<span class="nc" id="L165">            escapeCsv(node.label()));</span>
+<span class="nc" id="L166">      }</span>
+    }
+<span class="fc" id="L168">  }</span>
+
+  private static String escape(String s) {
+<span class="fc" id="L171">    StringBuilder out = new StringBuilder(s.length() + 8);</span>
+<span class="fc bfc" id="L172" title="All 2 branches covered.">    for (int i = 0; i &lt; s.length(); i++) {</span>
+<span class="fc" id="L173">      char c = s.charAt(i);</span>
+<span class="pc bpc" id="L174" title="7 of 8 branches missed.">      switch (c) {</span>
+<span class="nc" id="L175">        case '\\' -&gt; out.append(&quot;\\\\&quot;);</span>
+<span class="nc" id="L176">        case '&quot;' -&gt; out.append(&quot;\\\&quot;&quot;);</span>
+<span class="nc" id="L177">        case '\b' -&gt; out.append(&quot;\\b&quot;);</span>
+<span class="nc" id="L178">        case '\f' -&gt; out.append(&quot;\\f&quot;);</span>
+<span class="nc" id="L179">        case '\n' -&gt; out.append(&quot;\\n&quot;);</span>
+<span class="nc" id="L180">        case '\r' -&gt; out.append(&quot;\\r&quot;);</span>
+<span class="nc" id="L181">        case '\t' -&gt; out.append(&quot;\\t&quot;);</span>
+        default -&gt; {
+<span class="pc bpc" id="L183" title="1 of 2 branches missed.">          if (c &lt; 0x20) {</span>
+<span class="nc" id="L184">            out.append(String.format(Locale.ROOT, &quot;\\u%04x&quot;, (int) c));</span>
+          } else {
+<span class="fc" id="L186">            out.append(c);</span>
+          }
+        }
+      }
+    }
+<span class="fc" id="L191">    return out.toString();</span>
+  }
+
+  private static String escapeCsv(String s) {
+<span class="nc bnc" id="L195" title="All 2 branches missed.">    if (s == null) {</span>
+<span class="nc" id="L196">      return &quot;&quot;;</span>
+    }
+<span class="nc bnc" id="L198" title="All 6 branches missed.">    if (s.contains(&quot;,&quot;) || s.contains(&quot;\&quot;&quot;) || s.contains(&quot;\n&quot;)) {</span>
+<span class="nc" id="L199">      return &quot;\&quot;&quot; + s.replace(&quot;\&quot;&quot;, &quot;\&quot;\&quot;&quot;) + &quot;\&quot;&quot;;</span>
+    }
+<span class="nc" id="L201">    return s;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

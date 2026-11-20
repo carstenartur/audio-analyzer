@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>AcousticLocalizationEngine.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.workbench</a> &gt; <span class="el_source">AcousticLocalizationEngine.java</span></div><h1>AcousticLocalizationEngine.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.workbench;
+
+import java.io.IOException;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.function.Consumer;
+import org.hammer.audio.acquisition.LocalizationEngine;
+import org.hammer.audio.acquisition.LocalizationExperiment;
+import org.hammer.audio.acquisition.MicrophoneArray;
+import org.hammer.audio.acquisition.MultiChannelAudioSource;
+import org.hammer.audio.experimental.acoustic.plugin.AcousticLocalizationPlugin;
+import org.hammer.audio.experimental.acoustic.simulation.SimulationScenarios;
+import org.hammer.audio.experimental.acoustic.simulation.SimulationScenarios.SimulationScenario;
+import org.hammer.audio.experimental.acoustic.tracking.FrameSchedule;
+
+/** ServiceLoader adapter that exposes the established acoustic runner to any host surface. */
+<span class="fc" id="L19">public final class AcousticLocalizationEngine implements LocalizationEngine {</span>
+
+  @Override
+  public String id() {
+<span class="nc" id="L23">    return new AcousticLocalizationPlugin().descriptor().id();</span>
+  }
+
+  @Override
+  public String version() {
+<span class="nc" id="L28">    return new AcousticLocalizationPlugin().descriptor().version();</span>
+  }
+
+  @Override
+  public List&lt;String&gt; scenarios() {
+<span class="nc" id="L33">    return SimulationScenarios.all().stream().map(SimulationScenario::name).toList();</span>
+  }
+
+  @Override
+  public MicrophoneArray exampleArray() {
+<span class="nc" id="L38">    return SimulationScenarios.singleSource().array();</span>
+  }
+
+  @Override
+  public float simulationSampleRate(String scenario) {
+<span class="nc" id="L43">    return scenario(scenario).sampleRate();</span>
+  }
+
+  @Override
+  public MultiChannelAudioSource simulate(
+      String scenario, MicrophoneArray array, int durationSeconds) {
+<span class="nc" id="L49">    return context(scenario, array, durationSeconds, simulationSampleRate(scenario)).newSource();</span>
+  }
+
+  @Override
+  @SuppressWarnings(&quot;PMD.UseConcurrentHashMap&quot;) // Local artifact map; sorted, frozen on return.
+  public Result run(
+      MultiChannelAudioSource source,
+      LocalizationExperiment experiment,
+      Options options,
+      Consumer&lt;Frame&gt; progress)
+      throws IOException {
+<span class="fc" id="L60">    long processingBudgetNanos =</span>
+        new FrameSchedule(
+<span class="fc" id="L62">                source.format().sampleRate(),</span>
+<span class="fc" id="L63">                options.blockFrames(),</span>
+                WorkbenchScenarioRunner.PIPELINE_MAX_LOAD_FRACTION)
+<span class="fc" id="L65">            .maxProcessingNanos();</span>
+<span class="fc" id="L66">    WorkbenchRunResult result =</span>
+<span class="fc" id="L67">        WorkbenchScenarioRunner.runSource(</span>
+            source,
+<span class="fc" id="L69">            context(</span>
+<span class="fc" id="L70">                options.scenario(),</span>
+<span class="fc" id="L71">                experiment.profile().array(),</span>
+<span class="fc" id="L72">                options.durationSeconds(),</span>
+<span class="fc" id="L73">                source.format().sampleRate()),</span>
+            experiment,
+<span class="fc" id="L75">            WorkbenchParameters.defaults().blockSize(options.blockFrames()).build(),</span>
+            (snapshot, index) -&gt;
+<span class="fc" id="L77">                progress.accept(</span>
+                    new Frame(
+                        index,
+<span class="fc" id="L80">                        snapshot.processingNanos(),</span>
+                        processingBudgetNanos,
+<span class="fc" id="L82">                        snapshot.synchronization(),</span>
+<span class="fc" id="L83">                        snapshot.tdoaConsistency().reliable(),</span>
+<span class="fc" id="L84">                        snapshot.tracks().stream()</span>
+<span class="fc" id="L85">                            .map(</span>
+                                track -&gt;
+<span class="fc" id="L87">                                    new Track(</span>
+<span class="fc" id="L88">                                        track.id(),</span>
+<span class="fc" id="L89">                                        track.positionMeters().x(),</span>
+<span class="fc" id="L90">                                        track.positionMeters().y(),</span>
+<span class="fc" id="L91">                                        track.confidence()))</span>
+<span class="fc" id="L92">                            .toList())));</span>
+<span class="fc" id="L93">    Map&lt;String, String&gt; artifacts = new TreeMap&lt;&gt;();</span>
+<span class="fc" id="L94">    artifacts.put(&quot;localization.csv&quot;, WorkbenchRunExporter.toCsv(result));</span>
+<span class="fc" id="L95">    artifacts.put(&quot;summary.md&quot;, WorkbenchRunExporter.toMarkdown(result));</span>
+<span class="fc bfc" id="L96" title="All 2 branches covered.">    if (result.benchmarkReport() != null) {</span>
+<span class="fc" id="L97">      artifacts.put(&quot;benchmark.md&quot;, WorkbenchRunExporter.toBenchmarkMarkdown(result));</span>
+    }
+<span class="fc" id="L99">    return new Result(</span>
+<span class="fc" id="L100">        result.experiment(),</span>
+<span class="fc" id="L101">        result.blockCount(),</span>
+<span class="fc" id="L102">        result.overBudgetFrameCount(),</span>
+<span class="fc bfc" id="L103" title="All 2 branches covered.">        result.benchmarkReport() != null,</span>
+<span class="fc bfc" id="L104" title="All 2 branches covered.">        result.benchmarkReport() == null</span>
+<span class="fc" id="L105">            ? Set.of(&quot;localization.csv&quot;, &quot;summary.md&quot;)</span>
+<span class="fc" id="L106">            : Set.of(&quot;localization.csv&quot;, &quot;summary.md&quot;, &quot;benchmark.md&quot;),</span>
+        artifacts);
+  }
+
+  private static SimulationScenario context(
+      String name, MicrophoneArray array, int duration, float sampleRate) {
+<span class="fc" id="L112">    SimulationScenario selected = scenario(name);</span>
+<span class="fc" id="L113">    return new SimulationScenario(</span>
+<span class="fc" id="L114">        selected.name(),</span>
+<span class="fc" id="L115">        selected.room(),</span>
+        array,
+<span class="fc" id="L117">        selected.emitters(),</span>
+        sampleRate,
+        duration,
+<span class="fc" id="L120">        selected.randomSeed());</span>
+  }
+
+  private static SimulationScenario scenario(String name) {
+<span class="fc" id="L124">    return SimulationScenarios.all().stream()</span>
+<span class="fc" id="L125">        .filter(value -&gt; value.name().equals(name))</span>
+<span class="fc" id="L126">        .findFirst()</span>
+<span class="pc" id="L127">        .orElseThrow(() -&gt; new IllegalArgumentException(&quot;Unknown simulation: &quot; + name));</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

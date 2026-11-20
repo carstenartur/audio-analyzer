@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ExperimentHealthFinding.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Acquisition</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.acquisition.health</a> &gt; <span class="el_source">ExperimentHealthFinding.java</span></div><h1>ExperimentHealthFinding.java</h1><pre class="source lang-java linenums">package org.hammer.audio.acquisition.health;
+
+import java.time.Instant;
+import java.util.Objects;
+
+/**
+ * Immutable diagnostic with explicit freshness and remediation semantics.
+ *
+ * @param code stable diagnostic code
+ * @param severity information, warning, blocker or error
+ * @param message concise user-facing explanation
+ * @param detail technical evidence
+ * @param component affected component or document path
+ * @param observedAt source observation time
+ * @param maximumAgeSeconds acceptable age; zero means no expiry
+ * @param remediationAction navigation or action identifier
+ * @param acknowledgeable whether a warning can be acknowledged
+ * @param acknowledged whether the operator acknowledged the latched finding
+ */
+public record ExperimentHealthFinding(
+    String code,
+    Severity severity,
+    String message,
+    String detail,
+    String component,
+    Instant observedAt,
+    long maximumAgeSeconds,
+    String remediationAction,
+    boolean acknowledgeable,
+    boolean acknowledged) {
+
+  /** Severity never derives from display color or exception absence. */
+<span class="fc" id="L33">  public enum Severity {</span>
+<span class="fc" id="L34">    INFO,</span>
+<span class="fc" id="L35">    WARNING,</span>
+<span class="fc" id="L36">    BLOCKING,</span>
+<span class="fc" id="L37">    ERROR</span>
+  }
+
+  // Keep findings immutable and normalize optional diagnostic text.
+<span class="fc" id="L41">  public ExperimentHealthFinding {</span>
+<span class="fc" id="L42">    Objects.requireNonNull(code, &quot;code&quot;);</span>
+<span class="fc" id="L43">    Objects.requireNonNull(severity, &quot;severity&quot;);</span>
+<span class="fc" id="L44">    Objects.requireNonNull(message, &quot;message&quot;);</span>
+<span class="fc" id="L45">    Objects.requireNonNull(component, &quot;component&quot;);</span>
+<span class="fc" id="L46">    Objects.requireNonNull(observedAt, &quot;observedAt&quot;);</span>
+<span class="pc bpc" id="L47" title="1 of 2 branches missed.">    detail = detail == null ? &quot;&quot; : detail;</span>
+<span class="pc bpc" id="L48" title="1 of 2 branches missed.">    remediationAction = remediationAction == null ? &quot;&quot; : remediationAction;</span>
+<span class="fc bfc" id="L49" title="All 2 branches covered.">    if (severity == Severity.BLOCKING) {</span>
+<span class="fc" id="L50">      acknowledgeable = false;</span>
+<span class="fc" id="L51">      acknowledged = false;</span>
+    }
+<span class="fc" id="L53">  }</span>
+
+  /** Whether this observation is older than its declared freshness window. */
+  public boolean stale(Instant now) {
+<span class="pc bpc" id="L57" title="1 of 4 branches missed.">    return maximumAgeSeconds &gt; 0L &amp;&amp; now.isAfter(observedAt.plusSeconds(maximumAgeSeconds));</span>
+  }
+
+  /** Acknowledge a warning without altering the source condition or permitting a blocker. */
+  public ExperimentHealthFinding acknowledge() {
+<span class="pc bpc" id="L62" title="1 of 4 branches missed.">    if (!acknowledgeable || severity == Severity.BLOCKING) {</span>
+<span class="fc" id="L63">      throw new IllegalArgumentException(&quot;This finding must be fixed: &quot; + code);</span>
+    }
+<span class="fc" id="L65">    return new ExperimentHealthFinding(</span>
+        code,
+        severity,
+        message,
+        detail,
+        component,
+        observedAt,
+        maximumAgeSeconds,
+        remediationAction,
+        true,
+        true);
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

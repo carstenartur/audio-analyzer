@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ExperimentCaptureBinding.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experiment Document</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experiment.document</a> &gt; <span class="el_source">ExperimentCaptureBinding.java</span></div><h1>ExperimentCaptureBinding.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experiment.document;
+
+import java.util.HashSet;
+import java.util.List;
+
+/**
+ * Locally selected capture capabilities and explicit logical-to-physical channel mapping.
+ *
+ * @param deviceId explicitly selected local device identity
+ * @param sampleRateHz advertised sample rate
+ * @param channels physical capture channel count
+ * @param sampleSizeBits PCM sample width
+ * @param signed whether PCM samples are signed
+ * @param bigEndian PCM byte order
+ * @param synchronizedChannels explicit synchronization confirmation
+ * @param channelMapping unique physical index for each logical channel
+ * @param calibrationConfirmed confirmation of calibration applicability to this device and mapping
+ */
+public record ExperimentCaptureBinding(
+    String deviceId,
+    double sampleRateHz,
+    int channels,
+    int sampleSizeBits,
+    boolean signed,
+    boolean bigEndian,
+    boolean synchronizedChannels,
+    List&lt;Integer&gt; channelMapping,
+    boolean calibrationConfirmed) {
+
+  /* Require a finite format and a one-to-one mapping within the selected device. */
+<span class="fc" id="L31">  public ExperimentCaptureBinding {</span>
+<span class="pc bpc" id="L32" title="1 of 2 branches missed.">    if (deviceId == null</span>
+<span class="pc bpc" id="L33" title="1 of 2 branches missed.">        || deviceId.isBlank()</span>
+<span class="pc bpc" id="L34" title="4 of 8 branches missed.">        || !Double.isFinite(sampleRateHz)</span>
+        || sampleRateHz &lt;= 0
+        || channels &lt; 1
+        || channels &gt; 256
+<span class="pc bpc" id="L38" title="1 of 2 branches missed.">        || !List.of(8, 16, 24, 32).contains(sampleSizeBits)) {</span>
+<span class="nc" id="L39">      throw new IllegalArgumentException(&quot;Invalid local capture capabilities&quot;);</span>
+    }
+<span class="fc" id="L41">    channelMapping = List.copyOf(channelMapping);</span>
+<span class="pc bpc" id="L42" title="1 of 2 branches missed.">    if (new HashSet&lt;&gt;(channelMapping).size() != channelMapping.size()</span>
+<span class="pc bpc" id="L43" title="3 of 6 branches missed.">        || channelMapping.stream().anyMatch(channel -&gt; channel &lt; 0 || channel &gt;= channels)) {</span>
+<span class="nc" id="L44">      throw new IllegalArgumentException(</span>
+          &quot;Capture mapping must contain unique physical channel indices&quot;);
+    }
+<span class="fc" id="L47">  }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

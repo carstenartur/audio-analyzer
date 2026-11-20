@@ -1,0 +1,388 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WorkflowSessionRegistry.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Core</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.collaboration</a> &gt; <span class="el_source">WorkflowSessionRegistry.java</span></div><h1>WorkflowSessionRegistry.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.collaboration;
+
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.BiConsumer;
+import org.hammer.audio.workflow.Workflow;
+import org.hammer.audio.workflow.WorkflowOperation;
+import org.hammer.audio.workflow.collaboration.WorkflowSessionException.Code;
+import org.hammer.audio.workflow.collaboration.WorkflowSessionPersistenceCoordinator.RecoveredSession;
+import org.hammer.audio.workflow.collaboration.store.WorkflowSessionStateStore;
+
+/**
+ * Thread-safe application service for collaboration-session lifecycle and actor membership.
+ *
+ * &lt;p&gt;Sessions retain their canonical workflow when the last participant leaves, so actors can
+ * reconnect. A session is removed only by an explicit owner close operation. Session mode is
+ * immutable for the complete lifetime of a session.
+ *
+ * &lt;p&gt;When a durable store is supplied, open sessions are recovered without restoring transport
+ * connections or presence state and without replaying historical events as new events.
+ */
+public final class WorkflowSessionRegistry {
+
+  private static final String SESSION_ID_FIELD = &quot;sessionId&quot;;
+  private static final long INITIAL_SESSION_EVENT_SEQUENCE = 2;
+
+<span class="fc" id="L32">  private final Map&lt;String, WorkflowSessionEntry&gt; sessionEntries = new ConcurrentHashMap&lt;&gt;();</span>
+  private final WorkflowSessionEventHub sessionEventHub;
+  private final WorkflowSessionPersistenceCoordinator persistence;
+
+  /** Creates a registry with an in-memory bounded session-event hub. */
+  public WorkflowSessionRegistry() {
+<span class="fc" id="L38">    this(new WorkflowSessionEventHub());</span>
+<span class="fc" id="L39">  }</span>
+
+  /** Creates a registry publishing lifecycle and accepted-operation events to the supplied hub. */
+<span class="fc" id="L42">  public WorkflowSessionRegistry(WorkflowSessionEventHub eventHub) {</span>
+<span class="fc" id="L43">    this.sessionEventHub = Objects.requireNonNull(eventHub, &quot;eventHub&quot;);</span>
+<span class="fc" id="L44">    this.persistence = WorkflowSessionPersistenceCoordinator.inMemory();</span>
+<span class="fc" id="L45">  }</span>
+
+  /**
+   * Creates a registry backed by durable collaboration state and recovers all open sessions.
+   *
+   * @param eventHub transport-neutral event hub
+   * @param stateStore durable collaboration state store, or {@code null} for in-memory operation
+   */
+  public WorkflowSessionRegistry(
+<span class="fc" id="L54">      WorkflowSessionEventHub eventHub, WorkflowSessionStateStore stateStore) {</span>
+<span class="fc" id="L55">    this.sessionEventHub = Objects.requireNonNull(eventHub, &quot;eventHub&quot;);</span>
+<span class="fc" id="L56">    this.persistence =</span>
+<span class="pc bpc" id="L57" title="1 of 2 branches missed.">        stateStore == null</span>
+<span class="nc" id="L58">            ? WorkflowSessionPersistenceCoordinator.inMemory()</span>
+<span class="fc" id="L59">            : WorkflowSessionPersistenceCoordinator.durable(stateStore);</span>
+<span class="fc" id="L60">    recoverDurableSessions();</span>
+<span class="fc" id="L61">  }</span>
+
+  /** Returns the transport-neutral event hub used by this registry. */
+  public WorkflowSessionEventHub eventHub() {
+<span class="nc" id="L65">    return sessionEventHub;</span>
+  }
+
+  /** Creates a new session and joins its owner. */
+  public SessionSnapshot create(
+      String sessionId, CollaborationMode mode, OperationActor owner, Workflow initialWorkflow) {
+<span class="fc" id="L71">    String requiredSessionId = requireNotBlank(sessionId, SESSION_ID_FIELD);</span>
+<span class="fc" id="L72">    Objects.requireNonNull(mode, &quot;mode&quot;);</span>
+<span class="fc" id="L73">    Objects.requireNonNull(owner, &quot;owner&quot;);</span>
+<span class="fc" id="L74">    Objects.requireNonNull(initialWorkflow, &quot;initialWorkflow&quot;);</span>
+<span class="fc" id="L75">    Instant createdAt = Instant.now().truncatedTo(ChronoUnit.MICROS);</span>
+<span class="fc" id="L76">    WorkflowSessionEntry created =</span>
+<span class="fc" id="L77">        WorkflowSessionEntry.created(</span>
+            requiredSessionId,
+            mode,
+            owner,
+            createdAt,
+            initialWorkflow,
+            sessionEventHub,
+            persistence);
+<span class="fc" id="L85">    WorkflowSessionEntry previous = sessionEntries.putIfAbsent(requiredSessionId, created);</span>
+<span class="pc bpc" id="L86" title="1 of 2 branches missed.">    if (previous != null) {</span>
+<span class="nc" id="L87">      throw error(</span>
+          Code.SESSION_ALREADY_EXISTS,
+          requiredSessionId,
+          &quot;Session already exists: &quot; + requiredSessionId);
+    }
+
+<span class="fc" id="L93">    boolean persisted = false;</span>
+    try {
+<span class="fc" id="L95">      persistence.create(</span>
+          requiredSessionId,
+          mode,
+          owner,
+          createdAt,
+          initialWorkflow,
+          INITIAL_SESSION_EVENT_SEQUENCE);
+<span class="fc" id="L102">      persisted = persistence.durable();</span>
+<span class="fc" id="L103">      sessionEventHub.openSession(requiredSessionId, owner, initialWorkflow);</span>
+<span class="fc" id="L104">      created.verifyInitialEventStream(INITIAL_SESSION_EVENT_SEQUENCE);</span>
+<span class="fc" id="L105">      return created.snapshot();</span>
+<span class="nc" id="L106">    } catch (RuntimeException failure) {</span>
+<span class="nc" id="L107">      sessionEntries.remove(requiredSessionId, created);</span>
+<span class="nc bnc" id="L108" title="All 2 branches missed.">      if (persisted) {</span>
+<span class="nc" id="L109">        persistence.compensateFailedCreate(</span>
+            requiredSessionId, 0, INITIAL_SESSION_EVENT_SEQUENCE, failure);
+      }
+<span class="nc" id="L112">      throw new IllegalStateException(</span>
+          &quot;Failed to create collaboration session &quot; + requiredSessionId, failure);
+    }
+  }
+
+  /** Joins an existing session. Duplicate joins with identical actor metadata are idempotent. */
+  public SessionSnapshot join(String sessionId, OperationActor actor) {
+<span class="fc" id="L119">    return requireSession(sessionId).join(Objects.requireNonNull(actor, &quot;actor&quot;));</span>
+  }
+
+  /** Leaves a session while retaining it for reconnect until explicitly closed. */
+  public SessionSnapshot leave(String sessionId, String actorId) {
+<span class="fc" id="L124">    return requireSession(sessionId).leave(requireNotBlank(actorId, &quot;actorId&quot;));</span>
+  }
+
+  /** Returns immutable session metadata. */
+  public SessionSnapshot inspect(String sessionId) {
+<span class="fc" id="L129">    return requireSession(sessionId).snapshot();</span>
+  }
+
+  /** Returns the current server-authoritative workflow. */
+  public Workflow workflow(String sessionId) {
+<span class="fc" id="L134">    return requireSession(sessionId).workflow();</span>
+  }
+
+  /** Captures immutable metadata and workflow under the same lock as membership authorization. */
+  public SessionWorkflowSnapshot authorizedWorkflow(String sessionId, OperationActor actor) {
+<span class="fc" id="L139">    return requireSession(sessionId).authorizedWorkflow(Objects.requireNonNull(actor, &quot;actor&quot;));</span>
+  }
+
+  /** Authorizes and subscribes to one session instance without a close/recreate gap. */
+  public WorkflowSessionEventHub.Subscription subscribe(
+      String sessionId,
+      OperationActor actor,
+      long afterSequence,
+      BiConsumer&lt;SessionSnapshot, WorkflowSessionEvent&gt; listener) {
+<span class="nc" id="L148">    return requireSession(sessionId)</span>
+<span class="nc" id="L149">        .subscribe(</span>
+<span class="nc" id="L150">            Objects.requireNonNull(actor, &quot;actor&quot;),</span>
+            afterSequence,
+<span class="nc" id="L152">            Objects.requireNonNull(listener, &quot;listener&quot;));</span>
+  }
+
+  /** Applies an actor-authored semantic operation at the current server revision. */
+  public Workflow applyOperation(
+      String sessionId, CollaborationMode mode, OperationActor actor, WorkflowOperation operation) {
+<span class="fc" id="L158">    assertOperationAuthor(sessionId, actor, operation);</span>
+<span class="fc" id="L159">    return requireSession(sessionId).apply(mode, actor, operation);</span>
+  }
+
+  /**
+   * Applies an actor-authored semantic operation against an explicit client-observed revision.
+   *
+   * &lt;p&gt;An identical command retry remains idempotent even when its expected revision precedes the
+   * current revision.
+   */
+  public Workflow applyOperation(
+      String sessionId,
+      CollaborationMode mode,
+      OperationActor actor,
+      long expectedRevision,
+      WorkflowOperation operation) {
+<span class="pc bpc" id="L174" title="1 of 2 branches missed.">    if (expectedRevision &lt; 0) {</span>
+<span class="nc" id="L175">      throw new IllegalArgumentException(&quot;expectedRevision must be &gt;= 0&quot;);</span>
+    }
+<span class="fc" id="L177">    assertOperationAuthor(sessionId, actor, operation);</span>
+<span class="fc" id="L178">    return requireSession(sessionId).apply(mode, actor, expectedRevision, operation);</span>
+  }
+
+  /** Computes an immutable undo preview at the current semantic revision. */
+  public WorkflowUndoPreview previewUndo(
+      String sessionId, OperationActor actor, String targetOperationId) {
+<span class="fc" id="L184">    return requireSession(sessionId)</span>
+<span class="fc" id="L185">        .previewUndo(Objects.requireNonNull(actor, &quot;actor&quot;), targetOperationId);</span>
+  }
+
+  /** Computes an immutable redo preview at the current semantic revision. */
+  public WorkflowRedoPreview previewRedo(
+      String sessionId, OperationActor actor, String targetUndoOperationId) {
+<span class="fc" id="L191">    return requireSession(sessionId)</span>
+<span class="fc" id="L192">        .previewRedo(Objects.requireNonNull(actor, &quot;actor&quot;), targetUndoOperationId);</span>
+  }
+
+  /** Returns one bounded newest-first page of durable semantic history. */
+  public WorkflowHistoryPage history(
+      String sessionId, OperationActor actor, Long beforeRevision, int limit) {
+<span class="fc" id="L198">    return requireSession(sessionId)</span>
+<span class="fc" id="L199">        .history(Objects.requireNonNull(actor, &quot;actor&quot;), beforeRevision, limit);</span>
+  }
+
+  /** Returns actor-scoped personal undo, redo and shared-undo capabilities. */
+  public WorkflowHistoryCapabilities capabilities(String sessionId, OperationActor actor) {
+<span class="fc" id="L204">    return requireSession(sessionId).capabilities(Objects.requireNonNull(actor, &quot;actor&quot;));</span>
+  }
+
+  /** Applies a revision-aware server-side semantic undo command. */
+  public WorkflowHistoryCommandResult undo(String sessionId, UndoWorkflowCommand command) {
+<span class="fc" id="L209">    return requireSession(sessionId).undo(Objects.requireNonNull(command, &quot;command&quot;));</span>
+  }
+
+  /** Applies a revision-aware server-side semantic redo command. */
+  public WorkflowHistoryCommandResult redo(String sessionId, RedoWorkflowCommand command) {
+<span class="fc" id="L214">    return requireSession(sessionId).redo(Objects.requireNonNull(command, &quot;command&quot;));</span>
+  }
+
+  /** Updates non-semantic presence for a joined actor. */
+  public PresenceState updatePresence(
+      String sessionId, OperationActor actor, PresenceState presenceState) {
+<span class="fc" id="L220">    Objects.requireNonNull(actor, &quot;actor&quot;);</span>
+<span class="fc" id="L221">    Objects.requireNonNull(presenceState, &quot;presenceState&quot;);</span>
+<span class="pc bpc" id="L222" title="1 of 2 branches missed.">    if (!presenceState.actorId().equals(actor.actorId())) {</span>
+<span class="nc" id="L223">      throw error(</span>
+          Code.ACTOR_METADATA_MISMATCH,
+          sessionId,
+          &quot;Presence actor '&quot;
+<span class="nc" id="L227">              + presenceState.actorId()</span>
+              + &quot;' does not match actor '&quot;
+<span class="nc" id="L229">              + actor.actorId()</span>
+              + &quot;'&quot;);
+    }
+<span class="fc" id="L232">    return requireSession(sessionId).updatePresence(actor, presenceState);</span>
+  }
+
+  /** Explicitly closes a session. Only its owner may close it. */
+  public void close(String sessionId, String requestedByActorId) {
+<span class="fc" id="L237">    String requiredSessionId = requireNotBlank(sessionId, SESSION_ID_FIELD);</span>
+<span class="fc" id="L238">    String actorId = requireNotBlank(requestedByActorId, &quot;requestedByActorId&quot;);</span>
+<span class="fc" id="L239">    WorkflowSessionEntry entry = requireSession(requiredSessionId);</span>
+<span class="fc" id="L240">    long finalSequence = entry.close(actorId);</span>
+<span class="pc bpc" id="L241" title="1 of 2 branches missed.">    if (!sessionEntries.remove(requiredSessionId, entry)) {</span>
+<span class="nc" id="L242">      throw error(</span>
+          Code.SESSION_NOT_FOUND,
+          requiredSessionId,
+          &quot;Session changed while closing: &quot; + requiredSessionId);
+    }
+<span class="fc" id="L247">    sessionEventHub.closeSession(requiredSessionId, entry.owner());</span>
+<span class="fc" id="L248">    entry.verifyClosedEvent(finalSequence);</span>
+<span class="fc" id="L249">  }</span>
+
+  /** Returns all current sessions in stable identifier order. */
+  public List&lt;SessionSnapshot&gt; sessions() {
+<span class="nc" id="L253">    return sessionEntries.values().stream()</span>
+<span class="nc" id="L254">        .map(WorkflowSessionEntry::snapshot)</span>
+<span class="nc" id="L255">        .sorted(Comparator.comparing(SessionSnapshot::sessionId))</span>
+<span class="nc" id="L256">        .toList();</span>
+  }
+
+  private void recoverDurableSessions() {
+<span class="fc bfc" id="L260" title="All 2 branches covered.">    for (RecoveredSession recovered : persistence.recoverOpenSessions()) {</span>
+<span class="fc" id="L261">      WorkflowSessionEntry.SessionDefinition definition =</span>
+          new WorkflowSessionEntry.SessionDefinition(
+<span class="fc" id="L263">              recovered.sessionId(),</span>
+<span class="fc" id="L264">              recovered.mode(),</span>
+<span class="fc" id="L265">              recovered.owner(),</span>
+<span class="fc" id="L266">              recovered.createdAt(),</span>
+<span class="fc" id="L267">              recovered.workflow());</span>
+<span class="fc" id="L268">      WorkflowSessionEntry.RecoveryState recoveryState =</span>
+          new WorkflowSessionEntry.RecoveryState(
+<span class="fc" id="L270">              recovered.operations(), false, recovered.revision(), recovered.sequence());</span>
+<span class="fc" id="L271">      WorkflowSessionEntry entry =</span>
+<span class="fc" id="L272">          WorkflowSessionEntry.recovered(definition, recoveryState, sessionEventHub, persistence);</span>
+<span class="pc bpc" id="L273" title="1 of 2 branches missed.">      if (sessionEntries.putIfAbsent(recovered.sessionId(), entry) != null) {</span>
+<span class="nc" id="L274">        throw new WorkflowSessionRecoveryException(</span>
+<span class="nc" id="L275">            recovered.sessionId(),</span>
+<span class="nc" id="L276">            &quot;Duplicate durable collaboration session: &quot; + recovered.sessionId());</span>
+      }
+      try {
+<span class="fc" id="L279">        sessionEventHub.restoreSession(</span>
+<span class="fc" id="L280">            recovered.sessionId(),</span>
+<span class="fc" id="L281">            recovered.workflow(),</span>
+<span class="fc" id="L282">            recovered.sequence(),</span>
+<span class="fc" id="L283">            recovered.revision());</span>
+<span class="nc" id="L284">      } catch (RuntimeException failure) {</span>
+<span class="nc" id="L285">        sessionEntries.remove(recovered.sessionId(), entry);</span>
+<span class="nc" id="L286">        throw new WorkflowSessionRecoveryException(</span>
+<span class="nc" id="L287">            recovered.sessionId(),</span>
+<span class="nc" id="L288">            &quot;Failed to restore collaboration event stream for session &quot; + recovered.sessionId(),</span>
+            failure);
+<span class="fc" id="L290">      }</span>
+<span class="fc" id="L291">    }</span>
+<span class="fc" id="L292">  }</span>
+
+  private WorkflowSessionEntry requireSession(String sessionId) {
+<span class="fc" id="L295">    String requiredSessionId = requireNotBlank(sessionId, SESSION_ID_FIELD);</span>
+<span class="fc" id="L296">    WorkflowSessionEntry entry = sessionEntries.get(requiredSessionId);</span>
+<span class="fc bfc" id="L297" title="All 2 branches covered.">    if (entry == null) {</span>
+<span class="fc" id="L298">      throw error(</span>
+          Code.SESSION_NOT_FOUND, requiredSessionId, &quot;Unknown session: &quot; + requiredSessionId);
+    }
+<span class="fc" id="L301">    return entry;</span>
+  }
+
+  private static void assertOperationAuthor(
+      String sessionId, OperationActor actor, WorkflowOperation operation) {
+<span class="fc" id="L306">    Objects.requireNonNull(actor, &quot;actor&quot;);</span>
+<span class="fc" id="L307">    Objects.requireNonNull(operation, &quot;operation&quot;);</span>
+<span class="pc bpc" id="L308" title="1 of 2 branches missed.">    if (!operation.author().equals(actor.actorId())) {</span>
+<span class="nc" id="L309">      throw error(</span>
+          Code.INVALID_OPERATION_AUTHOR,
+          sessionId,
+          &quot;Operation author '&quot;
+<span class="nc" id="L313">              + operation.author()</span>
+              + &quot;' does not match actor '&quot;
+<span class="nc" id="L315">              + actor.actorId()</span>
+              + &quot;'&quot;);
+    }
+<span class="fc" id="L318">  }</span>
+
+  private static WorkflowSessionException error(Code code, String sessionId, String message) {
+<span class="fc" id="L321">    return new WorkflowSessionException(code, sessionId, message);</span>
+  }
+
+  private static String requireNotBlank(String value, String field) {
+<span class="fc" id="L325">    Objects.requireNonNull(value, field);</span>
+<span class="pc bpc" id="L326" title="1 of 2 branches missed.">    if (value.isBlank()) {</span>
+<span class="nc" id="L327">      throw new IllegalArgumentException(field + &quot; must not be blank&quot;);</span>
+    }
+<span class="fc" id="L329">    return value;</span>
+  }
+
+  /**
+   * Immutable transport-neutral session metadata.
+   *
+   * @param sessionId stable collaboration-session identifier
+   * @param mode immutable collaboration mode
+   * @param owner actor that owns the session lifecycle
+   * @param createdAt session creation timestamp
+   * @param participants currently joined actors
+   * @param operationCount accepted semantic operation count
+   * @param workflowId canonical workflow identifier
+   * @param revision current semantic revision
+   * @param sequence current ordered event sequence
+   */
+  public record SessionSnapshot(
+      String sessionId,
+      CollaborationMode mode,
+      OperationActor owner,
+      Instant createdAt,
+      List&lt;OperationActor&gt; participants,
+      int operationCount,
+      String workflowId,
+      long revision,
+      long sequence) {
+
+<span class="fc" id="L356">    public SessionSnapshot {</span>
+<span class="fc" id="L357">      requireNotBlank(sessionId, &quot;sessionId&quot;);</span>
+<span class="fc" id="L358">      Objects.requireNonNull(mode, &quot;mode&quot;);</span>
+<span class="fc" id="L359">      Objects.requireNonNull(owner, &quot;owner&quot;);</span>
+<span class="fc" id="L360">      Objects.requireNonNull(createdAt, &quot;createdAt&quot;);</span>
+<span class="fc" id="L361">      participants = List.copyOf(Objects.requireNonNull(participants, &quot;participants&quot;));</span>
+<span class="pc bpc" id="L362" title="1 of 2 branches missed.">      if (operationCount &lt; 0) {</span>
+<span class="nc" id="L363">        throw new IllegalArgumentException(&quot;operationCount must be &gt;= 0&quot;);</span>
+      }
+<span class="fc" id="L365">      requireNotBlank(workflowId, &quot;workflowId&quot;);</span>
+<span class="pc bpc" id="L366" title="2 of 4 branches missed.">      if (revision &lt; 0 || sequence &lt; revision) {</span>
+<span class="nc" id="L367">        throw new IllegalArgumentException(&quot;Invalid session revision/event sequence&quot;);</span>
+      }
+<span class="fc" id="L369">    }</span>
+  }
+
+  /**
+   * An immutable workflow and the exact session metadata that authorized its capture.
+   *
+   * @param session metadata and membership at the capture instant
+   * @param workflow immutable workflow captured under the same session lock
+   */
+  public record SessionWorkflowSnapshot(SessionSnapshot session, Workflow workflow) {
+<span class="fc" id="L379">    public SessionWorkflowSnapshot {</span>
+<span class="fc" id="L380">      Objects.requireNonNull(session, &quot;session&quot;);</span>
+<span class="fc" id="L381">      Objects.requireNonNull(workflow, &quot;workflow&quot;);</span>
+<span class="pc bpc" id="L382" title="1 of 2 branches missed.">      if (!session.workflowId().equals(workflow.id())) {</span>
+<span class="nc" id="L383">        throw new IllegalArgumentException(&quot;Session and captured workflow ids must match&quot;);</span>
+      }
+<span class="fc" id="L385">    }</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

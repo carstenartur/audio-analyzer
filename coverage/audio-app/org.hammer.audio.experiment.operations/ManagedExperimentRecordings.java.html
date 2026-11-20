@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ManagedExperimentRecordings.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experiment.operations</a> &gt; <span class="el_source">ManagedExperimentRecordings.java</span></div><h1>ManagedExperimentRecordings.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experiment.operations;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+import java.util.stream.Stream;
+import org.hammer.audio.experiment.operations.ExperimentOperationsModels.RecordingView;
+import org.hammer.audio.recording.AudioBlockRecordingReader;
+import org.hammer.audio.recording.RecordingInspection;
+
+/** Managed imported/generated recordings, including containment and non-destructive recovery. */
+final class ManagedExperimentRecordings {
+  private static final long MAX_IMPORT_BYTES = 512L * 1024L * 1024L;
+  private final Path directory;
+
+<span class="fc" id="L21">  ManagedExperimentRecordings(Path directory) {</span>
+<span class="fc" id="L22">    this.directory = directory;</span>
+<span class="fc" id="L23">  }</span>
+
+  RecordingView importRecording(InputStream input) throws IOException {
+<span class="nc" id="L26">    Path imports = directory.resolve(&quot;imports&quot;);</span>
+<span class="nc" id="L27">    Files.createDirectories(imports);</span>
+<span class="nc" id="L28">    Path target = imports.resolve(UUID.randomUUID() + &quot;.aarec&quot;);</span>
+<span class="nc" id="L29">    boolean accepted = false;</span>
+    try {
+<span class="nc" id="L31">      try (OutputStream output = Files.newOutputStream(target)) {</span>
+<span class="nc" id="L32">        byte[] buffer = new byte[8192];</span>
+<span class="nc" id="L33">        long total = 0L;</span>
+<span class="nc" id="L34">        int count = input.read(buffer);</span>
+<span class="nc bnc" id="L35" title="All 2 branches missed.">        while (count &gt;= 0) {</span>
+<span class="nc" id="L36">          total += count;</span>
+<span class="nc bnc" id="L37" title="All 2 branches missed.">          if (total &gt; MAX_IMPORT_BYTES) {</span>
+<span class="nc" id="L38">            throw new IOException(&quot;Recording import exceeds 512 MiB.&quot;);</span>
+          }
+<span class="nc" id="L40">          output.write(buffer, 0, count);</span>
+<span class="nc" id="L41">          count = input.read(buffer);</span>
+        }
+      }
+<span class="nc" id="L44">      RecordingInspection inspection = AudioBlockRecordingReader.inspect(target);</span>
+<span class="nc" id="L45">      accepted = true;</span>
+<span class="nc" id="L46">      return recordingView(target, inspection);</span>
+    } finally {
+<span class="nc bnc" id="L48" title="All 2 branches missed.">      if (!accepted) {</span>
+<span class="nc" id="L49">        Files.deleteIfExists(target);</span>
+      }
+    }
+  }
+
+  RecordingView recover(String id) throws IOException {
+<span class="nc" id="L55">    Path source = path(id);</span>
+<span class="nc" id="L56">    Path imports = directory.resolve(&quot;imports&quot;);</span>
+<span class="nc" id="L57">    Files.createDirectories(imports);</span>
+<span class="nc" id="L58">    Path target = imports.resolve(UUID.randomUUID() + &quot;.aarec&quot;);</span>
+<span class="nc" id="L59">    RecordingInspection inspection = AudioBlockRecordingReader.recover(source, target);</span>
+<span class="nc" id="L60">    Files.writeString(</span>
+<span class="nc" id="L61">        target.resolveSibling(target.getFileName() + &quot;.recovery.txt&quot;),</span>
+<span class="nc" id="L62">        &quot;Recovered from &quot; + id + &quot;\nOriginal: &quot; + AudioBlockRecordingReader.inspect(source) + &quot;\n&quot;);</span>
+<span class="nc" id="L63">    return recordingView(target, inspection);</span>
+  }
+
+  List&lt;RecordingView&gt; list() throws IOException {
+<span class="fc bfc" id="L67" title="All 2 branches covered.">    if (!Files.isDirectory(directory)) {</span>
+<span class="fc" id="L68">      return List.of();</span>
+    }
+<span class="fc" id="L70">    List&lt;RecordingView&gt; result = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L71">    try (Stream&lt;Path&gt; paths = Files.walk(directory, 3)) {</span>
+<span class="fc" id="L72">      List&lt;Path&gt; candidates =</span>
+          paths
+<span class="fc" id="L74">              .filter(Files::isRegularFile)</span>
+<span class="fc" id="L75">              .filter(ManagedExperimentRecordings::recordingFile)</span>
+<span class="fc" id="L76">              .sorted()</span>
+<span class="fc" id="L77">              .toList();</span>
+<span class="pc bpc" id="L78" title="1 of 2 branches missed.">      for (Path path : candidates) {</span>
+        try {
+<span class="nc" id="L80">          result.add(recordingView(path, AudioBlockRecordingReader.inspect(path)));</span>
+<span class="nc" id="L81">        } catch (IOException exception) {</span>
+<span class="nc" id="L82">          result.add(</span>
+              new RecordingView(
+<span class="nc" id="L84">                  directory.relativize(path).toString(),</span>
+<span class="nc" id="L85">                  ExperimentEvidenceFiles.fileName(path),</span>
+                  &quot;UNREADABLE&quot;,
+                  0L));
+<span class="nc" id="L88">        }</span>
+<span class="nc" id="L89">      }</span>
+    }
+<span class="fc" id="L91">    return List.copyOf(result);</span>
+  }
+
+  private RecordingView recordingView(Path path, RecordingInspection inspection)
+      throws IOException {
+<span class="nc" id="L96">    return new RecordingView(</span>
+<span class="nc" id="L97">        directory.relativize(path).toString().replace('\\', '/'),</span>
+<span class="nc" id="L98">        ExperimentEvidenceFiles.fileName(path),</span>
+<span class="nc" id="L99">        inspection.integrity().name(),</span>
+<span class="nc" id="L100">        inspection.totalFrames());</span>
+  }
+
+  private static boolean recordingFile(Path path) {
+<span class="nc" id="L104">    Path name = path.getFileName();</span>
+<span class="nc bnc" id="L105" title="All 2 branches missed.">    if (name == null) {</span>
+<span class="nc" id="L106">      return false;</span>
+    }
+<span class="nc" id="L108">    String filename = name.toString();</span>
+<span class="nc bnc" id="L109" title="All 4 branches missed.">    return filename.endsWith(&quot;.aarec&quot;) || filename.endsWith(&quot;.aarec.partial&quot;);</span>
+  }
+
+  Path path(String id) throws IOException {
+<span class="nc bnc" id="L113" title="All 4 branches missed.">    if (id == null || id.isBlank()) {</span>
+<span class="nc" id="L114">      throw new IOException(&quot;No recording is selected.&quot;);</span>
+    }
+<span class="nc" id="L116">    Path candidate = directory.resolve(id).normalize();</span>
+<span class="nc bnc" id="L117" title="All 2 branches missed.">    if (!candidate.startsWith(directory)</span>
+<span class="nc bnc" id="L118" title="All 2 branches missed.">        || !Files.isRegularFile(candidate)</span>
+<span class="nc bnc" id="L119" title="All 2 branches missed.">        || !candidate.toRealPath().startsWith(directory.toRealPath())) {</span>
+<span class="nc" id="L120">      throw new IOException(&quot;Recording must be an imported or generated input in this workspace.&quot;);</span>
+    }
+<span class="nc" id="L122">    return candidate;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

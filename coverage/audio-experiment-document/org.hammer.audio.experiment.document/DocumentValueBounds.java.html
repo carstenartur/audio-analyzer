@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>DocumentValueBounds.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experiment Document</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experiment.document</a> &gt; <span class="el_source">DocumentValueBounds.java</span></div><h1>DocumentValueBounds.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experiment.document;
+
+import java.nio.charset.StandardCharsets;
+import org.hammer.audio.plugin.document.DocumentValue;
+
+/** Validates plugin-produced values before recursive conversion or canonical serialization. */
+final class DocumentValueBounds {
+
+  private DocumentValueBounds() {
+    // utility class
+  }
+
+  static void check(DocumentValue value, String pointer) throws ExperimentDocumentException {
+<span class="fc" id="L14">    check(value, pointer, ExperimentDocumentFormat.MAX_DOCUMENT_BYTES / 2);</span>
+<span class="fc" id="L15">  }</span>
+
+  static void check(DocumentValue value, String pointer, int maximumBytes)
+      throws ExperimentDocumentException {
+<span class="fc" id="L19">    inspect(value, pointer, 0, new long[] {0, maximumBytes});</span>
+<span class="fc" id="L20">  }</span>
+
+  private static void inspect(DocumentValue value, String pointer, int depth, long[] size)
+      throws ExperimentDocumentException {
+<span class="pc bpc" id="L24" title="2 of 4 branches missed.">    if (value == null || depth &gt; ExperimentDocumentFormat.MAX_NESTING_DEPTH - 5) {</span>
+<span class="nc" id="L25">      throw new ExperimentDocumentException(</span>
+          pointer, &quot;plugin-value-depth&quot;, &quot;Plugin value exceeds nesting limits&quot;);
+    }
+<span class="fc" id="L28">    size[0] += 2;</span>
+<span class="pc bpc" id="L29" title="4 of 6 branches missed.">    switch (value) {</span>
+<span class="fc" id="L30">      case DocumentValue.ObjectValue object -&gt; {</span>
+<span class="fc" id="L31">        collection(object.fields().size(), pointer);</span>
+<span class="fc bfc" id="L32" title="All 2 branches covered.">        for (java.util.Map.Entry&lt;String, DocumentValue&gt; entry : object.fields().entrySet()) {</span>
+<span class="fc" id="L33">          text(entry.getKey(), pointer, size);</span>
+<span class="fc" id="L34">          inspect(</span>
+<span class="fc" id="L35">              entry.getValue(),</span>
+<span class="fc" id="L36">              DocumentValueJson.pointer(pointer, entry.getKey()),</span>
+              depth + 1,
+              size);
+<span class="fc" id="L39">        }</span>
+<span class="fc" id="L40">      }</span>
+<span class="nc" id="L41">      case DocumentValue.ArrayValue array -&gt; {</span>
+<span class="nc" id="L42">        collection(array.values().size(), pointer);</span>
+<span class="nc bnc" id="L43" title="All 2 branches missed.">        for (int index = 0; index &lt; array.values().size(); index++) {</span>
+<span class="nc" id="L44">          inspect(array.values().get(index), pointer + &quot;/&quot; + index, depth + 1, size);</span>
+        }
+<span class="nc" id="L46">      }</span>
+<span class="nc" id="L47">      case DocumentValue.StringValue string -&gt; text(string.value(), pointer, size);</span>
+<span class="fc" id="L48">      case DocumentValue.NumberValue number -&gt; {</span>
+<span class="pc bpc" id="L49" title="2 of 4 branches missed.">        if (number.value().precision() &gt; 128 || number.value().toString().length() &gt; 128) {</span>
+<span class="nc" id="L50">          throw new ExperimentDocumentException(</span>
+              pointer, &quot;plugin-number-limit&quot;, &quot;Plugin number exceeds token limits&quot;);
+        }
+<span class="fc" id="L53">        size[0] += number.value().toString().length();</span>
+<span class="fc" id="L54">      }</span>
+<span class="nc" id="L55">      case DocumentValue.BooleanValue ignored -&gt; {</span>
+<span class="nc" id="L56">        size[0] += 5;</span>
+<span class="nc" id="L57">      }</span>
+<span class="nc" id="L58">      case DocumentValue.NullValue ignored -&gt; {</span>
+<span class="nc" id="L59">        size[0] += 4;</span>
+      }
+    }
+<span class="pc bpc" id="L62" title="1 of 2 branches missed.">    if (size[0] &gt; size[1]) {</span>
+<span class="nc" id="L63">      throw new ExperimentDocumentException(</span>
+          pointer, &quot;plugin-value-size&quot;, &quot;Plugin section exceeds its byte limit&quot;);
+    }
+<span class="fc" id="L66">  }</span>
+
+  private static void text(String value, String pointer, long[] size)
+      throws ExperimentDocumentException {
+<span class="fc bfc" id="L70" title="All 2 branches covered.">    if (value.length() &gt; ExperimentDocumentFormat.MAX_STRING_LENGTH) {</span>
+<span class="fc" id="L71">      throw new ExperimentDocumentException(</span>
+          pointer, &quot;max-string&quot;, &quot;Plugin string exceeds the limit&quot;);
+    }
+    // Account for escapes without constructing an unbounded serialized tree.
+<span class="fc" id="L75">    size[0] += value.getBytes(StandardCharsets.UTF_8).length + 2L;</span>
+<span class="fc bfc" id="L76" title="All 2 branches covered.">    for (int index = 0; index &lt; value.length(); index++) {</span>
+<span class="fc" id="L77">      char character = value.charAt(index);</span>
+<span class="pc bpc" id="L78" title="1 of 2 branches missed.">      if (character &lt; 0x20) {</span>
+<span class="nc" id="L79">        size[0] += 5;</span>
+<span class="pc bpc" id="L80" title="2 of 4 branches missed.">      } else if (character == '&quot;' || character == '\\') {</span>
+<span class="nc" id="L81">        size[0]++;</span>
+      }
+    }
+<span class="fc" id="L84">  }</span>
+
+  private static void collection(int size, String pointer) throws ExperimentDocumentException {
+<span class="pc bpc" id="L87" title="1 of 2 branches missed.">    if (size &gt; ExperimentDocumentFormat.MAX_COLLECTION_SIZE) {</span>
+<span class="nc" id="L88">      throw new ExperimentDocumentException(</span>
+          pointer, &quot;max-collection&quot;, &quot;Plugin collection exceeds the limit&quot;);
+    }
+<span class="fc" id="L91">  }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

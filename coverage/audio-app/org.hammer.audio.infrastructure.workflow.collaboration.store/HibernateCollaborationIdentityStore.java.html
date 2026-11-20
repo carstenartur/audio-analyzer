@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>HibernateCollaborationIdentityStore.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.infrastructure.workflow.collaboration.store</a> &gt; <span class="el_source">HibernateCollaborationIdentityStore.java</span></div><h1>HibernateCollaborationIdentityStore.java</h1><pre class="source lang-java linenums">package org.hammer.audio.infrastructure.workflow.collaboration.store;
+
+import java.util.Objects;
+import java.util.Optional;
+import org.hammer.audio.workflow.collaboration.identity.CollaborationIdentity;
+import org.hammer.audio.workflow.collaboration.identity.CollaborationIdentityStore;
+import org.hibernate.Session;
+import org.hibernate.SessionFactory;
+import org.hibernate.Transaction;
+
+/** Stores identities in the same application-owned Hibernate context as durable collaboration. */
+public final class HibernateCollaborationIdentityStore implements CollaborationIdentityStore {
+  private final SessionFactory sessionFactory;
+
+<span class="fc" id="L15">  public HibernateCollaborationIdentityStore(SessionFactory sessionFactory) {</span>
+<span class="fc" id="L16">    this.sessionFactory = Objects.requireNonNull(sessionFactory, &quot;sessionFactory&quot;);</span>
+<span class="fc" id="L17">  }</span>
+
+  @Override
+  public Optional&lt;CollaborationIdentity&gt; find(String actorId) {
+<span class="fc" id="L21">    try (Session session = sessionFactory.openSession()) {</span>
+<span class="fc" id="L22">      CollaborationIdentityEntity entity = session.find(CollaborationIdentityEntity.class, actorId);</span>
+<span class="pc bpc" id="L23" title="1 of 2 branches missed.">      return entity == null ? Optional.empty() : Optional.of(entity.toIdentity());</span>
+    }
+  }
+
+  @Override
+  public void insert(CollaborationIdentity identity) {
+<span class="fc" id="L29">    try (Session session = sessionFactory.openSession()) {</span>
+<span class="fc" id="L30">      Transaction transaction = session.beginTransaction();</span>
+      try {
+<span class="fc" id="L32">        session.persist(CollaborationIdentityEntity.from(identity));</span>
+<span class="fc" id="L33">        transaction.commit();</span>
+      } finally {
+<span class="pc bpc" id="L35" title="1 of 2 branches missed.">        if (transaction.isActive()) {</span>
+<span class="nc" id="L36">          transaction.rollback();</span>
+        }
+      }
+    }
+<span class="fc" id="L40">  }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

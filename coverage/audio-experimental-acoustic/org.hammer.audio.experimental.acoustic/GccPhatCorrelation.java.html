@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>GccPhatCorrelation.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic</a> &gt; <span class="el_source">GccPhatCorrelation.java</span></div><h1>GccPhatCorrelation.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic;
+
+import org.hammer.audio.analysis.Fft;
+
+/** Package-local GCC-PHAT correlation engine with optional power-of-two interpolation. */
+final class GccPhatCorrelation {
+
+  private static final double EPSILON = 1.0e-12;
+
+  private GccPhatCorrelation() {
+    // utility class
+  }
+
+  /** Returns the PHAT-weighted circular correlation at the requested interpolation factor. */
+  static double[] correlate(float[] first, float[] second, int frames, int interpolationFactor) {
+<span class="pc bpc" id="L16" title="3 of 6 branches missed.">    if (frames &lt; 2 || frames &gt; first.length || frames &gt; second.length) {</span>
+<span class="nc" id="L17">      throw new IllegalArgumentException(&quot;frames must be in [2, min(channel lengths)]&quot;);</span>
+    }
+<span class="pc bpc" id="L19" title="2 of 4 branches missed.">    if (interpolationFactor &lt; 1 || Integer.bitCount(interpolationFactor) != 1) {</span>
+<span class="nc" id="L20">      throw new IllegalArgumentException(&quot;interpolationFactor must be a positive power of two&quot;);</span>
+    }
+
+<span class="fc" id="L23">    int fftSize = nextPowerOfTwo(frames * 2);</span>
+<span class="fc" id="L24">    float[] firstReal = new float[fftSize];</span>
+<span class="fc" id="L25">    float[] firstImaginary = new float[fftSize];</span>
+<span class="fc" id="L26">    float[] secondReal = new float[fftSize];</span>
+<span class="fc" id="L27">    float[] secondImaginary = new float[fftSize];</span>
+<span class="fc" id="L28">    System.arraycopy(first, 0, firstReal, 0, frames);</span>
+<span class="fc" id="L29">    System.arraycopy(second, 0, secondReal, 0, frames);</span>
+
+<span class="fc" id="L31">    Fft fft = new Fft(fftSize);</span>
+<span class="fc" id="L32">    fft.forward(firstReal, firstImaginary);</span>
+<span class="fc" id="L33">    fft.forward(secondReal, secondImaginary);</span>
+
+<span class="fc" id="L35">    float[] crossReal = new float[fftSize];</span>
+<span class="fc" id="L36">    float[] crossImaginary = new float[fftSize];</span>
+<span class="fc bfc" id="L37" title="All 2 branches covered.">    for (int bin = 0; bin &lt; fftSize; bin++) {</span>
+<span class="fc" id="L38">      double real = secondReal[bin] * firstReal[bin] + secondImaginary[bin] * firstImaginary[bin];</span>
+<span class="fc" id="L39">      double imaginary =</span>
+          secondImaginary[bin] * firstReal[bin] - secondReal[bin] * firstImaginary[bin];
+<span class="fc" id="L41">      double magnitude = Math.hypot(real, imaginary);</span>
+<span class="fc bfc" id="L42" title="All 2 branches covered.">      if (magnitude &gt; EPSILON) {</span>
+<span class="fc" id="L43">        crossReal[bin] = (float) (real / magnitude);</span>
+<span class="fc" id="L44">        crossImaginary[bin] = (float) (imaginary / magnitude);</span>
+      }
+    }
+
+<span class="fc bfc" id="L48" title="All 2 branches covered.">    if (interpolationFactor == 1) {</span>
+<span class="fc" id="L49">      inverse(fft, crossReal, crossImaginary);</span>
+<span class="fc" id="L50">      return asDoubleArray(crossReal, 1.0);</span>
+    }
+<span class="fc" id="L52">    return interpolate(crossReal, crossImaginary, interpolationFactor);</span>
+  }
+
+  private static double[] interpolate(
+      float[] crossReal, float[] crossImaginary, int interpolationFactor) {
+<span class="fc" id="L57">    int fftSize = crossReal.length;</span>
+<span class="fc" id="L58">    int interpolatedSize = Math.multiplyExact(fftSize, interpolationFactor);</span>
+<span class="fc" id="L59">    float[] interpolatedReal = new float[interpolatedSize];</span>
+<span class="fc" id="L60">    float[] interpolatedImaginary = new float[interpolatedSize];</span>
+<span class="fc" id="L61">    int half = fftSize / 2;</span>
+<span class="fc" id="L62">    System.arraycopy(crossReal, 0, interpolatedReal, 0, half + 1);</span>
+<span class="fc" id="L63">    System.arraycopy(crossImaginary, 0, interpolatedImaginary, 0, half + 1);</span>
+<span class="fc" id="L64">    int negativeFrequencyCount = fftSize - half - 1;</span>
+<span class="fc" id="L65">    System.arraycopy(</span>
+        crossReal,
+        half + 1,
+        interpolatedReal,
+        interpolatedSize - negativeFrequencyCount,
+        negativeFrequencyCount);
+<span class="fc" id="L71">    System.arraycopy(</span>
+        crossImaginary,
+        half + 1,
+        interpolatedImaginary,
+        interpolatedSize - negativeFrequencyCount,
+        negativeFrequencyCount);
+
+<span class="fc" id="L78">    inverse(new Fft(interpolatedSize), interpolatedReal, interpolatedImaginary);</span>
+<span class="fc" id="L79">    return asDoubleArray(interpolatedReal, interpolationFactor);</span>
+  }
+
+  private static double[] asDoubleArray(float[] values, double scale) {
+<span class="fc" id="L83">    double[] result = new double[values.length];</span>
+<span class="fc bfc" id="L84" title="All 2 branches covered.">    for (int index = 0; index &lt; values.length; index++) {</span>
+<span class="fc" id="L85">      result[index] = values[index] * scale;</span>
+    }
+<span class="fc" id="L87">    return result;</span>
+  }
+
+  private static void inverse(Fft fft, float[] real, float[] imaginary) {
+<span class="fc bfc" id="L91" title="All 2 branches covered.">    for (int index = 0; index &lt; imaginary.length; index++) {</span>
+<span class="fc" id="L92">      imaginary[index] = -imaginary[index];</span>
+    }
+<span class="fc" id="L94">    fft.forward(real, imaginary);</span>
+<span class="fc bfc" id="L95" title="All 2 branches covered.">    for (int index = 0; index &lt; real.length; index++) {</span>
+<span class="fc" id="L96">      real[index] /= real.length;</span>
+<span class="fc" id="L97">      imaginary[index] = -imaginary[index] / real.length;</span>
+    }
+<span class="fc" id="L99">  }</span>
+
+  private static int nextPowerOfTwo(int value) {
+<span class="fc" id="L102">    int result = 1;</span>
+<span class="fc bfc" id="L103" title="All 2 branches covered.">    while (result &lt; value) {</span>
+<span class="fc" id="L104">      result &lt;&lt;= 1;</span>
+    }
+<span class="fc" id="L106">    return Math.max(2, result);</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

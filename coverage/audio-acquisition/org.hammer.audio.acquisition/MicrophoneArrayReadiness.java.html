@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>MicrophoneArrayReadiness.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Acquisition</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.acquisition</a> &gt; <span class="el_source">MicrophoneArrayReadiness.java</span></div><h1>MicrophoneArrayReadiness.java</h1><pre class="source lang-java linenums">package org.hammer.audio.acquisition;
+
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+
+/**
+ * Deterministic readiness result for starting localization with one profile and source mode.
+ *
+ * @param ready whether localization may start
+ * @param synchronization synchronization evidence used by the decision
+ * @param diagnostics ordered human-readable findings
+ */
+public record MicrophoneArrayReadiness(
+    boolean ready, SynchronizationAssessment synchronization, List&lt;String&gt; diagnostics) {
+
+  // Validate and defensively copy one readiness result.
+<span class="fc" id="L19">  public MicrophoneArrayReadiness {</span>
+<span class="fc" id="L20">    Objects.requireNonNull(synchronization, &quot;synchronization&quot;);</span>
+<span class="fc" id="L21">    diagnostics = List.copyOf(Objects.requireNonNull(diagnostics, &quot;diagnostics&quot;));</span>
+<span class="fc" id="L22">  }</span>
+
+  /** Evaluate a profile before simulation, replay or live localization starts. */
+  public static MicrophoneArrayReadiness assess(
+      MicrophoneArrayProfile profile,
+      LocalizationInputMode mode,
+      Instant observationTime,
+      double maximumTimingErrorSamples) {
+<span class="fc" id="L30">    Objects.requireNonNull(profile, &quot;profile&quot;);</span>
+<span class="fc" id="L31">    Objects.requireNonNull(mode, &quot;mode&quot;);</span>
+<span class="fc" id="L32">    Objects.requireNonNull(observationTime, &quot;observationTime&quot;);</span>
+<span class="pc bpc" id="L33" title="2 of 4 branches missed.">    if (!Double.isFinite(maximumTimingErrorSamples) || maximumTimingErrorSamples &lt;= 0.0) {</span>
+<span class="nc" id="L34">      throw new IllegalArgumentException(&quot;maximumTimingErrorSamples must be finite and &gt; 0&quot;);</span>
+    }
+
+<span class="fc" id="L37">    List&lt;String&gt; diagnostics = new ArrayList&lt;&gt;();</span>
+<span class="pc bpc" id="L38" title="1 of 2 branches missed.">    if (!profile.supports(mode)) {</span>
+<span class="nc" id="L39">      diagnostics.add(&quot;Profile does not support input mode &quot; + mode + '.');</span>
+<span class="nc" id="L40">      return new MicrophoneArrayReadiness(</span>
+<span class="nc" id="L41">          false, SynchronizationAssessment.nominalSharedClock(), diagnostics);</span>
+    }
+
+<span class="fc bfc" id="L44" title="All 2 branches covered.">    if (mode != LocalizationInputMode.LIVE) {</span>
+<span class="fc" id="L45">      diagnostics.add(&quot;Non-live source uses deterministic shared-clock timing evidence.&quot;);</span>
+<span class="fc" id="L46">      return new MicrophoneArrayReadiness(</span>
+<span class="fc" id="L47">          true, SynchronizationAssessment.nominalSharedClock(), diagnostics);</span>
+    }
+
+<span class="fc" id="L50">    CaptureDeviceConfiguration capture = profile.liveCaptureConfiguration().orElseThrow();</span>
+<span class="pc bpc" id="L51" title="1 of 2 branches missed.">    if (capture.format().channels() != profile.array().channels()) {</span>
+<span class="nc" id="L52">      diagnostics.add(&quot;Capture channel count does not match the microphone-array profile.&quot;);</span>
+<span class="nc" id="L53">      return new MicrophoneArrayReadiness(</span>
+<span class="nc" id="L54">          false, SynchronizationAssessment.nominalSharedClock(), diagnostics);</span>
+    }
+<span class="pc bpc" id="L56" title="1 of 2 branches missed.">    if (profile.calibration() == null) {</span>
+<span class="fc" id="L57">      diagnostics.add(&quot;Live localization requires a calibration for this array mapping.&quot;);</span>
+<span class="fc" id="L58">      return new MicrophoneArrayReadiness(</span>
+<span class="fc" id="L59">          false, SynchronizationAssessment.nominalSharedClock(), diagnostics);</span>
+    }
+
+<span class="nc" id="L62">    SynchronizationAssessment synchronization =</span>
+        profile
+<span class="nc" id="L64">            .calibration()</span>
+<span class="nc" id="L65">            .assess(observationTime, capture.format().sampleRate(), maximumTimingErrorSamples);</span>
+<span class="nc" id="L66">    diagnostics.addAll(synchronization.diagnostics());</span>
+<span class="nc" id="L67">    return new MicrophoneArrayReadiness(synchronization.usable(), synchronization, diagnostics);</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

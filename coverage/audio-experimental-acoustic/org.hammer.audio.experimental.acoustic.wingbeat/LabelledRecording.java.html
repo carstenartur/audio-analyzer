@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>LabelledRecording.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.wingbeat</a> &gt; <span class="el_source">LabelledRecording.java</span></div><h1>LabelledRecording.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.wingbeat;
+
+import java.util.Objects;
+
+/**
+ * An entry in a labelled recording dataset for classifier evaluation.
+ *
+ * &lt;p&gt;A {@code LabelledRecording} pairs a pre-extracted {@link WingbeatFeatureVector} with a known
+ * ground-truth label. This allows classifiers to be evaluated against reference datasets without
+ * coupling the evaluation framework to a specific audio format or file layout.
+ *
+ * &lt;p&gt;The ground-truth label must be one of the constants in {@link WingbeatLabel} or a custom
+ * domain-specific string. An empty or blank label is not permitted.
+ *
+ * @param id unique identifier for this recording within the dataset; must not be blank
+ * @param description human-readable description of the recording (species, sex, conditions, etc.)
+ * @param groundTruthLabel the known classification label; must not be blank
+ * @param features the pre-extracted feature vector for this recording; must not be {@code null}
+ */
+public record LabelledRecording(
+    String id, String description, String groundTruthLabel, WingbeatFeatureVector features) {
+
+  /* Validate fields. */
+<span class="fc" id="L24">  public LabelledRecording {</span>
+<span class="fc" id="L25">    Objects.requireNonNull(id, &quot;id&quot;);</span>
+<span class="fc" id="L26">    Objects.requireNonNull(description, &quot;description&quot;);</span>
+<span class="fc" id="L27">    Objects.requireNonNull(groundTruthLabel, &quot;groundTruthLabel&quot;);</span>
+<span class="fc" id="L28">    Objects.requireNonNull(features, &quot;features&quot;);</span>
+<span class="pc bpc" id="L29" title="1 of 2 branches missed.">    if (id.isBlank()) {</span>
+<span class="nc" id="L30">      throw new IllegalArgumentException(&quot;id must not be blank&quot;);</span>
+    }
+<span class="fc bfc" id="L32" title="All 2 branches covered.">    if (groundTruthLabel.isBlank()) {</span>
+<span class="fc" id="L33">      throw new IllegalArgumentException(&quot;groundTruthLabel must not be blank&quot;);</span>
+    }
+<span class="fc" id="L35">  }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

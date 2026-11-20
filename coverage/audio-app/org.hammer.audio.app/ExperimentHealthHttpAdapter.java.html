@@ -1,0 +1,206 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ExperimentHealthHttpAdapter.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.app</a> &gt; <span class="el_source">ExperimentHealthHttpAdapter.java</span></div><h1>ExperimentHealthHttpAdapter.java</h1><pre class="source lang-java linenums">package org.hammer.audio.app;
+
+import jakarta.servlet.http.HttpServletRequest;
+import java.io.IOException;
+import java.time.Instant;
+import java.util.Map;
+import org.hammer.audio.acquisition.health.ExperimentHealthSnapshot;
+import org.hammer.audio.experiment.document.ExperimentDocumentService;
+import org.hammer.audio.experiment.document.ExperimentDocumentSession;
+import org.hammer.audio.experiment.document.workspace.ExperimentDocumentWorkspaceService;
+import org.hammer.audio.experiment.health.ExperimentDocumentHealthProjector;
+import org.hammer.audio.experiment.health.WorkflowExperimentHealthProjector;
+import org.hammer.audio.workflow.WorkflowValidator;
+import org.hammer.audio.workflow.collaboration.OperationActor;
+import org.hammer.audio.workflow.collaboration.WorkflowSessionException;
+import org.hammer.audio.workflow.collaboration.WorkflowSessionRegistry;
+import org.hammer.audio.workflow.collaboration.store.WorkflowSessionRevisionConflictException;
+import org.hammer.audio.workflow.editor.http.CollaborationIdentityException;
+import org.hammer.audio.workflow.editor.http.CollaborationIdentityService;
+import org.hammer.audio.workflow.editor.http.WorkflowSessionApiModels.ActorResponse;
+import org.hammer.audio.workflow.execution.WorkflowRunException;
+import org.hammer.audio.workflow.execution.WorkflowRunModels.Command;
+import org.hammer.audio.workflow.execution.WorkflowRunModels.LiveSessionSource;
+import org.hammer.audio.workflow.execution.WorkflowRunModels.Preflight;
+import org.hammer.audio.workflow.execution.WorkflowRunModels.StoredCommitSource;
+import org.hammer.audio.workflow.execution.WorkflowRunService;
+import org.hammer.audio.workflow.execution.http.WorkflowRunApiModels.RunResponse;
+import org.hammer.audio.workflow.execution.http.WorkflowRunApiModels.RunResultResponse;
+import org.hammer.audio.workflow.execution.http.WorkflowRunHttpAdapter;
+import org.hammer.audio.workflow.store.CommitId;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+/** Read-only health over existing document, authorized workflow and execution services. */
+@RestController
+@RequestMapping(&quot;/workflow/experiment-health&quot;)
+public final class ExperimentHealthHttpAdapter {
+  private final ExperimentDocumentWorkspaceService workspace;
+  private final ExperimentDocumentService documents;
+  private final WorkflowSessionRegistry sessions;
+  private final CollaborationIdentityService identities;
+  private final WorkflowRunService runs;
+  private final WorkflowRunHttpAdapter runQueries;
+
+  /** Use the same backend and authority boundaries as execution and document editing. */
+  public ExperimentHealthHttpAdapter(
+      ExperimentDocumentWorkspaceService workspace,
+      ExperimentDocumentService documents,
+      WorkflowSessionRegistry sessions,
+      CollaborationIdentityService identities,
+      WorkflowRunService runs,
+<span class="fc" id="L56">      WorkflowRunHttpAdapter runQueries) {</span>
+<span class="fc" id="L57">    this.workspace = workspace;</span>
+<span class="fc" id="L58">    this.documents = documents;</span>
+<span class="fc" id="L59">    this.sessions = sessions;</span>
+<span class="fc" id="L60">    this.identities = identities;</span>
+<span class="fc" id="L61">    this.runs = runs;</span>
+<span class="fc" id="L62">    this.runQueries = runQueries;</span>
+<span class="fc" id="L63">  }</span>
+
+  /** Query one explicit source; no selector means the local document/workflow workspace. */
+  @GetMapping
+  public ExperimentHealthSnapshot status(
+      @RequestParam(name = &quot;sessionId&quot;, required = false) String sessionId,
+      @RequestParam(name = &quot;revision&quot;, required = false) Long revision,
+      @RequestParam(name = &quot;commitId&quot;, required = false) String commitId,
+      @RequestParam(name = &quot;runId&quot;, required = false) String runId,
+      HttpServletRequest request)
+      throws IOException {
+    int selections =
+<span class="pc bpc" id="L75" title="1 of 6 branches missed.">        (sessionId == null ? 0 : 1) + (commitId == null ? 0 : 1) + (runId == null ? 0 : 1);</span>
+<span class="pc bpc" id="L76" title="1 of 2 branches missed.">    if (selections &gt; 1) {</span>
+<span class="nc" id="L77">      throw new IllegalArgumentException(&quot;Select one document, session revision, commit or run.&quot;);</span>
+    }
+<span class="fc bfc" id="L79" title="All 2 branches covered.">    if (runId != null) {</span>
+<span class="fc" id="L80">      return runtime(runId, request);</span>
+    }
+<span class="pc bpc" id="L82" title="1 of 2 branches missed.">    if (sessionId != null) {</span>
+<span class="fc" id="L83">      return session(sessionId, revision, request);</span>
+    }
+<span class="nc bnc" id="L85" title="All 2 branches missed.">    if (commitId != null) {</span>
+<span class="nc" id="L86">      return stored(commitId);</span>
+    }
+<span class="nc" id="L88">    ExperimentDocumentWorkspaceService.ReadinessContext context = workspace.readinessContext();</span>
+<span class="nc" id="L89">    ExperimentDocumentSession.Context document = context.document();</span>
+<span class="nc" id="L90">    return ExperimentDocumentHealthProjector.project(</span>
+        new ExperimentDocumentHealthProjector.Input(
+<span class="nc" id="L92">            document.preview(),</span>
+<span class="nc" id="L93">            document.status().path(),</span>
+<span class="nc bnc" id="L94" title="All 4 branches missed.">            document.status().dirty() || context.workflowDirty(),</span>
+<span class="nc" id="L95">            document.revision(),</span>
+<span class="nc" id="L96">            context.workflowSha256(),</span>
+<span class="nc" id="L97">            new WorkflowValidator().validate(context.workflow()),</span>
+<span class="nc" id="L98">            documents.pluginSections().toString()),</span>
+<span class="nc" id="L99">        Instant.now());</span>
+  }
+
+  private ExperimentHealthSnapshot session(String id, Long revision, HttpServletRequest request) {
+<span class="pc bpc" id="L103" title="1 of 2 branches missed.">    if (revision == null) {</span>
+<span class="nc" id="L104">      throw new IllegalArgumentException(</span>
+          &quot;A session readiness check requires its displayed revision.&quot;);
+    }
+<span class="fc" id="L107">    OperationActor actor = identities.requireActor(request, null);</span>
+    // Capture membership and graph under one session lock; never re-read a recreated private id.
+    WorkflowSessionRegistry.SessionWorkflowSnapshot captured;
+    try {
+<span class="fc" id="L111">      captured = sessions.authorizedWorkflow(id, actor);</span>
+<span class="fc" id="L112">    } catch (WorkflowSessionException denied) {</span>
+      // A failed private-source membership check never exposes session metadata through health.
+<span class="fc" id="L114">      throw new CollaborationIdentityException(denied);</span>
+<span class="fc" id="L115">    }</span>
+<span class="fc" id="L116">    ActorResponse owner = identities.project(captured.session().owner(), &quot;OWNER&quot;);</span>
+<span class="fc" id="L117">    ActorResponse operator = identities.project(actor, &quot;EDITOR&quot;);</span>
+<span class="fc" id="L118">    Map&lt;String, String&gt; facts =</span>
+<span class="fc" id="L119">        Map.of(</span>
+            &quot;workflow.sessionId&quot;,
+            id,
+            &quot;workflow.revision&quot;,
+<span class="fc" id="L123">            Long.toString(captured.session().revision()),</span>
+            &quot;collaboration.owner&quot;,
+<span class="fc" id="L125">            owner.displayName() + &quot; (&quot; + owner.provenance() + &quot;)&quot;,</span>
+            &quot;operator.attribution&quot;,
+<span class="fc" id="L127">            operator.displayName() + &quot; (&quot; + operator.provenance() + &quot;)&quot;);</span>
+    try {
+<span class="fc" id="L129">      Preflight preflight =</span>
+<span class="fc" id="L130">          runs.preflight(</span>
+<span class="fc" id="L131">              new Command(&quot;readiness.session&quot;, new LiveSessionSource(id, revision)), captured);</span>
+<span class="fc" id="L132">      return WorkflowExperimentHealthProjector.ready(preflight, facts, Instant.now());</span>
+<span class="fc" id="L133">    } catch (WorkflowSessionRevisionConflictException exception) {</span>
+<span class="fc" id="L134">      return WorkflowExperimentHealthProjector.blocked(</span>
+<span class="fc" id="L135">          &quot;workflow.revision-changed&quot;, exception.getMessage(), facts, Instant.now());</span>
+<span class="nc" id="L136">    } catch (WorkflowRunException exception) {</span>
+<span class="nc" id="L137">      return rejected(exception, facts);</span>
+    }
+  }
+
+  private ExperimentHealthSnapshot stored(String commit) {
+<span class="nc" id="L142">    Map&lt;String, String&gt; facts = Map.of(&quot;workflow.commit&quot;, commit);</span>
+    try {
+<span class="nc" id="L144">      return WorkflowExperimentHealthProjector.ready(</span>
+<span class="nc" id="L145">          runs.preflight(</span>
+              new Command(&quot;readiness.commit&quot;, new StoredCommitSource(new CommitId(commit)))),
+          facts,
+<span class="nc" id="L148">          Instant.now());</span>
+<span class="nc" id="L149">    } catch (WorkflowRunException exception) {</span>
+<span class="nc" id="L150">      return rejected(exception, facts);</span>
+    }
+  }
+
+  private ExperimentHealthSnapshot runtime(String id, HttpServletRequest request) {
+    // Reuse the run adapter's retained-owner/member grants, including after session closure.
+<span class="fc" id="L156">    RunResponse run = runQueries.inspect(id, request);</span>
+<span class="fc" id="L157">    WorkflowRunHttpAdapter.RunAttribution attribution =</span>
+<span class="fc" id="L158">        runQueries.authorizedAttribution(id, request);</span>
+<span class="fc" id="L159">    RunResultResponse result = null;</span>
+<span class="pc bpc" id="L160" title="1 of 2 branches missed.">    if (run.finishedAt() != null) {</span>
+      try {
+<span class="fc" id="L162">        result = runQueries.result(id, request);</span>
+<span class="nc" id="L163">      } catch (WorkflowRunException unavailable) {</span>
+        // The projector explicitly reports missing terminal evidence as incomplete.
+<span class="nc" id="L165">        result = null;</span>
+<span class="fc" id="L166">      }</span>
+    }
+<span class="fc" id="L168">    return WorkflowExperimentHealthProjector.runtime(</span>
+        run,
+        result,
+<span class="fc" id="L171">        Map.of(</span>
+            &quot;operator.attribution&quot;,
+<span class="fc" id="L173">            publicAttribution(attribution.creator()),</span>
+            &quot;collaboration.owner&quot;,
+<span class="fc" id="L175">            publicAttribution(attribution.owner())),</span>
+<span class="fc" id="L176">        Instant.now());</span>
+  }
+
+  private static String publicAttribution(ActorResponse actor) {
+<span class="pc bpc" id="L180" title="1 of 2 branches missed.">    return actor == null</span>
+<span class="nc" id="L181">        ? &quot;Unavailable: original run actor was not recorded&quot;</span>
+<span class="fc" id="L182">        : actor.displayName() + &quot; (&quot; + actor.provenance() + &quot;)&quot;;</span>
+  }
+
+  private static ExperimentHealthSnapshot rejected(
+      WorkflowRunException exception, Map&lt;String, String&gt; facts) {
+<span class="nc" id="L187">    String detail = exception.getMessage() + &quot; &quot; + exception.violations();</span>
+<span class="nc" id="L188">    return WorkflowExperimentHealthProjector.blocked(</span>
+<span class="nc" id="L189">        &quot;workflow.&quot; + exception.code(), detail, facts, Instant.now());</span>
+  }
+
+  /** Keep transport failures explicit; identity failures retain their dedicated 403 handler. */
+  @ExceptionHandler({IOException.class, IllegalArgumentException.class})
+  public ResponseEntity&lt;Map&lt;String, String&gt;&gt; failure(Exception exception) {
+<span class="nc" id="L195">    return ResponseEntity.badRequest()</span>
+<span class="nc" id="L196">        .body(</span>
+<span class="nc" id="L197">            Map.of(</span>
+                &quot;code&quot;,
+                &quot;experiment-health&quot;,
+                &quot;detail&quot;,
+<span class="nc bnc" id="L201" title="All 2 branches missed.">                exception.getMessage() == null</span>
+<span class="nc" id="L202">                    ? &quot;Readiness could not be inspected&quot;</span>
+<span class="nc" id="L203">                    : exception.getMessage()));</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

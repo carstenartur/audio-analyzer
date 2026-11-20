@@ -1,0 +1,214 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ExperimentDocumentHealthProjector.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experiment.health</a> &gt; <span class="el_source">ExperimentDocumentHealthProjector.java</span></div><h1>ExperimentDocumentHealthProjector.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experiment.health;
+
+import java.nio.file.Path;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
+import org.hammer.audio.acquisition.health.ExperimentHealthAggregator;
+import org.hammer.audio.acquisition.health.ExperimentHealthFinding;
+import org.hammer.audio.acquisition.health.ExperimentHealthFinding.Severity;
+import org.hammer.audio.acquisition.health.ExperimentHealthSnapshot;
+import org.hammer.audio.acquisition.health.ExperimentHealthState;
+import org.hammer.audio.experiment.document.ExperimentDocument;
+import org.hammer.audio.experiment.document.ExperimentDocumentPreview;
+import org.hammer.audio.experiment.document.ExperimentLocalBindingPreview;
+import org.hammer.audio.experiment.document.ExperimentLocalBindingService;
+import org.hammer.audio.experiment.document.ExperimentLocalBindings;
+import org.hammer.audio.plugin.document.DocumentDiagnostic;
+
+/** Projects one correlated document/workflow snapshot without probing files or opening devices. */
+// All maps are local to one immutable projection; no map instance is shared across calls.
+@SuppressWarnings(&quot;PMD.UseConcurrentHashMap&quot;)
+public final class ExperimentDocumentHealthProjector {
+
+  private ExperimentDocumentHealthProjector() {
+    // Shared immutable projection utility.
+  }
+
+  /** Inspect document compatibility and explicitly unresolved current-snapshot local bindings. */
+  public static ExperimentHealthSnapshot project(Input input, Instant now) {
+<span class="fc" id="L32">    Map&lt;String, String&gt; facts = new TreeMap&lt;&gt;();</span>
+<span class="fc" id="L33">    facts.put(&quot;readiness.scope&quot;, &quot;EXPERIMENT_DOCUMENT&quot;);</span>
+<span class="fc" id="L34">    facts.put(&quot;workflow.sha256&quot;, input.workflowSha256());</span>
+<span class="pc bpc" id="L35" title="1 of 2 branches missed.">    facts.put(&quot;workflow.validation&quot;, input.workflowViolations().isEmpty() ? &quot;VALID&quot; : &quot;BLOCKED&quot;);</span>
+<span class="fc" id="L36">    facts.put(&quot;document.revision&quot;, Long.toString(input.revision()));</span>
+<span class="fc" id="L37">    facts.put(&quot;document.dirty&quot;, Boolean.toString(input.dirty()));</span>
+<span class="fc" id="L38">    facts.put(&quot;plugins.installed&quot;, input.installedPlugins());</span>
+<span class="fc" id="L39">    List&lt;ExperimentHealthFinding&gt; findings = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L40">    ExperimentDocumentPreview preview = input.preview();</span>
+<span class="pc bpc" id="L41" title="1 of 2 branches missed.">    if (preview == null) {</span>
+<span class="nc" id="L42">      facts.put(&quot;document.status&quot;, &quot;No experiment document is open&quot;);</span>
+<span class="nc" id="L43">      return snapshot(</span>
+          &quot;&quot;, &quot;Experiment document&quot;, ExperimentHealthState.NOT_CONFIGURED, facts, findings, now);
+    }
+<span class="fc" id="L46">    addDocumentFacts(input, facts);</span>
+<span class="fc bfc" id="L47" title="All 2 branches covered.">    if (input.dirty()) {</span>
+<span class="fc" id="L48">      findings.add(</span>
+<span class="fc" id="L49">          finding(</span>
+              &quot;document.dirty&quot;,
+              Severity.WARNING,
+              &quot;Document has unsaved changes&quot;,
+              &quot;The canonical hash identifies the last validated snapshot. Validate and save or&quot;
+                  + &quot; download current edits before preserving evidence.&quot;,
+              &quot;/&quot;,
+              &quot;save-document&quot;,
+              now));
+    }
+<span class="fc bfc" id="L59" title="All 2 branches covered.">    if (!preview.document().workflow().sha256().equals(input.workflowSha256())) {</span>
+<span class="fc" id="L60">      findings.add(</span>
+<span class="fc" id="L61">          finding(</span>
+              &quot;workflow.document-mismatch&quot;,
+              Severity.BLOCKING,
+              &quot;Workflow differs from the document snapshot&quot;,
+              &quot;Refresh the complete document from the current graph before using its hash as&quot;
+                  + &quot; execution provenance.&quot;,
+              &quot;/workflow/sha256&quot;,
+              &quot;review-document&quot;,
+              now));
+    }
+<span class="fc" id="L71">    preview.diagnostics().forEach(item -&gt; findings.add(diagnostic(&quot;document&quot;, item, now)));</span>
+<span class="pc bpc" id="L72" title="1 of 4 branches missed.">    if (!preview.executionAllowed() || preview.readOnly()) {</span>
+<span class="fc" id="L73">      findings.add(</span>
+<span class="fc" id="L74">          finding(</span>
+              &quot;document.compatibility&quot;,
+              Severity.BLOCKING,
+              &quot;Document compatibility blocks execution&quot;,
+              &quot;Resolve the required plugin, schema or migration diagnostics in document&quot;
+                  + &quot; inspection.&quot;,
+              &quot;/requiredPlugins&quot;,
+              &quot;review-document&quot;,
+              now));
+    }
+<span class="fc" id="L84">    addWorkflowFindings(input, findings, now);</span>
+    // No paths are supplied: this reuses the existing requirement checks without filesystem I/O.
+<span class="fc" id="L86">    ExperimentLocalBindingPreview bindings =</span>
+        new ExperimentLocalBindingService()
+<span class="fc" id="L88">            .inspect(preview, new ExperimentLocalBindings(Map.of(), null));</span>
+<span class="fc" id="L89">    bindings.diagnostics().forEach(item -&gt; findings.add(diagnostic(&quot;bindings&quot;, item, now)));</span>
+<span class="fc" id="L90">    facts.put(</span>
+        &quot;bindings.status&quot;,
+<span class="fc bfc" id="L92" title="All 2 branches covered.">        bindings.diagnostics().isEmpty() ? &quot;NONE_REQUIRED&quot; : &quot;UNVERIFIED_FOR_CURRENT_SNAPSHOT&quot;);</span>
+<span class="fc" id="L93">    facts.put(</span>
+        &quot;bindings.scope&quot;,
+        &quot;Import-candidate checks are not execution bindings for the current document&quot;
+            + &quot; hash/revision&quot;);
+<span class="fc" id="L97">    return snapshot(</span>
+<span class="fc" id="L98">        preview.document().experiment().id(),</span>
+<span class="fc" id="L99">        preview.document().experiment().name(),</span>
+        ExperimentHealthState.READY,
+        facts,
+        findings,
+        now);
+  }
+
+  private static void addDocumentFacts(Input input, Map&lt;String, String&gt; facts) {
+<span class="fc" id="L107">    ExperimentDocumentPreview preview = input.preview();</span>
+<span class="fc" id="L108">    ExperimentDocument document = preview.document();</span>
+<span class="fc" id="L109">    facts.put(&quot;document.name&quot;, document.experiment().name());</span>
+<span class="fc" id="L110">    facts.put(</span>
+<span class="fc bfc" id="L111" title="All 2 branches covered.">        &quot;document.path&quot;, input.path() == null ? &quot;Unsaved local copy&quot; : input.path().toString());</span>
+<span class="fc" id="L112">    facts.put(&quot;document.format&quot;, document.format() + &quot; / &quot; + document.formatVersion());</span>
+<span class="fc" id="L113">    facts.put(&quot;document.sha256&quot;, preview.canonicalSha256());</span>
+<span class="fc" id="L114">    facts.put(</span>
+        &quot;document.hashState&quot;,
+<span class="fc bfc" id="L116" title="All 2 branches covered.">        input.dirty() ? &quot;Validated snapshot; unsaved draft may differ&quot; : &quot;Current saved snapshot&quot;);</span>
+<span class="fc" id="L117">    facts.put(&quot;document.readOnly&quot;, Boolean.toString(preview.readOnly()));</span>
+<span class="fc" id="L118">    facts.put(&quot;document.migrations&quot;, String.join(&quot;; &quot;, preview.migrations()));</span>
+<span class="fc" id="L119">    facts.put(</span>
+        &quot;document.sourceCommit&quot;,
+<span class="pc bpc" id="L121" title="1 of 2 branches missed.">        document.provenance().sourceCommit().isEmpty()</span>
+<span class="fc" id="L122">            ? &quot;Not supplied&quot;</span>
+<span class="nc" id="L123">            : document.provenance().sourceCommit());</span>
+<span class="fc" id="L124">    facts.put(&quot;plugins.required&quot;, document.requiredPlugins().toString());</span>
+<span class="fc" id="L125">    facts.put(&quot;plugins.sectionHashes&quot;, preview.sectionHashes().toString());</span>
+<span class="fc" id="L126">    facts.put(&quot;plugins.algorithmVersions&quot;, document.provenance().algorithmVersions().toString());</span>
+<span class="fc" id="L127">    facts.put(&quot;source.mode&quot;, document.experiment().sourceMode());</span>
+<span class="fc" id="L128">    facts.put(&quot;outputs.requested&quot;, document.outputs().toString());</span>
+<span class="fc" id="L129">    facts.put(&quot;assets.required&quot;, document.assets().toString());</span>
+<span class="fc" id="L130">  }</span>
+
+  private static void addWorkflowFindings(
+      Input input, List&lt;ExperimentHealthFinding&gt; findings, Instant now) {
+<span class="pc bpc" id="L134" title="1 of 2 branches missed.">    for (int index = 0; index &lt; input.workflowViolations().size(); index++) {</span>
+<span class="nc" id="L135">      findings.add(</span>
+<span class="nc" id="L136">          finding(</span>
+              &quot;workflow.validation.&quot; + index,
+              Severity.BLOCKING,
+              &quot;Workflow validation failed&quot;,
+<span class="nc" id="L140">              input.workflowViolations().get(index),</span>
+              &quot;/workflow&quot;,
+              &quot;review-workflow&quot;,
+              now));
+    }
+<span class="fc" id="L145">  }</span>
+
+  private static ExperimentHealthFinding diagnostic(
+      String prefix, DocumentDiagnostic item, Instant now) {
+<span class="fc" id="L149">    Severity severity =</span>
+<span class="pc bpc" id="L150" title="2 of 3 branches missed.">        switch (item.severity()) {</span>
+<span class="fc" id="L151">          case ERROR -&gt; Severity.BLOCKING;</span>
+<span class="nc" id="L152">          case WARNING -&gt; Severity.WARNING;</span>
+<span class="pc" id="L153">          case INFO -&gt; Severity.INFO;</span>
+        };
+<span class="fc" id="L155">    return finding(</span>
+<span class="fc" id="L156">        prefix + &quot;.&quot; + item.code() + &quot;:&quot; + item.pointer(),</span>
+        severity,
+<span class="fc" id="L158">        item.message(),</span>
+<span class="fc" id="L159">        item.pointer() + &quot;: &quot; + item.message(),</span>
+<span class="fc" id="L160">        item.pointer(),</span>
+        &quot;review-document&quot;,
+        now);
+  }
+
+  private static ExperimentHealthFinding finding(
+      String code,
+      Severity severity,
+      String message,
+      String detail,
+      String component,
+      String remedy,
+      Instant now) {
+<span class="fc" id="L173">    return new ExperimentHealthFinding(</span>
+        code, severity, message, detail, component, now, 0L, remedy, false, false);
+  }
+
+  private static ExperimentHealthSnapshot snapshot(
+      String id,
+      String name,
+      ExperimentHealthState state,
+      Map&lt;String, String&gt; facts,
+      List&lt;ExperimentHealthFinding&gt; findings,
+      Instant now) {
+<span class="fc" id="L184">    ExperimentHealthAggregator aggregate = new ExperimentHealthAggregator();</span>
+<span class="fc" id="L185">    aggregate.update(&quot;document&quot;, findings, now);</span>
+<span class="fc" id="L186">    return aggregate.snapshot(id, name, state, &quot;DOCUMENT PREFLIGHT&quot;, facts, now);</span>
+  }
+
+  /**
+   * One atomic observation supplied by the desktop session or server workspace.
+   *
+   * @param preview retained validated document, or null when none is open
+   * @param path current local document path, not a file to inspect
+   * @param dirty whether current edits differ from the saved document
+   * @param revision local document session revision
+   * @param workflowSha256 SHA-256 of the same captured workflow graph
+   * @param workflowViolations validation of that captured graph
+   * @param installedPlugins installed package/section versions from the document service
+   */
+  public record Input(
+      ExperimentDocumentPreview preview,
+      Path path,
+      boolean dirty,
+      long revision,
+      String workflowSha256,
+      List&lt;String&gt; workflowViolations,
+      String installedPlugins) {
+    // Freeze the observations before handing them to either UI.
+<span class="fc" id="L209">    public Input {</span>
+<span class="fc" id="L210">      workflowViolations = List.copyOf(workflowViolations);</span>
+<span class="fc" id="L211">    }</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

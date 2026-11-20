@@ -1,0 +1,297 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ExperimentDocumentSessionHttpAdapter.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experiment.document.http</a> &gt; <span class="el_source">ExperimentDocumentSessionHttpAdapter.java</span></div><h1>ExperimentDocumentSessionHttpAdapter.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experiment.document.http;
+
+import jakarta.servlet.http.HttpServletRequest;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.TreeMap;
+import org.hammer.audio.experiment.document.ExperimentDocumentFormat;
+import org.hammer.audio.experiment.document.ExperimentDocumentService;
+import org.hammer.audio.experiment.document.ExperimentLocalBindingService;
+import org.hammer.audio.experiment.document.ExperimentLocalBindings;
+import org.hammer.audio.experiment.document.binding.ExperimentCaptureBindingResolver;
+import org.hammer.audio.experiment.document.workspace.ExperimentDocumentWorkspaceService;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+/** Complete-document download, workspace copies and explicit local readiness operations. */
+@RestController
+@RequestMapping(&quot;/experiment-documents&quot;)
+// The HTTP boundary coordinates portable DTOs, workspace lifecycle and local binding policy.
+@SuppressWarnings(&quot;PMD.CouplingBetweenObjects&quot;)
+public final class ExperimentDocumentSessionHttpAdapter {
+  private final ExperimentDocumentWorkspaceService workspace;
+  private final ExperimentDocumentService documents;
+  private final ExperimentLocalResourcePolicy resources;
+
+  /** Use the same document service and workspace for all import/export surfaces. */
+  public ExperimentDocumentSessionHttpAdapter(
+      ExperimentDocumentWorkspaceService workspace, ExperimentDocumentService documents) {
+<span class="fc" id="L41">    this(workspace, documents, ExperimentLocalResourcePolicy.fromConfiguration(&quot;&quot;));</span>
+<span class="fc" id="L42">  }</span>
+
+  /** Configure HTTP file access using directories explicitly approved by the host at startup. */
+  @org.springframework.beans.factory.annotation.Autowired
+  public ExperimentDocumentSessionHttpAdapter(
+      ExperimentDocumentWorkspaceService workspace,
+      ExperimentDocumentService documents,
+      @org.springframework.beans.factory.annotation.Value(
+              &quot;${audio.experiment-document.local-roots:}&quot;)
+          String approvedRoots) {
+<span class="fc" id="L52">    this(workspace, documents, ExperimentLocalResourcePolicy.fromConfiguration(approvedRoots));</span>
+<span class="fc" id="L53">  }</span>
+
+  ExperimentDocumentSessionHttpAdapter(
+      ExperimentDocumentWorkspaceService workspace,
+      ExperimentDocumentService documents,
+<span class="fc" id="L58">      ExperimentLocalResourcePolicy resources) {</span>
+<span class="fc" id="L59">    this.workspace = Objects.requireNonNull(workspace, &quot;workspace&quot;);</span>
+<span class="fc" id="L60">    this.documents = Objects.requireNonNull(documents, &quot;documents&quot;);</span>
+<span class="fc" id="L61">    this.resources = Objects.requireNonNull(resources, &quot;resources&quot;);</span>
+<span class="fc" id="L62">  }</span>
+
+  /** Download the whole current document, including preserved profiles and plugin sections. */
+  @GetMapping(path = &quot;/current&quot;, produces = ExperimentDocumentFormat.MEDIA_TYPE)
+  public ResponseEntity&lt;byte[]&gt; current() throws IOException {
+<span class="nc" id="L67">    return attachment(workspace.exportCurrent(), &quot;experiment.audioexp&quot;);</span>
+  }
+
+  /** Return local document hash, dirty state and last saved/downloaded time. */
+  @GetMapping(path = &quot;/session&quot;, produces = MediaType.APPLICATION_JSON_VALUE)
+  public org.hammer.audio.experiment.document.ExperimentDocumentSession.Status status()
+      throws IOException {
+<span class="nc" id="L74">    return workspace.status();</span>
+  }
+
+  /** Acknowledge a downloaded snapshot only while its canonical hash remains current. */
+  @PostMapping(path = &quot;/saved&quot;)
+  public ResponseEntity&lt;Void&gt; saved(@RequestHeader(HttpHeaders.IF_MATCH) String hash)
+      throws IOException {
+<span class="nc" id="L81">    workspace.downloaded(hash);</span>
+<span class="nc" id="L82">    return ResponseEntity.noContent().build();</span>
+  }
+
+  /** Import a separate complete copy without touching current editable state. */
+  @PostMapping(
+      path = &quot;/import&quot;,
+      consumes = {ExperimentDocumentFormat.MEDIA_TYPE, MediaType.APPLICATION_JSON_VALUE})
+  public ExperimentDocumentWorkspaceService.CopyResult importCopy(
+      HttpServletRequest request, @RequestHeader(HttpHeaders.IF_MATCH) String hash)
+      throws IOException {
+<span class="nc" id="L92">    return workspace.importCopy(request.getInputStream(), hash);</span>
+  }
+
+  /** List explicitly imported copies; only names and hashes are exposed. */
+  @GetMapping(path = &quot;/copies&quot;)
+  public List&lt;ExperimentDocumentWorkspaceService.CopyResult&gt; copies() {
+<span class="nc" id="L98">    return workspace.copies();</span>
+  }
+
+  /** Download a retained independent copy. */
+  @GetMapping(path = &quot;/copies/{id}&quot;, produces = ExperimentDocumentFormat.MEDIA_TYPE)
+  public ResponseEntity&lt;byte[]&gt; copy(@PathVariable(&quot;id&quot;) String id) throws IOException {
+<span class="fc" id="L104">    return attachment(workspace.exportCopy(id), &quot;experiment-copy.audioexp&quot;);</span>
+  }
+
+  /** Explicit discard of an independent copy. */
+  @DeleteMapping(path = &quot;/copies/{id}&quot;)
+  public ResponseEntity&lt;Void&gt; removeCopy(@PathVariable(&quot;id&quot;) String id) {
+<span class="nc" id="L110">    workspace.removeCopy(id);</span>
+<span class="nc" id="L111">    return ResponseEntity.noContent().build();</span>
+  }
+
+  /**
+   * Inspect only explicitly supplied local paths and selected device capabilities. Never opens a
+   * device.
+   */
+  @PostMapping(path = &quot;/bindings&quot;, consumes = MediaType.APPLICATION_JSON_VALUE)
+  public BindingResponse bindings(HttpServletRequest input) throws IOException {
+<span class="fc" id="L120">    BindingRequest request = ExperimentBindingRequestReader.read(input.getInputStream());</span>
+<span class="fc" id="L121">    org.hammer.audio.experiment.document.ExperimentDocumentPreview preview =</span>
+<span class="fc" id="L122">        documents.preview(request.document().getBytes(StandardCharsets.UTF_8));</span>
+<span class="fc" id="L123">    ExperimentLocalBindings selected = resolveBindings(preview.document(), request);</span>
+<span class="fc" id="L124">    org.hammer.audio.experiment.document.ExperimentLocalBindingPreview inspected =</span>
+<span class="fc" id="L125">        new ExperimentLocalBindingService().inspect(preview, selected);</span>
+<span class="fc" id="L126">    return new BindingResponse(inspected.ready(), inspected.diagnostics());</span>
+  }
+
+  /**
+   * Export selected assets/results separately from the portable setup, without server-side file
+   * writes.
+   */
+  @PostMapping(
+      path = &quot;/evidence&quot;,
+      consumes = MediaType.APPLICATION_JSON_VALUE,
+      produces = &quot;application/zip&quot;)
+  public ResponseEntity&lt;org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody&gt;
+      evidence(HttpServletRequest input) throws IOException {
+<span class="fc" id="L139">    BindingRequest request = ExperimentBindingRequestReader.read(input.getInputStream());</span>
+<span class="fc" id="L140">    org.hammer.audio.experiment.document.ExperimentDocumentPreview preview =</span>
+<span class="fc" id="L141">        documents.preview(request.document().getBytes(StandardCharsets.UTF_8));</span>
+<span class="fc" id="L142">    ExperimentLocalBindings selected = resolveBindings(preview.document(), request);</span>
+<span class="fc" id="L143">    org.hammer.audio.experiment.document.ExperimentEvidenceExporter exporter =</span>
+        new org.hammer.audio.experiment.document.ExperimentEvidenceExporter();
+<span class="fc" id="L145">    exporter.validate(preview, selected);</span>
+<span class="fc" id="L146">    return ResponseEntity.ok()</span>
+<span class="fc" id="L147">        .contentType(MediaType.parseMediaType(&quot;application/zip&quot;))</span>
+<span class="fc" id="L148">        .header(HttpHeaders.CONTENT_DISPOSITION, &quot;attachment; filename=\&quot;experiment-evidence.zip\&quot;&quot;)</span>
+<span class="fc" id="L149">        .body(output -&gt; exporter.write(output, preview, selected));</span>
+  }
+
+  /** Return structured errors for explicit session and binding operations. */
+  @org.springframework.web.bind.annotation.ExceptionHandler({
+    IOException.class,
+    IllegalArgumentException.class,
+    IllegalStateException.class,
+    SecurityException.class
+  })
+  public ResponseEntity&lt;ExperimentDocumentHttpAdapter.ErrorResponse&gt; failure(Exception exception) {
+<span class="fc bfc" id="L160" title="All 2 branches covered.">    if (exception instanceof SecurityException) {</span>
+<span class="fc" id="L161">      return ResponseEntity.status(403)</span>
+<span class="fc" id="L162">          .body(</span>
+              new ExperimentDocumentHttpAdapter.ErrorResponse(
+<span class="fc" id="L164">                  &quot;local-resource-not-approved&quot;, &quot;/localBindings&quot;, exception.getMessage()));</span>
+    }
+<span class="fc bfc" id="L166" title="All 2 branches covered.">    if (exception</span>
+<span class="fc" id="L167">        instanceof org.hammer.audio.experiment.document.ExperimentDocumentException document) {</span>
+<span class="fc" id="L168">      return ResponseEntity.status(422)</span>
+<span class="fc" id="L169">          .body(</span>
+              new ExperimentDocumentHttpAdapter.ErrorResponse(
+<span class="fc" id="L171">                  document.code(), document.pointer(), document.getMessage()));</span>
+    }
+<span class="pc bpc" id="L173" title="1 of 2 branches missed.">    if (exception</span>
+        instanceof
+<span class="nc" id="L175">        org.hammer.audio.experiment.document.workspace.ExperimentDocumentApplyException apply) {</span>
+<span class="nc" id="L176">      return ResponseEntity.status(409)</span>
+<span class="nc" id="L177">          .body(</span>
+              new ExperimentDocumentHttpAdapter.ErrorResponse(
+<span class="nc" id="L179">                  apply.code(), &quot;/&quot;, apply.getMessage()));</span>
+    }
+<span class="fc" id="L181">    return ResponseEntity.badRequest()</span>
+<span class="fc" id="L182">        .body(</span>
+            new ExperimentDocumentHttpAdapter.ErrorResponse(
+                &quot;document-operation&quot;,
+                &quot;/localBindings&quot;,
+<span class="pc bpc" id="L186" title="1 of 2 branches missed.">                exception.getMessage() == null</span>
+<span class="nc" id="L187">                    ? &quot;Document operation failed&quot;</span>
+<span class="fc" id="L188">                    : exception.getMessage()));</span>
+  }
+
+  // Each request owns this sorted map; no mutable request state is shared between threads.
+  @SuppressWarnings(&quot;PMD.UseConcurrentHashMap&quot;)
+  private ExperimentLocalBindings resolveBindings(
+      org.hammer.audio.experiment.document.ExperimentDocument document, BindingRequest request)
+      throws IOException {
+<span class="pc bpc" id="L196" title="1 of 2 branches missed.">    if (request.assetPaths().size() &gt; 64) {</span>
+<span class="nc" id="L197">      throw new IllegalArgumentException(&quot;At most 64 asset bindings are allowed&quot;);</span>
+    }
+<span class="fc" id="L199">    Map&lt;String, Path&gt; assets = new TreeMap&lt;&gt;();</span>
+<span class="fc" id="L200">    request</span>
+<span class="fc" id="L201">        .assetPaths()</span>
+<span class="fc" id="L202">        .forEach(</span>
+            (id, path) -&gt; {
+<span class="pc bpc" id="L204" title="2 of 4 branches missed.">              if (path != null &amp;&amp; !path.isBlank()) {</span>
+<span class="fc" id="L205">                assets.put(id, Path.of(path));</span>
+              }
+<span class="fc" id="L207">            });</span>
+    Path output =
+<span class="pc bpc" id="L209" title="1 of 4 branches missed.">        request.outputDirectory() == null || request.outputDirectory().isBlank()</span>
+<span class="fc" id="L210">            ? null</span>
+<span class="fc" id="L211">            : Path.of(request.outputDirectory());</span>
+<span class="fc" id="L212">    Map&lt;String, Path&gt; approvedAssets = resources.assets(assets);</span>
+<span class="fc" id="L213">    Path approvedOutput = resources.outputDirectory(output);</span>
+<span class="fc" id="L214">    org.hammer.audio.experiment.document.ExperimentCaptureBinding capture =</span>
+        new ExperimentCaptureBindingResolver()
+<span class="fc" id="L216">            .resolve(</span>
+                document,
+<span class="fc" id="L218">                request.deviceId(),</span>
+<span class="fc" id="L219">                request.deviceChannels(),</span>
+<span class="fc" id="L220">                request.channelMapping(),</span>
+<span class="fc" id="L221">                request.synchronizationConfirmed(),</span>
+<span class="fc" id="L222">                request.calibrationConfirmed());</span>
+<span class="fc" id="L223">    return new ExperimentLocalBindings(</span>
+<span class="fc" id="L224">        approvedAssets, approvedOutput, capture, request.confirmedMediaTypes());</span>
+  }
+
+  private static ResponseEntity&lt;byte[]&gt; attachment(byte[] bytes, String filename) {
+<span class="fc" id="L228">    return ResponseEntity.ok()</span>
+<span class="fc" id="L229">        .contentType(MediaType.parseMediaType(ExperimentDocumentFormat.MEDIA_TYPE))</span>
+<span class="fc" id="L230">        .header(HttpHeaders.CONTENT_DISPOSITION, &quot;attachment; filename=\&quot;&quot; + filename + &quot;\&quot;&quot;)</span>
+<span class="fc" id="L231">        .body(bytes);</span>
+  }
+
+  /**
+   * Explicit local bindings; this request is never serialized into a portable document.
+   *
+   * @param document complete portable document JSON
+   * @param assetPaths explicitly chosen local asset paths by asset id
+   * @param outputDirectory explicitly chosen local output directory
+   * @param deviceId explicitly chosen local device identity
+   * @param deviceChannels physical capture channels
+   * @param channelMapping unique physical index for each logical channel
+   * @param synchronizationConfirmed whether synchronized capture was verified
+   * @param calibrationConfirmed whether calibration applicability was confirmed
+   * @param confirmedMediaTypes explicit confirmations for unrecognized asset formats
+   */
+  public record BindingRequest(
+      String document,
+      Map&lt;String, String&gt; assetPaths,
+      String outputDirectory,
+      String deviceId,
+      int deviceChannels,
+      List&lt;Integer&gt; channelMapping,
+      boolean synchronizationConfirmed,
+      boolean calibrationConfirmed,
+      Map&lt;String, String&gt; confirmedMediaTypes) {
+    /* Bound and copy the request before local resource inspection. */
+<span class="fc" id="L258">    public BindingRequest {</span>
+<span class="pc bpc" id="L259" title="2 of 4 branches missed.">      if (document == null || document.length() &gt; ExperimentDocumentFormat.MAX_DOCUMENT_BYTES) {</span>
+<span class="nc" id="L260">        throw new IllegalArgumentException(&quot;Document is missing or oversized&quot;);</span>
+      }
+<span class="pc bpc" id="L262" title="2 of 6 branches missed.">      if (assetPaths != null &amp;&amp; assetPaths.size() &gt; 64</span>
+<span class="pc bpc" id="L263" title="3 of 4 branches missed.">          || confirmedMediaTypes != null &amp;&amp; confirmedMediaTypes.size() &gt; 64</span>
+<span class="nc bnc" id="L264" title="All 2 branches missed.">          || channelMapping != null &amp;&amp; channelMapping.size() &gt; 256) {</span>
+<span class="nc" id="L265">        throw new IllegalArgumentException(&quot;Local binding request exceeds collection limits&quot;);</span>
+      }
+<span class="fc bfc" id="L267" title="All 2 branches covered.">      assetPaths = Map.copyOf(assetPaths == null ? Map.of() : assetPaths);</span>
+<span class="fc bfc" id="L268" title="All 2 branches covered.">      for (Map.Entry&lt;String, String&gt; asset : assetPaths.entrySet()) {</span>
+<span class="pc bpc" id="L269" title="2 of 4 branches missed.">        if (asset.getKey().length() &gt; 1024 || asset.getValue().length() &gt; 4096) {</span>
+<span class="nc" id="L270">          throw new IllegalArgumentException(&quot;Local asset binding exceeds path limits&quot;);</span>
+        }
+<span class="fc" id="L272">      }</span>
+<span class="pc bpc" id="L273" title="2 of 6 branches missed.">      if (outputDirectory != null &amp;&amp; outputDirectory.length() &gt; 4096</span>
+<span class="nc bnc" id="L274" title="All 2 branches missed.">          || deviceId != null &amp;&amp; deviceId.length() &gt; 4096) {</span>
+<span class="nc" id="L275">        throw new IllegalArgumentException(&quot;Local resource identifier is too long&quot;);</span>
+      }
+<span class="pc bpc" id="L277" title="1 of 2 branches missed.">      channelMapping = List.copyOf(channelMapping == null ? List.of() : channelMapping);</span>
+      confirmedMediaTypes =
+<span class="pc bpc" id="L279" title="1 of 2 branches missed.">          Map.copyOf(confirmedMediaTypes == null ? Map.of() : confirmedMediaTypes);</span>
+<span class="fc" id="L280">    }</span>
+  }
+
+  /**
+   * Resource readiness diagnostics without echoing local file paths into shared preview data.
+   *
+   * @param ready whether all document and local resource requirements are satisfied
+   * @param diagnostics bounded pointer-aware readiness messages
+   */
+  public record BindingResponse(
+      boolean ready, List&lt;org.hammer.audio.plugin.document.DocumentDiagnostic&gt; diagnostics) {
+    /* Defensively copy the inspection result. */
+<span class="fc" id="L292">    public BindingResponse {</span>
+<span class="fc" id="L293">      diagnostics = List.copyOf(diagnostics);</span>
+<span class="fc" id="L294">    }</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

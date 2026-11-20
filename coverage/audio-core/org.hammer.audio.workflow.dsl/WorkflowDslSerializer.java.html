@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WorkflowDslSerializer.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Core</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.dsl</a> &gt; <span class="el_source">WorkflowDslSerializer.java</span></div><h1>WorkflowDslSerializer.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.dsl;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
+import org.hammer.audio.workflow.Edge;
+import org.hammer.audio.workflow.Metadata;
+import org.hammer.audio.workflow.Node;
+import org.hammer.audio.workflow.Port;
+import org.hammer.audio.workflow.Workflow;
+
+/**
+ * Deterministic text serializer for {@link Workflow} objects.
+ *
+ * &lt;p&gt;Produces byte-identical output for semantically equivalent workflows. Node, edge, port and
+ * metadata entries are sorted by their stable identifiers so that Git diffs remain meaningful.
+ * Layout, presence and viewport state are excluded.
+ *
+ * &lt;p&gt;Owned by the DSL layer. May be used by the persistence facade and application services, but
+ * must not depend on UI, JGit or execution internals.
+ *
+ * @see WorkflowDslParser
+ */
+<span class="fc" id="L25">public final class WorkflowDslSerializer {</span>
+
+  private static final String INDENT = &quot;  &quot;;
+  private static final String NL = &quot;\n&quot;;
+
+  /** Serializes {@code workflow} to a deterministic UTF-8 text string. */
+  public String serialize(Workflow workflow) {
+<span class="fc" id="L32">    StringBuilder sb = new StringBuilder();</span>
+<span class="fc" id="L33">    sb.append(&quot;workflow&quot;).append(NL);</span>
+<span class="fc" id="L34">    sb.append(INDENT).append(&quot;id: &quot;).append(escapeValue(workflow.id())).append(NL);</span>
+<span class="fc" id="L35">    sb.append(INDENT).append(&quot;name: &quot;).append(escapeValue(workflow.name())).append(NL);</span>
+<span class="fc" id="L36">    appendMetadata(sb, INDENT, workflow.metadata());</span>
+<span class="fc" id="L37">    sb.append(INDENT).append(&quot;nodes:&quot;).append(NL);</span>
+<span class="fc" id="L38">    List&lt;Node&gt; sortedNodes = sortedById(workflow.nodes(), Node::id);</span>
+<span class="fc bfc" id="L39" title="All 2 branches covered.">    for (Node node : sortedNodes) {</span>
+<span class="fc" id="L40">      appendNode(sb, node);</span>
+<span class="fc" id="L41">    }</span>
+<span class="fc" id="L42">    sb.append(INDENT).append(&quot;edges:&quot;).append(NL);</span>
+<span class="fc" id="L43">    List&lt;Edge&gt; sortedEdges = sortedById(workflow.edges(), Edge::id);</span>
+<span class="fc bfc" id="L44" title="All 2 branches covered.">    for (Edge edge : sortedEdges) {</span>
+<span class="fc" id="L45">      appendEdge(sb, edge);</span>
+<span class="fc" id="L46">    }</span>
+<span class="fc" id="L47">    return sb.toString();</span>
+  }
+
+  private void appendNode(StringBuilder sb, Node node) {
+<span class="fc" id="L51">    String i2 = INDENT + INDENT;</span>
+<span class="fc" id="L52">    String i3 = i2 + INDENT;</span>
+<span class="fc" id="L53">    sb.append(i2).append(&quot;- id: &quot;).append(escapeValue(node.id())).append(NL);</span>
+<span class="fc" id="L54">    sb.append(i3).append(&quot;type: &quot;).append(escapeValue(node.type())).append(NL);</span>
+<span class="fc" id="L55">    sb.append(i3).append(&quot;label: &quot;).append(escapeValue(node.label())).append(NL);</span>
+<span class="fc" id="L56">    appendMetadata(sb, i3, node.metadata());</span>
+<span class="fc bfc" id="L57" title="All 2 branches covered.">    if (!node.inputPorts().isEmpty()) {</span>
+<span class="fc" id="L58">      sb.append(i3).append(&quot;inputPorts:&quot;).append(NL);</span>
+<span class="fc bfc" id="L59" title="All 2 branches covered.">      for (Port port : sortedById(node.inputPorts(), Port::id)) {</span>
+<span class="fc" id="L60">        appendPort(sb, i3 + INDENT, port);</span>
+<span class="fc" id="L61">      }</span>
+    }
+<span class="fc bfc" id="L63" title="All 2 branches covered.">    if (!node.outputPorts().isEmpty()) {</span>
+<span class="fc" id="L64">      sb.append(i3).append(&quot;outputPorts:&quot;).append(NL);</span>
+<span class="fc bfc" id="L65" title="All 2 branches covered.">      for (Port port : sortedById(node.outputPorts(), Port::id)) {</span>
+<span class="fc" id="L66">        appendPort(sb, i3 + INDENT, port);</span>
+<span class="fc" id="L67">      }</span>
+    }
+<span class="fc" id="L69">  }</span>
+
+  private void appendPort(StringBuilder sb, String indent, Port port) {
+<span class="fc" id="L72">    String i2 = indent + INDENT;</span>
+<span class="fc" id="L73">    sb.append(indent).append(&quot;- id: &quot;).append(escapeValue(port.id())).append(NL);</span>
+<span class="fc" id="L74">    sb.append(i2).append(&quot;name: &quot;).append(escapeValue(port.name())).append(NL);</span>
+<span class="fc" id="L75">    sb.append(i2).append(&quot;direction: &quot;).append(port.direction().name()).append(NL);</span>
+<span class="fc" id="L76">    sb.append(i2).append(&quot;dataType: &quot;).append(escapeValue(port.dataType().id())).append(NL);</span>
+<span class="fc" id="L77">    sb.append(i2).append(&quot;required: &quot;).append(port.required()).append(NL);</span>
+<span class="fc" id="L78">    sb.append(i2).append(&quot;multiplicity: &quot;).append(port.multiplicity().name()).append(NL);</span>
+<span class="fc" id="L79">    appendMetadata(sb, i2, port.metadata());</span>
+<span class="fc" id="L80">  }</span>
+
+  private void appendEdge(StringBuilder sb, Edge edge) {
+<span class="fc" id="L83">    String i2 = INDENT + INDENT;</span>
+<span class="fc" id="L84">    String i3 = i2 + INDENT;</span>
+<span class="fc" id="L85">    sb.append(i2).append(&quot;- id: &quot;).append(escapeValue(edge.id())).append(NL);</span>
+<span class="fc" id="L86">    sb.append(i3).append(&quot;sourceNodeId: &quot;).append(escapeValue(edge.sourceNodeId())).append(NL);</span>
+<span class="fc" id="L87">    sb.append(i3).append(&quot;sourcePortId: &quot;).append(escapeValue(edge.sourcePortId())).append(NL);</span>
+<span class="fc" id="L88">    sb.append(i3).append(&quot;targetNodeId: &quot;).append(escapeValue(edge.targetNodeId())).append(NL);</span>
+<span class="fc" id="L89">    sb.append(i3).append(&quot;targetPortId: &quot;).append(escapeValue(edge.targetPortId())).append(NL);</span>
+<span class="fc" id="L90">    appendMetadata(sb, i3, edge.metadata());</span>
+<span class="fc" id="L91">  }</span>
+
+  private void appendMetadata(StringBuilder sb, String indent, Metadata metadata) {
+<span class="pc bpc" id="L94" title="1 of 4 branches missed.">    if (metadata == null || metadata.entries().isEmpty()) {</span>
+<span class="fc" id="L95">      return;</span>
+    }
+<span class="fc" id="L97">    sb.append(indent).append(&quot;metadata:&quot;).append(NL);</span>
+<span class="fc" id="L98">    String i2 = indent + INDENT;</span>
+<span class="fc" id="L99">    Map&lt;String, String&gt; sorted = new TreeMap&lt;&gt;(metadata.entries());</span>
+<span class="fc bfc" id="L100" title="All 2 branches covered.">    for (Map.Entry&lt;String, String&gt; entry : sorted.entrySet()) {</span>
+<span class="fc" id="L101">      sb.append(i2)</span>
+<span class="fc" id="L102">          .append(escapeValue(entry.getKey()))</span>
+<span class="fc" id="L103">          .append(&quot;: &quot;)</span>
+<span class="fc" id="L104">          .append(escapeValue(entry.getValue()))</span>
+<span class="fc" id="L105">          .append(NL);</span>
+<span class="fc" id="L106">    }</span>
+<span class="fc" id="L107">  }</span>
+
+  /** Escapes a string value for safe inclusion in the DSL text. */
+  static String escapeValue(String value) {
+<span class="pc bpc" id="L111" title="1 of 2 branches missed.">    if (value == null) {</span>
+<span class="nc" id="L112">      return &quot;~&quot;;</span>
+    }
+<span class="fc bfc" id="L114" title="All 2 branches covered.">    if (needsQuoting(value)) {</span>
+<span class="fc" id="L115">      return &quot;\&quot;&quot; + value.replace(&quot;\\&quot;, &quot;\\\\&quot;).replace(&quot;\&quot;&quot;, &quot;\\\&quot;&quot;).replace(&quot;\n&quot;, &quot;\\n&quot;) + &quot;\&quot;&quot;;</span>
+    }
+<span class="fc" id="L117">    return value;</span>
+  }
+
+  private static boolean needsQuoting(String value) {
+<span class="pc bpc" id="L121" title="1 of 2 branches missed.">    if (value.isEmpty()) {</span>
+<span class="nc" id="L122">      return true;</span>
+    }
+<span class="fc bfc" id="L124" title="All 2 branches covered.">    for (int i = 0; i &lt; value.length(); i++) {</span>
+<span class="fc" id="L125">      char c = value.charAt(i);</span>
+<span class="pc bpc" id="L126" title="4 of 14 branches missed.">      if (c == ':' || c == '&quot;' || c == '\\' || c == '\n' || c == '#' || c == '[' || c == ']') {</span>
+<span class="fc" id="L127">        return true;</span>
+      }
+    }
+<span class="fc" id="L130">    return false;</span>
+  }
+
+  @FunctionalInterface
+  private interface IdGetter&lt;T&gt; {
+    String id(T item);
+  }
+
+  private &lt;T&gt; List&lt;T&gt; sortedById(List&lt;T&gt; items, IdGetter&lt;T&gt; getter) {
+<span class="fc" id="L139">    List&lt;T&gt; sorted = new ArrayList&lt;&gt;(items);</span>
+<span class="fc" id="L140">    sorted.sort((a, b) -&gt; getter.id(a).compareTo(getter.id(b)));</span>
+<span class="fc" id="L141">    return sorted;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

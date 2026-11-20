@@ -1,0 +1,324 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ExperimentDocumentSession.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experiment Document</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experiment.document</a> &gt; <span class="el_source">ExperimentDocumentSession.java</span></div><h1>ExperimentDocumentSession.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experiment.document;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.Clock;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+import org.hammer.audio.workflow.Workflow;
+import org.hammer.audio.workflow.history.WorkflowDiff;
+
+/**
+ * Full portable-document editing lifecycle; local paths and bindings never enter the envelope. The
+ * session monitor also protects adapters' compound revision-check/save transactions.
+ */
+@SuppressWarnings(&quot;PMD.AvoidSynchronizedAtMethodLevel&quot;)
+public final class ExperimentDocumentSession {
+
+  private final ExperimentDocumentService service;
+<span class="fc" id="L22">  private final ExperimentDocumentCodec codec = new ExperimentDocumentCodec();</span>
+  private final Clock clock;
+<span class="fc" id="L24">  private final List&lt;Path&gt; recent = new ArrayList&lt;&gt;();</span>
+  private ExperimentDocumentPreview current;
+  private Path original;
+  private Path path;
+  private Instant lastSavedAt;
+  private String savedHash;
+  private boolean dirty;
+  private String workflowDraft;
+  private long stateRevision;
+
+  /** Create a document session using the system clock for explicit edits and saves. */
+  public ExperimentDocumentSession(ExperimentDocumentService service) {
+<span class="nc" id="L36">    this(service, Clock.systemUTC());</span>
+<span class="nc" id="L37">  }</span>
+
+  /** Create a session with a deterministic clock for reproducible lifecycle tests. */
+<span class="fc" id="L40">  public ExperimentDocumentSession(ExperimentDocumentService service, Clock clock) {</span>
+<span class="fc" id="L41">    this.service = Objects.requireNonNull(service, &quot;service&quot;);</span>
+<span class="fc" id="L42">    this.clock = Objects.requireNonNull(clock, &quot;clock&quot;);</span>
+<span class="fc" id="L43">  }</span>
+
+  /** Apply a preview only after the caller's explicit dirty-state decision. */
+  public synchronized boolean open(
+      ExperimentDocumentPreview preview, Path source, DirtyDecision decision, Path saveTarget)
+      throws IOException {
+<span class="fc" id="L49">    Objects.requireNonNull(preview, &quot;preview&quot;);</span>
+<span class="fc" id="L50">    Objects.requireNonNull(decision, &quot;decision&quot;);</span>
+<span class="fc bfc" id="L51" title="All 2 branches covered.">    if (dirty) {</span>
+<span class="fc bfc" id="L52" title="All 2 branches covered.">      if (decision == DirtyDecision.CANCEL) {</span>
+<span class="fc" id="L53">        return false;</span>
+      }
+<span class="pc bpc" id="L55" title="1 of 2 branches missed.">      if (decision == DirtyDecision.SAVE) {</span>
+<span class="pc bpc" id="L56" title="1 of 2 branches missed.">        if (saveTarget != null) {</span>
+<span class="nc" id="L57">          saveAs(saveTarget);</span>
+        } else {
+<span class="nc" id="L59">          save();</span>
+        }
+      }
+    }
+<span class="pc bpc" id="L63" title="1 of 2 branches missed.">    if (Thread.currentThread().isInterrupted()) {</span>
+<span class="nc" id="L64">      throw new java.io.InterruptedIOException(&quot;Document open cancelled&quot;);</span>
+    }
+<span class="fc" id="L66">    current = preview;</span>
+<span class="fc bfc" id="L67" title="All 2 branches covered.">    original = source == null ? null : source.toAbsolutePath().normalize();</span>
+<span class="fc" id="L68">    path = null;</span>
+<span class="fc" id="L69">    lastSavedAt = null;</span>
+<span class="fc bfc" id="L70" title="All 2 branches covered.">    savedHash = source == null ? null : preview.canonicalSha256();</span>
+<span class="fc" id="L71">    workflowDraft = null;</span>
+<span class="pc bpc" id="L72" title="1 of 4 branches missed.">    dirty = source == null || !preview.migrations().isEmpty();</span>
+<span class="fc" id="L73">    stateRevision++;</span>
+<span class="fc bfc" id="L74" title="All 2 branches covered.">    if (original != null) {</span>
+<span class="fc" id="L75">      remember(original);</span>
+    }
+<span class="fc" id="L77">    return true;</span>
+  }
+
+  /** Apply only while the local session still matches the state shown in the preview. */
+  public synchronized boolean openIfCurrent(
+      ExperimentDocumentPreview preview,
+      Path source,
+      DirtyDecision decision,
+      Path saveTarget,
+      long expectedRevision)
+      throws IOException {
+<span class="nc" id="L88">    requireRevision(expectedRevision);</span>
+<span class="nc" id="L89">    return open(preview, source, decision, saveTarget);</span>
+  }
+
+  /** Local generation for modeless editors and confirmation previews. */
+  public synchronized long revision() {
+<span class="fc" id="L94">    return stateRevision;</span>
+  }
+
+  /** Retain incomplete workflow editing without treating it as validated executable data. */
+  public synchronized void editWorkflow(String draft, long expectedRevision) {
+<span class="fc" id="L99">    requireRevision(expectedRevision);</span>
+<span class="fc" id="L100">    requireCurrent();</span>
+<span class="pc bpc" id="L101" title="1 of 2 branches missed.">    if (current.readOnly()) {</span>
+<span class="nc" id="L102">      throw new IllegalStateException(&quot;Document is read-only&quot;);</span>
+    }
+<span class="pc bpc" id="L104" title="1 of 2 branches missed.">    if (draft.length() &gt; ExperimentDocumentFormat.MAX_DOCUMENT_BYTES) {</span>
+<span class="nc" id="L105">      throw new IllegalArgumentException(&quot;Workflow draft exceeds the document size limit&quot;);</span>
+    }
+<span class="pc bpc" id="L107" title="1 of 2 branches missed.">    workflowDraft = draft.equals(current.document().workflow().content()) ? null : draft;</span>
+<span class="pc bpc" id="L108" title="3 of 4 branches missed.">    dirty = workflowDraft != null || !current.canonicalSha256().equals(savedHash);</span>
+<span class="fc" id="L109">    stateRevision++;</span>
+<span class="fc" id="L110">  }</span>
+
+  /** Current draft text for the editable document surface. */
+  public synchronized String workflowText() {
+<span class="fc" id="L114">    requireCurrent();</span>
+<span class="pc bpc" id="L115" title="1 of 2 branches missed.">    return workflowDraft == null ? current.document().workflow().content() : workflowDraft;</span>
+  }
+
+  /** Validate the current draft through the established workflow parser and document service. */
+  public synchronized void validateDraft() throws ExperimentDocumentException {
+<span class="fc bfc" id="L120" title="All 2 branches covered.">    if (workflowDraft != null) {</span>
+<span class="nc" id="L121">      updateWorkflow(new org.hammer.audio.workflow.dsl.WorkflowDslParser().parse(workflowDraft));</span>
+<span class="nc" id="L122">      workflowDraft = null;</span>
+<span class="nc bnc" id="L123" title="All 2 branches missed.">      dirty = !current.canonicalSha256().equals(savedHash);</span>
+    }
+<span class="fc" id="L125">  }</span>
+
+  /** Reject stale actions from a modeless editor rather than modifying a different document. */
+  public synchronized void requireRevision(long expectedRevision) {
+<span class="fc bfc" id="L129" title="All 2 branches covered.">    if (stateRevision != expectedRevision) {</span>
+<span class="fc" id="L130">      throw new IllegalStateException(</span>
+          &quot;Document changed in another window; reopen the current editor or preview&quot;);
+    }
+<span class="fc" id="L133">  }</span>
+
+  /** Semantic differences against the current setup, without changing it. */
+  public synchronized WorkflowDiff diff(ExperimentDocumentPreview preview) {
+<span class="nc" id="L137">    Workflow incoming = service.workflow(preview);</span>
+    Workflow before =
+<span class="nc bnc" id="L139" title="All 2 branches missed.">        current == null</span>
+<span class="nc" id="L140">            ? new Workflow(incoming.id(), incoming.name(), List.of(), List.of())</span>
+<span class="nc" id="L141">            : service.workflow(current);</span>
+<span class="nc" id="L142">    return WorkflowDiff.compute(before, incoming);</span>
+  }
+
+  /** Replace only the workflow, retaining profiles, plugins, assets, outputs and provenance. */
+  public synchronized void updateWorkflow(Workflow workflow) throws ExperimentDocumentException {
+<span class="fc" id="L147">    requireCurrent();</span>
+<span class="fc bfc" id="L148" title="All 2 branches covered.">    if (current.readOnly()) {</span>
+<span class="fc" id="L149">      throw new IllegalStateException(</span>
+          &quot;Unsupported document is read-only; export an unchanged copy&quot;);
+    }
+<span class="pc bpc" id="L152" title="1 of 2 branches missed.">    if (service.workflow(current).equals(workflow)) {</span>
+<span class="nc" id="L153">      return;</span>
+    }
+<span class="fc" id="L155">    ExperimentDocument changed =</span>
+<span class="fc" id="L156">        service.withWorkflow(current.document(), workflow, clock.instant());</span>
+<span class="fc" id="L157">    ExperimentDocumentPreview candidate = service.preview(codec.encode(changed));</span>
+<span class="pc bpc" id="L158" title="2 of 4 branches missed.">    if (candidate.readOnly() || !candidate.executionAllowed()) {</span>
+<span class="nc" id="L159">      throw new ExperimentDocumentException(</span>
+          &quot;/workflow&quot;,
+          &quot;document-edit-invalid&quot;,
+          &quot;Edited workflow is incompatible with document requirements&quot;);
+    }
+<span class="pc bpc" id="L164" title="1 of 2 branches missed.">    if (Thread.currentThread().isInterrupted()) {</span>
+<span class="nc" id="L165">      throw new ExperimentDocumentException(</span>
+          &quot;/workflow&quot;, &quot;document-cancelled&quot;, &quot;Document edit cancelled&quot;);
+    }
+<span class="fc" id="L168">    current = candidate;</span>
+<span class="pc bpc" id="L169" title="1 of 2 branches missed.">    dirty = !candidate.canonicalSha256().equals(savedHash);</span>
+<span class="fc" id="L170">    workflowDraft = null;</span>
+<span class="fc" id="L171">    stateRevision++;</span>
+<span class="fc" id="L172">  }</span>
+
+  /** Save to the previously selected copy; first save requires an explicit Save As destination. */
+  public synchronized void save() throws IOException {
+<span class="nc" id="L176">    requireCurrent();</span>
+<span class="nc bnc" id="L177" title="All 2 branches missed.">    if (path == null) {</span>
+<span class="nc" id="L178">      throw new IOException(&quot;Select a Save As destination before the first save&quot;);</span>
+    }
+<span class="nc bnc" id="L180" title="All 2 branches missed.">    if (current.readOnly()) {</span>
+<span class="nc" id="L181">      throw new IOException(&quot;Read-only documents can only be exported with Save As&quot;);</span>
+    }
+<span class="nc" id="L183">    write(path);</span>
+<span class="nc" id="L184">  }</span>
+
+  /**
+   * Atomically write an explicitly selected normalized copy without overwriting the imported
+   * source.
+   */
+  public synchronized void saveAs(Path target) throws IOException {
+<span class="fc" id="L191">    requireCurrent();</span>
+<span class="fc" id="L192">    Path selected = Objects.requireNonNull(target, &quot;target&quot;).toAbsolutePath().normalize();</span>
+<span class="fc bfc" id="L193" title="All 2 branches covered.">    if (original != null</span>
+<span class="fc bfc" id="L194" title="All 2 branches covered.">        &amp;&amp; (original.equals(selected)</span>
+<span class="pc bpc" id="L195" title="3 of 4 branches missed.">            || Files.exists(selected) &amp;&amp; Files.isSameFile(original, selected))) {</span>
+<span class="fc" id="L196">      throw new IOException(&quot;Save As requires a destination distinct from the imported original&quot;);</span>
+    }
+<span class="fc" id="L198">    write(selected);</span>
+<span class="fc" id="L199">  }</span>
+
+  /** Return current canonical bytes for a browser download or evidence export. */
+  public synchronized byte[] bytes() throws ExperimentDocumentException {
+<span class="fc" id="L203">    requireCurrent();</span>
+<span class="fc" id="L204">    validateDraft();</span>
+<span class="fc" id="L205">    return codec.encode(current.document());</span>
+  }
+
+  /** Record an explicit successful download without placing browser paths in the document. */
+  public synchronized void downloaded(String canonicalHash) {
+<span class="fc" id="L210">    requireCurrent();</span>
+<span class="pc bpc" id="L211" title="3 of 4 branches missed.">    if (workflowDraft != null || !current.canonicalSha256().equals(canonicalHash)) {</span>
+<span class="fc" id="L212">      throw new IllegalStateException(&quot;The downloaded snapshot is no longer current&quot;);</span>
+    }
+<span class="nc" id="L214">    savedHash = canonicalHash;</span>
+<span class="nc" id="L215">    lastSavedAt = clock.instant();</span>
+<span class="nc" id="L216">    dirty = false;</span>
+<span class="nc" id="L217">    stateRevision++;</span>
+<span class="nc" id="L218">  }</span>
+
+  /** Local imported source protected from overwrite by document and evidence export. */
+  public synchronized Path originalPath() {
+<span class="nc" id="L222">    return original;</span>
+  }
+
+  /** Return the retained complete immutable preview. */
+  public synchronized ExperimentDocumentPreview preview() {
+<span class="nc" id="L227">    requireCurrent();</span>
+<span class="nc" id="L228">    return current;</span>
+  }
+
+  /** Capture the retained preview, lifecycle metadata and local generation atomically. */
+  public synchronized Context context() {
+<span class="fc" id="L233">    return new Context(current, status(), stateRevision);</span>
+  }
+
+  /** Return local lifecycle metadata; do not embed this value in exported documents. */
+  public synchronized Status status() {
+<span class="fc bfc" id="L238" title="All 2 branches covered.">    return new Status(</span>
+        current != null,
+        path,
+        dirty,
+        lastSavedAt,
+<span class="fc bfc" id="L243" title="All 4 branches covered.">        current == null ? null : current.canonicalSha256(),</span>
+<span class="fc bfc" id="L244" title="All 2 branches covered.">        current != null &amp;&amp; current.readOnly(),</span>
+<span class="fc" id="L245">        List.copyOf(recent));</span>
+  }
+
+  private void write(Path selected) throws IOException {
+<span class="fc" id="L249">    validateDraft();</span>
+<span class="fc" id="L250">    codec.save(selected, current.document());</span>
+<span class="fc" id="L251">    path = selected;</span>
+<span class="fc" id="L252">    savedHash = current.canonicalSha256();</span>
+<span class="fc" id="L253">    lastSavedAt = clock.instant();</span>
+<span class="fc" id="L254">    dirty = false;</span>
+<span class="fc" id="L255">    stateRevision++;</span>
+<span class="fc" id="L256">    remember(selected);</span>
+<span class="fc" id="L257">  }</span>
+
+  private void remember(Path selected) {
+<span class="fc" id="L260">    recent.remove(selected);</span>
+<span class="fc" id="L261">    recent.addFirst(selected);</span>
+<span class="pc bpc" id="L262" title="1 of 2 branches missed.">    if (recent.size() &gt; 10) {</span>
+<span class="nc" id="L263">      recent.removeLast();</span>
+    }
+<span class="fc" id="L265">  }</span>
+
+  private void requireCurrent() {
+<span class="pc bpc" id="L268" title="1 of 2 branches missed.">    if (current == null) {</span>
+<span class="nc" id="L269">      throw new IllegalStateException(&quot;No experiment document is open&quot;);</span>
+    }
+<span class="fc" id="L271">  }</span>
+
+  /** Explicit response to a dirty-document replacement decision. */
+<span class="fc" id="L274">  public enum DirtyDecision {</span>
+<span class="fc" id="L275">    SAVE,</span>
+<span class="fc" id="L276">    DISCARD,</span>
+<span class="fc" id="L277">    CANCEL</span>
+  }
+
+  /**
+   * One immutable document-session snapshot; a closed session has no preview.
+   *
+   * @param preview validated retained document, or null when no document is open
+   * @param status lifecycle metadata from the same session generation
+   * @param revision local generation for correlating edits and confirmation previews
+   */
+  public record Context(ExperimentDocumentPreview preview, Status status, long revision) {
+    /* Require lifecycle metadata even when no document is open. */
+<span class="fc" id="L289">    public Context {</span>
+<span class="fc" id="L290">      Objects.requireNonNull(status, &quot;status&quot;);</span>
+<span class="fc" id="L291">    }</span>
+
+    /** Represent a host that has not opened a document or attached its document adapter. */
+    public static Context empty() {
+<span class="nc" id="L295">      return new Context(null, new Status(false, null, false, null, null, false, List.of()), 0);</span>
+    }
+  }
+
+  /**
+   * Session metadata local to this application, including a maximum of ten recent files.
+   *
+   * @param open whether a complete document is retained
+   * @param path selected local copy path, if any
+   * @param dirty whether edits differ from the saved snapshot
+   * @param lastSavedAt last successful local save or browser download acknowledgement
+   * @param canonicalSha256 digest of the validated complete document
+   * @param readOnly whether editing is blocked by compatibility diagnostics
+   * @param recentFiles most recent local paths, newest first
+   */
+  public record Status(
+      boolean open,
+      Path path,
+      boolean dirty,
+      Instant lastSavedAt,
+      String canonicalSha256,
+      boolean readOnly,
+      List&lt;Path&gt; recentFiles) {
+    /* Defensively copy the local recent-file list. */
+<span class="fc" id="L319">    public Status {</span>
+<span class="fc" id="L320">      recentFiles = List.copyOf(recentFiles);</span>
+<span class="fc" id="L321">    }</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

@@ -1,0 +1,184 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>AudioBlock.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Core</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.core</a> &gt; <span class="el_source">AudioBlock.java</span></div><h1>AudioBlock.java</h1><pre class="source lang-java linenums">package org.hammer.audio.core;
+
+import java.util.Objects;
+
+/**
+ * Immutable block of normalized audio frames flowing through the platform.
+ *
+ * &lt;p&gt;An {@code AudioBlock} is the canonical unit of audio data exchanged between the capture, ring
+ * buffer, DSP, analysis and snapshot layers. It carries:
+ *
+ * &lt;ul&gt;
+ *   &lt;li&gt;{@link #format()} — descriptor of the underlying stream
+ *   &lt;li&gt;{@link #samples()} — non-interleaved {@code float[channels][frames]} samples in the
+ *       normalized range {@code [-1.0f, 1.0f]}
+ *   &lt;li&gt;{@link #frameIndex()} — running frame counter from stream start (monotonically increasing)
+ *   &lt;li&gt;{@link #timestampNanos()} — capture timestamp in nanoseconds (relative to {@link
+ *       System#nanoTime()})
+ * &lt;/ul&gt;
+ *
+ * &lt;p&gt;Blocks are immutable: the underlying {@code float[][]} is defensively copied on construction
+ * and on access. This makes them safe to hand out to multiple consumers without coordination, at
+ * the cost of an extra allocation per snapshot. Hot DSP paths that consume blocks should use {@link
+ * #channelView(int)} which exposes the internal array read-only by contract (the array is still
+ * shared, do not mutate).
+ *
+ * &lt;p&gt;Thread-safety: instances are immutable and safely publishable.
+ *
+ * @author refactoring
+ */
+public final class AudioBlock {
+
+  private final AudioFormatDescriptor format;
+  private final float[][] samples; // [channel][frame]
+  private final int frames;
+  private final long frameIndex;
+  private final long timestampNanos;
+
+  /**
+   * Create an audio block by defensively copying the supplied samples.
+   *
+   * @param format audio format descriptor; must not be {@code null}
+   * @param samples non-interleaved {@code float[channels][frames]} buffer; must match {@code
+   *     format.channels()} and have a uniform per-channel length. Must not be {@code null}
+   * @param frameIndex monotonically increasing frame counter from stream start
+   * @param timestampNanos capture timestamp (nanoseconds, e.g. {@link System#nanoTime()})
+   * @throws IllegalArgumentException if {@code samples} layout does not match {@code format}
+   */
+  public AudioBlock(
+      AudioFormatDescriptor format, float[][] samples, long frameIndex, long timestampNanos) {
+<span class="fc" id="L50">    this(format, samples, frameIndex, timestampNanos, true);</span>
+<span class="fc" id="L51">  }</span>
+
+  /**
+   * Internal constructor that may skip the defensive copy. Used by {@link #wrap} for hot-path
+   * production code that has just allocated a fresh array and is willing to surrender ownership.
+   */
+  private AudioBlock(
+      AudioFormatDescriptor format,
+      float[][] samples,
+      long frameIndex,
+      long timestampNanos,
+<span class="fc" id="L62">      boolean copy) {</span>
+<span class="fc" id="L63">    this.format = Objects.requireNonNull(format, &quot;format&quot;);</span>
+<span class="fc" id="L64">    Objects.requireNonNull(samples, &quot;samples&quot;);</span>
+<span class="fc bfc" id="L65" title="All 2 branches covered.">    if (samples.length != format.channels()) {</span>
+<span class="fc" id="L66">      throw new IllegalArgumentException(</span>
+<span class="fc" id="L67">          &quot;samples.length (&quot; + samples.length + &quot;) != format.channels (&quot; + format.channels() + &quot;)&quot;);</span>
+    }
+<span class="pc bpc" id="L69" title="2 of 4 branches missed.">    int len = samples.length == 0 ? 0 : (samples[0] == null ? 0 : samples[0].length);</span>
+<span class="fc bfc" id="L70" title="All 2 branches covered.">    for (int c = 0; c &lt; samples.length; c++) {</span>
+<span class="pc bpc" id="L71" title="1 of 2 branches missed.">      if (samples[c] == null) {</span>
+<span class="nc" id="L72">        throw new IllegalArgumentException(&quot;samples[&quot; + c + &quot;] is null&quot;);</span>
+      }
+<span class="fc bfc" id="L74" title="All 2 branches covered.">      if (samples[c].length != len) {</span>
+<span class="fc" id="L75">        throw new IllegalArgumentException(</span>
+            &quot;All channels must have the same number of frames; channel &quot;
+                + c
+                + &quot; has &quot;
+                + samples[c].length
+                + &quot; expected &quot;
+                + len);
+      }
+    }
+<span class="fc bfc" id="L84" title="All 2 branches covered.">    if (copy) {</span>
+<span class="fc" id="L85">      float[][] cp = new float[samples.length][];</span>
+<span class="fc bfc" id="L86" title="All 2 branches covered.">      for (int c = 0; c &lt; samples.length; c++) {</span>
+<span class="fc" id="L87">        cp[c] = samples[c].clone();</span>
+      }
+<span class="fc" id="L89">      this.samples = cp;</span>
+<span class="fc" id="L90">    } else {</span>
+<span class="fc" id="L91">      this.samples = samples;</span>
+    }
+<span class="fc" id="L93">    this.frames = len;</span>
+<span class="fc" id="L94">    this.frameIndex = frameIndex;</span>
+<span class="fc" id="L95">    this.timestampNanos = timestampNanos;</span>
+<span class="fc" id="L96">  }</span>
+
+  /**
+   * Wrap an already-owned {@code float[channels][frames]} array as an {@code AudioBlock}, skipping
+   * the per-channel deep copy. The caller transfers ownership of {@code samples} and must not
+   * mutate it after the call.
+   *
+   * &lt;p&gt;Layout validation (channel count, uniform per-channel length) is still performed; only the
+   * deep copy is skipped. This is the recommended factory for hot paths that have just allocated a
+   * fresh, exactly-sized array (e.g. capture loops, signal generators).
+   *
+   * @param format audio format descriptor; must not be {@code null}
+   * @param samples non-interleaved per-channel buffer (ownership transferred); must not be {@code
+   *     null}
+   * @param frameIndex monotonically increasing frame counter from stream start
+   * @param timestampNanos capture timestamp (nanoseconds)
+   * @return a new immutable {@code AudioBlock} referencing the supplied array
+   */
+  public static AudioBlock wrap(
+      AudioFormatDescriptor format, float[][] samples, long frameIndex, long timestampNanos) {
+<span class="fc" id="L116">    return new AudioBlock(format, samples, frameIndex, timestampNanos, false);</span>
+  }
+
+  /**
+   * @return the audio format descriptor
+   */
+  public AudioFormatDescriptor format() {
+<span class="fc" id="L123">    return format;</span>
+  }
+
+  /**
+   * @return a defensive deep copy of the per-channel sample arrays. For zero-allocation read access
+   *     in hot paths use {@link #channelView(int)}.
+   */
+  public float[][] samples() {
+<span class="fc" id="L131">    float[][] cp = new float[samples.length][];</span>
+<span class="fc bfc" id="L132" title="All 2 branches covered.">    for (int c = 0; c &lt; samples.length; c++) {</span>
+<span class="fc" id="L133">      cp[c] = samples[c].clone();</span>
+    }
+<span class="fc" id="L135">    return cp;</span>
+  }
+
+  /**
+   * Read-only view of one channel's sample array. The returned array is the block's internal
+   * storage and &lt;strong&gt;must not be mutated&lt;/strong&gt; by the caller. This exists for hot DSP loops
+   * that must avoid per-block allocations.
+   *
+   * @param channel channel index, in {@code [0, channels)}
+   * @return the internal per-channel sample array (do not mutate)
+   * @throws IndexOutOfBoundsException if {@code channel} is out of range
+   */
+  public float[] channelView(int channel) {
+<span class="fc" id="L148">    return samples[channel];</span>
+  }
+
+  /**
+   * @return number of audio frames in this block (samples per channel)
+   */
+  public int frames() {
+<span class="fc" id="L155">    return frames;</span>
+  }
+
+  /**
+   * @return number of channels (convenience alias of {@code format().channels()})
+   */
+  public int channels() {
+<span class="fc" id="L162">    return format.channels();</span>
+  }
+
+  /**
+   * @return monotonically increasing frame counter from stream start
+   */
+  public long frameIndex() {
+<span class="fc" id="L169">    return frameIndex;</span>
+  }
+
+  /**
+   * @return capture timestamp in nanoseconds (cf. {@link System#nanoTime()})
+   */
+  public long timestampNanos() {
+<span class="fc" id="L176">    return timestampNanos;</span>
+  }
+
+  @Override
+  public String toString() {
+<span class="nc" id="L181">    return &quot;AudioBlock[&quot; + format + &quot;, frames=&quot; + frames + &quot;, frameIndex=&quot; + frameIndex + &quot;]&quot;;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

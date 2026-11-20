@@ -1,0 +1,165 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>RecordingStatusPanel.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer</a> &gt; <span class="el_source">RecordingStatusPanel.java</span></div><h1>RecordingStatusPanel.java</h1><pre class="source lang-java linenums">package org.hammer;
+
+import java.awt.Color;
+import java.awt.FlowLayout;
+import java.awt.event.ActionListener;
+import java.nio.file.Path;
+import java.time.Duration;
+import java.util.Locale;
+import java.util.Objects;
+import javax.swing.BorderFactory;
+import javax.swing.JButton;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
+import org.hammer.audio.recording.runtime.RecordingState;
+import org.hammer.audio.recording.runtime.RecordingStatus;
+import org.hammer.audio.recording.runtime.RecordingStorageLevel;
+
+/** Persistent non-modal recording health strip for the desktop workbench. */
+public final class RecordingStatusPanel extends JPanel {
+
+  private static final long serialVersionUID = 1L;
+
+<span class="nc" id="L23">  private final JLabel state = new JLabel(&quot;● Idle&quot;);</span>
+<span class="nc" id="L24">  private final JLabel elapsed = new JLabel(&quot;00:00:00&quot;);</span>
+<span class="nc" id="L25">  private final JLabel destination = new JLabel(&quot;—&quot;);</span>
+<span class="nc" id="L26">  private final JLabel size = new JLabel(&quot;0 B&quot;);</span>
+<span class="nc" id="L27">  private final JLabel free = new JLabel(&quot;free: unknown&quot;);</span>
+<span class="nc" id="L28">  private final JLabel rate = new JLabel(&quot;0 B/s&quot;);</span>
+<span class="nc" id="L29">  private final JLabel remaining = new JLabel(&quot;remaining: unknown&quot;);</span>
+<span class="nc" id="L30">  private final JLabel completeness = new JLabel(&quot;complete&quot;);</span>
+<span class="nc" id="L31">  private final JLabel storage = new JLabel(&quot;Storage: unknown&quot;);</span>
+<span class="nc" id="L32">  private final JButton stopButton = new JButton(&quot;Stop recording&quot;);</span>
+
+  /** Create an initially idle status strip. */
+  public RecordingStatusPanel() {
+<span class="nc" id="L36">    super(new FlowLayout(FlowLayout.LEFT, 10, 3));</span>
+<span class="nc" id="L37">    setBorder(BorderFactory.createTitledBorder(&quot;Experiment recording&quot;));</span>
+<span class="nc" id="L38">    add(state);</span>
+<span class="nc" id="L39">    add(elapsed);</span>
+<span class="nc" id="L40">    add(destination);</span>
+<span class="nc" id="L41">    add(size);</span>
+<span class="nc" id="L42">    add(free);</span>
+<span class="nc" id="L43">    add(rate);</span>
+<span class="nc" id="L44">    add(remaining);</span>
+<span class="nc" id="L45">    add(storage);</span>
+<span class="nc" id="L46">    add(completeness);</span>
+<span class="nc" id="L47">    add(stopButton);</span>
+<span class="nc" id="L48">    stopButton.setEnabled(false);</span>
+<span class="nc" id="L49">    getAccessibleContext().setAccessibleName(&quot;Recording health and storage&quot;);</span>
+<span class="nc" id="L50">    storage.getAccessibleContext().setAccessibleName(&quot;Storage warning and observation time&quot;);</span>
+<span class="nc" id="L51">    setVisible(false);</span>
+<span class="nc" id="L52">  }</span>
+
+  /** Configure the action invoked by the persistent stop control. */
+  public void setStopAction(Runnable action) {
+<span class="nc" id="L56">    Objects.requireNonNull(action, &quot;action&quot;);</span>
+<span class="nc bnc" id="L57" title="All 2 branches missed.">    for (ActionListener listener : stopButton.getActionListeners()) {</span>
+<span class="nc" id="L58">      stopButton.removeActionListener(listener);</span>
+    }
+<span class="nc" id="L60">    stopButton.addActionListener(event -&gt; action.run());</span>
+<span class="nc" id="L61">  }</span>
+
+  /** Render one immutable recording status snapshot. Must be called on the Swing EDT. */
+  public void updateStatus(RecordingStatus status) {
+<span class="nc" id="L65">    Objects.requireNonNull(status, &quot;status&quot;);</span>
+<span class="nc" id="L66">    setVisible(true);</span>
+<span class="nc" id="L67">    state.setText(stateLabel(status.state()));</span>
+<span class="nc" id="L68">    state.setForeground(</span>
+<span class="nc bnc" id="L69" title="All 2 branches missed.">        status.state() == RecordingState.RECORDING ? new Color(220, 55, 55) : getForeground());</span>
+<span class="nc" id="L70">    elapsed.setText(formatDuration(status.elapsed()));</span>
+<span class="nc" id="L71">    Path fileName = status.destination().getFileName();</span>
+<span class="nc bnc" id="L72" title="All 2 branches missed.">    destination.setText(fileName == null ? status.destination().toString() : fileName.toString());</span>
+<span class="nc" id="L73">    destination.setToolTipText(status.destination().toString());</span>
+<span class="nc" id="L74">    size.setText(formatBytes(status.bytesWritten()));</span>
+<span class="nc bnc" id="L75" title="All 2 branches missed.">    if (status.storage().usableBytes() &gt;= 0L) {</span>
+<span class="nc" id="L76">      free.setText(&quot;free: &quot; + formatBytes(status.storage().usableBytes()));</span>
+    } else {
+<span class="nc" id="L78">      free.setText(&quot;free: unknown&quot;);</span>
+    }
+<span class="nc" id="L80">    rate.setText(formatBytes((long) status.measuredBytesPerSecond()) + &quot;/s&quot;);</span>
+<span class="nc" id="L81">    remaining.setText(formatRemaining(status.storage().estimatedSafeSecondsRemaining()));</span>
+<span class="nc" id="L82">    completeness.setText(completenessLabel(status));</span>
+<span class="nc" id="L83">    completeness.setToolTipText(detail(status));</span>
+<span class="nc bnc" id="L84" title="All 4 branches missed.">    stopButton.setEnabled(!status.terminal() &amp;&amp; status.state() != RecordingState.STOPPING);</span>
+<span class="nc" id="L85">    RecordingStorageLevel storageLevel = status.storage().level();</span>
+<span class="nc" id="L86">    storage.setText(</span>
+<span class="nc" id="L87">        &quot;Storage: &quot; + storageLevel + &quot; · warnings &quot; + status.storage().warningHistory().size());</span>
+<span class="nc" id="L88">    storage.setToolTipText(</span>
+        &quot;Last successful check: &quot;
+<span class="nc" id="L90">            + status.storage().lastSuccessfulCheck()</span>
+            + &quot;; &quot;
+<span class="nc" id="L92">            + status.storage().errorMessage());</span>
+<span class="nc" id="L93">    state.setToolTipText(</span>
+<span class="nc bnc" id="L94" title="All 2 branches missed.">        storageLevel == RecordingStorageLevel.NORMAL</span>
+<span class="nc" id="L95">            ? &quot;Recording storage is healthy.&quot;</span>
+<span class="nc" id="L96">            : &quot;Storage status: &quot; + storageLevel + &quot; — &quot; + status.storage().errorMessage());</span>
+<span class="nc" id="L97">    revalidate();</span>
+<span class="nc" id="L98">    repaint();</span>
+<span class="nc" id="L99">  }</span>
+
+  private static String stateLabel(RecordingState value) {
+<span class="nc bnc" id="L102" title="All 6 branches missed.">    return switch (value) {</span>
+<span class="nc" id="L103">      case STARTING -&gt; &quot;● Starting&quot;;</span>
+<span class="nc" id="L104">      case RECORDING -&gt; &quot;● Recording&quot;;</span>
+<span class="nc" id="L105">      case STOPPING -&gt; &quot;● Stopping&quot;;</span>
+<span class="nc" id="L106">      case COMPLETED -&gt; &quot;✓ Completed&quot;;</span>
+<span class="nc" id="L107">      case INCOMPLETE -&gt; &quot;⚠ Incomplete&quot;;</span>
+<span class="nc" id="L108">      case FAILED -&gt; &quot;✕ Failed&quot;;</span>
+    };
+  }
+
+  private static String completenessLabel(RecordingStatus status) {
+<span class="nc bnc" id="L113" title="All 2 branches missed.">    if (status.errorMessage().isBlank()) {</span>
+<span class="nc" id="L114">      return String.format(</span>
+          Locale.ROOT,
+          &quot;blocks %d/%d · dropped %d · gaps %d · queue %d/%d&quot;,
+<span class="nc" id="L117">          status.writtenBlocks(),</span>
+<span class="nc" id="L118">          status.receivedBlocks(),</span>
+<span class="nc" id="L119">          status.droppedBlocks(),</span>
+<span class="nc" id="L120">          status.continuityGapCount(),</span>
+<span class="nc" id="L121">          status.queueDepth(),</span>
+<span class="nc" id="L122">          status.queueCapacity());</span>
+    }
+<span class="nc" id="L124">    return &quot;error: &quot; + status.errorMessage();</span>
+  }
+
+  private static String detail(RecordingStatus status) {
+    String reason =
+<span class="nc bnc" id="L129" title="All 2 branches missed.">        status.stopReason().isBlank() ? &quot;No stop reason recorded.&quot; : status.stopReason();</span>
+<span class="nc" id="L130">    return reason</span>
+        + &quot; Written frames: &quot;
+<span class="nc" id="L132">        + status.writtenFrames()</span>
+        + &quot;/&quot;
+<span class="nc" id="L134">        + status.receivedFrames()</span>
+        + &quot;.&quot;;
+  }
+
+  private static String formatDuration(Duration duration) {
+<span class="nc" id="L139">    long seconds = Math.max(0L, duration.toSeconds());</span>
+<span class="nc" id="L140">    return String.format(</span>
+<span class="nc" id="L141">        Locale.ROOT, &quot;%02d:%02d:%02d&quot;, seconds / 3600L, (seconds / 60L) % 60L, seconds % 60L);</span>
+  }
+
+  private static String formatRemaining(long seconds) {
+<span class="nc bnc" id="L145" title="All 2 branches missed.">    if (seconds &lt; 0L) {</span>
+<span class="nc" id="L146">      return &quot;remaining: unknown&quot;;</span>
+    }
+<span class="nc" id="L148">    return &quot;remaining: &quot; + formatDuration(Duration.ofSeconds(seconds));</span>
+  }
+
+  private static String formatBytes(long bytes) {
+<span class="nc bnc" id="L152" title="All 2 branches missed.">    if (bytes &lt; 1024L) {</span>
+<span class="nc" id="L153">      return bytes + &quot; B&quot;;</span>
+    }
+<span class="nc" id="L155">    double value = bytes;</span>
+<span class="nc" id="L156">    String[] units = {&quot;KiB&quot;, &quot;MiB&quot;, &quot;GiB&quot;, &quot;TiB&quot;};</span>
+<span class="nc" id="L157">    int unit = -1;</span>
+    do {
+<span class="nc" id="L159">      value /= 1024.0;</span>
+<span class="nc" id="L160">      unit++;</span>
+<span class="nc bnc" id="L161" title="All 4 branches missed.">    } while (value &gt;= 1024.0 &amp;&amp; unit + 1 &lt; units.length);</span>
+<span class="nc" id="L162">    return String.format(Locale.ROOT, &quot;%.1f %s&quot;, value, units[unit]);</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

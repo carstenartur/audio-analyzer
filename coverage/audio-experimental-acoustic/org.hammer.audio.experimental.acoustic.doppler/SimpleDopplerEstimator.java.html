@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>SimpleDopplerEstimator.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.doppler</a> &gt; <span class="el_source">SimpleDopplerEstimator.java</span></div><h1>SimpleDopplerEstimator.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.doppler;
+
+/**
+ * Linearized small-velocity Doppler estimator using {@code v_r ~= c * (f_observed - f_reference) /
+ * f_reference}.
+ *
+ * &lt;p&gt;This approximation is intended for source speeds much smaller than the speed of sound.
+ * Positive radial velocity means the source moves toward the microphone.
+ */
+public final class SimpleDopplerEstimator implements DopplerEstimator {
+
+  /** Default speed of sound in air in m/s. */
+  public static final double DEFAULT_SPEED_OF_SOUND_METERS_PER_SECOND = 343.0;
+
+  private final double speedOfSoundMetersPerSecond;
+
+  /** Create an estimator with the default speed of sound. */
+  public SimpleDopplerEstimator() {
+<span class="fc" id="L19">    this(DEFAULT_SPEED_OF_SOUND_METERS_PER_SECOND);</span>
+<span class="fc" id="L20">  }</span>
+
+  /** Create an estimator with a configurable speed of sound. */
+<span class="fc" id="L23">  public SimpleDopplerEstimator(double speedOfSoundMetersPerSecond) {</span>
+<span class="pc bpc" id="L24" title="1 of 4 branches missed.">    if (!(speedOfSoundMetersPerSecond &gt; 0.0) || !Double.isFinite(speedOfSoundMetersPerSecond)) {</span>
+<span class="fc" id="L25">      throw new IllegalArgumentException(&quot;speedOfSoundMetersPerSecond must be finite and &gt; 0&quot;);</span>
+    }
+<span class="fc" id="L27">    this.speedOfSoundMetersPerSecond = speedOfSoundMetersPerSecond;</span>
+<span class="fc" id="L28">  }</span>
+
+  @Override
+  public double estimateRadialVelocity(double observedFrequencyHz, double referenceFrequencyHz) {
+<span class="pc bpc" id="L32" title="2 of 4 branches missed.">    if (!Double.isFinite(observedFrequencyHz) || observedFrequencyHz &lt; 0.0) {</span>
+<span class="nc" id="L33">      throw new IllegalArgumentException(&quot;observedFrequencyHz must be finite and &gt;= 0&quot;);</span>
+    }
+<span class="pc bpc" id="L35" title="1 of 4 branches missed.">    if (!(referenceFrequencyHz &gt; 0.0) || !Double.isFinite(referenceFrequencyHz)) {</span>
+<span class="fc" id="L36">      throw new IllegalArgumentException(&quot;referenceFrequencyHz must be finite and &gt; 0&quot;);</span>
+    }
+<span class="fc" id="L38">    return speedOfSoundMetersPerSecond</span>
+        * (observedFrequencyHz - referenceFrequencyHz)
+        / referenceFrequencyHz;
+  }
+
+  /** Configured speed of sound in m/s. */
+  public double speedOfSoundMetersPerSecond() {
+<span class="nc" id="L45">    return speedOfSoundMetersPerSecond;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

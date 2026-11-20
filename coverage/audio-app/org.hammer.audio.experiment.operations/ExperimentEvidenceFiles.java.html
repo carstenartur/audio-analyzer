@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ExperimentEvidenceFiles.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experiment.operations</a> &gt; <span class="el_source">ExperimentEvidenceFiles.java</span></div><h1>ExperimentEvidenceFiles.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experiment.operations;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.Comparator;
+import java.util.HexFormat;
+import java.util.List;
+import java.util.stream.Stream;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
+
+/** Finalized evidence hashing and streaming, separate from experiment lifecycle decisions. */
+final class ExperimentEvidenceFiles {
+  private ExperimentEvidenceFiles() {
+    /* Utility class. */
+  }
+
+  static void export(Path directory, OutputStream output) throws IOException {
+<span class="fc" id="L24">    try (ZipOutputStream zip = new ZipOutputStream(output)) {</span>
+<span class="fc" id="L25">      try (Stream&lt;Path&gt; paths = Files.list(directory)) {</span>
+<span class="fc bfc" id="L26" title="All 2 branches covered.">        for (Path file : paths.filter(Files::isRegularFile).sorted().toList()) {</span>
+<span class="fc" id="L27">          ZipEntry entry = new ZipEntry(fileName(file));</span>
+<span class="fc" id="L28">          entry.setTime(0L);</span>
+<span class="fc" id="L29">          zip.putNextEntry(entry);</span>
+<span class="fc" id="L30">          Files.copy(file, zip);</span>
+<span class="fc" id="L31">          zip.closeEntry();</span>
+<span class="fc" id="L32">        }</span>
+      }
+    }
+<span class="fc" id="L35">  }</span>
+
+  static void writeHashes(Path directory) throws IOException {
+<span class="fc" id="L38">    StringBuilder checksums = new StringBuilder();</span>
+<span class="fc" id="L39">    try (Stream&lt;Path&gt; files = Files.list(directory)) {</span>
+<span class="fc" id="L40">      List&lt;Path&gt; artifacts =</span>
+<span class="fc" id="L41">          files.filter(Files::isRegularFile).sorted(Comparator.comparing(Path::toString)).toList();</span>
+<span class="fc bfc" id="L42" title="All 2 branches covered.">      for (Path file : artifacts) {</span>
+<span class="fc" id="L43">        String name = fileName(file);</span>
+<span class="fc bfc" id="L44" title="All 2 branches covered.">        if (!&quot;SHA256SUMS&quot;.equals(name)) {</span>
+<span class="fc" id="L45">          checksums.append(sha256(file)).append(&quot;  &quot;).append(name).append('\n');</span>
+        }
+<span class="fc" id="L47">      }</span>
+    }
+<span class="fc" id="L49">    Files.writeString(directory.resolve(&quot;SHA256SUMS&quot;), checksums.toString());</span>
+<span class="fc" id="L50">  }</span>
+
+  static String sha256(byte[] bytes) {
+<span class="fc" id="L53">    return HexFormat.of().formatHex(digest().digest(bytes));</span>
+  }
+
+  static String sha256(Path file) throws IOException {
+<span class="fc" id="L57">    MessageDigest digest = digest();</span>
+<span class="fc" id="L58">    try (InputStream stream = Files.newInputStream(file)) {</span>
+<span class="fc" id="L59">      byte[] buffer = new byte[8192];</span>
+<span class="fc" id="L60">      int count = stream.read(buffer);</span>
+<span class="fc bfc" id="L61" title="All 2 branches covered.">      while (count &gt;= 0) {</span>
+<span class="fc" id="L62">        digest.update(buffer, 0, count);</span>
+<span class="fc" id="L63">        count = stream.read(buffer);</span>
+      }
+    }
+<span class="fc" id="L66">    return HexFormat.of().formatHex(digest.digest());</span>
+  }
+
+  static String fileName(Path path) throws IOException {
+<span class="fc" id="L70">    Path name = path.getFileName();</span>
+<span class="pc bpc" id="L71" title="1 of 2 branches missed.">    if (name == null) {</span>
+<span class="nc" id="L72">      throw new IOException(&quot;An evidence artifact must have a filename.&quot;);</span>
+    }
+<span class="fc" id="L74">    return name.toString();</span>
+  }
+
+  private static MessageDigest digest() {
+    try {
+<span class="fc" id="L79">      return MessageDigest.getInstance(&quot;SHA-256&quot;);</span>
+<span class="nc" id="L80">    } catch (NoSuchAlgorithmException exception) {</span>
+<span class="nc" id="L81">      throw new IllegalStateException(&quot;SHA-256 is required&quot;, exception);</span>
+    }
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

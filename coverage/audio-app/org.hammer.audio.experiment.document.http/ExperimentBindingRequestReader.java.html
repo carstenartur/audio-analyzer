@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ExperimentBindingRequestReader.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experiment.document.http</a> &gt; <span class="el_source">ExperimentBindingRequestReader.java</span></div><h1>ExperimentBindingRequestReader.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experiment.document.http;
+
+import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.core.StreamReadConstraints;
+import com.fasterxml.jackson.core.StreamReadFeature;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.IOException;
+import java.io.InputStream;
+import org.hammer.audio.experiment.document.ExperimentDocumentException;
+import org.hammer.audio.experiment.document.ExperimentDocumentFormat;
+
+/** Bounds the explicit local-binding wrapper before any JSON tree or DTO allocation. */
+final class ExperimentBindingRequestReader {
+  static final int MAX_BYTES = ExperimentDocumentFormat.MAX_DOCUMENT_BYTES * 2 + 512 * 1024;
+<span class="fc" id="L16">  private static final ObjectMapper MAPPER =</span>
+      new ObjectMapper(
+<span class="fc" id="L18">              JsonFactory.builder()</span>
+<span class="fc" id="L19">                  .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION)</span>
+<span class="fc" id="L20">                  .streamReadConstraints(</span>
+<span class="fc" id="L21">                      StreamReadConstraints.builder()</span>
+<span class="fc" id="L22">                          .maxNestingDepth(16)</span>
+<span class="fc" id="L23">                          .maxStringLength(ExperimentDocumentFormat.MAX_DOCUMENT_BYTES)</span>
+<span class="fc" id="L24">                          .maxNumberLength(128)</span>
+<span class="fc" id="L25">                          .build())</span>
+<span class="fc" id="L26">                  .build())</span>
+<span class="fc" id="L27">          .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS);</span>
+
+  private ExperimentBindingRequestReader() {
+    // Utility class.
+  }
+
+  static ExperimentDocumentSessionHttpAdapter.BindingRequest read(InputStream input)
+      throws IOException {
+<span class="fc" id="L35">    byte[] bytes = input.readNBytes(MAX_BYTES + 1);</span>
+<span class="fc bfc" id="L36" title="All 2 branches covered.">    if (bytes.length &gt; MAX_BYTES) {</span>
+<span class="fc" id="L37">      throw new ExperimentDocumentException(</span>
+          &quot;/localBindings&quot;, &quot;max-binding-bytes&quot;, &quot;Local binding request exceeds its byte limit&quot;);
+    }
+<span class="fc" id="L40">    return MAPPER.readValue(bytes, ExperimentDocumentSessionHttpAdapter.BindingRequest.class);</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

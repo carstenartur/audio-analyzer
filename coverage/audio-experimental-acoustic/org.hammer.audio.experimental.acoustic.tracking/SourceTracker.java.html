@@ -1,0 +1,370 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>SourceTracker.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.tracking</a> &gt; <span class="el_source">SourceTracker.java</span></div><h1>SourceTracker.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.tracking;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Objects;
+import org.hammer.audio.geometry.Vector2;
+import org.hammer.audio.geometry.Vector3;
+
+/**
+ * Maintains a set of {@link TrackedSource}s over time, providing identity persistence and temporal
+ * smoothing on top of per-frame frequency clusters and localized positions.
+ *
+ * &lt;p&gt;For each new frame the tracker is fed a list of observations, where every observation pairs a
+ * {@link FrequencyCluster} with its localized 2D position. The tracker matches every observation to
+ * the closest existing track in frequency space (within {@link #frequencyMatchHz} Hz tolerance),
+ * updates the matched track's Kalman filter, creates a new track for unmatched observations, and
+ * drops tracks that have not been observed for {@link #missingFramesToDrop} frames.
+ *
+ * &lt;p&gt;The tracker does not depend on audio types directly; it consumes only positions and
+ * frequencies. This makes it equally usable from unit tests with synthetic data and from the full
+ * {@link TrackingPipeline} with real audio.
+ */
+public final class SourceTracker {
+
+  private static final double DOPPLER_VARIANCE_SCALE_HZ_SQUARED = 4.0;
+  private static final double DOPPLER_CONSISTENCY_SCALE_METERS_PER_SECOND = 2.0;
+
+  private final double frequencyMatchHz;
+  private final int missingFramesToDrop;
+  private final double processNoiseDensity;
+  private final double measurementNoiseVariance;
+  private final double initialPositionVariance;
+  private final double initialVelocityVariance;
+  private final double confidenceDecay;
+  private final double confidenceGain;
+  private final double dopplerVelocityWeight;
+
+<span class="fc" id="L40">  private final List&lt;Track&gt; tracks = new ArrayList&lt;&gt;();</span>
+  private int nextId;
+<span class="fc" id="L42">  private long lastFrameIndex = Long.MIN_VALUE;</span>
+<span class="fc" id="L43">  private double lastTimestampSeconds = Double.NaN;</span>
+
+  /**
+   * Construct a tracker with explicit smoothing parameters.
+   *
+   * @param frequencyMatchHz maximum frequency distance for matching observations to tracks (Hz)
+   * @param missingFramesToDrop number of consecutive missed frames after which a track is dropped
+   * @param processNoiseDensity Kalman acceleration spectral density
+   * @param measurementNoiseVariance Kalman position-measurement variance
+   * @param initialPositionVariance initial position variance assigned to new tracks
+   * @param initialVelocityVariance initial velocity variance assigned to new tracks
+   * @param confidenceDecay multiplicative confidence decay applied on missed frames (in {@code
+   *     [0,1]}, 0 means immediate forget, 1 means never decay)
+   * @param confidenceGain weight added to confidence on every observation (in {@code [0,1]})
+   */
+  public SourceTracker(
+      double frequencyMatchHz,
+      int missingFramesToDrop,
+      double processNoiseDensity,
+      double measurementNoiseVariance,
+      double initialPositionVariance,
+      double initialVelocityVariance,
+      double confidenceDecay,
+      double confidenceGain) {
+<span class="fc" id="L67">    this(</span>
+        frequencyMatchHz,
+        missingFramesToDrop,
+        processNoiseDensity,
+        measurementNoiseVariance,
+        initialPositionVariance,
+        initialVelocityVariance,
+        confidenceDecay,
+        confidenceGain,
+        0.35);
+<span class="fc" id="L77">  }</span>
+
+  /**
+   * Construct a tracker with explicit smoothing parameters and a Doppler/position velocity blend.
+   */
+  public SourceTracker(
+      double frequencyMatchHz,
+      int missingFramesToDrop,
+      double processNoiseDensity,
+      double measurementNoiseVariance,
+      double initialPositionVariance,
+      double initialVelocityVariance,
+      double confidenceDecay,
+      double confidenceGain,
+<span class="fc" id="L91">      double dopplerVelocityWeight) {</span>
+<span class="pc bpc" id="L92" title="1 of 4 branches missed.">    if (!(frequencyMatchHz &gt; 0.0) || !Double.isFinite(frequencyMatchHz)) {</span>
+<span class="fc" id="L93">      throw new IllegalArgumentException(&quot;frequencyMatchHz must be finite and &gt; 0&quot;);</span>
+    }
+<span class="fc bfc" id="L95" title="All 2 branches covered.">    if (missingFramesToDrop &lt; 0) {</span>
+<span class="fc" id="L96">      throw new IllegalArgumentException(&quot;missingFramesToDrop must be &gt;= 0&quot;);</span>
+    }
+<span class="pc bpc" id="L98" title="2 of 6 branches missed.">    if (!Double.isFinite(confidenceDecay) || confidenceDecay &lt; 0.0 || confidenceDecay &gt; 1.0) {</span>
+<span class="fc" id="L99">      throw new IllegalArgumentException(&quot;confidenceDecay must be in [0,1]&quot;);</span>
+    }
+<span class="pc bpc" id="L101" title="2 of 6 branches missed.">    if (!Double.isFinite(confidenceGain) || confidenceGain &lt; 0.0 || confidenceGain &gt; 1.0) {</span>
+<span class="fc" id="L102">      throw new IllegalArgumentException(&quot;confidenceGain must be in [0,1]&quot;);</span>
+    }
+<span class="pc bpc" id="L104" title="3 of 6 branches missed.">    if (!Double.isFinite(dopplerVelocityWeight)</span>
+        || dopplerVelocityWeight &lt; 0.0
+        || dopplerVelocityWeight &gt; 1.0) {
+<span class="nc" id="L107">      throw new IllegalArgumentException(&quot;dopplerVelocityWeight must be in [0,1]&quot;);</span>
+    }
+<span class="fc" id="L109">    this.frequencyMatchHz = frequencyMatchHz;</span>
+<span class="fc" id="L110">    this.missingFramesToDrop = missingFramesToDrop;</span>
+<span class="fc" id="L111">    this.processNoiseDensity = processNoiseDensity;</span>
+<span class="fc" id="L112">    this.measurementNoiseVariance = measurementNoiseVariance;</span>
+<span class="fc" id="L113">    this.initialPositionVariance = initialPositionVariance;</span>
+<span class="fc" id="L114">    this.initialVelocityVariance = initialVelocityVariance;</span>
+<span class="fc" id="L115">    this.confidenceDecay = confidenceDecay;</span>
+<span class="fc" id="L116">    this.confidenceGain = confidenceGain;</span>
+<span class="fc" id="L117">    this.dopplerVelocityWeight = dopplerVelocityWeight;</span>
+<span class="fc" id="L118">  }</span>
+
+  /** Default configuration suitable for typical insect-source experiments. */
+  public static SourceTracker withDefaults() {
+<span class="fc" id="L122">    return new SourceTracker(40.0, 3, 0.5, 0.04, 1.0, 1.0, 0.8, 0.3);</span>
+  }
+
+  /**
+   * Update the tracker with the observations of one frame.
+   *
+   * @param frameIndex monotonically increasing frame index
+   * @param timestampSeconds capture timestamp in seconds (used as the Kalman time step source)
+   * @param observations frequency-cluster + position pairs for the current frame
+   * @return immutable snapshot of all currently active tracks (sorted by id)
+   */
+  public List&lt;TrackedSource&gt; update(
+      long frameIndex, double timestampSeconds, List&lt;Observation&gt; observations) {
+<span class="fc" id="L135">    Objects.requireNonNull(observations, &quot;observations&quot;);</span>
+<span class="fc bfc" id="L136" title="All 2 branches covered.">    if (frameIndex &lt; lastFrameIndex) {</span>
+<span class="fc" id="L137">      throw new IllegalArgumentException(&quot;frameIndex must be non-decreasing&quot;);</span>
+    }
+    double dt =
+<span class="fc bfc" id="L140" title="All 2 branches covered.">        Double.isNaN(lastTimestampSeconds)</span>
+<span class="fc" id="L141">            ? 0.0</span>
+<span class="fc" id="L142">            : Math.max(0.0, timestampSeconds - lastTimestampSeconds);</span>
+<span class="fc bfc" id="L143" title="All 2 branches covered.">    for (Track track : tracks) {</span>
+<span class="fc" id="L144">      track.filter.predict(dt);</span>
+<span class="fc" id="L145">      track.consecutiveMissedFrames++;</span>
+<span class="fc" id="L146">    }</span>
+
+<span class="fc" id="L148">    int existingTrackCount = tracks.size();</span>
+<span class="fc" id="L149">    boolean[] taken = new boolean[existingTrackCount];</span>
+<span class="fc bfc" id="L150" title="All 2 branches covered.">    for (Observation observation : observations) {</span>
+<span class="fc" id="L151">      int matched = findClosestTrack(observation.frequencyHz(), taken);</span>
+<span class="fc bfc" id="L152" title="All 2 branches covered.">      if (matched &gt;= 0) {</span>
+<span class="fc" id="L153">        Track track = tracks.get(matched);</span>
+<span class="fc" id="L154">        track.filter.update(observation.position());</span>
+<span class="fc" id="L155">        track.frequencyHz = observation.frequencyHz();</span>
+<span class="fc" id="L156">        track.observedFrequencyHz = observation.observedFrequencyHz();</span>
+<span class="fc" id="L157">        track.radialVelocityMetersPerSecond = observation.radialVelocityMetersPerSecond();</span>
+<span class="fc" id="L158">        track.frequencyVarianceHzSquared = observation.frequencyVarianceHzSquared();</span>
+<span class="fc" id="L159">        track.radialVelocityStdDevMetersPerSecond =</span>
+<span class="fc" id="L160">            observation.radialVelocityStdDevMetersPerSecond();</span>
+<span class="fc" id="L161">        track.dopplerVelocityWeight = adaptiveDopplerWeight(observation);</span>
+<span class="fc" id="L162">        track.fusedVelocityMetersPerSecond3d =</span>
+<span class="fc" id="L163">            blendVelocity(</span>
+<span class="fc" id="L164">                track.filter.velocity(),</span>
+<span class="fc" id="L165">                observation.velocityMetersPerSecond3d(),</span>
+                track.dopplerVelocityWeight);
+<span class="fc" id="L167">        track.lastUpdatedFrameIndex = frameIndex;</span>
+<span class="fc" id="L168">        track.consecutiveMissedFrames = 0;</span>
+<span class="fc" id="L169">        track.observationCount++;</span>
+<span class="fc" id="L170">        track.confidence =</span>
+<span class="fc" id="L171">            Math.min(</span>
+                1.0,
+                track.confidence * confidenceDecay
+<span class="fc" id="L174">                    + confidenceGain * dopplerReliability(observation));</span>
+<span class="fc" id="L175">        taken[matched] = true;</span>
+<span class="fc" id="L176">      } else {</span>
+<span class="fc" id="L177">        Track track = new Track();</span>
+<span class="fc" id="L178">        track.id = nextId++;</span>
+<span class="fc" id="L179">        track.frequencyHz = observation.frequencyHz();</span>
+<span class="fc" id="L180">        track.observedFrequencyHz = observation.observedFrequencyHz();</span>
+<span class="fc" id="L181">        track.filter =</span>
+            new Kalman2D(
+<span class="fc" id="L183">                observation.position(),</span>
+                initialPositionVariance,
+                initialVelocityVariance,
+                processNoiseDensity,
+                measurementNoiseVariance);
+<span class="fc" id="L188">        track.lastUpdatedFrameIndex = frameIndex;</span>
+<span class="fc" id="L189">        track.consecutiveMissedFrames = 0;</span>
+<span class="fc" id="L190">        track.observationCount = 1;</span>
+<span class="fc" id="L191">        track.confidence = confidenceGain * dopplerReliability(observation);</span>
+<span class="fc" id="L192">        track.radialVelocityMetersPerSecond = observation.radialVelocityMetersPerSecond();</span>
+<span class="fc" id="L193">        track.frequencyVarianceHzSquared = observation.frequencyVarianceHzSquared();</span>
+<span class="fc" id="L194">        track.radialVelocityStdDevMetersPerSecond =</span>
+<span class="fc" id="L195">            observation.radialVelocityStdDevMetersPerSecond();</span>
+<span class="fc" id="L196">        track.dopplerVelocityWeight = adaptiveDopplerWeight(observation);</span>
+<span class="fc" id="L197">        track.fusedVelocityMetersPerSecond3d =</span>
+<span class="fc" id="L198">            observation.velocityMetersPerSecond3d().scale(track.dopplerVelocityWeight);</span>
+<span class="fc" id="L199">        tracks.add(track);</span>
+      }
+<span class="fc" id="L201">    }</span>
+    // Decay confidence for missed tracks.
+<span class="fc bfc" id="L203" title="All 2 branches covered.">    for (int i = 0; i &lt; existingTrackCount; i++) {</span>
+<span class="fc bfc" id="L204" title="All 2 branches covered.">      if (!taken[i]) {</span>
+<span class="fc" id="L205">        tracks.get(i).confidence *= confidenceDecay;</span>
+      }
+    }
+    // Drop stale tracks.
+<span class="fc" id="L209">    Iterator&lt;Track&gt; iterator = tracks.iterator();</span>
+<span class="fc bfc" id="L210" title="All 2 branches covered.">    while (iterator.hasNext()) {</span>
+<span class="fc" id="L211">      Track track = iterator.next();</span>
+<span class="fc bfc" id="L212" title="All 2 branches covered.">      if (track.consecutiveMissedFrames &gt; missingFramesToDrop) {</span>
+<span class="fc" id="L213">        iterator.remove();</span>
+      }
+<span class="fc" id="L215">    }</span>
+
+<span class="fc" id="L217">    lastFrameIndex = frameIndex;</span>
+<span class="fc" id="L218">    lastTimestampSeconds = timestampSeconds;</span>
+<span class="fc" id="L219">    return snapshot();</span>
+  }
+
+  /** Snapshot of currently active tracks, sorted by track id for stable rendering. */
+  public List&lt;TrackedSource&gt; snapshot() {
+<span class="fc" id="L224">    List&lt;TrackedSource&gt; sources = new ArrayList&lt;&gt;(tracks.size());</span>
+<span class="fc bfc" id="L225" title="All 2 branches covered.">    for (Track track : tracks) {</span>
+<span class="fc" id="L226">      sources.add(</span>
+          new TrackedSource(
+              track.id,
+              track.frequencyHz,
+              track.observedFrequencyHz,
+<span class="fc" id="L231">              track.filter.position(),</span>
+<span class="fc" id="L232">              track.fusedVelocityMetersPerSecond3d.xy(),</span>
+              track.fusedVelocityMetersPerSecond3d,
+              track.radialVelocityMetersPerSecond,
+              track.frequencyVarianceHzSquared,
+              track.confidence,
+              track.lastUpdatedFrameIndex,
+              track.observationCount,
+              track.dopplerVelocityWeight,
+              track.radialVelocityStdDevMetersPerSecond));
+<span class="fc" id="L241">    }</span>
+<span class="fc" id="L242">    sources.sort((left, right) -&gt; Integer.compare(left.id(), right.id()));</span>
+<span class="fc" id="L243">    return Collections.unmodifiableList(sources);</span>
+  }
+
+  /** Reset all tracker state (used by tests and scenario setups). */
+  public void reset() {
+<span class="fc" id="L248">    tracks.clear();</span>
+<span class="fc" id="L249">    nextId = 0;</span>
+<span class="fc" id="L250">    lastFrameIndex = Long.MIN_VALUE;</span>
+<span class="fc" id="L251">    lastTimestampSeconds = Double.NaN;</span>
+<span class="fc" id="L252">  }</span>
+
+  private int findClosestTrack(double frequencyHz, boolean[] taken) {
+<span class="fc" id="L255">    int best = -1;</span>
+<span class="fc" id="L256">    double bestDistance = frequencyMatchHz;</span>
+<span class="fc" id="L257">    int upperBound = Math.min(tracks.size(), taken.length);</span>
+<span class="fc bfc" id="L258" title="All 2 branches covered.">    for (int i = 0; i &lt; upperBound; i++) {</span>
+<span class="fc bfc" id="L259" title="All 2 branches covered.">      if (taken[i]) {</span>
+<span class="fc" id="L260">        continue;</span>
+      }
+<span class="fc" id="L262">      double distance = Math.abs(tracks.get(i).frequencyHz - frequencyHz);</span>
+<span class="fc bfc" id="L263" title="All 2 branches covered.">      if (distance &lt;= bestDistance) {</span>
+<span class="fc" id="L264">        bestDistance = distance;</span>
+<span class="fc" id="L265">        best = i;</span>
+      }
+    }
+<span class="fc" id="L268">    return best;</span>
+  }
+
+  private Vector3 blendVelocity(
+      Vector2 positionDeltaVelocity, Vector3 dopplerVelocity, double dopplerWeight) {
+<span class="fc" id="L273">    Vector3 positional = Vector3.from(positionDeltaVelocity);</span>
+<span class="fc" id="L274">    return positional.scale(1.0 - dopplerWeight).plus(dopplerVelocity.scale(dopplerWeight));</span>
+  }
+
+  private double adaptiveDopplerWeight(Observation observation) {
+<span class="fc" id="L278">    return dopplerVelocityWeight * dopplerReliability(observation);</span>
+  }
+
+  private double dopplerReliability(Observation observation) {
+<span class="fc" id="L282">    double varianceReliability =</span>
+<span class="fc" id="L283">        1.0 / (1.0 + observation.frequencyVarianceHzSquared() / DOPPLER_VARIANCE_SCALE_HZ_SQUARED);</span>
+<span class="fc" id="L284">    double consistencyReliability =</span>
+        1.0
+            / (1.0
+<span class="fc" id="L287">                + observation.radialVelocityStdDevMetersPerSecond()</span>
+                    / DOPPLER_CONSISTENCY_SCALE_METERS_PER_SECOND);
+<span class="fc" id="L289">    return clamp01(varianceReliability * consistencyReliability);</span>
+  }
+
+  private static double clamp01(double value) {
+<span class="fc" id="L293">    return Math.max(0.0, Math.min(1.0, value));</span>
+  }
+
+  /** One frame observation: cluster frequency + localized 2D position. */
+  public record Observation(
+      double frequencyHz,
+      double observedFrequencyHz,
+      Vector2 position,
+      Vector3 velocityMetersPerSecond3d,
+      double radialVelocityMetersPerSecond,
+      double frequencyVarianceHzSquared,
+      double radialVelocityStdDevMetersPerSecond) {
+
+    /** Create an observation without Doppler data. */
+    public Observation(double frequencyHz, Vector2 position) {
+<span class="fc" id="L308">      this(frequencyHz, frequencyHz, position, Vector3.ZERO, 0.0, 0.0, 0.0);</span>
+<span class="fc" id="L309">    }</span>
+
+    /** Create an observation with Doppler data but no explicit consistency metric. */
+    public Observation(
+        double frequencyHz,
+        double observedFrequencyHz,
+        Vector2 position,
+        Vector3 velocityMetersPerSecond3d,
+        double radialVelocityMetersPerSecond,
+        double frequencyVarianceHzSquared) {
+<span class="fc" id="L319">      this(</span>
+          frequencyHz,
+          observedFrequencyHz,
+          position,
+          velocityMetersPerSecond3d,
+          radialVelocityMetersPerSecond,
+          frequencyVarianceHzSquared,
+          0.0);
+<span class="fc" id="L327">    }</span>
+
+    /** Validate fields. */
+<span class="fc" id="L330">    public Observation {</span>
+<span class="pc bpc" id="L331" title="2 of 4 branches missed.">      if (!Double.isFinite(frequencyHz) || frequencyHz &lt; 0.0) {</span>
+<span class="nc" id="L332">        throw new IllegalArgumentException(&quot;frequencyHz must be finite and &gt;= 0&quot;);</span>
+      }
+<span class="pc bpc" id="L334" title="2 of 4 branches missed.">      if (!Double.isFinite(observedFrequencyHz) || observedFrequencyHz &lt; 0.0) {</span>
+<span class="nc" id="L335">        throw new IllegalArgumentException(&quot;observedFrequencyHz must be finite and &gt;= 0&quot;);</span>
+      }
+<span class="fc" id="L337">      Objects.requireNonNull(position, &quot;position&quot;);</span>
+<span class="fc" id="L338">      Objects.requireNonNull(velocityMetersPerSecond3d, &quot;velocityMetersPerSecond3d&quot;);</span>
+<span class="pc bpc" id="L339" title="1 of 2 branches missed.">      if (!Double.isFinite(radialVelocityMetersPerSecond)) {</span>
+<span class="nc" id="L340">        throw new IllegalArgumentException(&quot;radialVelocityMetersPerSecond must be finite&quot;);</span>
+      }
+<span class="pc bpc" id="L342" title="2 of 4 branches missed.">      if (!Double.isFinite(frequencyVarianceHzSquared) || frequencyVarianceHzSquared &lt; 0.0) {</span>
+<span class="nc" id="L343">        throw new IllegalArgumentException(&quot;frequencyVarianceHzSquared must be finite and &gt;= 0&quot;);</span>
+      }
+<span class="pc bpc" id="L345" title="2 of 4 branches missed.">      if (!Double.isFinite(radialVelocityStdDevMetersPerSecond)</span>
+          || radialVelocityStdDevMetersPerSecond &lt; 0.0) {
+<span class="nc" id="L347">        throw new IllegalArgumentException(</span>
+            &quot;radialVelocityStdDevMetersPerSecond must be finite and &gt;= 0&quot;);
+      }
+<span class="fc" id="L350">    }</span>
+  }
+
+  /** Internal mutable track record. */
+<span class="fc" id="L354">  private static final class Track {</span>
+    int id;
+    double frequencyHz;
+    double observedFrequencyHz;
+    Kalman2D filter;
+<span class="fc" id="L359">    Vector3 fusedVelocityMetersPerSecond3d = Vector3.ZERO;</span>
+    double radialVelocityMetersPerSecond;
+    double frequencyVarianceHzSquared;
+    double radialVelocityStdDevMetersPerSecond;
+    double dopplerVelocityWeight;
+    long lastUpdatedFrameIndex;
+    int consecutiveMissedFrames;
+    int observationCount;
+    double confidence;
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

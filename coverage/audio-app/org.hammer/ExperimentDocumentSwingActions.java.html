@@ -1,0 +1,284 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ExperimentDocumentSwingActions.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer</a> &gt; <span class="el_source">ExperimentDocumentSwingActions.java</span></div><h1>ExperimentDocumentSwingActions.java</h1><pre class="source lang-java linenums">package org.hammer;
+
+import java.awt.Cursor;
+import java.awt.FlowLayout;
+import java.awt.event.InputEvent;
+import java.awt.event.KeyEvent;
+import java.nio.file.Path;
+import java.util.Objects;
+import java.util.concurrent.Callable;
+import java.util.function.Consumer;
+import javax.swing.JButton;
+import javax.swing.JDialog;
+import javax.swing.JFrame;
+import javax.swing.JMenu;
+import javax.swing.JMenuItem;
+import javax.swing.JOptionPane;
+import javax.swing.JProgressBar;
+import javax.swing.KeyStroke;
+import org.hammer.audio.experiment.document.ExperimentDocumentPreview;
+import org.hammer.audio.experiment.document.ExperimentDocumentService;
+import org.hammer.audio.experiment.document.ExperimentDocumentSession;
+
+/** Desktop adapter for the shared complete-document lifecycle and explicit confirmation preview. */
+// Compound revision checks and saves intentionally share the session's reentrant monitor.
+@SuppressWarnings(&quot;PMD.AvoidSynchronizedStatement&quot;)
+final class ExperimentDocumentSwingActions {
+  private final JFrame owner;
+  private final ExperimentDocumentService service;
+  private final ExperimentDocumentSession session;
+<span class="nc" id="L30">  private final JMenu recent = new JMenu(&quot;Recent experiment files&quot;);</span>
+<span class="nc" id="L31">  private final java.util.List&lt;Path&gt; recentPaths = new java.util.ArrayList&lt;&gt;();</span>
+  private ExperimentDocumentTask&lt;?&gt; worker;
+<span class="nc" id="L33">  private final java.util.Deque&lt;Runnable&gt; pending = new java.util.ArrayDeque&lt;&gt;();</span>
+
+<span class="nc" id="L35">  ExperimentDocumentSwingActions(JFrame owner, ExperimentDocumentService service) {</span>
+<span class="nc" id="L36">    this.owner = Objects.requireNonNull(owner, &quot;owner&quot;);</span>
+<span class="nc" id="L37">    this.service = Objects.requireNonNull(service, &quot;documentService&quot;);</span>
+<span class="nc" id="L38">    this.session = new ExperimentDocumentSession(service);</span>
+<span class="nc" id="L39">  }</span>
+
+  /** Return one immutable snapshot for the host's document-health presentation. */
+  ExperimentDocumentSession.Context documentContext() {
+<span class="nc" id="L43">    return session.context();</span>
+  }
+
+  /** Install keyboard-accessible Open, Import, Save, Save As and Validate actions. */
+  void install() {
+<span class="nc" id="L48">    JMenu menu = null;</span>
+<span class="nc bnc" id="L49" title="All 2 branches missed.">    for (int index = 0; index &lt; owner.getJMenuBar().getMenuCount(); index++) {</span>
+<span class="nc bnc" id="L50" title="All 2 branches missed.">      if (&quot;File&quot;.equals(owner.getJMenuBar().getMenu(index).getText())) {</span>
+<span class="nc" id="L51">        menu = owner.getJMenuBar().getMenu(index);</span>
+<span class="nc" id="L52">        break;</span>
+      }
+    }
+<span class="nc bnc" id="L55" title="All 2 branches missed.">    if (menu == null) {</span>
+<span class="nc" id="L56">      throw new IllegalStateException(&quot;Desktop File menu is unavailable&quot;);</span>
+    }
+<span class="nc" id="L58">    add(</span>
+        menu,
+        &quot;Open experiment document...&quot;,
+        KeyEvent.VK_O,
+        InputEvent.CTRL_DOWN_MASK,
+<span class="nc" id="L63">        () -&gt; choose(false));</span>
+<span class="nc" id="L64">    add(</span>
+        menu,
+        &quot;Import experiment copy...&quot;,
+        KeyEvent.VK_O,
+        InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK,
+<span class="nc" id="L69">        () -&gt; choose(true));</span>
+<span class="nc" id="L70">    add(</span>
+        menu,
+        &quot;Save experiment document&quot;,
+        KeyEvent.VK_S,
+        InputEvent.CTRL_DOWN_MASK,
+<span class="nc" id="L75">        () -&gt; save(false));</span>
+<span class="nc" id="L76">    add(</span>
+        menu,
+        &quot;Save experiment document as...&quot;,
+        KeyEvent.VK_S,
+        InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK,
+<span class="nc" id="L81">        () -&gt; save(true));</span>
+<span class="nc" id="L82">    add(</span>
+        menu,
+        &quot;Validate current experiment&quot;,
+        KeyEvent.VK_F5,
+        0,
+        () -&gt; {
+<span class="nc bnc" id="L88" title="All 2 branches missed.">          if (session.status().open()) {</span>
+<span class="nc" id="L89">            showEditor();</span>
+          } else {
+<span class="nc" id="L91">            choose(false);</span>
+          }
+<span class="nc" id="L93">        });</span>
+<span class="nc" id="L94">    menu.add(recent);</span>
+<span class="nc" id="L95">  }</span>
+
+  /** OS launch and already-running open events always enter the non-mutating preview first. */
+  void inspect(Path source) {
+<span class="nc" id="L99">    run(() -&gt; service.preview(source), preview -&gt; showPreview(source, preview, false));</span>
+<span class="nc" id="L100">  }</span>
+
+  private void choose(boolean copy) {
+<span class="nc" id="L103">    Path source = ExperimentDocumentFileChooser.chooseOpen(owner);</span>
+<span class="nc bnc" id="L104" title="All 2 branches missed.">    if (source != null) {</span>
+<span class="nc" id="L105">      run(() -&gt; service.preview(source), preview -&gt; showPreview(source, preview, copy));</span>
+    }
+<span class="nc" id="L107">  }</span>
+
+  private void showPreview(Path source, ExperimentDocumentPreview preview, boolean copy) {
+<span class="nc" id="L110">    new ExperimentDocumentPreviewDialog(</span>
+            owner,
+            service,
+            session,
+            request -&gt; {
+<span class="nc bnc" id="L115" title="All 2 branches missed.">              if (request.copy()) {</span>
+<span class="nc" id="L116">                Path target = ExperimentDocumentFileChooser.chooseSave(owner);</span>
+<span class="nc bnc" id="L117" title="All 2 branches missed.">                if (target == null) {</span>
+<span class="nc" id="L118">                  return;</span>
+                }
+<span class="nc" id="L120">                run(</span>
+                    () -&gt; {
+<span class="nc" id="L122">                      ExperimentDocumentSession independent =</span>
+                          new ExperimentDocumentSession(service);
+<span class="nc" id="L124">                      independent.open(</span>
+                          preview, source, ExperimentDocumentSession.DirtyDecision.DISCARD, null);
+<span class="nc" id="L126">                      independent.saveAs(target);</span>
+<span class="nc" id="L127">                      return target;</span>
+                    },
+                    saved -&gt; {
+<span class="nc" id="L130">                      remember(saved);</span>
+<span class="nc" id="L131">                      JOptionPane.showMessageDialog(</span>
+                          owner, &quot;Independent experiment copy saved to:\n&quot; + saved);
+<span class="nc" id="L133">                    });</span>
+<span class="nc" id="L134">              } else {</span>
+                Path target =
+<span class="nc bnc" id="L136" title="All 2 branches missed.">                    request.decision() == ExperimentDocumentSession.DirtyDecision.SAVE</span>
+<span class="nc bnc" id="L137" title="All 2 branches missed.">                            &amp;&amp; session.status().path() == null</span>
+<span class="nc" id="L138">                        ? ExperimentDocumentFileChooser.chooseSave(owner)</span>
+<span class="nc" id="L139">                        : null;</span>
+<span class="nc bnc" id="L140" title="All 2 branches missed.">                if (request.decision() == ExperimentDocumentSession.DirtyDecision.SAVE</span>
+<span class="nc bnc" id="L141" title="All 4 branches missed.">                    &amp;&amp; session.status().path() == null</span>
+                    &amp;&amp; target == null) {
+<span class="nc" id="L143">                  return;</span>
+                }
+<span class="nc" id="L145">                run(</span>
+                    () -&gt;
+<span class="nc" id="L147">                        session.openIfCurrent(</span>
+                            preview,
+                            source,
+<span class="nc" id="L150">                            request.decision(),</span>
+                            target,
+<span class="nc" id="L152">                            request.expectedRevision()),</span>
+                    opened -&gt; {
+<span class="nc bnc" id="L154" title="All 2 branches missed.">                      if (opened) {</span>
+<span class="nc" id="L155">                        remember(source);</span>
+<span class="nc" id="L156">                        showEditor();</span>
+                      }
+<span class="nc" id="L158">                    });</span>
+              }
+<span class="nc" id="L160">            })</span>
+<span class="nc" id="L161">        .show(source, preview, copy);</span>
+<span class="nc" id="L162">  }</span>
+
+  private void save(boolean saveAs) {
+<span class="nc bnc" id="L165" title="All 2 branches missed.">    if (!session.status().open()) {</span>
+<span class="nc" id="L166">      JOptionPane.showMessageDialog(owner, &quot;Open an experiment document first.&quot;);</span>
+<span class="nc" id="L167">      return;</span>
+    }
+    Path target =
+<span class="nc bnc" id="L170" title="All 4 branches missed.">        saveAs || session.status().path() == null</span>
+<span class="nc" id="L171">            ? ExperimentDocumentFileChooser.chooseSave(owner)</span>
+<span class="nc" id="L172">            : null;</span>
+<span class="nc bnc" id="L173" title="All 6 branches missed.">    if ((saveAs || session.status().path() == null) &amp;&amp; target == null) {</span>
+<span class="nc" id="L174">      return;</span>
+    }
+<span class="nc" id="L176">    long expectedRevision = session.revision();</span>
+<span class="nc" id="L177">    run(</span>
+        () -&gt; {
+<span class="nc" id="L179">          synchronized (session) {</span>
+<span class="nc" id="L180">            session.requireRevision(expectedRevision);</span>
+<span class="nc bnc" id="L181" title="All 2 branches missed.">            if (target == null) {</span>
+<span class="nc" id="L182">              session.save();</span>
+            } else {
+<span class="nc" id="L184">              session.saveAs(target);</span>
+            }
+<span class="nc" id="L186">            return session.status();</span>
+          }
+        },
+        status -&gt; {
+<span class="nc" id="L190">          remember(status.path());</span>
+<span class="nc" id="L191">          JOptionPane.showMessageDialog(</span>
+<span class="nc" id="L192">              owner, &quot;Saved &quot; + status.path() + &quot;\nSHA-256: &quot; + status.canonicalSha256());</span>
+<span class="nc" id="L193">        });</span>
+<span class="nc" id="L194">  }</span>
+
+  private void showEditor() {
+<span class="nc" id="L197">    new ExperimentDocumentEditorDialog(owner, service, session).show();</span>
+<span class="nc" id="L198">  }</span>
+
+  private void remember(Path path) {
+<span class="nc bnc" id="L201" title="All 2 branches missed.">    if (path == null) {</span>
+<span class="nc" id="L202">      return;</span>
+    }
+<span class="nc" id="L204">    recentPaths.remove(path);</span>
+<span class="nc" id="L205">    recentPaths.addFirst(path);</span>
+<span class="nc bnc" id="L206" title="All 2 branches missed.">    if (recentPaths.size() &gt; 10) {</span>
+<span class="nc" id="L207">      recentPaths.removeLast();</span>
+    }
+<span class="nc" id="L209">    recent.removeAll();</span>
+<span class="nc bnc" id="L210" title="All 2 branches missed.">    for (Path entry : recentPaths) {</span>
+<span class="nc" id="L211">      Path name = entry.getFileName();</span>
+<span class="nc bnc" id="L212" title="All 2 branches missed.">      JMenuItem item = new JMenuItem(name == null ? entry.toString() : name.toString());</span>
+<span class="nc" id="L213">      item.addActionListener(event -&gt; inspect(entry));</span>
+<span class="nc" id="L214">      recent.add(item);</span>
+<span class="nc" id="L215">    }</span>
+<span class="nc" id="L216">  }</span>
+
+  private &lt;T&gt; void run(Callable&lt;T&gt; task, Consumer&lt;T&gt; completed) {
+<span class="nc bnc" id="L219" title="All 2 branches missed.">    if (worker != null) {</span>
+<span class="nc bnc" id="L220" title="All 2 branches missed.">      if (pending.size() &gt;= 16) {</span>
+<span class="nc" id="L221">        showFailure(owner, new IllegalStateException(&quot;Too many pending document operations&quot;));</span>
+      } else {
+<span class="nc" id="L223">        pending.addLast(() -&gt; run(task, completed));</span>
+      }
+<span class="nc" id="L225">      return;</span>
+    }
+<span class="nc" id="L227">    JDialog progress = new JDialog(owner, &quot;Experiment document&quot;, false);</span>
+<span class="nc" id="L228">    progress.setLayout(new FlowLayout());</span>
+<span class="nc" id="L229">    JProgressBar bar = new JProgressBar();</span>
+<span class="nc" id="L230">    bar.setIndeterminate(true);</span>
+<span class="nc" id="L231">    progress.add(bar);</span>
+<span class="nc" id="L232">    JButton cancel = new JButton(&quot;Cancel&quot;);</span>
+<span class="nc" id="L233">    progress.add(cancel);</span>
+<span class="nc" id="L234">    owner.setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));</span>
+<span class="nc" id="L235">    worker =</span>
+        new ExperimentDocumentTask&lt;&gt;(
+            task,
+            finished -&gt; {
+<span class="nc" id="L239">              worker = null;</span>
+<span class="nc" id="L240">              progress.dispose();</span>
+<span class="nc" id="L241">              owner.setCursor(Cursor.getDefaultCursor());</span>
+              try {
+<span class="nc" id="L243">                completed.accept(finished.get());</span>
+<span class="nc" id="L244">              } catch (InterruptedException exception) {</span>
+<span class="nc" id="L245">                Thread.currentThread().interrupt();</span>
+<span class="nc" id="L246">              } catch (java.util.concurrent.ExecutionException exception) {</span>
+<span class="nc" id="L247">                showFailure(owner, exception.getCause());</span>
+              } finally {
+<span class="nc bnc" id="L249" title="All 2 branches missed.">                if (!pending.isEmpty()) {</span>
+<span class="nc" id="L250">                  javax.swing.SwingUtilities.invokeLater(pending.removeFirst());</span>
+                }
+              }
+<span class="nc" id="L253">            });</span>
+<span class="nc" id="L254">    cancel.addActionListener(</span>
+        event -&gt; {
+<span class="nc bnc" id="L256" title="All 2 branches missed.">          if (worker != null) {</span>
+<span class="nc" id="L257">            worker.requestCancellation();</span>
+<span class="nc" id="L258">            cancel.setText(&quot;Cancellation requested…&quot;);</span>
+<span class="nc" id="L259">            cancel.setEnabled(false);</span>
+          }
+<span class="nc" id="L261">        });</span>
+<span class="nc" id="L262">    progress.setDefaultCloseOperation(JDialog.DO_NOTHING_ON_CLOSE);</span>
+<span class="nc" id="L263">    progress.pack();</span>
+<span class="nc" id="L264">    progress.setLocationRelativeTo(owner);</span>
+<span class="nc" id="L265">    progress.setVisible(true);</span>
+<span class="nc" id="L266">    worker.execute();</span>
+<span class="nc" id="L267">  }</span>
+
+  private static void add(JMenu menu, String title, int key, int modifiers, Runnable action) {
+<span class="nc" id="L270">    JMenuItem item = new JMenuItem(title);</span>
+<span class="nc" id="L271">    item.setAccelerator(KeyStroke.getKeyStroke(key, modifiers));</span>
+<span class="nc" id="L272">    item.addActionListener(event -&gt; action.run());</span>
+<span class="nc" id="L273">    menu.add(item);</span>
+<span class="nc" id="L274">  }</span>
+
+  static void showFailure(java.awt.Component owner, Throwable failure) {
+    String message =
+<span class="nc bnc" id="L278" title="All 4 branches missed.">        failure == null || failure.getMessage() == null</span>
+<span class="nc" id="L279">            ? &quot;Document operation failed&quot;</span>
+<span class="nc" id="L280">            : failure.getMessage();</span>
+<span class="nc" id="L281">    JOptionPane.showMessageDialog(owner, message, &quot;Experiment document&quot;, JOptionPane.ERROR_MESSAGE);</span>
+<span class="nc" id="L282">  }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

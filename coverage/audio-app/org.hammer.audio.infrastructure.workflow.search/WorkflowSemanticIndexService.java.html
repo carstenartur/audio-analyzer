@@ -1,0 +1,194 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WorkflowSemanticIndexService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.infrastructure.workflow.search</a> &gt; <span class="el_source">WorkflowSemanticIndexService.java</span></div><h1>WorkflowSemanticIndexService.java</h1><pre class="source lang-java linenums">package org.hammer.audio.infrastructure.workflow.search;
+
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import org.hammer.audio.workflow.dsl.WorkflowDslParser;
+import org.hammer.audio.workflow.history.WorkflowSemanticHistoryFilter;
+import org.hammer.audio.workflow.history.WorkflowSemanticHistoryQuery;
+import org.hammer.audio.workflow.history.WorkflowSemanticHistoryResult;
+import org.hammer.audio.workflow.store.CommitId;
+import org.hammer.audio.workflow.store.WorkflowSnapshot;
+import org.hibernate.Session;
+import org.hibernate.SessionFactory;
+import org.hibernate.Transaction;
+
+/** Maintains and queries Audio Analyzer-owned semantic workflow history. */
+public final class WorkflowSemanticIndexService {
+
+  private final SessionFactory sessionFactory;
+  private final String repositoryName;
+  private final WorkflowDslParser parser;
+  private final WorkflowSemanticQueryService queryService;
+
+  /** Creates a semantic projection service over the shared application persistence context. */
+<span class="fc" id="L30">  public WorkflowSemanticIndexService(SessionFactory sessionFactory, String repositoryName) {</span>
+<span class="fc" id="L31">    this.sessionFactory = Objects.requireNonNull(sessionFactory, &quot;sessionFactory&quot;);</span>
+<span class="fc" id="L32">    this.repositoryName = requireNotBlank(repositoryName, &quot;repositoryName&quot;);</span>
+<span class="fc" id="L33">    this.parser = new WorkflowDslParser();</span>
+<span class="fc" id="L34">    this.queryService = new WorkflowSemanticQueryService(this.sessionFactory, this.repositoryName);</span>
+<span class="fc" id="L35">  }</span>
+
+  /**
+   * Adds or refreshes the new head commit without reparsing the rest of the linear branch history.
+   *
+   * @return whether a new projection row was created
+   */
+  public boolean indexCheckpoint(
+      String branch, CommitId commitId, WorkflowSnapshot authoritativeSnapshot) {
+<span class="fc" id="L44">    String normalizedBranch = normalizeBranch(branch);</span>
+<span class="fc" id="L45">    Objects.requireNonNull(commitId, &quot;commitId&quot;);</span>
+<span class="fc" id="L46">    WorkflowSemanticProjectionValues values =</span>
+<span class="fc" id="L47">        WorkflowSemanticProjectionValues.from(authoritativeSnapshot, parser);</span>
+
+<span class="fc" id="L49">    try (Session session = sessionFactory.openSession()) {</span>
+<span class="fc" id="L50">      Transaction transaction = session.beginTransaction();</span>
+<span class="fc" id="L51">      boolean committed = false;</span>
+      try {
+<span class="fc" id="L53">        List&lt;WorkflowSemanticIndexEntity&gt; existingRows =</span>
+<span class="fc" id="L54">            branchRows(session, normalizedBranch, true);</span>
+<span class="fc" id="L55">        WorkflowSemanticIndexEntity head = null;</span>
+<span class="fc" id="L56">        List&lt;WorkflowSemanticIndexEntity&gt; olderRows = new ArrayList&lt;&gt;(existingRows.size());</span>
+<span class="fc bfc" id="L57" title="All 2 branches covered.">        for (WorkflowSemanticIndexEntity row : existingRows) {</span>
+<span class="pc bpc" id="L58" title="1 of 2 branches missed.">          if (row.getObjectId().equals(commitId.value())) {</span>
+<span class="nc" id="L59">            head = row;</span>
+          } else {
+<span class="fc" id="L61">            olderRows.add(row);</span>
+          }
+<span class="fc" id="L63">        }</span>
+
+<span class="pc bpc" id="L65" title="1 of 2 branches missed.">        boolean created = head == null;</span>
+<span class="pc bpc" id="L66" title="1 of 2 branches missed.">        if (created) {</span>
+<span class="fc" id="L67">          head =</span>
+<span class="fc" id="L68">              WorkflowSemanticIndexEntity.create(</span>
+<span class="fc" id="L69">                  repositoryName, normalizedBranch, commitId.value(), 0, values);</span>
+<span class="fc" id="L70">          session.persist(head);</span>
+        } else {
+<span class="nc" id="L72">          head.apply(values);</span>
+<span class="nc" id="L73">          head.setBranchPosition(0);</span>
+        }
+<span class="fc bfc" id="L75" title="All 2 branches covered.">        for (int position = 0; position &lt; olderRows.size(); position++) {</span>
+<span class="fc" id="L76">          olderRows.get(position).setBranchPosition(position + 1);</span>
+        }
+<span class="fc" id="L78">        transaction.commit();</span>
+<span class="fc" id="L79">        committed = true;</span>
+<span class="fc" id="L80">        return created;</span>
+      } finally {
+<span class="fc" id="L82">        rollbackIfNecessary(transaction, committed);</span>
+      }
+    }
+  }
+
+  /**
+   * Reconciles all semantic rows for one branch with an authoritative ordered commit sequence.
+   *
+   * @return number of newly created projection rows
+   */
+  public int replaceBranch(String branch, List&lt;WorkflowSemanticProjectionEntry&gt; entries) {
+<span class="fc" id="L93">    String normalizedBranch = normalizeBranch(branch);</span>
+<span class="fc" id="L94">    Objects.requireNonNull(entries, &quot;entries&quot;);</span>
+<span class="fc" id="L95">    Set&lt;String&gt; suppliedObjectIds = new LinkedHashSet&lt;&gt;();</span>
+<span class="fc bfc" id="L96" title="All 2 branches covered.">    for (WorkflowSemanticProjectionEntry entry : entries) {</span>
+<span class="pc bpc" id="L97" title="1 of 2 branches missed.">      if (!suppliedObjectIds.add(entry.commitId().value())) {</span>
+<span class="nc" id="L98">        throw new IllegalArgumentException(</span>
+<span class="nc" id="L99">            &quot;duplicate semantic projection commit: &quot; + entry.commitId().value());</span>
+      }
+<span class="fc" id="L101">    }</span>
+
+<span class="fc" id="L103">    try (Session session = sessionFactory.openSession()) {</span>
+<span class="fc" id="L104">      Transaction transaction = session.beginTransaction();</span>
+<span class="fc" id="L105">      boolean committed = false;</span>
+      try {
+<span class="fc" id="L107">        Map&lt;String, WorkflowSemanticIndexEntity&gt; existingByObjectId = new ConcurrentHashMap&lt;&gt;();</span>
+<span class="fc bfc" id="L108" title="All 2 branches covered.">        for (WorkflowSemanticIndexEntity row : branchRows(session, normalizedBranch, false)) {</span>
+<span class="fc" id="L109">          existingByObjectId.put(row.getObjectId(), row);</span>
+<span class="fc" id="L110">        }</span>
+
+<span class="fc" id="L112">        int created = 0;</span>
+<span class="fc bfc" id="L113" title="All 2 branches covered.">        for (WorkflowSemanticProjectionEntry entry : entries) {</span>
+<span class="fc" id="L114">          WorkflowSemanticProjectionValues values =</span>
+<span class="fc" id="L115">              WorkflowSemanticProjectionValues.from(entry.snapshot(), parser);</span>
+<span class="fc" id="L116">          WorkflowSemanticIndexEntity row = existingByObjectId.remove(entry.commitId().value());</span>
+<span class="fc bfc" id="L117" title="All 2 branches covered.">          if (row == null) {</span>
+<span class="fc" id="L118">            row =</span>
+<span class="fc" id="L119">                WorkflowSemanticIndexEntity.create(</span>
+                    repositoryName,
+                    normalizedBranch,
+<span class="fc" id="L122">                    entry.commitId().value(),</span>
+<span class="fc" id="L123">                    entry.branchPosition(),</span>
+                    values);
+<span class="fc" id="L125">            session.persist(row);</span>
+<span class="fc" id="L126">            created++;</span>
+          } else {
+<span class="fc" id="L128">            row.setBranchPosition(entry.branchPosition());</span>
+<span class="fc" id="L129">            row.apply(values);</span>
+          }
+<span class="fc" id="L131">        }</span>
+<span class="fc" id="L132">        existingByObjectId.values().forEach(session::remove);</span>
+<span class="fc" id="L133">        transaction.commit();</span>
+<span class="fc" id="L134">        committed = true;</span>
+<span class="fc" id="L135">        return created;</span>
+      } finally {
+<span class="fc" id="L137">        rollbackIfNecessary(transaction, committed);</span>
+      }
+    }
+  }
+
+  /** Searches one branch-specific semantic projection with exact domain filters. */
+  public List&lt;WorkflowSemanticHistoryResult&gt; search(WorkflowSemanticHistoryQuery query) {
+<span class="fc" id="L144">    return queryService.search(query);</span>
+  }
+
+  /** Returns every exact commit candidate matching one branch and its semantic predicates. */
+  public List&lt;CommitId&gt; findCandidateCommitIds(WorkflowSemanticHistoryFilter filter) {
+<span class="fc" id="L149">    return queryService.findCandidateCommitIds(filter);</span>
+  }
+
+  /** Loads branch-specific semantic evidence for an exact final commit set. */
+  public Map&lt;String, WorkflowSemanticHistoryResult&gt; findEvidence(
+      String branch, Collection&lt;CommitId&gt; commits) {
+<span class="fc" id="L155">    return queryService.findEvidence(branch, commits);</span>
+  }
+
+  private List&lt;WorkflowSemanticIndexEntity&gt; branchRows(
+      Session session, String normalizedBranch, boolean ordered) {
+<span class="fc bfc" id="L160" title="All 2 branches covered.">    String orderBy = ordered ? &quot; ORDER BY s.branchPosition&quot; : &quot;&quot;;</span>
+<span class="fc" id="L161">    return session</span>
+<span class="fc" id="L162">        .createQuery(</span>
+            &quot;FROM WorkflowSemanticIndexEntity s &quot;
+                + &quot;WHERE s.repositoryName = :repository AND s.branchName = :branch&quot;
+                + orderBy,
+            WorkflowSemanticIndexEntity.class)
+<span class="fc" id="L167">        .setParameter(&quot;repository&quot;, repositoryName)</span>
+<span class="fc" id="L168">        .setParameter(&quot;branch&quot;, normalizedBranch)</span>
+<span class="fc" id="L169">        .getResultList();</span>
+  }
+
+  private static void rollbackIfNecessary(Transaction transaction, boolean committed) {
+<span class="pc bpc" id="L173" title="3 of 4 branches missed.">    if (!committed &amp;&amp; transaction.isActive()) {</span>
+<span class="nc" id="L174">      transaction.rollback();</span>
+    }
+<span class="fc" id="L176">  }</span>
+
+  static String normalizeBranch(String branch) {
+<span class="fc" id="L179">    String normalized = requireNotBlank(branch, &quot;branch&quot;);</span>
+<span class="pc bpc" id="L180" title="1 of 2 branches missed.">    return normalized.startsWith(&quot;refs/heads/&quot;)</span>
+<span class="nc" id="L181">        ? normalized.substring(&quot;refs/heads/&quot;.length())</span>
+<span class="fc" id="L182">        : normalized;</span>
+  }
+
+  private static String requireNotBlank(String value, String name) {
+<span class="fc" id="L186">    Objects.requireNonNull(value, name);</span>
+<span class="fc" id="L187">    String normalized = value.trim();</span>
+<span class="pc bpc" id="L188" title="1 of 2 branches missed.">    if (normalized.isEmpty()) {</span>
+<span class="nc" id="L189">      throw new IllegalArgumentException(name + &quot; must not be blank&quot;);</span>
+    }
+<span class="fc" id="L191">    return normalized;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

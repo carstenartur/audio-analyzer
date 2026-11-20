@@ -1,0 +1,237 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>RecordedAudioCaptureService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio</a> &gt; <span class="el_source">RecordedAudioCaptureService.java</span></div><h1>RecordedAudioCaptureService.java</h1><pre class="source lang-java linenums">package org.hammer.audio;
+
+import java.io.IOException;
+import java.nio.file.Path;
+import java.util.List;
+import java.util.Objects;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import javax.sound.sampled.AudioFormat;
+import org.hammer.audio.buffer.AudioRingBuffer;
+import org.hammer.audio.core.AudioBlock;
+import org.hammer.audio.core.AudioFormatDescriptor;
+import org.hammer.audio.recording.AudioBlockRecordingReader;
+import org.hammer.audio.snapshot.WaveformSnapshot;
+import org.hammer.audio.ui.WaveformRenderer;
+
+/**
+ * {@link AudioCaptureService} that replays a previously recorded audio file. Blocks are published
+ * at their natural sample-rate pace and exposed exactly like live or demo capture, so the rest of
+ * the application is unaware of the origin of the audio data.
+ *
+ * &lt;p&gt;When the recording is exhausted the service automatically stops, mirroring the behavior of
+ * pressing &quot;Stop&quot; on a live capture.
+ */
+public final class RecordedAudioCaptureService implements AudioCaptureService {
+
+  private static final int RING_BUFFER_CAPACITY = 64;
+
+  private final List&lt;AudioBlock&gt; blocks;
+  private final AudioFormatDescriptor descriptor;
+  private final AudioFormat format;
+<span class="fc" id="L34">  private final AudioRingBuffer&lt;AudioBlock&gt; ringBuffer =</span>
+      new AudioRingBuffer&lt;&gt;(RING_BUFFER_CAPACITY);
+<span class="fc" id="L36">  private final AudioBlockBroadcaster broadcaster = new AudioBlockBroadcaster();</span>
+<span class="fc" id="L37">  private final AtomicBoolean running = new AtomicBoolean(false);</span>
+  private final boolean loop;
+
+<span class="fc" id="L40">  private volatile WaveformModel latestModel = WaveformModel.EMPTY;</span>
+  private volatile AudioBlock latestBlock;
+<span class="fc" id="L42">  private volatile int divisor = 1;</span>
+<span class="fc" id="L43">  private volatile int panelWidth = 640;</span>
+<span class="fc" id="L44">  private volatile int panelHeight = 200;</span>
+
+  private ExecutorService workerExecutor;
+
+  /** Open a recording file and load its blocks into memory. */
+  public static RecordedAudioCaptureService open(Path file, boolean loop) throws IOException {
+<span class="nc" id="L50">    Objects.requireNonNull(file, &quot;file&quot;);</span>
+<span class="nc" id="L51">    List&lt;AudioBlock&gt; blocks = AudioBlockRecordingReader.readAll(file);</span>
+<span class="nc bnc" id="L52" title="All 2 branches missed.">    if (blocks.isEmpty()) {</span>
+<span class="nc" id="L53">      throw new IOException(&quot;recording contains no blocks: &quot; + file);</span>
+    }
+<span class="nc" id="L55">    return new RecordedAudioCaptureService(blocks, loop);</span>
+  }
+
+  /** Create a replay service from a non-empty, format-consistent block list. */
+<span class="fc" id="L59">  public RecordedAudioCaptureService(List&lt;AudioBlock&gt; blocks, boolean loop) {</span>
+<span class="fc" id="L60">    Objects.requireNonNull(blocks, &quot;blocks&quot;);</span>
+<span class="fc bfc" id="L61" title="All 2 branches covered.">    if (blocks.isEmpty()) {</span>
+<span class="fc" id="L62">      throw new IllegalArgumentException(&quot;blocks must be non-empty&quot;);</span>
+    }
+<span class="fc" id="L64">    this.descriptor = blocks.get(0).format();</span>
+<span class="fc bfc" id="L65" title="All 2 branches covered.">    for (AudioBlock block : blocks) {</span>
+<span class="fc bfc" id="L66" title="All 2 branches covered.">      if (!descriptor.equals(block.format())) {</span>
+<span class="fc" id="L67">        throw new IllegalArgumentException(</span>
+            &quot;all blocks must share the same format; first=&quot;
+                + descriptor
+                + &quot; block=&quot;
+<span class="fc" id="L71">                + block.format());</span>
+      }
+<span class="fc" id="L73">    }</span>
+<span class="fc" id="L74">    this.blocks = List.copyOf(blocks);</span>
+<span class="fc" id="L75">    this.loop = loop;</span>
+<span class="fc" id="L76">    this.format =</span>
+        new AudioFormat(
+<span class="fc" id="L78">            descriptor.sampleRate(),</span>
+<span class="fc" id="L79">            descriptor.sourceSampleSizeInBits(),</span>
+<span class="fc" id="L80">            descriptor.channels(),</span>
+            true,
+            false);
+<span class="fc" id="L83">  }</span>
+
+  /** Returns whether replay restarts after the final block. */
+  public boolean isLooping() {
+<span class="nc" id="L87">    return loop;</span>
+  }
+
+  /** Returns the number of blocks in this recording. */
+  public int blockCount() {
+<span class="fc" id="L92">    return blocks.size();</span>
+  }
+
+  @Override
+  public void start() {
+<span class="pc bpc" id="L97" title="1 of 2 branches missed.">    if (running.getAndSet(true)) {</span>
+<span class="nc" id="L98">      return;</span>
+    }
+<span class="fc" id="L100">    workerExecutor =</span>
+<span class="fc" id="L101">        Executors.newSingleThreadExecutor(</span>
+            runnable -&gt; {
+<span class="fc" id="L103">              Thread worker = new Thread(runnable, &quot;RecordedAudioCaptureWorker&quot;);</span>
+<span class="fc" id="L104">              worker.setDaemon(true);</span>
+<span class="fc" id="L105">              return worker;</span>
+            });
+<span class="fc" id="L107">    workerExecutor.submit(this::replayLoop);</span>
+<span class="fc" id="L108">    ActiveAudioCaptureRegistry.activate(this);</span>
+<span class="fc" id="L109">  }</span>
+
+  @Override
+  public void stop() {
+<span class="pc bpc" id="L113" title="1 of 2 branches missed.">    if (!running.getAndSet(false)) {</span>
+<span class="nc" id="L114">      return;</span>
+    }
+<span class="fc" id="L116">    ActiveAudioCaptureRegistry.deactivate(this);</span>
+<span class="pc bpc" id="L117" title="1 of 2 branches missed.">    if (workerExecutor != null) {</span>
+<span class="fc" id="L118">      workerExecutor.shutdownNow();</span>
+      try {
+<span class="pc bpc" id="L120" title="1 of 2 branches missed.">        if (!workerExecutor.awaitTermination(1, TimeUnit.SECONDS)) {</span>
+<span class="nc" id="L121">          workerExecutor.shutdownNow();</span>
+        }
+<span class="nc" id="L123">      } catch (InterruptedException interruptedException) {</span>
+<span class="nc" id="L124">        Thread.currentThread().interrupt();</span>
+<span class="fc" id="L125">      }</span>
+<span class="fc" id="L126">      workerExecutor = null;</span>
+    }
+<span class="fc" id="L128">  }</span>
+
+  @Override
+  public boolean isRunning() {
+<span class="fc" id="L132">    return running.get();</span>
+  }
+
+  @Override
+  public WaveformModel getLatestModel() {
+<span class="nc bnc" id="L137" title="All 2 branches missed.">    return latestModel != null ? latestModel : WaveformModel.EMPTY;</span>
+  }
+
+  @Override
+  public AudioFormat getFormat() {
+<span class="nc" id="L142">    return format;</span>
+  }
+
+  @Override
+  public AudioFormatDescriptor getDescriptor() {
+<span class="fc" id="L147">    return descriptor;</span>
+  }
+
+  @Override
+  public AudioBlock getLatestBlock() {
+<span class="fc" id="L152">    return latestBlock;</span>
+  }
+
+  @Override
+  public AudioBlockSubscription subscribe(AudioBlockListener listener) {
+<span class="nc" id="L157">    return broadcaster.subscribe(listener);</span>
+  }
+
+  @Override
+  public AudioRingBuffer&lt;AudioBlock&gt; getRingBuffer() {
+<span class="nc" id="L162">    return ringBuffer;</span>
+  }
+
+  @Override
+  public void setDivisor(int divisor) {
+<span class="nc bnc" id="L167" title="All 2 branches missed.">    if (divisor &lt; 1) {</span>
+<span class="nc" id="L168">      throw new IllegalArgumentException(&quot;Divisor must be &gt;= 1&quot;);</span>
+    }
+<span class="nc" id="L170">    this.divisor = divisor;</span>
+<span class="nc" id="L171">  }</span>
+
+  @Override
+  public int getDivisor() {
+<span class="nc" id="L175">    return divisor;</span>
+  }
+
+  @Override
+  public void recomputeLayout(int width, int height) {
+<span class="nc" id="L180">    panelWidth = width;</span>
+<span class="nc" id="L181">    panelHeight = height;</span>
+<span class="nc" id="L182">    AudioBlock block = latestBlock;</span>
+<span class="nc bnc" id="L183" title="All 2 branches missed.">    if (block != null) {</span>
+<span class="nc" id="L184">      latestModel = buildLegacyModel(block);</span>
+    }
+<span class="nc" id="L186">  }</span>
+
+  private void replayLoop() {
+<span class="fc" id="L189">    int index = 0;</span>
+<span class="pc bpc" id="L190" title="2 of 4 branches missed.">    while (running.get() &amp;&amp; !Thread.currentThread().isInterrupted()) {</span>
+<span class="fc" id="L191">      AudioBlock block = blocks.get(index);</span>
+<span class="fc" id="L192">      latestBlock = block;</span>
+<span class="fc" id="L193">      ringBuffer.offer(block);</span>
+<span class="fc" id="L194">      broadcaster.publish(block);</span>
+<span class="fc" id="L195">      latestModel = buildLegacyModel(block);</span>
+<span class="fc" id="L196">      int sleepMillis =</span>
+<span class="fc" id="L197">          Math.max(5, Math.round((1000f * block.frames()) / Math.max(1f, descriptor.sampleRate())));</span>
+      try {
+<span class="nc" id="L199">        Thread.sleep(sleepMillis);</span>
+<span class="fc" id="L200">      } catch (InterruptedException interruptedException) {</span>
+<span class="fc" id="L201">        Thread.currentThread().interrupt();</span>
+<span class="fc" id="L202">        return;</span>
+<span class="nc" id="L203">      }</span>
+<span class="nc" id="L204">      index++;</span>
+<span class="nc bnc" id="L205" title="All 2 branches missed.">      if (index &gt;= blocks.size()) {</span>
+<span class="nc bnc" id="L206" title="All 2 branches missed.">        if (!loop) {</span>
+<span class="nc" id="L207">          running.set(false);</span>
+<span class="nc" id="L208">          ActiveAudioCaptureRegistry.deactivate(this);</span>
+<span class="nc" id="L209">          return;</span>
+        }
+<span class="nc" id="L211">        index = 0;</span>
+      }
+<span class="nc" id="L213">    }</span>
+<span class="nc" id="L214">  }</span>
+
+  private WaveformModel buildLegacyModel(AudioBlock block) {
+<span class="fc" id="L217">    WaveformSnapshot snapshot =</span>
+<span class="fc" id="L218">        WaveformSnapshot.wrap(</span>
+<span class="fc" id="L219">            block.samples(),</span>
+<span class="fc" id="L220">            block.format().sampleRate(),</span>
+<span class="fc" id="L221">            block.frameIndex(),</span>
+<span class="fc" id="L222">            block.timestampNanos());</span>
+<span class="fc" id="L223">    int[] xPoints = WaveformRenderer.computeXPoints(snapshot.frames(), panelWidth);</span>
+    int[][] yPoints;
+<span class="pc bpc" id="L225" title="1 of 2 branches missed.">    if (panelHeight &lt;= 0) {</span>
+<span class="nc" id="L226">      yPoints = new int[snapshot.channels()][0];</span>
+    } else {
+<span class="fc" id="L228">      yPoints = WaveformRenderer.computeYPointsAllChannels(snapshot, panelHeight);</span>
+    }
+<span class="fc" id="L230">    int dataSizeBytes =</span>
+<span class="fc" id="L231">        snapshot.frames()</span>
+<span class="fc" id="L232">            * snapshot.channels()</span>
+<span class="fc" id="L233">            * Math.max(1, descriptor.sourceSampleSizeInBits() / 8);</span>
+<span class="fc" id="L234">    return new WaveformModel(xPoints, yPoints, 0, dataSizeBytes);</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

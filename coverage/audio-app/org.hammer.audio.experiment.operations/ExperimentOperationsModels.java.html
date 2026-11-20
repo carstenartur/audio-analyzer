@@ -1,0 +1,157 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ExperimentOperationsModels.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experiment.operations</a> &gt; <span class="el_source">ExperimentOperationsModels.java</span></div><h1>ExperimentOperationsModels.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experiment.operations;
+
+import java.util.List;
+import org.hammer.audio.acquisition.CaptureDeviceDescriptor;
+import org.hammer.audio.acquisition.LocalizationInputMode;
+import org.hammer.audio.acquisition.health.ExperimentHealthSnapshot;
+import org.hammer.audio.recording.runtime.RecordingStatus;
+import org.hammer.audio.recording.runtime.RecordingStorageStatus;
+
+/** Immutable transport values shared by browser and Swing experiment operations. */
+// Nested records form a transport namespace; callers do not instantiate this holder.
+@SuppressWarnings(&quot;PMD.MissingStaticMethodInNonInstantiatableClass&quot;)
+public final class ExperimentOperationsModels {
+
+  private ExperimentOperationsModels() {
+    // namespace for transport records
+  }
+
+  /**
+   * Explicit source and output choices; output names are portable filenames inside managed runs.
+   *
+   * @param name experiment display name
+   * @param sourceMode simulation, replay or live
+   * @param profileId persisted microphone profile
+   * @param scenario deterministic simulation selection
+   * @param recordingId managed replay input, empty for other modes
+   * @param durationSeconds bounded intended duration
+   * @param recordOutput whether every consumed block should be recorded
+   * @param outputFilename portable recording filename
+   */
+  public record Configuration(
+      String name,
+      String sourceMode,
+      String profileId,
+      String scenario,
+      String recordingId,
+      int durationSeconds,
+      boolean recordOutput,
+      String outputFilename) {
+
+    // Reject ambiguous source modes and unbounded remote runs at the application boundary.
+<span class="fc" id="L42">    public Configuration {</span>
+<span class="pc bpc" id="L43" title="4 of 8 branches missed.">      if (name == null || name.isBlank() || profileId == null || profileId.isBlank()) {</span>
+<span class="nc" id="L44">        throw new IllegalArgumentException(&quot;Experiment name and microphone profile are required.&quot;);</span>
+      }
+<span class="fc" id="L46">      LocalizationInputMode.valueOf(sourceMode);</span>
+<span class="pc bpc" id="L47" title="2 of 4 branches missed.">      if (durationSeconds &lt; 1 || durationSeconds &gt; 3600) {</span>
+<span class="nc" id="L48">        throw new IllegalArgumentException(</span>
+            &quot;Experiment duration must be between 1 and 3600 seconds.&quot;);
+      }
+<span class="pc bpc" id="L51" title="1 of 2 branches missed.">      recordingId = recordingId == null ? &quot;&quot; : recordingId;</span>
+<span class="pc bpc" id="L52" title="1 of 2 branches missed.">      scenario = scenario == null ? &quot;single-source&quot; : scenario;</span>
+<span class="pc bpc" id="L53" title="1 of 2 branches missed.">      if (outputFilename == null</span>
+<span class="pc bpc" id="L54" title="1 of 2 branches missed.">          || !outputFilename.matches(&quot;[A-Za-z0-9][A-Za-z0-9._-]{0,80}\\.aarec&quot;)</span>
+<span class="fc bfc" id="L55" title="All 2 branches covered.">          || &quot;input.aarec&quot;.equalsIgnoreCase(outputFilename)</span>
+<span class="pc bpc" id="L56" title="1 of 2 branches missed.">          || outputFilename.matches(&quot;(?i)(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])\\..*&quot;)) {</span>
+<span class="fc" id="L57">        throw new IllegalArgumentException(</span>
+            &quot;Choose a portable .aarec filename without folders or reserved device names.&quot;);
+      }
+<span class="fc" id="L60">    }</span>
+  }
+
+  /**
+   * A persisted profile and its editable deterministic definition.
+   *
+   * @param id profile identity
+   * @param name profile name
+   * @param layout geometry family
+   * @param channels microphone count
+   * @param definition complete geometry, device and measured-calibration definition
+   */
+<span class="fc" id="L72">  public record ProfileView(</span>
+      String id, String name, String layout, int channels, String definition) {
+    // Immutable transport value.
+  }
+
+  /**
+   * One managed replay candidate with its inspected completion state.
+   *
+   * @param id relative managed identity
+   * @param name filename
+   * @param integrity recording inspection result
+   * @param frames complete readable frames
+   */
+<span class="nc" id="L85">  public record RecordingView(String id, String name, String integrity, long frames) {</span>
+    // Immutable transport value.
+  }
+
+  /**
+   * Available local inputs; an empty devices list is meaningful and never replaced by fake
+   * hardware.
+   *
+   * @param profiles persisted and starter profiles
+   * @param devices real local capture devices
+   * @param scenarios deterministic simulation names
+   * @param recordings managed replay inputs
+   */
+  public record Catalogue(
+      List&lt;ProfileView&gt; profiles,
+      List&lt;CaptureDeviceDescriptor&gt; devices,
+      List&lt;String&gt; scenarios,
+      List&lt;RecordingView&gt; recordings) {
+    // Preserve immutable catalogue values across both UI projections.
+<span class="fc" id="L104">    public Catalogue {</span>
+<span class="fc" id="L105">      profiles = List.copyOf(profiles);</span>
+<span class="fc" id="L106">      devices = List.copyOf(devices);</span>
+<span class="fc" id="L107">      scenarios = List.copyOf(scenarios);</span>
+<span class="fc" id="L108">      recordings = List.copyOf(recordings);</span>
+<span class="fc" id="L109">    }</span>
+  }
+
+  /**
+   * Reviewable preflight tied to the exact profile and configuration hash.
+   *
+   * @param token configuration fingerprint invalidated by edits
+   * @param health explicit readiness findings
+   * @param storage capacity estimate, or null when unavailable
+   */
+<span class="fc" id="L119">  public record Preflight(</span>
+      String token, ExperimentHealthSnapshot health, RecordingStorageStatus storage) {
+    // Immutable transport value.
+  }
+
+  /**
+   * One projected track in the microphone coordinate system.
+   *
+   * @param id tracker identity
+   * @param x horizontal metres
+   * @param y vertical metres
+   * @param confidence tracker confidence
+   */
+<span class="fc" id="L132">  public record TrackPoint(int id, double x, double y, double confidence) {</span>
+    // Immutable transport value.
+  }
+
+  /**
+   * Persistent active or final run snapshot.
+   *
+   * @param runId stable run identity
+   * @param health shared health state and evidence
+   * @param recording complete recorder status when recording was requested
+   * @param tracks latest localization tracks
+   * @param exportAvailable whether finalized evidence can be exported
+   */
+  public record RunView(
+      String runId,
+      ExperimentHealthSnapshot health,
+      RecordingStatus recording,
+      List&lt;TrackPoint&gt; tracks,
+      boolean exportAvailable) {
+    // Freeze the track list while acquisition continues on the worker thread.
+<span class="fc" id="L152">    public RunView {</span>
+<span class="fc" id="L153">      tracks = List.copyOf(tracks);</span>
+<span class="fc" id="L154">    }</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

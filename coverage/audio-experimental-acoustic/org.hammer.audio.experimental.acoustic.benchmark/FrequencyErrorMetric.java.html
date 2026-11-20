@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>FrequencyErrorMetric.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.benchmark</a> &gt; <span class="el_source">FrequencyErrorMetric.java</span></div><h1>FrequencyErrorMetric.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.benchmark;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Objects;
+
+/**
+ * Summary metric for benchmark comparisons of recovered source frequencies.
+ *
+ * @param meanAbsoluteErrorHz mean absolute frequency error in hertz
+ * @param medianAbsoluteErrorHz median absolute frequency error in hertz
+ * @param meanRelativeError mean relative frequency error
+ * @param sampleCount total frequency sample count
+ * @param evaluatedCount number of evaluated frequency samples
+ * @param skippedCount number of skipped frequency samples
+ * @param unavailableTruthCount number of samples without usable frequency truth
+ */
+public record FrequencyErrorMetric(
+    Double meanAbsoluteErrorHz,
+    Double medianAbsoluteErrorHz,
+    Double meanRelativeError,
+    int sampleCount,
+    int evaluatedCount,
+    int skippedCount,
+    int unavailableTruthCount) {
+
+<span class="fc" id="L28">  public FrequencyErrorMetric {</span>
+<span class="fc" id="L29">    validateCounts(sampleCount, evaluatedCount, skippedCount, unavailableTruthCount);</span>
+<span class="fc" id="L30">    validateMetric(meanAbsoluteErrorHz, evaluatedCount, &quot;meanAbsoluteErrorHz&quot;);</span>
+<span class="fc" id="L31">    validateMetric(medianAbsoluteErrorHz, evaluatedCount, &quot;medianAbsoluteErrorHz&quot;);</span>
+<span class="fc" id="L32">    validateMetric(meanRelativeError, evaluatedCount, &quot;meanRelativeError&quot;);</span>
+<span class="fc" id="L33">  }</span>
+
+  /** Build a summary metric from per-sample absolute and relative errors. */
+  public static FrequencyErrorMetric ofSamples(
+      List&lt;Double&gt; absoluteErrorsHz,
+      List&lt;Double&gt; relativeErrors,
+      int skippedCount,
+      int unavailableTruthCount) {
+<span class="fc" id="L41">    Objects.requireNonNull(absoluteErrorsHz, &quot;absoluteErrorsHz&quot;);</span>
+<span class="fc" id="L42">    Objects.requireNonNull(relativeErrors, &quot;relativeErrors&quot;);</span>
+<span class="pc bpc" id="L43" title="1 of 2 branches missed.">    if (absoluteErrorsHz.size() != relativeErrors.size()) {</span>
+<span class="nc" id="L44">      throw new IllegalArgumentException(</span>
+          &quot;absoluteErrorsHz and relativeErrors must have the same size&quot;);
+    }
+<span class="fc" id="L47">    int evaluatedCount = absoluteErrorsHz.size();</span>
+<span class="fc" id="L48">    return new FrequencyErrorMetric(</span>
+<span class="fc bfc" id="L49" title="All 2 branches covered.">        evaluatedCount == 0 ? null : mean(absoluteErrorsHz),</span>
+<span class="fc bfc" id="L50" title="All 2 branches covered.">        evaluatedCount == 0 ? null : median(absoluteErrorsHz),</span>
+<span class="fc bfc" id="L51" title="All 2 branches covered.">        evaluatedCount == 0 ? null : mean(relativeErrors),</span>
+        evaluatedCount + skippedCount + unavailableTruthCount,
+        evaluatedCount,
+        skippedCount,
+        unavailableTruthCount);
+  }
+
+  private static void validateCounts(
+      int sampleCount, int evaluatedCount, int skippedCount, int unavailableTruthCount) {
+<span class="pc bpc" id="L60" title="4 of 8 branches missed.">    if (sampleCount &lt; 0 || evaluatedCount &lt; 0 || skippedCount &lt; 0 || unavailableTruthCount &lt; 0) {</span>
+<span class="nc" id="L61">      throw new IllegalArgumentException(&quot;metric counts must be &gt;= 0&quot;);</span>
+    }
+<span class="pc bpc" id="L63" title="1 of 2 branches missed.">    if (sampleCount != evaluatedCount + skippedCount + unavailableTruthCount) {</span>
+<span class="nc" id="L64">      throw new IllegalArgumentException(</span>
+          &quot;sampleCount must equal evaluatedCount + skippedCount + unavailableTruthCount&quot;);
+    }
+<span class="fc" id="L67">  }</span>
+
+  private static void validateMetric(Double value, int evaluatedCount, String fieldName) {
+<span class="fc bfc" id="L70" title="All 2 branches covered.">    if (evaluatedCount == 0) {</span>
+<span class="pc bpc" id="L71" title="1 of 2 branches missed.">      if (value != null) {</span>
+<span class="nc" id="L72">        throw new IllegalArgumentException(fieldName + &quot; must be null when evaluatedCount is 0&quot;);</span>
+      }
+<span class="fc" id="L74">      return;</span>
+    }
+<span class="pc bpc" id="L76" title="3 of 6 branches missed.">    if (value == null || !Double.isFinite(value) || value &lt; 0.0) {</span>
+<span class="nc" id="L77">      throw new IllegalArgumentException(fieldName + &quot; must be finite and &gt;= 0&quot;);</span>
+    }
+<span class="fc" id="L79">  }</span>
+
+  private static double mean(List&lt;Double&gt; values) {
+<span class="fc" id="L82">    double sum = 0.0;</span>
+<span class="fc bfc" id="L83" title="All 2 branches covered.">    for (Double value : values) {</span>
+<span class="pc bpc" id="L84" title="3 of 6 branches missed.">      if (value == null || !Double.isFinite(value) || value &lt; 0.0) {</span>
+<span class="nc" id="L85">        throw new IllegalArgumentException(&quot;metric samples must be finite and &gt;= 0&quot;);</span>
+      }
+<span class="fc" id="L87">      sum += value;</span>
+<span class="fc" id="L88">    }</span>
+<span class="fc" id="L89">    return sum / values.size();</span>
+  }
+
+  private static double median(List&lt;Double&gt; values) {
+<span class="fc" id="L93">    List&lt;Double&gt; sorted = new ArrayList&lt;&gt;(values.size());</span>
+<span class="fc bfc" id="L94" title="All 2 branches covered.">    for (Double value : values) {</span>
+<span class="pc bpc" id="L95" title="3 of 6 branches missed.">      if (value == null || !Double.isFinite(value) || value &lt; 0.0) {</span>
+<span class="nc" id="L96">        throw new IllegalArgumentException(&quot;metric samples must be finite and &gt;= 0&quot;);</span>
+      }
+<span class="fc" id="L98">      sorted.add(value);</span>
+<span class="fc" id="L99">    }</span>
+<span class="fc" id="L100">    Collections.sort(sorted);</span>
+<span class="fc" id="L101">    int middle = sorted.size() / 2;</span>
+<span class="fc bfc" id="L102" title="All 2 branches covered.">    if ((sorted.size() &amp; 1) == 1) {</span>
+<span class="fc" id="L103">      return sorted.get(middle);</span>
+    }
+<span class="fc" id="L105">    return (sorted.get(middle - 1) + sorted.get(middle)) / 2.0;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

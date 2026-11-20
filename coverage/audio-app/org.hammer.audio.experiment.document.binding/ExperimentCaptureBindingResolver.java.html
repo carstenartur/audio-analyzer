@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ExperimentCaptureBindingResolver.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experiment.document.binding</a> &gt; <span class="el_source">ExperimentCaptureBindingResolver.java</span></div><h1>ExperimentCaptureBindingResolver.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experiment.document.binding;
+
+import java.util.List;
+import javax.sound.sampled.AudioFormat;
+import javax.sound.sampled.AudioSystem;
+import javax.sound.sampled.DataLine;
+import javax.sound.sampled.TargetDataLine;
+import org.hammer.audio.JavaSoundCaptureDeviceDiscovery;
+import org.hammer.audio.experiment.document.ExperimentCaptureBinding;
+import org.hammer.audio.experiment.document.ExperimentDocument;
+import org.hammer.audio.plugin.document.DocumentValue;
+
+/** Checks advertised JavaSound capabilities without acquiring a line or opening a device. */
+<span class="fc" id="L14">public final class ExperimentCaptureBindingResolver {</span>
+
+  /** Resolve an explicitly selected provider id and verify the required PCM capability. */
+  public ExperimentCaptureBinding resolve(
+      ExperimentDocument document,
+      String deviceId,
+      int deviceChannels,
+      List&lt;Integer&gt; mapping,
+      boolean synchronizationConfirmed,
+      boolean calibrationConfirmed) {
+<span class="pc bpc" id="L24" title="3 of 4 branches missed.">    if (deviceId == null || deviceId.isBlank()) {</span>
+<span class="fc" id="L25">      return null;</span>
+    }
+<span class="nc" id="L27">    javax.sound.sampled.Mixer.Info mixer =</span>
+        new JavaSoundCaptureDeviceDiscovery()
+<span class="nc" id="L29">            .findMixerInfo(deviceId)</span>
+<span class="nc" id="L30">            .orElseThrow(</span>
+<span class="nc" id="L31">                () -&gt; new IllegalArgumentException(&quot;Selected capture device is unavailable&quot;));</span>
+<span class="nc bnc" id="L32" title="All 2 branches missed.">    if (!(document.profiles().fields().get(&quot;capture&quot;)</span>
+<span class="nc" id="L33">        instanceof DocumentValue.ObjectValue capture)) {</span>
+<span class="nc" id="L34">      throw new IllegalArgumentException(&quot;Document does not declare a capture profile&quot;);</span>
+    }
+<span class="nc" id="L36">    double rate =</span>
+<span class="nc" id="L37">        ((DocumentValue.NumberValue) capture.fields().get(&quot;sampleRateHz&quot;)).value().doubleValue();</span>
+<span class="nc" id="L38">    int bits =</span>
+<span class="nc" id="L39">        ((DocumentValue.NumberValue) capture.fields().get(&quot;sampleSizeBits&quot;))</span>
+<span class="nc" id="L40">            .value()</span>
+<span class="nc" id="L41">            .intValueExact();</span>
+<span class="nc" id="L42">    boolean signed = ((DocumentValue.BooleanValue) capture.fields().get(&quot;signed&quot;)).value();</span>
+<span class="nc" id="L43">    boolean endian = ((DocumentValue.BooleanValue) capture.fields().get(&quot;bigEndian&quot;)).value();</span>
+<span class="nc" id="L44">    ExperimentCaptureBinding binding =</span>
+        new ExperimentCaptureBinding(
+            deviceId,
+            rate,
+            deviceChannels,
+            bits,
+            signed,
+            endian,
+            synchronizationConfirmed,
+            mapping,
+            calibrationConfirmed);
+<span class="nc" id="L55">    AudioFormat format = new AudioFormat((float) rate, bits, deviceChannels, signed, endian);</span>
+<span class="nc" id="L56">    if (!AudioSystem.getMixer(mixer)</span>
+<span class="nc bnc" id="L57" title="All 2 branches missed.">        .isLineSupported(new DataLine.Info(TargetDataLine.class, format))) {</span>
+<span class="nc" id="L58">      throw new IllegalArgumentException(</span>
+          &quot;Selected device does not advertise the required PCM format and channel count&quot;);
+    }
+<span class="nc" id="L61">    return binding;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

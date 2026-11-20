@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>PhaseScopeSnapshot.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Core</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.snapshot</a> &gt; <span class="el_source">PhaseScopeSnapshot.java</span></div><h1>PhaseScopeSnapshot.java</h1><pre class="source lang-java linenums">package org.hammer.audio.snapshot;
+
+import org.hammer.audio.core.AudioBlock;
+
+/**
+ * Immutable snapshot for stereo phase-scope (X-Y) visualization.
+ *
+ * &lt;p&gt;Carries the left and right channel sample arrays from one block, normalized to {@code [-1,
+ * 1]}. The renderer is responsible for any pixel scaling.
+ *
+ * @author refactoring
+ */
+public final class PhaseScopeSnapshot {
+
+  private final float[] left;
+  private final float[] right;
+  private final long sourceFrameIndex;
+  private final long sourceTimestampNanos;
+
+  /**
+   * Build a phase-scope snapshot from an {@link AudioBlock}. Defensive copies are made of the
+   * channel arrays.
+   *
+   * @param block the source block; must have at least 2 channels. If not, an empty snapshot is
+   *     produced.
+   * @return immutable snapshot
+   */
+  public static PhaseScopeSnapshot fromBlock(AudioBlock block) {
+<span class="nc bnc" id="L29" title="All 2 branches missed.">    if (block.channels() &lt; 2) {</span>
+<span class="nc" id="L30">      return new PhaseScopeSnapshot(</span>
+<span class="nc" id="L31">          new float[0], new float[0], block.frameIndex(), block.timestampNanos());</span>
+    }
+<span class="nc" id="L33">    return new PhaseScopeSnapshot(</span>
+<span class="nc" id="L34">        block.channelView(0).clone(),</span>
+<span class="nc" id="L35">        block.channelView(1).clone(),</span>
+<span class="nc" id="L36">        block.frameIndex(),</span>
+<span class="nc" id="L37">        block.timestampNanos());</span>
+  }
+
+  /** Empty snapshot constant. */
+<span class="nc" id="L41">  public static final PhaseScopeSnapshot EMPTY =</span>
+      new PhaseScopeSnapshot(new float[0], new float[0], 0L, 0L);
+
+  private PhaseScopeSnapshot(
+<span class="nc" id="L45">      float[] left, float[] right, long sourceFrameIndex, long sourceTimestampNanos) {</span>
+<span class="nc" id="L46">    this.left = left;</span>
+<span class="nc" id="L47">    this.right = right;</span>
+<span class="nc" id="L48">    this.sourceFrameIndex = sourceFrameIndex;</span>
+<span class="nc" id="L49">    this.sourceTimestampNanos = sourceTimestampNanos;</span>
+<span class="nc" id="L50">  }</span>
+
+  /**
+   * @return number of frames in this snapshot
+   */
+  public int frames() {
+<span class="nc" id="L56">    return left.length;</span>
+  }
+
+  /**
+   * @return read-only view of the left channel samples (do not mutate)
+   */
+  public float[] leftView() {
+<span class="nc" id="L63">    return left;</span>
+  }
+
+  /**
+   * @return read-only view of the right channel samples (do not mutate)
+   */
+  public float[] rightView() {
+<span class="nc" id="L70">    return right;</span>
+  }
+
+  /**
+   * @return source block frame index
+   */
+  public long sourceFrameIndex() {
+<span class="nc" id="L77">    return sourceFrameIndex;</span>
+  }
+
+  /**
+   * @return source block timestamp in nanos
+   */
+  public long sourceTimestampNanos() {
+<span class="nc" id="L84">    return sourceTimestampNanos;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

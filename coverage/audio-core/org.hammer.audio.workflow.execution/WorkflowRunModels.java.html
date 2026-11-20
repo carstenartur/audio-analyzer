@@ -1,0 +1,313 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WorkflowRunModels.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Core</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.execution</a> &gt; <span class="el_source">WorkflowRunModels.java</span></div><h1>WorkflowRunModels.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.execution;
+
+import java.io.Serial;
+import java.io.Serializable;
+import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import org.hammer.audio.workflow.store.CommitId;
+
+/** Framework-independent command, lifecycle and backend contracts for immutable workflow runs. */
+public interface WorkflowRunModels {
+
+  /** Truthful execution capability exposed to clients. */
+<span class="fc" id="L15">  enum Mode {</span>
+    /** Topological lifecycle simulation without audio computation. */
+<span class="fc" id="L17">    SIMULATION,</span>
+    /** A backend that performs real workflow computation. */
+<span class="fc" id="L19">    COMPUTATION</span>
+  }
+
+  /** Process-local lifecycle of one immutable run. */
+<span class="fc" id="L23">  enum State {</span>
+<span class="fc" id="L24">    QUEUED,</span>
+<span class="fc" id="L25">    RUNNING,</span>
+<span class="fc" id="L26">    CANCEL_REQUESTED,</span>
+<span class="fc" id="L27">    CANCELLED,</span>
+<span class="fc" id="L28">    COMPLETED,</span>
+<span class="fc" id="L29">    FAILED;</span>
+
+    /** Returns whether no further lifecycle transition is possible. */
+    public boolean terminal() {
+<span class="pc bpc" id="L33" title="3 of 6 branches missed.">      return this == CANCELLED || this == COMPLETED || this == FAILED;</span>
+    }
+
+    /** Returns whether this state may transition to {@code target}. */
+    public boolean canTransitionTo(State target) {
+<span class="fc" id="L38">      Objects.requireNonNull(target, &quot;target&quot;);</span>
+<span class="pc bpc" id="L39" title="1 of 4 branches missed.">      return switch (this) {</span>
+        case QUEUED -&gt;
+<span class="pc bpc" id="L41" title="5 of 8 branches missed.">            target == RUNNING</span>
+                || target == CANCEL_REQUESTED
+                || target == CANCELLED
+                || target == FAILED;
+        case RUNNING -&gt;
+<span class="pc bpc" id="L46" title="5 of 8 branches missed.">            target == CANCEL_REQUESTED</span>
+                || target == CANCELLED
+                || target == COMPLETED
+                || target == FAILED;
+<span class="pc bpc" id="L50" title="5 of 6 branches missed.">        case CANCEL_REQUESTED -&gt; target == CANCELLED || target == COMPLETED || target == FAILED;</span>
+<span class="nc" id="L51">        case CANCELLED, COMPLETED, FAILED -&gt; false;</span>
+      };
+    }
+  }
+
+  /** Kind of immutable source captured before dispatch. */
+<span class="fc" id="L57">  enum SourceKind {</span>
+<span class="fc" id="L58">    LIVE_SESSION,</span>
+<span class="fc" id="L59">    STORED_COMMIT</span>
+  }
+
+  /** Transport-neutral selector for the workflow version to execute. */
+  sealed interface Source permits LiveSessionSource, StoredCommitSource {
+    /** Returns the source discriminator. */
+    SourceKind kind();
+  }
+
+  /**
+   * Selects one exact server-authoritative collaboration-session revision.
+   *
+   * @param sessionId stable collaboration-session identifier
+   * @param expectedRevision exact semantic revision required by the caller
+   */
+  record LiveSessionSource(String sessionId, long expectedRevision) implements Source {
+<span class="fc" id="L75">    public LiveSessionSource {</span>
+<span class="pc bpc" id="L76" title="2 of 4 branches missed.">      if (sessionId == null || sessionId.isBlank()) {</span>
+<span class="nc" id="L77">        throw new IllegalArgumentException(&quot;sessionId must not be blank&quot;);</span>
+      }
+<span class="pc bpc" id="L79" title="1 of 2 branches missed.">      if (expectedRevision &lt; 0) {</span>
+<span class="nc" id="L80">        throw new IllegalArgumentException(&quot;expectedRevision must be &gt;= 0&quot;);</span>
+      }
+<span class="fc" id="L82">    }</span>
+
+    @Override
+    public SourceKind kind() {
+<span class="fc" id="L86">      return SourceKind.LIVE_SESSION;</span>
+    }
+  }
+
+  /**
+   * Selects one exact stored workflow commit.
+   *
+   * @param commitId immutable version-control identifier
+   */
+  record StoredCommitSource(CommitId commitId) implements Source {
+<span class="fc" id="L96">    public StoredCommitSource {</span>
+<span class="fc" id="L97">      Objects.requireNonNull(commitId, &quot;commitId&quot;);</span>
+<span class="fc" id="L98">    }</span>
+
+    @Override
+    public SourceKind kind() {
+<span class="fc" id="L102">      return SourceKind.STORED_COMMIT;</span>
+    }
+  }
+
+  /**
+   * Idempotent start command for one immutable source.
+   *
+   * @param startCommandId stable transport-retry identity
+   * @param source exact workflow source to capture
+   * @param expectedFingerprint reviewed canonical SHA-256, or null for legacy callers
+   */
+  record Command(String startCommandId, Source source, String expectedFingerprint) {
+<span class="fc" id="L114">    public Command {</span>
+<span class="fc" id="L115">      StableExecutionIds.requireStable(startCommandId, &quot;startCommandId&quot;);</span>
+<span class="fc" id="L116">      Objects.requireNonNull(source, &quot;source&quot;);</span>
+<span class="pc bpc" id="L117" title="1 of 4 branches missed.">      if (expectedFingerprint != null &amp;&amp; !expectedFingerprint.matches(&quot;[0-9a-f]{64}&quot;)) {</span>
+<span class="nc" id="L118">        throw new IllegalArgumentException(</span>
+            &quot;expectedFingerprint must be a canonical SHA-256 digest&quot;);
+      }
+<span class="fc" id="L121">    }</span>
+
+    /** Preserve existing callers that have not supplied a reviewed fingerprint. */
+    public Command(String startCommandId, Source source) {
+<span class="fc" id="L125">      this(startCommandId, source, null);</span>
+<span class="fc" id="L126">    }</span>
+  }
+
+  /**
+   * Machine-readable preflight or backend-capability violation.
+   *
+   * @param code stable machine-readable code
+   * @param message human-readable diagnostic
+   * @param nodeId optional affected node identifier
+   */
+  record Violation(String code, String message, String nodeId) implements Serializable {
+
+    @Serial private static final long serialVersionUID = 1L;
+
+<span class="fc" id="L140">    public Violation {</span>
+<span class="pc bpc" id="L141" title="2 of 4 branches missed.">      if (code == null || code.isBlank()) {</span>
+<span class="nc" id="L142">        throw new IllegalArgumentException(&quot;code must not be blank&quot;);</span>
+      }
+<span class="pc bpc" id="L144" title="2 of 4 branches missed.">      if (message == null || message.isBlank()) {</span>
+<span class="nc" id="L145">        throw new IllegalArgumentException(&quot;message must not be blank&quot;);</span>
+      }
+<span class="pc bpc" id="L147" title="2 of 4 branches missed.">      if (nodeId != null &amp;&amp; nodeId.isBlank()) {</span>
+<span class="nc" id="L148">        throw new IllegalArgumentException(&quot;nodeId must be null or non-blank&quot;);</span>
+      }
+<span class="fc" id="L150">    }</span>
+  }
+
+  /**
+   * Immutable backend input derived from exact canonical DSL before dispatch.
+   *
+   * @param runId stable run identifier
+   * @param startCommandId idempotent start-command identity
+   * @param source exact selected workflow source
+   * @param dslText canonical deterministic workflow DSL
+   * @param fingerprint SHA-256 fingerprint of the canonical DSL
+   * @param snapshot immutable workflow snapshot
+   * @param plan immutable topological execution plan
+   * @param semanticRevision live-session revision, otherwise {@code null}
+   * @param commitId stored source commit, otherwise {@code null}
+   * @param capturedAt instant at which the immutable input was captured
+   */
+  record Input(
+      String runId,
+      String startCommandId,
+      Source source,
+      String dslText,
+      String fingerprint,
+      ExecutionSnapshot snapshot,
+      ExecutionPlan plan,
+      Long semanticRevision,
+      CommitId commitId,
+      Instant capturedAt) {
+<span class="fc" id="L178">    public Input {</span>
+<span class="fc" id="L179">      StableExecutionIds.requireStable(runId, &quot;runId&quot;);</span>
+<span class="fc" id="L180">      StableExecutionIds.requireStable(startCommandId, &quot;startCommandId&quot;);</span>
+<span class="fc" id="L181">      Objects.requireNonNull(source, &quot;source&quot;);</span>
+<span class="fc" id="L182">      Objects.requireNonNull(dslText, &quot;dslText&quot;);</span>
+<span class="pc bpc" id="L183" title="2 of 4 branches missed.">      if (fingerprint == null || fingerprint.isBlank()) {</span>
+<span class="nc" id="L184">        throw new IllegalArgumentException(&quot;fingerprint must not be blank&quot;);</span>
+      }
+<span class="fc" id="L186">      Objects.requireNonNull(snapshot, &quot;snapshot&quot;);</span>
+<span class="fc" id="L187">      Objects.requireNonNull(plan, &quot;plan&quot;);</span>
+<span class="fc" id="L188">      Objects.requireNonNull(capturedAt, &quot;capturedAt&quot;);</span>
+<span class="pc bpc" id="L189" title="1 of 4 branches missed.">      if (semanticRevision != null &amp;&amp; semanticRevision &lt; 0) {</span>
+<span class="nc" id="L190">        throw new IllegalArgumentException(&quot;semanticRevision must be null or &gt;= 0&quot;);</span>
+      }
+<span class="fc bfc" id="L192" title="All 2 branches covered.">      if (source.kind() == SourceKind.LIVE_SESSION) {</span>
+<span class="pc bpc" id="L193" title="2 of 4 branches missed.">        if (semanticRevision == null || commitId != null) {</span>
+<span class="nc" id="L194">          throw new IllegalArgumentException(</span>
+              &quot;Live-session inputs require semanticRevision and no commitId&quot;);
+        }
+<span class="pc bpc" id="L197" title="2 of 4 branches missed.">      } else if (semanticRevision != null || commitId == null) {</span>
+<span class="nc" id="L198">        throw new IllegalArgumentException(</span>
+            &quot;Stored-commit inputs require commitId and no semanticRevision&quot;);
+      }
+<span class="fc" id="L201">    }</span>
+  }
+
+  /**
+   * Reviewed exact workflow input without dispatching or retaining an execution.
+   *
+   * @param input immutable source, validation and execution plan
+   * @param mode actual configured backend capability
+   */
+  record Preflight(Input input, Mode mode) {
+    // Require the same immutable input and mode used by normal execution.
+<span class="fc" id="L212">    public Preflight {</span>
+<span class="fc" id="L213">      Objects.requireNonNull(input, &quot;input&quot;);</span>
+<span class="fc" id="L214">      Objects.requireNonNull(mode, &quot;mode&quot;);</span>
+<span class="fc" id="L215">    }</span>
+  }
+
+  /**
+   * Immutable result and optional backend-specific textual artifacts.
+   *
+   * @param reproducibilityBundle terminal execution evidence
+   * @param artifacts backend-specific immutable textual artifacts
+   */
+  record Result(ReproducibilityBundle reproducibilityBundle, Map&lt;String, String&gt; artifacts) {
+<span class="fc" id="L225">    public Result {</span>
+<span class="fc" id="L226">      Objects.requireNonNull(reproducibilityBundle, &quot;reproducibilityBundle&quot;);</span>
+<span class="fc" id="L227">      artifacts = Map.copyOf(Objects.requireNonNull(artifacts, &quot;artifacts&quot;));</span>
+<span class="fc" id="L228">    }</span>
+  }
+
+  /**
+   * Immutable public view of one process-local run.
+   *
+   * @param runId stable run identifier
+   * @param startCommandId idempotent start-command identity
+   * @param state current lifecycle state
+   * @param mode truthful backend capability mode
+   * @param source exact captured source selector
+   * @param workflowId stable workflow identifier
+   * @param snapshotId immutable snapshot identifier
+   * @param planId immutable execution-plan identifier
+   * @param fingerprint SHA-256 fingerprint of canonical DSL
+   * @param semanticRevision live-session revision, otherwise {@code null}
+   * @param commitId stored source commit, otherwise {@code null}
+   * @param capturedAt source capture instant
+   * @param startedAt backend start instant, if started
+   * @param finishedAt terminal instant, if finished
+   * @param progressPercent bounded monotonic progress percentage
+   * @param statusMessage current human-readable status
+   * @param violations immutable diagnostics accumulated by the run
+   */
+  record Snapshot(
+      String runId,
+      String startCommandId,
+      State state,
+      Mode mode,
+      Source source,
+      String workflowId,
+      String snapshotId,
+      String planId,
+      String fingerprint,
+      Long semanticRevision,
+      CommitId commitId,
+      Instant capturedAt,
+      Instant startedAt,
+      Instant finishedAt,
+      int progressPercent,
+      String statusMessage,
+      List&lt;Violation&gt; violations) {
+<span class="fc" id="L270">    public Snapshot {</span>
+<span class="fc" id="L271">      StableExecutionIds.requireStable(runId, &quot;runId&quot;);</span>
+<span class="fc" id="L272">      StableExecutionIds.requireStable(startCommandId, &quot;startCommandId&quot;);</span>
+<span class="fc" id="L273">      Objects.requireNonNull(state, &quot;state&quot;);</span>
+<span class="fc" id="L274">      Objects.requireNonNull(mode, &quot;mode&quot;);</span>
+<span class="fc" id="L275">      Objects.requireNonNull(source, &quot;source&quot;);</span>
+<span class="fc" id="L276">      StableExecutionIds.requireStable(workflowId, &quot;workflowId&quot;);</span>
+<span class="fc" id="L277">      StableExecutionIds.requireStable(snapshotId, &quot;snapshotId&quot;);</span>
+<span class="fc" id="L278">      StableExecutionIds.requireStable(planId, &quot;planId&quot;);</span>
+<span class="pc bpc" id="L279" title="2 of 4 branches missed.">      if (fingerprint == null || fingerprint.isBlank()) {</span>
+<span class="nc" id="L280">        throw new IllegalArgumentException(&quot;fingerprint must not be blank&quot;);</span>
+      }
+<span class="fc" id="L282">      Objects.requireNonNull(capturedAt, &quot;capturedAt&quot;);</span>
+<span class="pc bpc" id="L283" title="2 of 4 branches missed.">      if (progressPercent &lt; 0 || progressPercent &gt; 100) {</span>
+<span class="nc" id="L284">        throw new IllegalArgumentException(&quot;progressPercent must be between 0 and 100&quot;);</span>
+      }
+<span class="pc bpc" id="L286" title="1 of 2 branches missed.">      statusMessage = statusMessage == null ? &quot;&quot; : statusMessage;</span>
+<span class="fc" id="L287">      violations = List.copyOf(Objects.requireNonNull(violations, &quot;violations&quot;));</span>
+<span class="fc" id="L288">    }</span>
+  }
+
+  /** Replaceable execution adapter. */
+  interface ExecutionBackend {
+    /** Returns whether the adapter simulates or performs computation. */
+    Mode mode();
+
+    /** Returns capability violations before any backend work is dispatched. */
+    List&lt;Violation&gt; validate(Input input);
+
+    /** Executes the immutable input and returns terminal evidence. */
+    Result execute(Input input, Control control)
+        throws WorkflowExecutionBackendException, InterruptedException;
+  }
+
+  /** Cooperative cancellation and progress channel supplied to a backend. */
+  interface Control {
+    /** Returns whether cancellation has been requested. */
+    boolean cancellationRequested();
+
+    /** Publishes bounded progress without changing the semantic input. */
+    void progress(int percentage, String message);
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

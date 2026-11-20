@@ -1,0 +1,1182 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>MicrophoneExperimentService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experiment.operations</a> &gt; <span class="el_source">MicrophoneExperimentService.java</span></div><h1>MicrophoneExperimentService.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experiment.operations;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.Clock;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.ServiceLoader;
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.TreeSet;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Supplier;
+import org.hammer.audio.JavaSoundCaptureDeviceDiscovery;
+import org.hammer.audio.JavaSoundMicrophoneArraySource;
+import org.hammer.audio.RecordingPreflight;
+import org.hammer.audio.RecordingTap;
+import org.hammer.audio.SourceCaptureSession;
+import org.hammer.audio.acquisition.CaptureDeviceDescriptor;
+import org.hammer.audio.acquisition.DirectoryMicrophoneArrayProfileStore;
+import org.hammer.audio.acquisition.LocalizationEngine;
+import org.hammer.audio.acquisition.LocalizationExperiment;
+import org.hammer.audio.acquisition.LocalizationExperimentCodec;
+import org.hammer.audio.acquisition.LocalizationExperimentStage;
+import org.hammer.audio.acquisition.LocalizationInputMode;
+import org.hammer.audio.acquisition.Microphone;
+import org.hammer.audio.acquisition.MicrophoneArray;
+import org.hammer.audio.acquisition.MicrophoneArrayLayout;
+import org.hammer.audio.acquisition.MicrophoneArrayProfile;
+import org.hammer.audio.acquisition.MicrophoneArrayProfileCodec;
+import org.hammer.audio.acquisition.MicrophoneArrayReadiness;
+import org.hammer.audio.acquisition.MultiChannelAudioSource;
+import org.hammer.audio.acquisition.health.ExperimentHealthAggregator;
+import org.hammer.audio.acquisition.health.ExperimentHealthFinding;
+import org.hammer.audio.acquisition.health.ExperimentHealthFinding.Severity;
+import org.hammer.audio.acquisition.health.ExperimentHealthSnapshot;
+import org.hammer.audio.acquisition.health.ExperimentHealthState;
+import org.hammer.audio.core.AudioFormatDescriptor;
+import org.hammer.audio.experiment.operations.ExperimentOperationsModels.Catalogue;
+import org.hammer.audio.experiment.operations.ExperimentOperationsModels.Configuration;
+import org.hammer.audio.experiment.operations.ExperimentOperationsModels.Preflight;
+import org.hammer.audio.experiment.operations.ExperimentOperationsModels.ProfileView;
+import org.hammer.audio.experiment.operations.ExperimentOperationsModels.RecordingView;
+import org.hammer.audio.experiment.operations.ExperimentOperationsModels.RunView;
+import org.hammer.audio.experiment.operations.ExperimentOperationsModels.TrackPoint;
+import org.hammer.audio.geometry.Vector2;
+import org.hammer.audio.recording.AudioBlockRecordingReader;
+import org.hammer.audio.recording.RecordingInspection;
+import org.hammer.audio.recording.runtime.FileStoreRecordingStorageProbe;
+import org.hammer.audio.recording.runtime.RecordingState;
+import org.hammer.audio.recording.runtime.RecordingStatus;
+import org.hammer.audio.recording.runtime.RecordingStorageLevel;
+import org.hammer.audio.recording.runtime.RecordingStorageStatus;
+
+/**
+ * Shared application service for microphone profiles, readiness, source execution and evidence.
+ * Browser and Swing use the same immutable snapshots and the existing acquisition/recording runner.
+ */
+// This host coordinates existing domain services. Its command monitor protects exact-profile
+// starts;
+// sorted catalogue maps are request-local, and runtime facts use ConcurrentHashMap explicitly.
+@SuppressWarnings({
+  &quot;PMD.CouplingBetweenObjects&quot;,
+  &quot;PMD.AvoidSynchronizedAtMethodLevel&quot;,
+  &quot;PMD.UseConcurrentHashMap&quot;
+})
+public final class MicrophoneExperimentService implements AutoCloseable {
+
+  private static final int BLOCK_FRAMES = 1024;
+  private static final String RUNTIME = &quot;runtime&quot;;
+  private static final String CAPTURE_STATE = &quot;source.captureState&quot;;
+  private static final String EDIT_PROFILE = &quot;edit-profile&quot;;
+  private static final String INSPECT_DIAGNOSTICS = &quot;inspect-diagnostics&quot;;
+  private static final String PREFLIGHT_COMPONENT = &quot;preflight&quot;;
+  private static final String PERFORMANCE_COMPONENT = &quot;performance&quot;;
+  private static final String PROCESSING_OVERRUNS = &quot;processing.overruns&quot;;
+  private final Path directory;
+  private final Clock clock;
+  private final Supplier&lt;List&lt;CaptureDeviceDescriptor&gt;&gt; deviceDiscovery;
+  private final DirectoryMicrophoneArrayProfileStore profiles;
+  private final ManagedExperimentRecordings recordings;
+  private final LocalizationEngine engine;
+<span class="fc" id="L94">  private final MicrophoneArrayProfileCodec profileCodec = new MicrophoneArrayProfileCodec();</span>
+<span class="fc" id="L95">  private final ExecutorService executor =</span>
+<span class="fc" id="L96">      Executors.newSingleThreadExecutor(</span>
+          runnable -&gt; {
+<span class="fc" id="L98">            Thread thread = new Thread(runnable, &quot;MicrophoneExperiment&quot;);</span>
+<span class="fc" id="L99">            thread.setDaemon(true);</span>
+<span class="fc" id="L100">            return thread;</span>
+          });
+  private volatile ActiveRun active;
+  private volatile Preflight preview;
+  private boolean closed;
+
+  /** Use local JavaSound discovery and the system clock. */
+  public MicrophoneExperimentService(Path directory) {
+<span class="fc" id="L108">    this(directory, Clock.systemUTC(), new JavaSoundCaptureDeviceDiscovery()::discover);</span>
+<span class="fc" id="L109">  }</span>
+
+  /** Create a service with explicit external boundaries for deterministic tests. */
+  public MicrophoneExperimentService(
+      Path directory, Clock clock, Supplier&lt;List&lt;CaptureDeviceDescriptor&gt;&gt; deviceDiscovery) {
+<span class="fc" id="L114">    this(</span>
+        directory,
+        clock,
+        deviceDiscovery,
+<span class="fc" id="L118">        ServiceLoader.load(LocalizationEngine.class).findFirst().orElse(null));</span>
+<span class="fc" id="L119">  }</span>
+
+  MicrophoneExperimentService(
+      Path directory,
+      Clock clock,
+      Supplier&lt;List&lt;CaptureDeviceDescriptor&gt;&gt; deviceDiscovery,
+<span class="fc" id="L125">      LocalizationEngine engine) {</span>
+<span class="fc" id="L126">    this.directory = directory.toAbsolutePath().normalize();</span>
+<span class="fc" id="L127">    this.clock = clock;</span>
+<span class="fc" id="L128">    this.deviceDiscovery = deviceDiscovery;</span>
+<span class="fc" id="L129">    this.engine = engine;</span>
+<span class="fc" id="L130">    profiles = new DirectoryMicrophoneArrayProfileStore(this.directory.resolve(&quot;profiles&quot;));</span>
+<span class="fc" id="L131">    recordings = new ManagedExperimentRecordings(this.directory);</span>
+<span class="fc" id="L132">  }</span>
+
+  /** Enumerate actual local inputs without opening capture lines. */
+  public Catalogue catalogue() throws IOException {
+<span class="fc" id="L136">    Map&lt;String, MicrophoneArrayProfile&gt; available = new TreeMap&lt;&gt;();</span>
+<span class="fc" id="L137">    MicrophoneArrayProfile starter = starterProfile();</span>
+<span class="fc" id="L138">    available.put(starter.profileId(), starter);</span>
+<span class="pc bpc" id="L139" title="1 of 2 branches missed.">    for (MicrophoneArrayProfile profile : profiles.list()) {</span>
+<span class="nc" id="L140">      available.put(profile.profileId(), profile);</span>
+<span class="nc" id="L141">    }</span>
+<span class="fc" id="L142">    return new Catalogue(</span>
+<span class="fc" id="L143">        available.values().stream().map(this::profileView).toList(),</span>
+<span class="fc" id="L144">        devices(),</span>
+<span class="pc bpc" id="L145" title="1 of 2 branches missed.">        engine == null ? List.of() : engine.scenarios(),</span>
+<span class="fc" id="L146">        recordings.list());</span>
+  }
+
+  /** Real input-capable device descriptors, shared with document binding UI. */
+  public List&lt;CaptureDeviceDescriptor&gt; devices() {
+<span class="fc" id="L151">    return List.copyOf(deviceDiscovery.get());</span>
+  }
+
+  /**
+   * Validate and atomically persist a complete profile definition, including measured calibration.
+   */
+  public synchronized ProfileView saveProfile(String definition) throws IOException {
+<span class="nc" id="L158">    MicrophoneArrayProfile profile = profileCodec.decode(definition);</span>
+<span class="nc" id="L159">    java.util.Optional&lt;MicrophoneArrayProfile&gt; previous = profiles.find(profile.profileId());</span>
+<span class="nc bnc" id="L160" title="All 2 branches missed.">    if (previous.isPresent()</span>
+<span class="nc bnc" id="L161" title="All 2 branches missed.">        &amp;&amp; previous.get().calibration() != null</span>
+<span class="nc bnc" id="L162" title="All 2 branches missed.">        &amp;&amp; profile.calibration() != null</span>
+<span class="nc bnc" id="L163" title="All 2 branches missed.">        &amp;&amp; (!previous.get().array().microphones().equals(profile.array().microphones())</span>
+<span class="nc bnc" id="L164" title="All 2 branches missed.">            || !java.util.Objects.equals(previous.get().liveCapture(), profile.liveCapture()))</span>
+<span class="nc bnc" id="L165" title="All 2 branches missed.">        &amp;&amp; previous.get().calibration().profileId().equals(profile.calibration().profileId())</span>
+        &amp;&amp; previous
+<span class="nc" id="L167">            .get()</span>
+<span class="nc" id="L168">            .calibration()</span>
+<span class="nc" id="L169">            .calibratedAt()</span>
+<span class="nc bnc" id="L170" title="All 2 branches missed.">            .equals(profile.calibration().calibratedAt())) {</span>
+<span class="nc" id="L171">      throw new IllegalArgumentException(</span>
+          &quot;Geometry or capture settings changed; remove the old calibration or supply a newly&quot;
+              + &quot; measured calibration.&quot;);
+    }
+<span class="nc" id="L175">    profiles.save(profile);</span>
+<span class="nc" id="L176">    preview = null;</span>
+<span class="nc" id="L177">    return profileView(profile);</span>
+  }
+
+  /** Inspect an imported recording before making it available as replay input. */
+  public RecordingView importRecording(InputStream input) throws IOException {
+<span class="nc" id="L182">    return recordings.importRecording(input);</span>
+  }
+
+  /** Recover readable blocks into a new file while retaining the original integrity evidence. */
+  public RecordingView recoverRecording(String id) throws IOException {
+<span class="nc" id="L187">    return recordings.recover(id);</span>
+  }
+
+  /** Perform blocking filesystem/device probes on the caller's background/request thread. */
+  public Preflight preflight(Configuration configuration) throws IOException {
+<span class="fc" id="L192">    return preflight(configuration, profile(configuration.profileId()));</span>
+  }
+
+  private Preflight preflight(Configuration configuration, MicrophoneArrayProfile profile)
+      throws IOException {
+<span class="fc" id="L197">    ExperimentHealthAggregator health = new ExperimentHealthAggregator();</span>
+<span class="fc" id="L198">    Map&lt;String, String&gt; facts = initialFacts(configuration, profile);</span>
+<span class="fc" id="L199">    List&lt;ExperimentHealthFinding&gt; findings = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L200">    LocalizationInputMode mode = LocalizationInputMode.valueOf(configuration.sourceMode());</span>
+<span class="pc bpc" id="L201" title="1 of 2 branches missed.">    if (engine == null) {</span>
+<span class="nc" id="L202">      findings.add(</span>
+<span class="nc" id="L203">          finding(</span>
+              &quot;plugin.localization&quot;,
+              Severity.BLOCKING,
+              &quot;Localization implementation is unavailable&quot;,
+              &quot;Install the acoustic localization plugin before running.&quot;,
+              PREFLIGHT_COMPONENT,
+              &quot;plugin-settings&quot;));
+    }
+<span class="fc" id="L211">    MicrophoneArrayReadiness readiness =</span>
+<span class="fc" id="L212">        MicrophoneArrayReadiness.assess(profile, mode, clock.instant(), 1.0);</span>
+<span class="fc bfc" id="L213" title="All 2 branches covered.">    if (!readiness.ready()) {</span>
+<span class="fc" id="L214">      findings.add(</span>
+<span class="fc" id="L215">          finding(</span>
+              &quot;source.profile&quot;,
+              Severity.BLOCKING,
+              &quot;Profile is not ready for &quot; + mode,
+<span class="fc" id="L219">              String.join(&quot; &quot;, readiness.diagnostics()),</span>
+              PREFLIGHT_COMPONENT,
+              EDIT_PROFILE));
+    }
+<span class="pc bpc" id="L223" title="1 of 2 branches missed.">    if (profile.array().channels() &lt; 2) {</span>
+<span class="nc" id="L224">      findings.add(</span>
+<span class="nc" id="L225">          finding(</span>
+              &quot;source.geometry&quot;,
+              Severity.BLOCKING,
+              &quot;Localization needs at least two microphones&quot;,
+              &quot;Define geometry and a contiguous channel map before running.&quot;,
+              PREFLIGHT_COMPONENT,
+              EDIT_PROFILE));
+    }
+<span class="fc" id="L233">    if (profile.array().microphones().stream().map(Microphone::positionMeters).distinct().count()</span>
+<span class="pc bpc" id="L234" title="1 of 2 branches missed.">        != profile.array().channels()) {</span>
+<span class="nc" id="L235">      findings.add(</span>
+<span class="nc" id="L236">          finding(</span>
+              &quot;source.geometry-overlap&quot;,
+              Severity.BLOCKING,
+              &quot;Microphones have overlapping positions&quot;,
+              &quot;Measure and enter distinct microphone positions in metres.&quot;,
+              PREFLIGHT_COMPONENT,
+              EDIT_PROFILE));
+    }
+<span class="fc" id="L244">    inspectLiveDevice(mode, profile, findings, facts);</span>
+<span class="fc" id="L245">    AudioFormatDescriptor format = sourceFormat(configuration, profile, findings);</span>
+<span class="fc" id="L246">    facts.put(</span>
+        &quot;source.format&quot;,
+<span class="fc" id="L248">        format.sampleRate()</span>
+            + &quot; Hz · &quot;
+<span class="fc" id="L250">            + format.channels()</span>
+            + &quot; channels · &quot;
+<span class="fc" id="L252">            + format.sourceSampleSizeInBits()</span>
+            + &quot; bit PCM&quot;);
+<span class="fc" id="L254">    RecordingStorageStatus storage = storagePreflight(configuration, format, facts, findings);</span>
+<span class="pc bpc" id="L255" title="1 of 4 branches missed.">    if (mode == LocalizationInputMode.LIVE &amp;&amp; !configuration.recordOutput()) {</span>
+<span class="nc" id="L256">      findings.add(</span>
+<span class="nc" id="L257">          finding(</span>
+              &quot;evidence.live-recording&quot;,
+              Severity.WARNING,
+              &quot;Live samples will not be reproducible without a recording&quot;,
+              &quot;Enable recording to preserve the experiment input.&quot;,
+              PREFLIGHT_COMPONENT,
+              &quot;enable-recording&quot;));
+    }
+<span class="fc" id="L265">    health.update(PREFLIGHT_COMPONENT, findings, clock.instant());</span>
+<span class="fc" id="L266">    ExperimentHealthSnapshot snapshot =</span>
+<span class="fc" id="L267">        health.snapshot(</span>
+            PREFLIGHT_COMPONENT,
+<span class="fc" id="L269">            configuration.name(),</span>
+            ExperimentHealthState.READY,
+            &quot;DEFINED → CALIBRATED&quot;,
+            facts,
+<span class="fc" id="L273">            clock.instant());</span>
+<span class="fc" id="L274">    Preflight result = new Preflight(fingerprint(configuration, profile), snapshot, storage);</span>
+<span class="fc" id="L275">    preview = result;</span>
+<span class="fc" id="L276">    return result;</span>
+  }
+
+  private void inspectLiveDevice(
+      LocalizationInputMode mode,
+      MicrophoneArrayProfile profile,
+      List&lt;ExperimentHealthFinding&gt; findings,
+      Map&lt;String, String&gt; facts) {
+<span class="fc bfc" id="L284" title="All 2 branches covered.">    if (mode == LocalizationInputMode.LIVE</span>
+<span class="pc bpc" id="L285" title="1 of 2 branches missed.">        &amp;&amp; (profile.liveCapture() == null</span>
+<span class="nc" id="L286">            || devices().stream()</span>
+<span class="nc bnc" id="L287" title="All 2 branches missed.">                .noneMatch(</span>
+                    device -&gt;
+<span class="nc" id="L289">                        device.deviceId().equals(profile.liveCapture().device().deviceId())))) {</span>
+<span class="fc" id="L290">      findings.add(</span>
+<span class="fc" id="L291">          finding(</span>
+              &quot;source.live-device&quot;,
+              Severity.BLOCKING,
+              &quot;Selected live capture device is unavailable&quot;,
+              &quot;Connect a synchronized multichannel device on the application host and select it in&quot;
+                  + &quot; the profile. Browser microphones are not host capture devices.&quot;,
+              PREFLIGHT_COMPONENT,
+              &quot;select-device&quot;));
+<span class="pc bpc" id="L299" title="1 of 2 branches missed.">    } else if (mode == LocalizationInputMode.LIVE) {</span>
+      try {
+<span class="nc bnc" id="L301" title="All 2 branches missed.">        if (!new JavaSoundCaptureDeviceDiscovery().supportsFormat(profile.liveCapture())) {</span>
+<span class="nc" id="L302">          findings.add(</span>
+<span class="nc" id="L303">              finding(</span>
+                  &quot;source.live-format&quot;,
+                  Severity.BLOCKING,
+                  &quot;Device does not advertise the selected PCM format&quot;,
+                  &quot;Choose a sample rate, channel count and PCM encoding supported by the selected&quot;
+                      + &quot; input device.&quot;,
+                  PREFLIGHT_COMPONENT,
+                  EDIT_PROFILE));
+        }
+<span class="nc" id="L312">        facts.put(</span>
+            &quot;source.deviceAccess&quot;,
+            &quot;Format advertisement checked; opening the device at Start will confirm permission and&quot;
+                + &quot; availability.&quot;);
+<span class="nc" id="L316">      } catch (IllegalArgumentException | SecurityException exception) {</span>
+<span class="nc" id="L317">        findings.add(</span>
+<span class="nc" id="L318">            finding(</span>
+                &quot;source.live-permission&quot;,
+                Severity.BLOCKING,
+                &quot;Capture device capability cannot be inspected&quot;,
+<span class="nc" id="L322">                exception.toString(),</span>
+                PREFLIGHT_COMPONENT,
+                &quot;select-device&quot;));
+<span class="nc" id="L325">      }</span>
+    }
+<span class="fc" id="L327">  }</span>
+
+  private RecordingStorageStatus storagePreflight(
+      Configuration configuration,
+      AudioFormatDescriptor format,
+      Map&lt;String, String&gt; facts,
+      List&lt;ExperimentHealthFinding&gt; findings) {
+<span class="fc" id="L334">    RecordingStorageStatus storage = null;</span>
+<span class="pc bpc" id="L335" title="1 of 2 branches missed.">    if (configuration.recordOutput()) {</span>
+      try {
+<span class="fc" id="L337">        storage =</span>
+            new FileStoreRecordingStorageProbe()
+<span class="fc" id="L339">                .probe(</span>
+<span class="fc" id="L340">                    preflightDestination(configuration),</span>
+                    0L,
+                    0.0,
+<span class="fc" id="L343">                    RecordingPreflight.expectedBytesPerSecond(format, BLOCK_FRAMES),</span>
+<span class="fc" id="L344">                    clock.instant());</span>
+<span class="fc" id="L345">        facts.put(&quot;storage.destination&quot;, storage.destination().toString());</span>
+<span class="fc" id="L346">        facts.put(&quot;storage.usableBytes&quot;, Long.toString(storage.usableBytes()));</span>
+<span class="fc" id="L347">        facts.put(&quot;storage.safeSeconds&quot;, Long.toString(storage.estimatedSafeSecondsRemaining()));</span>
+<span class="fc" id="L348">        facts.put(</span>
+<span class="fc" id="L349">            &quot;storage.expectedBytesPerSecond&quot;, Double.toString(storage.expectedBytesPerSecond()));</span>
+<span class="pc bpc" id="L350" title="2 of 4 branches missed.">        if (!storage.writable() || storage.critical()) {</span>
+<span class="nc" id="L351">          findings.add(</span>
+<span class="nc" id="L352">              finding(</span>
+                  &quot;storage.capacity&quot;,
+                  Severity.BLOCKING,
+                  &quot;Recording destination is not ready&quot;,
+<span class="nc" id="L356">                  storage.level() + &quot; · usable bytes &quot; + storage.usableBytes(),</span>
+                  PREFLIGHT_COMPONENT,
+                  &quot;storage-settings&quot;));
+<span class="fc bfc" id="L359" title="All 2 branches covered.">        } else if (storage.level() == RecordingStorageLevel.WARNING</span>
+            || !storage
+<span class="fc" id="L361">                .policy()</span>
+<span class="pc bpc" id="L362" title="1 of 2 branches missed.">                .fits(storage.estimatedSafeSecondsRemaining(), configuration.durationSeconds())) {</span>
+<span class="fc" id="L363">          findings.add(</span>
+<span class="fc" id="L364">              finding(</span>
+                  &quot;storage.margin&quot;,
+                  Severity.WARNING,
+                  &quot;Storage margin is smaller than the planned experiment&quot;,
+                  &quot;Estimated safe seconds: &quot;
+<span class="fc" id="L369">                      + storage.estimatedSafeSecondsRemaining()</span>
+                      + &quot;; capacity is advisory.&quot;,
+                  PREFLIGHT_COMPONENT,
+                  &quot;storage-settings&quot;));
+        }
+<span class="nc" id="L374">      } catch (IOException exception) {</span>
+<span class="nc" id="L375">        findings.add(</span>
+<span class="nc" id="L376">            finding(</span>
+                &quot;storage.query&quot;,
+                Severity.BLOCKING,
+                &quot;Recording capacity cannot be checked&quot;,
+<span class="nc" id="L380">                exception.getMessage(),</span>
+                PREFLIGHT_COMPONENT,
+                &quot;storage-settings&quot;));
+<span class="fc" id="L383">      }</span>
+    }
+<span class="fc" id="L385">    return storage;</span>
+  }
+
+  /** Recheck readiness before starting, rejecting profile/configuration edits and true blockers. */
+  public synchronized String start(
+      Configuration configuration, String token, boolean acknowledgeStorageWarning)
+      throws IOException {
+<span class="pc bpc" id="L392" title="1 of 2 branches missed.">    if (closed) {</span>
+<span class="nc" id="L393">      throw new IllegalStateException(&quot;Experiment service is closed.&quot;);</span>
+    }
+<span class="pc bpc" id="L395" title="3 of 4 branches missed.">    if (active != null &amp;&amp; !active.finished) {</span>
+<span class="nc" id="L396">      throw new IllegalStateException(&quot;An experiment is already running.&quot;);</span>
+    }
+<span class="fc" id="L398">    MicrophoneArrayProfile selectedProfile = profile(configuration.profileId());</span>
+<span class="fc" id="L399">    Preflight checked = preflight(configuration, selectedProfile);</span>
+<span class="fc bfc" id="L400" title="All 2 branches covered.">    if (!checked.token().equals(token)) {</span>
+<span class="fc" id="L401">      throw new IllegalStateException(&quot;Configuration changed; review a fresh preflight.&quot;);</span>
+    }
+<span class="fc bfc" id="L403" title="All 2 branches covered.">    if (!checked.health().startAllowed()) {</span>
+<span class="fc" id="L404">      throw new IllegalStateException(&quot;Experiment is blocked; resolve the listed findings.&quot;);</span>
+    }
+<span class="pc bpc" id="L406" title="1 of 2 branches missed.">    if (!acknowledgeStorageWarning</span>
+<span class="nc" id="L407">        &amp;&amp; checked.health().findings().stream()</span>
+<span class="nc bnc" id="L408" title="All 2 branches missed.">            .anyMatch(item -&gt; &quot;storage.margin&quot;.equals(item.code()))) {</span>
+<span class="nc" id="L409">      throw new IllegalStateException(&quot;Confirm the storage margin warning before starting.&quot;);</span>
+    }
+<span class="fc" id="L411">    String id = UUID.randomUUID().toString();</span>
+<span class="fc" id="L412">    ActiveRun run =</span>
+        new ActiveRun(
+            id,
+            configuration,
+            selectedProfile,
+<span class="fc" id="L417">            directory.resolve(&quot;runs&quot;).resolve(id),</span>
+<span class="fc" id="L418">            clock.instant());</span>
+<span class="fc" id="L419">    run.facts.putAll(checked.health().facts());</span>
+<span class="fc" id="L420">    run.health.update(PREFLIGHT_COMPONENT, checked.health().findings(), clock.instant());</span>
+<span class="fc" id="L421">    run.facts.put(&quot;configuration.sha256&quot;, checked.token());</span>
+<span class="fc" id="L422">    run.facts.put(&quot;operator.attribution&quot;, &quot;Unattributed local operator&quot;);</span>
+<span class="fc" id="L423">    run.state = ExperimentHealthState.RUNNING;</span>
+<span class="fc" id="L424">    active = run;</span>
+<span class="fc" id="L425">    executor.execute(() -&gt; execute(run));</span>
+<span class="fc" id="L426">    return id;</span>
+  }
+
+  /** Persistent, immutable active/final status; performs no filesystem or device probe. */
+  public RunView snapshot() {
+<span class="fc" id="L431">    ActiveRun run = active;</span>
+<span class="fc bfc" id="L432" title="All 2 branches covered.">    if (run == null) {</span>
+<span class="fc" id="L433">      Preflight current = preview;</span>
+      ExperimentHealthSnapshot health =
+<span class="pc bpc" id="L435" title="1 of 2 branches missed.">          current == null</span>
+              ? new ExperimentHealthAggregator()
+<span class="fc" id="L437">                  .snapshot(</span>
+                      &quot;&quot;,
+                      &quot;Microphone experiment&quot;,
+                      ExperimentHealthState.NOT_CONFIGURED,
+                      &quot;Define → calibrate → acquire → localize → benchmark → export&quot;,
+<span class="fc" id="L442">                      Map.of(),</span>
+<span class="fc" id="L443">                      clock.instant())</span>
+<span class="pc" id="L444">              : current.health();</span>
+<span class="fc" id="L445">      return new RunView(&quot;&quot;, health, null, List.of(), false);</span>
+    }
+<span class="fc bfc" id="L447" title="All 2 branches covered.">    RecordingStatus recording = run.recorder == null ? null : run.recorder.status();</span>
+<span class="fc" id="L448">    return new RunView(</span>
+        run.id,
+<span class="pc bpc" id="L450" title="1 of 4 branches missed.">        run.health.snapshot(</span>
+<span class="fc" id="L451">            run.id, run.configuration.name(), run.state, run.stage, run.facts, clock.instant()),</span>
+        recording,
+        run.tracks,
+        run.finished &amp;&amp; run.evidenceReady);
+  }
+
+  /**
+   * Stop source acquisition and finalize captured blocks; stopping early is incomplete evidence.
+   */
+  public void stop() throws IOException {
+<span class="fc" id="L461">    ActiveRun run = active;</span>
+<span class="pc bpc" id="L462" title="3 of 10 branches missed.">    if (run == null</span>
+        || run.finished
+        || run.state == ExperimentHealthState.COMPLETED
+        || run.state == ExperimentHealthState.INCOMPLETE
+        || run.state == ExperimentHealthState.FAILED) {
+<span class="fc" id="L467">      return;</span>
+    }
+<span class="fc" id="L469">    run.cancelled.set(true);</span>
+<span class="fc" id="L470">    run.state = ExperimentHealthState.STOPPING;</span>
+<span class="pc bpc" id="L471" title="1 of 2 branches missed.">    if (run.source != null) {</span>
+<span class="nc" id="L472">      run.source.close();</span>
+    }
+<span class="fc" id="L474">  }</span>
+
+  /** Acknowledge a latched warning without permitting unresolved blockers. */
+  public void acknowledge(String code, String operator) throws IOException {
+<span class="fc" id="L478">    ActiveRun run = active;</span>
+<span class="pc bpc" id="L479" title="1 of 2 branches missed.">    if (run == null) {</span>
+<span class="nc" id="L480">      throw new IllegalStateException(&quot;No active or completed run.&quot;);</span>
+    }
+<span class="fc" id="L482">    run.evidenceLock.lock();</span>
+    try {
+<span class="fc" id="L484">      run.health.acknowledge(code, operator, clock.instant());</span>
+<span class="fc bfc" id="L485" title="All 2 branches covered.">      if (run.evidenceReady) {</span>
+        try {
+<span class="fc" id="L487">          writeHealthEvidence(run);</span>
+<span class="nc" id="L488">        } catch (IOException failure) {</span>
+<span class="nc" id="L489">          fail(run, failure);</span>
+<span class="nc" id="L490">          throw failure;</span>
+<span class="fc" id="L491">        }</span>
+      }
+    } finally {
+<span class="fc" id="L494">      run.evidenceLock.unlock();</span>
+    }
+<span class="fc" id="L496">  }</span>
+
+  /**
+   * Stream finalized artifacts and their hashes without buffering recordings in browser/server
+   * memory.
+   */
+  public void exportEvidence(OutputStream output) throws IOException {
+<span class="fc" id="L503">    ActiveRun run = active;</span>
+<span class="pc bpc" id="L504" title="1 of 2 branches missed.">    if (run == null) {</span>
+<span class="nc" id="L505">      throw new IllegalStateException(&quot;Finalize the experiment before exporting evidence.&quot;);</span>
+    }
+<span class="fc" id="L507">    run.evidenceLock.lock();</span>
+    try {
+<span class="pc bpc" id="L509" title="2 of 4 branches missed.">      if (!run.finished || !run.evidenceReady) {</span>
+<span class="nc" id="L510">        throw new IllegalStateException(&quot;Finalize the experiment before exporting evidence.&quot;);</span>
+      }
+<span class="fc" id="L512">      ExperimentEvidenceFiles.export(run.directory, output);</span>
+    } finally {
+<span class="fc" id="L514">      run.evidenceLock.unlock();</span>
+    }
+<span class="fc" id="L516">  }</span>
+
+  /**
+   * Atomically export outside managed inputs/runs so a package can never include its own output.
+   */
+  public void exportEvidence(Path target) throws IOException {
+<span class="fc" id="L522">    Path destination = target.toAbsolutePath().normalize();</span>
+<span class="fc" id="L523">    Path parent = destination.getParent();</span>
+<span class="pc bpc" id="L524" title="1 of 4 branches missed.">    if (destination.startsWith(directory) || parent == null) {</span>
+<span class="fc" id="L525">      throw new IOException(&quot;Choose an evidence export outside the managed experiment directory.&quot;);</span>
+    }
+<span class="fc" id="L527">    Files.createDirectories(parent);</span>
+<span class="pc bpc" id="L528" title="2 of 4 branches missed.">    if (Files.exists(directory) &amp;&amp; parent.toRealPath().startsWith(directory.toRealPath())) {</span>
+<span class="nc" id="L529">      throw new IOException(</span>
+          &quot;Evidence export must not resolve into the managed experiment directory.&quot;);
+    }
+<span class="fc" id="L532">    Path temporary = Files.createTempFile(parent, &quot;.experiment-evidence-&quot;, &quot;.partial&quot;);</span>
+    try {
+<span class="fc" id="L534">      try (OutputStream output = Files.newOutputStream(temporary)) {</span>
+<span class="fc" id="L535">        exportEvidence(output);</span>
+      }
+<span class="fc" id="L537">      Files.move(</span>
+          temporary,
+          destination,
+          java.nio.file.StandardCopyOption.ATOMIC_MOVE,
+          java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+    } finally {
+<span class="fc" id="L543">      Files.deleteIfExists(temporary);</span>
+    }
+<span class="fc" id="L545">  }</span>
+
+  private void execute(ActiveRun run) {
+    try {
+<span class="fc" id="L549">      Files.createDirectories(run.directory);</span>
+<span class="fc" id="L550">      run.facts.put(&quot;evidence.complete&quot;, &quot;false&quot;);</span>
+<span class="fc" id="L551">      writeManifest(run, LocalizationExperimentStage.DEFINED);</span>
+<span class="fc" id="L552">      requireNotCancelled(run);</span>
+<span class="fc" id="L553">      LocalizationInputMode mode = LocalizationInputMode.valueOf(run.configuration.sourceMode());</span>
+<span class="fc" id="L554">      try (MultiChannelAudioSource input =</span>
+<span class="pc bpc" id="L555" title="2 of 3 branches missed.">          switch (mode) {</span>
+            case SIMULATION -&gt;
+<span class="fc" id="L557">                engine.simulate(</span>
+<span class="fc" id="L558">                    run.configuration.scenario(),</span>
+<span class="fc" id="L559">                    run.profile.array(),</span>
+<span class="fc" id="L560">                    run.configuration.durationSeconds());</span>
+            case REPLAY -&gt;
+<span class="nc" id="L562">                new RecordingMicrophoneSource(</span>
+<span class="nc" id="L563">                    recordings.path(run.configuration.recordingId()), run.profile.array());</span>
+<span class="pc" id="L564">            case LIVE -&gt; new JavaSoundMicrophoneArraySource(run.profile, 1.0);</span>
+          }) {
+<span class="fc" id="L566">        run.source =</span>
+            new SourceCaptureSession(
+                input,
+<span class="fc" id="L569">                Math.round(input.format().sampleRate() * run.configuration.durationSeconds()),</span>
+                BLOCK_FRAMES);
+<span class="fc" id="L571">        requireNotCancelled(run);</span>
+<span class="pc bpc" id="L572" title="1 of 2 branches missed.">        if (run.configuration.recordOutput()) {</span>
+<span class="fc" id="L573">          run.recorder =</span>
+<span class="fc" id="L574">              RecordingTap.start(</span>
+<span class="fc" id="L575">                  run.source, run.directory.resolve(run.configuration.outputFilename()));</span>
+        }
+<span class="fc" id="L577">        run.stage = &quot;ACQUIRING / LOCALIZING&quot;;</span>
+<span class="fc" id="L578">        run.facts.put(CAPTURE_STATE, &quot;RUNNING&quot;);</span>
+<span class="fc" id="L579">        LocalizationExperiment experiment =</span>
+<span class="fc" id="L580">            LocalizationExperiment.defined(</span>
+                    run.id,
+<span class="fc" id="L582">                    run.configuration.name(),</span>
+                    run.profile,
+                    mode,
+<span class="fc" id="L585">                    sourceReference(run.configuration),</span>
+<span class="fc" id="L586">                    clock.instant())</span>
+<span class="fc" id="L587">                .withMetadata(&quot;configuration.sha256&quot;, run.facts.get(&quot;configuration.sha256&quot;));</span>
+<span class="fc" id="L588">        LocalizationEngine.Result result =</span>
+<span class="fc" id="L589">            engine.run(</span>
+                run.source,
+                experiment,
+                new LocalizationEngine.Options(
+<span class="fc" id="L593">                    run.configuration.scenario(),</span>
+                    BLOCK_FRAMES,
+<span class="fc" id="L595">                    run.configuration.durationSeconds()),</span>
+<span class="fc" id="L596">                frame -&gt; progress(run, frame));</span>
+<span class="pc bpc" id="L597" title="1 of 2 branches missed.">        if (run.recorder != null) {</span>
+<span class="pc bpc" id="L598" title="1 of 2 branches missed.">          if (run.cancelled.get()) {</span>
+<span class="nc" id="L599">            run.recorder.stopIncomplete(&quot;Experiment stopped before its intended duration.&quot;);</span>
+          } else {
+<span class="fc" id="L601">            run.recorder.stop();</span>
+          }
+        }
+<span class="fc" id="L604">        run.facts.put(CAPTURE_STATE, &quot;STOPPED&quot;);</span>
+<span class="fc" id="L605">        finish(run, result);</span>
+      }
+<span class="fc" id="L607">    } catch (IOException | RuntimeException exception) {</span>
+<span class="fc" id="L608">      fail(run, exception);</span>
+    } finally {
+<span class="fc" id="L610">      run.health.update(RUNTIME, List.of(), clock.instant());</span>
+<span class="fc" id="L611">      run.finished = true;</span>
+    }
+<span class="fc" id="L613">  }</span>
+
+  private void progress(ActiveRun run, LocalizationEngine.Frame snapshot) {
+<span class="fc" id="L616">    run.facts.put(&quot;processed.blocks&quot;, Integer.toString(snapshot.index() + 1));</span>
+<span class="fc" id="L617">    run.facts.put(&quot;processed.frames&quot;, Long.toString(run.source.framesRead()));</span>
+<span class="fc" id="L618">    run.facts.put(&quot;source.lastBlockAt&quot;, clock.instant().toString());</span>
+<span class="fc" id="L619">    run.facts.put(</span>
+        &quot;elapsed.sampleSeconds&quot;,
+<span class="fc" id="L621">        Double.toString(run.source.framesRead() / run.source.format().sampleRate()));</span>
+<span class="fc" id="L622">    updateProcessingHealth(run, snapshot);</span>
+<span class="fc" id="L623">    run.tracks =</span>
+<span class="fc" id="L624">        snapshot.tracks().stream()</span>
+<span class="fc" id="L625">            .map(track -&gt; new TrackPoint(track.id(), track.x(), track.y(), track.confidence()))</span>
+<span class="fc" id="L626">            .toList();</span>
+<span class="fc" id="L627">    List&lt;ExperimentHealthFinding&gt; findings = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L628">    inspectSignal(run, findings);</span>
+<span class="pc bpc" id="L629" title="1 of 2 branches missed.">    if (snapshot.synchronization().status()</span>
+        != org.hammer.audio.acquisition.SynchronizationStatus.TRUSTED) {
+<span class="nc" id="L631">      boolean usable = snapshot.synchronization().usable();</span>
+<span class="nc" id="L632">      findings.add(</span>
+<span class="nc" id="L633">          finding(</span>
+              &quot;calibration.runtime&quot;,
+<span class="nc bnc" id="L635" title="All 2 branches missed.">              usable ? Severity.WARNING : Severity.ERROR,</span>
+<span class="nc bnc" id="L636" title="All 2 branches missed.">              usable ? &quot;Synchronization is degraded&quot; : &quot;Synchronization is no longer usable&quot;,</span>
+<span class="nc" id="L637">              String.join(&quot; &quot;, snapshot.synchronization().diagnostics()),</span>
+              RUNTIME,
+              EDIT_PROFILE));
+    }
+<span class="pc bpc" id="L641" title="1 of 2 branches missed.">    if (!snapshot.reliableTdoa()) {</span>
+<span class="nc" id="L642">      findings.add(</span>
+<span class="nc" id="L643">          finding(</span>
+              &quot;signal.tdoa&quot;,
+              Severity.WARNING,
+              &quot;TDOA pair evidence is inconsistent&quot;,
+              &quot;Inspect geometry, calibration, reflections and signal quality.&quot;,
+              RUNTIME,
+              INSPECT_DIAGNOSTICS));
+    }
+<span class="pc bpc" id="L651" title="1 of 2 branches missed.">    RecordingStatus recording = run.recorder == null ? null : run.recorder.status();</span>
+<span class="pc bpc" id="L652" title="1 of 2 branches missed.">    if (recording != null</span>
+<span class="fc bfc" id="L653" title="All 2 branches covered.">        &amp;&amp; (recording.storage().level() != RecordingStorageLevel.NORMAL</span>
+<span class="pc bpc" id="L654" title="1 of 2 branches missed.">            || !recording.completeSoFar())) {</span>
+<span class="fc" id="L655">      findings.add(</span>
+<span class="fc" id="L656">          finding(</span>
+              &quot;recording.health&quot;,
+<span class="pc bpc" id="L658" title="1 of 2 branches missed.">              recording.terminal() ? Severity.ERROR : Severity.WARNING,</span>
+<span class="fc" id="L659">              &quot;Recording: &quot; + recording.state() + &quot; · storage &quot; + recording.storage().level(),</span>
+<span class="fc" id="L660">              recording.stopReason() + &quot; &quot; + recording.storage().errorMessage(),</span>
+              RUNTIME,
+              &quot;inspect-recording&quot;));
+    }
+<span class="fc" id="L664">    findings.add(</span>
+        new ExperimentHealthFinding(
+            &quot;source.freshness&quot;,
+            Severity.INFO,
+            &quot;Source samples received&quot;,
+<span class="fc" id="L669">            &quot;Block &quot; + (snapshot.index() + 1),</span>
+            RUNTIME,
+<span class="fc" id="L671">            clock.instant(),</span>
+            5L,
+            &quot;select-source&quot;,
+            false,
+            false));
+<span class="fc" id="L676">    run.health.update(RUNTIME, findings, clock.instant());</span>
+<span class="fc" id="L677">  }</span>
+
+  private void updateProcessingHealth(ActiveRun run, LocalizationEngine.Frame snapshot) {
+<span class="fc" id="L680">    run.facts.put(&quot;processing.lastNanos&quot;, Long.toString(snapshot.processingNanos()));</span>
+<span class="fc" id="L681">    run.facts.put(&quot;processing.budgetNanos&quot;, Long.toString(snapshot.processingBudgetNanos()));</span>
+<span class="fc bfc" id="L682" title="All 2 branches covered.">    if (snapshot.processingNanos() &gt; snapshot.processingBudgetNanos()) {</span>
+<span class="fc" id="L683">      run.processingOverruns++;</span>
+    }
+<span class="fc" id="L685">    updateProcessingHealth(run, snapshot.index() + 1L, run.processingOverruns);</span>
+<span class="fc" id="L686">  }</span>
+
+  private void updateProcessingHealth(ActiveRun run, long blocks, long overruns) {
+<span class="fc" id="L689">    run.facts.put(PROCESSING_OVERRUNS, Long.toString(overruns));</span>
+    List&lt;ExperimentHealthFinding&gt; findings =
+<span class="fc bfc" id="L691" title="All 2 branches covered.">        overruns &gt;= Math.max(3L, blocks / 5L)</span>
+<span class="fc" id="L692">            ? List.of(</span>
+<span class="fc" id="L693">                finding(</span>
+                    PROCESSING_OVERRUNS,
+                    Severity.WARNING,
+                    &quot;Processing repeatedly exceeded its real-time budget&quot;,
+                    overruns
+                        + &quot; of &quot;
+                        + blocks
+                        + &quot; blocks exceeded budget. Inspect algorithm settings before a live run.&quot;,
+                    PERFORMANCE_COMPONENT,
+                    INSPECT_DIAGNOSTICS))
+<span class="fc" id="L703">            : List.of();</span>
+    // Clear the current condition on recovery; the aggregator retains its warning and review.
+    // A stable message preserves acknowledgement while only the running counts change.
+<span class="fc" id="L706">    run.health.update(PERFORMANCE_COMPONENT, findings, clock.instant());</span>
+<span class="fc" id="L707">  }</span>
+
+  private void inspectSignal(ActiveRun run, List&lt;ExperimentHealthFinding&gt; findings) {
+<span class="fc" id="L710">    org.hammer.audio.core.AudioBlock block = run.source.getLatestBlock();</span>
+<span class="pc bpc" id="L711" title="2 of 4 branches missed.">    if (block == null || block.frames() == 0) {</span>
+<span class="nc" id="L712">      return;</span>
+    }
+<span class="fc" id="L714">    long clipping = 0L;</span>
+<span class="fc" id="L715">    List&lt;String&gt; channelRms = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L716">    double largestRms = 0.0;</span>
+<span class="fc bfc" id="L717" title="All 2 branches covered.">    for (int channel = 0; channel &lt; block.channels(); channel++) {</span>
+<span class="fc" id="L718">      double squares = 0.0;</span>
+<span class="fc bfc" id="L719" title="All 2 branches covered.">      for (float sample : block.channelView(channel)) {</span>
+<span class="fc" id="L720">        squares += sample * sample;</span>
+<span class="pc bpc" id="L721" title="1 of 2 branches missed.">        if (Math.abs(sample) &gt;= 0.999f) {</span>
+<span class="nc" id="L722">          clipping++;</span>
+        }
+      }
+<span class="fc" id="L725">      double rms = Math.sqrt(squares / block.frames());</span>
+<span class="fc" id="L726">      largestRms = Math.max(largestRms, rms);</span>
+<span class="fc" id="L727">      channelRms.add(Double.toString(rms));</span>
+    }
+<span class="fc" id="L729">    run.facts.put(&quot;signal.channelRms&quot;, String.join(&quot;,&quot;, channelRms));</span>
+<span class="fc" id="L730">    run.facts.put(&quot;signal.clippedSamples&quot;, Long.toString(clipping));</span>
+<span class="pc bpc" id="L731" title="1 of 2 branches missed.">    if (clipping &gt; 0L) {</span>
+<span class="nc" id="L732">      findings.add(</span>
+<span class="nc" id="L733">          finding(</span>
+              &quot;signal.clipping&quot;,
+              Severity.WARNING,
+              &quot;Input samples are clipping&quot;,
+              clipping + &quot; samples reached the PCM limit in the latest block; reduce capture gain.&quot;,
+              RUNTIME,
+              &quot;inspect-signal&quot;));
+    }
+<span class="pc bpc" id="L741" title="1 of 2 branches missed.">    if (largestRms &lt; 0.000001) {</span>
+<span class="nc" id="L742">      findings.add(</span>
+<span class="nc" id="L743">          finding(</span>
+              &quot;signal.silence&quot;,
+              Severity.WARNING,
+              &quot;All microphone channels are silent&quot;,
+              &quot;Check device routing, input gain and the physical sound source.&quot;,
+              RUNTIME,
+              &quot;inspect-signal&quot;));
+    }
+<span class="fc" id="L751">  }</span>
+
+  private void finish(ActiveRun run, LocalizationEngine.Result result) throws IOException {
+<span class="fc" id="L754">    run.stage = &quot;BENCHMARKED / FINALIZING EVIDENCE&quot;;</span>
+<span class="pc bpc" id="L755" title="2 of 4 branches missed.">    boolean complete = !run.cancelled.get() &amp;&amp; result.blocks() &gt; 0;</span>
+<span class="fc" id="L756">    complete &amp;=</span>
+        run
+            .health
+<span class="fc" id="L759">            .snapshot(</span>
+<span class="fc" id="L760">                run.id, run.configuration.name(), run.state, run.stage, run.facts, clock.instant())</span>
+<span class="fc" id="L761">            .findings()</span>
+<span class="fc" id="L762">            .stream()</span>
+<span class="fc" id="L763">            .noneMatch(</span>
+                finding -&gt;
+<span class="pc bpc" id="L765" title="1 of 2 branches missed.">                    finding.severity() == Severity.ERROR</span>
+<span class="pc bpc" id="L766" title="1 of 2 branches missed.">                        || finding.severity() == Severity.BLOCKING);</span>
+<span class="fc" id="L767">    complete &amp;= recordingEvidenceComplete(run);</span>
+<span class="fc" id="L768">    run.facts.put(</span>
+        &quot;benchmark.status&quot;,
+<span class="fc bfc" id="L770" title="All 2 branches covered.">        result.benchmarkAvailable() ? &quot;AVAILABLE&quot; : &quot;Unavailable: no reference ground truth&quot;);</span>
+<span class="fc" id="L771">    updateProcessingHealth(run, result.blocks(), result.overruns());</span>
+<span class="fc" id="L772">    run.facts.put(CAPTURE_STATE, &quot;STOPPED&quot;);</span>
+<span class="fc" id="L773">    complete &amp;= writeResultArtifacts(run, result);</span>
+<span class="pc bpc" id="L774" title="1 of 2 branches missed.">    if (&quot;REPLAY&quot;.equals(run.configuration.sourceMode())) {</span>
+<span class="nc" id="L775">      Path input = recordings.path(run.configuration.recordingId());</span>
+<span class="nc" id="L776">      Files.copy(input, run.directory.resolve(&quot;input.aarec&quot;));</span>
+<span class="nc" id="L777">      Path recovery = input.resolveSibling(input.getFileName() + &quot;.recovery.txt&quot;);</span>
+<span class="nc bnc" id="L778" title="All 2 branches missed.">      if (Files.isRegularFile(recovery)) {</span>
+<span class="nc" id="L779">        Files.copy(recovery, run.directory.resolve(&quot;input-recovery.txt&quot;));</span>
+      }
+    }
+<span class="pc bpc" id="L782" title="1 of 2 branches missed.">    complete &amp;= !run.cancelled.get();</span>
+<span class="fc" id="L783">    run.facts.put(&quot;evidence.complete&quot;, Boolean.toString(complete));</span>
+<span class="fc bfc" id="L784" title="All 2 branches covered.">    run.state = complete ? ExperimentHealthState.COMPLETED : ExperimentHealthState.INCOMPLETE;</span>
+<span class="fc" id="L785">    run.stage = &quot;EXPORTED&quot;;</span>
+<span class="fc" id="L786">    run.evidenceLock.lock();</span>
+    try {
+<span class="fc" id="L788">      writeManifest(run, LocalizationExperimentStage.EXPORTED);</span>
+<span class="fc" id="L789">      writeHealthEvidence(run);</span>
+<span class="fc" id="L790">      run.evidenceReady = true;</span>
+    } finally {
+<span class="fc" id="L792">      run.evidenceLock.unlock();</span>
+    }
+<span class="fc" id="L794">  }</span>
+
+  private boolean writeResultArtifacts(ActiveRun run, LocalizationEngine.Result result)
+      throws IOException {
+<span class="fc" id="L798">    Set&lt;String&gt; generated = new TreeSet&lt;&gt;();</span>
+<span class="fc bfc" id="L799" title="All 2 branches covered.">    for (Map.Entry&lt;String, String&gt; artifact : result.artifacts().entrySet()) {</span>
+<span class="pc bpc" id="L800" title="1 of 2 branches missed.">      if (!artifact.getKey().matches(&quot;[A-Za-z0-9][A-Za-z0-9._-]{0,80}&quot;)) {</span>
+<span class="nc" id="L801">        throw new IOException(&quot;Plugin output filename is not portable: &quot; + artifact.getKey());</span>
+      }
+<span class="fc" id="L803">      Path path = run.directory.resolve(artifact.getKey());</span>
+<span class="fc" id="L804">      Files.writeString(path, artifact.getValue());</span>
+<span class="pc bpc" id="L805" title="1 of 2 branches missed.">      if (Files.isRegularFile(path)) {</span>
+<span class="fc" id="L806">        generated.add(artifact.getKey());</span>
+      }
+<span class="fc" id="L808">    }</span>
+<span class="fc" id="L809">    Set&lt;String&gt; required = new TreeSet&lt;&gt;(result.requiredArtifacts());</span>
+<span class="fc" id="L810">    Set&lt;String&gt; missing = new TreeSet&lt;&gt;(required);</span>
+<span class="fc" id="L811">    missing.removeAll(generated);</span>
+<span class="fc" id="L812">    String generatedNames = String.join(&quot;, &quot;, generated);</span>
+<span class="fc" id="L813">    String missingNames = String.join(&quot;, &quot;, missing);</span>
+<span class="fc" id="L814">    run.facts.put(&quot;artifacts.required&quot;, String.join(&quot;, &quot;, required));</span>
+<span class="fc" id="L815">    run.facts.put(&quot;artifacts.generated&quot;, generatedNames);</span>
+<span class="fc" id="L816">    run.facts.put(&quot;artifacts.missing&quot;, missingNames);</span>
+<span class="fc bfc" id="L817" title="All 4 branches covered.">    boolean complete = !required.isEmpty() &amp;&amp; missing.isEmpty();</span>
+<span class="fc" id="L818">    List&lt;ExperimentHealthFinding&gt; findings = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L819" title="All 2 branches covered.">    if (!complete) {</span>
+<span class="fc" id="L820">      findings.add(</span>
+<span class="fc" id="L821">          finding(</span>
+              &quot;evidence.artifacts&quot;,
+              Severity.ERROR,
+<span class="fc bfc" id="L824" title="All 2 branches covered.">              required.isEmpty()</span>
+<span class="fc" id="L825">                  ? &quot;Required analysis reports were not declared&quot;</span>
+<span class="fc" id="L826">                  : &quot;Required analysis reports are missing&quot;,</span>
+<span class="fc bfc" id="L827" title="All 2 branches covered.">              (required.isEmpty()</span>
+<span class="fc" id="L828">                      ? &quot;The localization provider returned no required report filenames.&quot;</span>
+<span class="fc" id="L829">                      : &quot;Missing required reports: &quot; + missingNames + '.')</span>
+                  + &quot; Persisted reports: &quot;
+                  + generatedNames
+                  + &quot;. Existing files remain available as incomplete evidence.&quot;,
+              &quot;artifacts&quot;,
+              INSPECT_DIAGNOSTICS));
+    }
+<span class="fc" id="L836">    run.health.update(&quot;artifacts&quot;, findings, clock.instant());</span>
+<span class="fc" id="L837">    return complete;</span>
+  }
+
+  private static boolean recordingEvidenceComplete(ActiveRun run) throws IOException {
+<span class="pc bpc" id="L841" title="1 of 2 branches missed.">    if (run.recorder == null) {</span>
+<span class="nc bnc" id="L842" title="All 2 branches missed.">      return !&quot;LIVE&quot;.equals(run.configuration.sourceMode());</span>
+    }
+<span class="pc bpc" id="L844" title="1 of 2 branches missed.">    if (!Files.isRegularFile(run.recorder.file())) {</span>
+<span class="nc" id="L845">      return false;</span>
+    }
+<span class="fc" id="L847">    RecordingInspection inspection = AudioBlockRecordingReader.inspect(run.recorder.file());</span>
+<span class="fc" id="L848">    run.facts.put(&quot;recording.integrity&quot;, inspection.integrity().name());</span>
+<span class="fc" id="L849">    run.facts.put(&quot;recording.verifiedContentSha256&quot;, inspection.sha256());</span>
+<span class="fc" id="L850">    run.facts.put(&quot;recording.sha256&quot;, ExperimentEvidenceFiles.sha256(run.recorder.file()));</span>
+<span class="fc" id="L851">    run.facts.put(&quot;recording.bytes&quot;, Long.toString(Files.size(run.recorder.file())));</span>
+<span class="pc bpc" id="L852" title="2 of 4 branches missed.">    return run.recorder.status().state() == RecordingState.COMPLETED &amp;&amp; inspection.complete();</span>
+  }
+
+  private void fail(ActiveRun run, Exception exception) {
+<span class="fc" id="L856">    run.evidenceReady = false;</span>
+<span class="fc" id="L857">    run.state =</span>
+<span class="pc bpc" id="L858" title="1 of 2 branches missed.">        run.cancelled.get() ? ExperimentHealthState.INCOMPLETE : ExperimentHealthState.FAILED;</span>
+<span class="fc" id="L859">    run.stage = &quot;FINALIZATION FAILED&quot;;</span>
+<span class="fc" id="L860">    run.facts.put(&quot;evidence.complete&quot;, &quot;false&quot;);</span>
+<span class="fc" id="L861">    run.facts.put(CAPTURE_STATE, &quot;STOPPED&quot;);</span>
+<span class="fc" id="L862">    run.health.update(</span>
+        &quot;failure&quot;,
+<span class="fc" id="L864">        List.of(</span>
+<span class="fc" id="L865">            finding(</span>
+                &quot;run.failure&quot;,
+                Severity.ERROR,
+<span class="pc bpc" id="L868" title="1 of 2 branches missed.">                run.cancelled.get() ? &quot;Experiment stopped before completion&quot; : &quot;Experiment failed&quot;,</span>
+<span class="fc" id="L869">                exception.toString(),</span>
+                &quot;failure&quot;,
+                INSPECT_DIAGNOSTICS)),
+<span class="fc" id="L872">        clock.instant());</span>
+    try {
+<span class="pc bpc" id="L874" title="1 of 2 branches missed.">      if (run.source != null) {</span>
+<span class="nc" id="L875">        run.source.close();</span>
+      }
+<span class="pc bpc" id="L877" title="1 of 2 branches missed.">      if (run.recorder != null) {</span>
+<span class="nc" id="L878">        run.recorder.stopIncomplete(&quot;Experiment did not complete: &quot; + exception);</span>
+      }
+<span class="fc" id="L880">      run.evidenceLock.lock();</span>
+      try {
+<span class="fc" id="L882">        Files.createDirectories(run.directory);</span>
+<span class="fc" id="L883">        writeManifest(run, LocalizationExperimentStage.DEFINED);</span>
+<span class="fc" id="L884">        writeHealthEvidence(run);</span>
+<span class="fc" id="L885">        run.evidenceReady = true;</span>
+      } finally {
+<span class="fc" id="L887">        run.evidenceLock.unlock();</span>
+      }
+<span class="nc" id="L889">    } catch (IOException closeFailure) {</span>
+<span class="nc" id="L890">      run.facts.put(&quot;evidence.finalizationError&quot;, closeFailure.toString());</span>
+<span class="fc" id="L891">    }</span>
+<span class="fc" id="L892">  }</span>
+
+  private void writeHealthEvidence(ActiveRun run) throws IOException {
+<span class="fc" id="L895">    Files.writeString(run.directory.resolve(&quot;health.txt&quot;), diagnosticText(run));</span>
+<span class="fc" id="L896">    ExperimentEvidenceFiles.writeHashes(run.directory);</span>
+<span class="fc" id="L897">  }</span>
+
+  private static void requireNotCancelled(ActiveRun run) throws IOException {
+<span class="fc bfc" id="L900" title="All 2 branches covered.">    if (run.cancelled.get()) {</span>
+<span class="pc bpc" id="L901" title="1 of 2 branches missed.">      if (run.source != null) {</span>
+<span class="nc" id="L902">        run.source.close();</span>
+      }
+<span class="fc" id="L904">      throw new IOException(&quot;Experiment stopped before source execution.&quot;);</span>
+    }
+<span class="fc" id="L906">  }</span>
+
+  private void writeManifest(ActiveRun run, LocalizationExperimentStage stage) throws IOException {
+<span class="fc" id="L909">    LocalizationExperiment experiment =</span>
+        new LocalizationExperiment(
+            run.id,
+<span class="fc" id="L912">            run.configuration.name(),</span>
+            run.profile,
+<span class="fc" id="L914">            LocalizationInputMode.valueOf(run.configuration.sourceMode()),</span>
+<span class="fc" id="L915">            sourceReference(run.configuration),</span>
+            run.createdAt,
+            stage,
+            run.facts);
+<span class="fc" id="L919">    Files.writeString(</span>
+<span class="fc" id="L920">        run.directory.resolve(&quot;experiment.manifest&quot;),</span>
+<span class="fc" id="L921">        new LocalizationExperimentCodec().encode(experiment));</span>
+<span class="fc" id="L922">  }</span>
+
+  private String diagnosticText(ActiveRun run) {
+<span class="fc" id="L925">    ExperimentHealthSnapshot snapshot =</span>
+<span class="fc" id="L926">        run.health.snapshot(</span>
+<span class="fc" id="L927">            run.id, run.configuration.name(), run.state, run.stage, run.facts, clock.instant());</span>
+<span class="fc" id="L928">    StringBuilder text =</span>
+        new StringBuilder()
+<span class="fc" id="L930">            .append(snapshot.state())</span>
+<span class="fc" id="L931">            .append('\n')</span>
+<span class="fc" id="L932">            .append(snapshot.stage())</span>
+<span class="fc" id="L933">            .append('\n');</span>
+<span class="fc" id="L934">    new TreeMap&lt;&gt;(snapshot.facts())</span>
+<span class="fc" id="L935">        .forEach((key, value) -&gt; text.append(key).append('=').append(value).append('\n'));</span>
+<span class="fc" id="L936">    snapshot.findings().forEach(finding -&gt; text.append(finding).append('\n'));</span>
+<span class="fc" id="L937">    snapshot.history().forEach(event -&gt; text.append(event).append('\n'));</span>
+<span class="fc bfc" id="L938" title="All 2 branches covered.">    if (run.recorder != null) {</span>
+<span class="fc" id="L939">      text.append(run.recorder.status()).append('\n');</span>
+    }
+<span class="fc" id="L941">    return text.toString();</span>
+  }
+
+  private Map&lt;String, String&gt; initialFacts(
+      Configuration configuration, MicrophoneArrayProfile profile) {
+<span class="fc" id="L946">    Map&lt;String, String&gt; facts = new ConcurrentHashMap&lt;&gt;();</span>
+<span class="fc" id="L947">    facts.put(&quot;readiness.scope&quot;, &quot;STANDALONE_MICROPHONE&quot;);</span>
+<span class="fc" id="L948">    facts.put(</span>
+        &quot;document.status&quot;,
+        &quot;Not applicable: this run uses a saved microphone profile, not an open .audioexp document&quot;);
+<span class="fc" id="L951">    facts.put(</span>
+        &quot;workflow.status&quot;,
+        &quot;Not applicable: this run uses the localization pipeline, not the editable workflow graph&quot;);
+<span class="fc" id="L954">    facts.put(</span>
+        &quot;bindings.status&quot;,
+        &quot;Source resources are checked for this profile and configuration; document bindings are not&quot;
+            + &quot; used&quot;);
+<span class="fc" id="L958">    facts.put(&quot;source.mode&quot;, configuration.sourceMode());</span>
+<span class="fc" id="L959">    facts.put(&quot;profile.id&quot;, profile.profileId());</span>
+<span class="fc" id="L960">    facts.put(&quot;profile.layout&quot;, profile.layout().name());</span>
+<span class="fc" id="L961">    facts.put(&quot;profile.channels&quot;, Integer.toString(profile.array().channels()));</span>
+<span class="fc" id="L962">    facts.put(&quot;profile.channelMap&quot;, profile.array().microphones().toString());</span>
+<span class="fc" id="L963">    facts.put(</span>
+        &quot;profile.sha256&quot;,
+<span class="fc" id="L965">        ExperimentEvidenceFiles.sha256(</span>
+<span class="fc" id="L966">            profileCodec.encode(profile).getBytes(StandardCharsets.UTF_8)));</span>
+<span class="fc" id="L967">    facts.put(&quot;physics.speedOfSound&quot;, &quot;343 m/s; simulated air assumption&quot;);</span>
+<span class="fc" id="L968">    facts.put(&quot;algorithm&quot;, &quot;GCC_PHAT / TrackingPipeline&quot;);</span>
+<span class="pc bpc" id="L969" title="1 of 2 branches missed.">    facts.put(&quot;plugin&quot;, engine == null ? &quot;Unavailable&quot; : engine.id());</span>
+<span class="pc bpc" id="L970" title="1 of 2 branches missed.">    facts.put(&quot;plugin.version&quot;, engine == null ? &quot;Unavailable&quot; : engine.version());</span>
+<span class="fc" id="L971">    facts.put(&quot;intended.seconds&quot;, Integer.toString(configuration.durationSeconds()));</span>
+<span class="fc" id="L972">    facts.put(</span>
+        &quot;calibration.status&quot;,
+<span class="pc bpc" id="L974" title="1 of 2 branches missed.">        profile.calibration() == null</span>
+<span class="fc" id="L975">            ? &quot;Not supplied (required for LIVE)&quot;</span>
+<span class="nc" id="L976">            : profile.calibration().profileId());</span>
+<span class="pc bpc" id="L977" title="1 of 2 branches missed.">    if (profile.calibration() != null) {</span>
+<span class="nc" id="L978">      org.hammer.audio.acquisition.SynchronizationAssessment assessment =</span>
+          profile
+<span class="nc" id="L980">              .calibration()</span>
+<span class="nc" id="L981">              .assess(</span>
+<span class="nc" id="L982">                  clock.instant(),</span>
+<span class="nc bnc" id="L983" title="All 2 branches missed.">                  profile.liveCapture() == null</span>
+<span class="nc" id="L984">                      ? 16_000f</span>
+<span class="nc" id="L985">                      : profile.liveCapture().format().sampleRate(),</span>
+                  1.0);
+<span class="nc" id="L987">      facts.put(&quot;calibration.calibratedAt&quot;, profile.calibration().calibratedAt().toString());</span>
+<span class="nc" id="L988">      facts.put(&quot;calibration.validUntil&quot;, profile.calibration().validUntil().toString());</span>
+<span class="nc" id="L989">      facts.put(&quot;calibration.synchronization&quot;, assessment.status().name());</span>
+<span class="nc" id="L990">      facts.put(&quot;calibration.errorSamples&quot;, Double.toString(assessment.estimatedErrorSamples()));</span>
+<span class="nc" id="L991">      facts.put(&quot;calibration.errorSeconds&quot;, Double.toString(assessment.estimatedErrorSeconds()));</span>
+<span class="nc" id="L992">      facts.put(</span>
+<span class="nc" id="L993">          &quot;calibration.budgetPercent&quot;, Double.toString(assessment.estimatedErrorSamples() * 100.0));</span>
+    }
+<span class="fc" id="L995">    return facts;</span>
+  }
+
+  private AudioFormatDescriptor sourceFormat(
+      Configuration configuration,
+      MicrophoneArrayProfile profile,
+      List&lt;ExperimentHealthFinding&gt; findings)
+      throws IOException {
+<span class="pc bpc" id="L1003" title="1 of 4 branches missed.">    if (&quot;LIVE&quot;.equals(configuration.sourceMode()) &amp;&amp; profile.liveCapture() != null) {</span>
+<span class="nc" id="L1004">      return profile.liveCapture().format();</span>
+    }
+<span class="pc bpc" id="L1006" title="1 of 2 branches missed.">    if (&quot;REPLAY&quot;.equals(configuration.sourceMode())) {</span>
+      try {
+<span class="nc" id="L1008">        RecordingInspection inspection =</span>
+<span class="nc" id="L1009">            AudioBlockRecordingReader.inspect(recordings.path(configuration.recordingId()));</span>
+<span class="nc bnc" id="L1010" title="All 4 branches missed.">        if (!inspection.complete() || inspection.continuityGapCount() != 0L) {</span>
+<span class="nc" id="L1011">          findings.add(</span>
+<span class="nc" id="L1012">              finding(</span>
+                  &quot;source.replay-integrity&quot;,
+                  Severity.BLOCKING,
+                  &quot;Replay input is incomplete or unverified&quot;,
+<span class="nc" id="L1016">                  inspection.integrity() + &quot;: &quot; + inspection.detail(),</span>
+                  PREFLIGHT_COMPONENT,
+                  &quot;recover-recording&quot;));
+        }
+<span class="nc bnc" id="L1020" title="All 2 branches missed.">        if (inspection.format().channels() != profile.array().channels()) {</span>
+<span class="nc" id="L1021">          findings.add(</span>
+<span class="nc" id="L1022">              finding(</span>
+                  &quot;source.replay-channels&quot;,
+                  Severity.BLOCKING,
+                  &quot;Replay channel count differs from the selected profile&quot;,
+<span class="nc" id="L1026">                  &quot;Recording channels: &quot; + inspection.format().channels(),</span>
+                  PREFLIGHT_COMPONENT,
+                  EDIT_PROFILE));
+        }
+<span class="nc" id="L1030">        return inspection.format();</span>
+<span class="nc" id="L1031">      } catch (IOException | IllegalArgumentException exception) {</span>
+<span class="nc" id="L1032">        findings.add(</span>
+<span class="nc" id="L1033">            finding(</span>
+                &quot;source.replay-file&quot;,
+                Severity.BLOCKING,
+                &quot;Select a readable recording for replay&quot;,
+<span class="nc" id="L1037">                exception.getMessage(),</span>
+                PREFLIGHT_COMPONENT,
+                &quot;import-recording&quot;));
+      }
+    }
+<span class="fc" id="L1042">    return new AudioFormatDescriptor(</span>
+<span class="pc bpc" id="L1043" title="1 of 2 branches missed.">        engine == null ? 16_000f : engine.simulationSampleRate(configuration.scenario()),</span>
+<span class="fc" id="L1044">        profile.array().channels(),</span>
+        32);
+  }
+
+  private MicrophoneArrayProfile profile(String id) throws IOException {
+<span class="fc" id="L1049">    return profiles</span>
+<span class="fc" id="L1050">        .find(id)</span>
+<span class="fc" id="L1051">        .orElseGet(</span>
+            () -&gt; {
+<span class="fc" id="L1053">              MicrophoneArrayProfile starter = starterProfile();</span>
+<span class="pc bpc" id="L1054" title="1 of 2 branches missed.">              if (!starter.profileId().equals(id)) {</span>
+<span class="nc" id="L1055">                throw new IllegalArgumentException(&quot;Unknown microphone profile: &quot; + id);</span>
+              }
+<span class="fc" id="L1057">              return starter;</span>
+            });
+  }
+
+  private MicrophoneArrayProfile starterProfile() {
+<span class="fc" id="L1062">    return new MicrophoneArrayProfile(</span>
+        &quot;rectangular-example&quot;,
+        &quot;Rectangular four-microphone example&quot;,
+        MicrophoneArrayLayout.RECTANGULAR,
+<span class="pc bpc" id="L1066" title="1 of 2 branches missed.">        engine == null</span>
+<span class="nc" id="L1067">            ? new MicrophoneArray(</span>
+<span class="nc" id="L1068">                List.of(</span>
+                    new Microphone(&quot;mic-0&quot;, new Vector2(0, 0), 0),
+                        new Microphone(&quot;mic-1&quot;, new Vector2(1, 0), 1),
+                    new Microphone(&quot;mic-2&quot;, new Vector2(1, 1), 2),
+                        new Microphone(&quot;mic-3&quot;, new Vector2(0, 1), 3)))
+<span class="fc" id="L1073">            : engine.exampleArray(),</span>
+<span class="fc" id="L1074">        Set.of(LocalizationInputMode.SIMULATION, LocalizationInputMode.REPLAY),</span>
+        null,
+        null);
+  }
+
+  private ProfileView profileView(MicrophoneArrayProfile profile) {
+<span class="fc" id="L1080">    return new ProfileView(</span>
+<span class="fc" id="L1081">        profile.profileId(),</span>
+<span class="fc" id="L1082">        profile.displayName(),</span>
+<span class="fc" id="L1083">        profile.layout().name(),</span>
+<span class="fc" id="L1084">        profile.array().channels(),</span>
+<span class="fc" id="L1085">        profileCodec.encode(profile));</span>
+  }
+
+  private Path preflightDestination(Configuration configuration) {
+<span class="fc" id="L1089">    return directory</span>
+<span class="fc" id="L1090">        .resolve(&quot;runs&quot;)</span>
+<span class="fc" id="L1091">        .resolve(PREFLIGHT_COMPONENT)</span>
+<span class="fc" id="L1092">        .resolve(configuration.outputFilename());</span>
+  }
+
+  private String fingerprint(Configuration configuration, MicrophoneArrayProfile profile) {
+<span class="fc" id="L1096">    return ExperimentEvidenceFiles.sha256(</span>
+<span class="fc" id="L1097">        (configuration + &quot;\n&quot; + profileCodec.encode(profile)).getBytes(StandardCharsets.UTF_8));</span>
+  }
+
+  private static String sourceReference(Configuration configuration) {
+<span class="pc bpc" id="L1101" title="1 of 2 branches missed.">    return &quot;REPLAY&quot;.equals(configuration.sourceMode())</span>
+<span class="nc" id="L1102">        ? configuration.recordingId()</span>
+<span class="fc" id="L1103">        : configuration.sourceMode().toLowerCase(java.util.Locale.ROOT)</span>
+            + ':'
+<span class="fc" id="L1105">            + configuration.scenario();</span>
+  }
+
+  private ExperimentHealthFinding finding(
+      String code,
+      Severity severity,
+      String message,
+      String detail,
+      String component,
+      String remedy) {
+<span class="fc" id="L1115">    return new ExperimentHealthFinding(</span>
+        code,
+        severity,
+        message,
+        detail,
+        component,
+<span class="fc bfc" id="L1121" title="All 4 branches covered.">        clock.instant(),</span>
+        0L,
+        remedy,
+        severity == Severity.WARNING || severity == Severity.ERROR,
+        false);
+  }
+
+  @Override
+  public synchronized void close() throws IOException {
+<span class="pc bpc" id="L1130" title="1 of 2 branches missed.">    if (closed) {</span>
+<span class="nc" id="L1131">      return;</span>
+    }
+<span class="fc" id="L1133">    closed = true;</span>
+<span class="fc" id="L1134">    stop();</span>
+<span class="fc" id="L1135">    executor.shutdown();</span>
+    try {
+<span class="pc bpc" id="L1137" title="1 of 2 branches missed.">      if (!executor.awaitTermination(15L, java.util.concurrent.TimeUnit.SECONDS)) {</span>
+<span class="nc" id="L1138">        executor.shutdownNow();</span>
+<span class="nc" id="L1139">        throw new IOException(&quot;Experiment did not finish shutdown within 15 seconds.&quot;);</span>
+      }
+<span class="nc" id="L1141">    } catch (InterruptedException exception) {</span>
+<span class="nc" id="L1142">      Thread.currentThread().interrupt();</span>
+<span class="nc" id="L1143">      executor.shutdownNow();</span>
+<span class="nc" id="L1144">      throw new IOException(&quot;Interrupted while finalizing experiment evidence.&quot;, exception);</span>
+<span class="fc" id="L1145">    }</span>
+<span class="fc" id="L1146">  }</span>
+
+  private static final class ActiveRun {
+    private final String id;
+    private final Configuration configuration;
+    private final MicrophoneArrayProfile profile;
+    private final Path directory;
+<span class="fc" id="L1153">    private final ExperimentHealthAggregator health = new ExperimentHealthAggregator();</span>
+<span class="fc" id="L1154">    private final Map&lt;String, String&gt; facts = new ConcurrentHashMap&lt;&gt;();</span>
+<span class="fc" id="L1155">    private final AtomicBoolean cancelled = new AtomicBoolean();</span>
+<span class="fc" id="L1156">    private final ReentrantLock evidenceLock = new ReentrantLock();</span>
+    private final Instant createdAt;
+    // Only the processing executor mutates this counter; views read the published facts.
+    private long processingOverruns;
+<span class="fc" id="L1160">    private volatile ExperimentHealthState state = ExperimentHealthState.NOT_CONFIGURED;</span>
+<span class="fc" id="L1161">    private volatile String stage = &quot;DEFINED&quot;;</span>
+    private volatile SourceCaptureSession source;
+    private volatile RecordingTap recorder;
+<span class="fc" id="L1164">    private volatile List&lt;TrackPoint&gt; tracks = List.of();</span>
+    private volatile boolean finished;
+    private volatile boolean evidenceReady;
+
+    private ActiveRun(
+        String id,
+        Configuration configuration,
+        MicrophoneArrayProfile profile,
+        Path directory,
+<span class="fc" id="L1173">        Instant createdAt) {</span>
+<span class="fc" id="L1174">      this.id = id;</span>
+<span class="fc" id="L1175">      this.configuration = configuration;</span>
+<span class="fc" id="L1176">      this.profile = profile;</span>
+<span class="fc" id="L1177">      this.directory = directory;</span>
+<span class="fc" id="L1178">      this.createdAt = createdAt;</span>
+<span class="fc" id="L1179">    }</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WaveformSnapshot.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Core</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.snapshot</a> &gt; <span class="el_source">WaveformSnapshot.java</span></div><h1>WaveformSnapshot.java</h1><pre class="source lang-java linenums">package org.hammer.audio.snapshot;
+
+import org.hammer.audio.core.AudioBlock;
+
+/**
+ * Immutable, UI-friendly snapshot of one block of waveform data.
+ *
+ * &lt;p&gt;Unlike the legacy {@link org.hammer.audio.WaveformModel}, which carried pre-computed pixel
+ * coordinates and thus mixed audio and rendering concerns, a {@code WaveformSnapshot} holds only
+ * normalized {@code float} samples plus the source metadata. Pixel scaling for any specific canvas
+ * is performed by the rendering layer (e.g. {@link org.hammer.audio.ui.WaveformRenderer}).
+ *
+ * &lt;p&gt;Snapshots are cheap to consume by any UI toolkit (Swing, JavaFX, Web), and are
+ * serializable-friendly for export and remote APIs.
+ *
+ * @author refactoring
+ */
+public final class WaveformSnapshot {
+
+  private final float[][] samples; // [channel][frame]
+  private final int frames;
+  private final float sampleRate;
+  private final long sourceFrameIndex;
+  private final long sourceTimestampNanos;
+
+  /**
+   * Build a waveform snapshot from a freshly-allocated {@code float[channels][frames]} array. The
+   * caller transfers ownership of the array and must not mutate it after the call.
+   *
+   * @param samples per-channel sample arrays of equal length (ownership transferred)
+   * @param sampleRate source sample rate in Hz
+   * @param sourceFrameIndex frame index of the source block
+   * @param sourceTimestampNanos timestamp of the source block (nanos)
+   * @return a new immutable snapshot
+   */
+  public static WaveformSnapshot wrap(
+      float[][] samples, float sampleRate, long sourceFrameIndex, long sourceTimestampNanos) {
+<span class="nc" id="L38">    return new WaveformSnapshot(samples, sampleRate, sourceFrameIndex, sourceTimestampNanos, false);</span>
+  }
+
+  /**
+   * Convenience factory that builds a snapshot from the contents of an {@link AudioBlock}.
+   *
+   * &lt;p&gt;Exactly one defensive deep copy of the per-channel sample arrays is performed: it comes from
+   * {@link AudioBlock#samples()}. The {@code copy=false} flag passed to the private constructor
+   * below means we do &lt;em&gt;not&lt;/em&gt; copy a second time. Do not flip that flag to {@code true}
+   * without removing the {@code block.samples()} call, or every UI snapshot will allocate twice.
+   */
+  public static WaveformSnapshot fromBlock(AudioBlock block) {
+    // block.samples() already returns a fresh deep copy; ownership transfers to the snapshot.
+<span class="nc" id="L51">    return new WaveformSnapshot(</span>
+<span class="nc" id="L52">        block.samples(),</span>
+<span class="nc" id="L53">        block.format().sampleRate(),</span>
+<span class="nc" id="L54">        block.frameIndex(),</span>
+<span class="nc" id="L55">        block.timestampNanos(),</span>
+        false);
+  }
+
+  /** Empty snapshot constant. */
+<span class="nc" id="L60">  public static final WaveformSnapshot EMPTY =</span>
+      new WaveformSnapshot(new float[0][], 0f, 0L, 0L, false);
+
+  private WaveformSnapshot(
+      float[][] samples,
+      float sampleRate,
+      long sourceFrameIndex,
+      long sourceTimestampNanos,
+<span class="nc" id="L68">      boolean copy) {</span>
+<span class="nc bnc" id="L69" title="All 2 branches missed.">    if (copy) {</span>
+<span class="nc" id="L70">      float[][] cp = new float[samples.length][];</span>
+<span class="nc bnc" id="L71" title="All 2 branches missed.">      for (int c = 0; c &lt; samples.length; c++) {</span>
+<span class="nc" id="L72">        cp[c] = samples[c].clone();</span>
+      }
+<span class="nc" id="L74">      this.samples = cp;</span>
+<span class="nc" id="L75">    } else {</span>
+<span class="nc" id="L76">      this.samples = samples;</span>
+    }
+<span class="nc bnc" id="L78" title="All 4 branches missed.">    this.frames = samples.length == 0 || samples[0] == null ? 0 : samples[0].length;</span>
+<span class="nc" id="L79">    this.sampleRate = sampleRate;</span>
+<span class="nc" id="L80">    this.sourceFrameIndex = sourceFrameIndex;</span>
+<span class="nc" id="L81">    this.sourceTimestampNanos = sourceTimestampNanos;</span>
+<span class="nc" id="L82">  }</span>
+
+  /**
+   * @return number of channels
+   */
+  public int channels() {
+<span class="nc" id="L88">    return samples.length;</span>
+  }
+
+  /**
+   * @return number of frames per channel
+   */
+  public int frames() {
+<span class="nc" id="L95">    return frames;</span>
+  }
+
+  /**
+   * @return source sample rate in Hz
+   */
+  public float sampleRate() {
+<span class="nc" id="L102">    return sampleRate;</span>
+  }
+
+  /**
+   * @return source block frame index
+   */
+  public long sourceFrameIndex() {
+<span class="nc" id="L109">    return sourceFrameIndex;</span>
+  }
+
+  /**
+   * @return source block timestamp in nanos
+   */
+  public long sourceTimestampNanos() {
+<span class="nc" id="L116">    return sourceTimestampNanos;</span>
+  }
+
+  /**
+   * Read-only view of one channel. The returned array is the snapshot's internal storage and
+   * &lt;strong&gt;must not be mutated&lt;/strong&gt;.
+   *
+   * @param channel channel index
+   * @return internal sample array (do not mutate)
+   */
+  public float[] channelView(int channel) {
+<span class="nc" id="L127">    return samples[channel];</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

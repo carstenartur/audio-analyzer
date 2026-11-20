@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>PluginDocumentTestKit.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experiment Document</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experiment.document</a> &gt; <span class="el_source">PluginDocumentTestKit.java</span></div><h1>PluginDocumentTestKit.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experiment.document;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import org.hammer.audio.plugin.document.DocumentValue;
+
+/** Host-equivalent schema, fixture and migration checks available to plugin authors. */
+public final class PluginDocumentTestKit {
+
+  private PluginDocumentTestKit() {
+    // utility class
+  }
+
+  /** Canonical schema SHA-256, independent of object key order and whitespace. */
+  public static String schemaSha256(String schemaJson) {
+    try {
+<span class="fc" id="L25">      return LocalJsonSchemaValidator.schemaDigest(schemaJson);</span>
+<span class="nc" id="L26">    } catch (IOException exception) {</span>
+<span class="nc" id="L27">      throw new IllegalArgumentException(&quot;Invalid bundled schema&quot;, exception);</span>
+    }
+  }
+
+  /** Canonical section hash includes schema and algorithm identity as well as data. */
+  public static String sectionSha256(ExperimentDocument.PluginSection section) {
+    try {
+<span class="nc" id="L34">      DocumentValueBounds.check(</span>
+<span class="nc" id="L35">          section.data(), &quot;/data&quot;, ExperimentDocumentFormat.MAX_DOCUMENT_BYTES);</span>
+<span class="nc" id="L36">      DocumentValue value =</span>
+<span class="nc" id="L37">          DocumentValue.object(</span>
+<span class="nc" id="L38">              Map.of(</span>
+                  &quot;schemaVersion&quot;,
+<span class="nc" id="L40">                      DocumentValue.number(java.math.BigDecimal.valueOf(section.schemaVersion())),</span>
+<span class="nc" id="L41">                  &quot;algorithmVersion&quot;, DocumentValue.string(section.algorithmVersion()),</span>
+<span class="nc" id="L42">                  &quot;data&quot;, section.data()));</span>
+<span class="nc" id="L43">      return DocumentHashes.sha256(</span>
+<span class="nc" id="L44">          new ObjectMapper().writeValueAsBytes(DocumentValueJson.toJson(value)));</span>
+<span class="nc" id="L45">    } catch (IOException exception) {</span>
+<span class="nc" id="L46">      throw new IllegalArgumentException(&quot;Section exceeds canonical value limits&quot;, exception);</span>
+    }
+  }
+
+  /** Verify a migration fixture is deterministic, byte-exact and idempotent on its output. */
+  public static void verifyFixture(ExperimentDocumentService service, byte[] input, byte[] expected)
+      throws ExperimentDocumentException {
+<span class="fc" id="L53">    byte[] first = service.normalize(input);</span>
+<span class="fc bfc" id="L54" title="All 2 branches covered.">    if (!Arrays.equals(expected, first)</span>
+<span class="pc bpc" id="L55" title="1 of 2 branches missed.">        || !Arrays.equals(first, service.normalize(input))</span>
+<span class="pc bpc" id="L56" title="1 of 2 branches missed.">        || !Arrays.equals(first, service.normalize(first))) {</span>
+<span class="fc" id="L57">      throw new IllegalArgumentException(</span>
+          &quot;Plugin fixture is not canonical, deterministic and idempotent&quot;);
+    }
+<span class="pc bpc" id="L60" title="1 of 2 branches missed.">    if (!service.preview(first).executionAllowed()) {</span>
+<span class="nc" id="L61">      throw new IllegalArgumentException(&quot;Plugin fixture has blocking diagnostics&quot;);</span>
+    }
+<span class="fc" id="L63">  }</span>
+
+  /** Produce a stable parameter table without evaluating or dereferencing external resources. */
+  public static List&lt;Parameter&gt; parameters(String schemaJson) {
+    try {
+<span class="fc" id="L68">      JsonNode schema = new BoundedDocumentJson().read(schemaJson.getBytes(StandardCharsets.UTF_8));</span>
+<span class="fc" id="L69">      List&lt;Parameter&gt; parameters = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L70">      collectParameters(schema, &quot;&quot;, parameters);</span>
+<span class="fc" id="L71">      return List.copyOf(parameters);</span>
+<span class="nc" id="L72">    } catch (IOException exception) {</span>
+<span class="nc" id="L73">      throw new IllegalArgumentException(&quot;Invalid bundled schema&quot;, exception);</span>
+    }
+  }
+
+  private static void collectParameters(
+      JsonNode schema, String pointer, List&lt;Parameter&gt; parameters) {
+<span class="fc" id="L79">    Set&lt;String&gt; required = new HashSet&lt;&gt;();</span>
+<span class="fc" id="L80">    schema.path(&quot;required&quot;).forEach(item -&gt; required.add(item.asText()));</span>
+<span class="fc" id="L81">    schema</span>
+<span class="fc" id="L82">        .path(&quot;properties&quot;)</span>
+<span class="fc" id="L83">        .fields()</span>
+<span class="fc" id="L84">        .forEachRemaining(</span>
+            entry -&gt; {
+<span class="fc" id="L86">              String child = DocumentValueJson.pointer(pointer, entry.getKey());</span>
+<span class="fc" id="L87">              JsonNode value = entry.getValue();</span>
+<span class="fc" id="L88">              parameters.add(</span>
+                  new Parameter(
+                      child,
+<span class="fc" id="L91">                      value.path(&quot;type&quot;).asText(&quot;any&quot;),</span>
+<span class="fc" id="L92">                      required.contains(entry.getKey()),</span>
+<span class="fc" id="L93">                      value.path(&quot;description&quot;).asText(&quot;&quot;)));</span>
+<span class="fc" id="L94">              collectParameters(value, child, parameters);</span>
+<span class="fc" id="L95">            });</span>
+<span class="fc" id="L96">  }</span>
+
+  /**
+   * One local-schema parameter for documentation and import previews.
+   *
+   * @param pointer data-relative parameter pointer
+   * @param type declared JSON type
+   * @param required whether the containing object requires this property
+   * @param description human-readable parameter documentation
+   */
+<span class="fc" id="L106">  public record Parameter(String pointer, String type, boolean required, String description) {</span>
+    // Immutable value; record components carry the complete state.
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>
