@@ -5,12 +5,16 @@ outbox delivery require an explicit persistence mode.
 
 ## Shared persistence runtime
 
-Audio Analyzer consumes the released migration-bearing storage library:
+Maven resolves the Core and Search modules from Maven Central with its default settings.
+The root `pom.xml` selects the shared storage, JGit and Hibernate ORM versions.
+`audio-app/pom.xml` selects Flyway.
 
 ```text
-io.github.carstenartur:jgit-storage-hibernate-core:0.1.5
-Hibernate ORM 7.4.5.Final
-Flyway 12.8.1
+io.github.carstenartur:jgit-storage-hibernate-core:0.12.2
+io.github.carstenartur:jgit-storage-hibernate-search:0.12.2
+JGit 7.8.1.202611041320-r
+Hibernate ORM 7.4.14.Final
+Flyway 13.8.0
 ```
 
 The application creates one Spring-managed `DataSource` and one application-owned Hibernate
@@ -189,25 +193,6 @@ WorkflowPersistenceEntityContributor collaborationPersistenceEntities() {
 The resulting classes are added to the same application-managed `SessionFactory` as the generic JGit
 storage entities. This extension point does not copy or replace any mapping from
 `jgit-storage-hibernate-core`.
-
-## GitHub Packages access
-
-The shared artifact is published through GitHub Packages. Maven uses repository id `github`. Local
-users need a settings entry with a token that has `read:packages`:
-
-```xml
-<settings>
-  <servers>
-    <server>
-      <id>github</id>
-      <username>YOUR_GITHUB_USERNAME</username>
-      <password>YOUR_GITHUB_TOKEN</password>
-    </server>
-  </servers>
-</settings>
-```
-
-Repository CI configures this server from `GITHUB_TOKEN` and requests `packages: read`.
 
 ## Explicit filesystem fallback
 

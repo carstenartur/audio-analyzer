@@ -12,7 +12,6 @@ on:
 permissions:
   contents: read
   checks: write
-  packages: read
 
 jobs:
   build:
@@ -20,7 +19,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       JAVA_VERSION: '21'
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
       - uses: actions/checkout@v7
@@ -31,9 +29,6 @@ jobs:
           java-version: ${{ env.JAVA_VERSION }}
           distribution: temurin
           cache: maven
-          server-id: github
-          server-username: GITHUB_ACTOR
-          server-password: GITHUB_TOKEN
 
       - name: Build and verify with Maven
         shell: bash
