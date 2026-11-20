@@ -7,8 +7,12 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import javax.sound.sampled.AudioFormat;
 import javax.sound.sampled.AudioSystem;
+import javax.sound.sampled.DataLine;
 import javax.sound.sampled.Mixer;
+import javax.sound.sampled.TargetDataLine;
+import org.hammer.audio.acquisition.CaptureDeviceConfiguration;
 import org.hammer.audio.acquisition.CaptureDeviceDescriptor;
 
 /** Discovers JavaSound input mixers without leaking JavaSound types into the acquisition domain. */
@@ -48,6 +52,24 @@ public final class JavaSoundCaptureDeviceDiscovery {
       }
     }
     return Optional.empty();
+  }
+
+  /** Check the selected mixer's advertised PCM format without acquiring or opening its line. */
+  public boolean supportsFormat(CaptureDeviceConfiguration configuration) {
+    Optional<Mixer.Info> info = findMixerInfo(configuration.device().deviceId());
+    if (info.isEmpty()) {
+      return false;
+    }
+    org.hammer.audio.core.AudioFormatDescriptor descriptor = configuration.format();
+    AudioFormat format =
+        new AudioFormat(
+            descriptor.sampleRate(),
+            descriptor.sourceSampleSizeInBits(),
+            descriptor.channels(),
+            configuration.signed(),
+            configuration.bigEndian());
+    return AudioSystem.getMixer(info.get())
+        .isLineSupported(new DataLine.Info(TargetDataLine.class, format));
   }
 
   private static CaptureDeviceDescriptor descriptor(Mixer.Info info) {

@@ -70,6 +70,7 @@ class WorkbenchWorkflowRunIT {
       installRunResponseGate(alice.page());
       Locator runCurrent = alice.page().locator("[data-testid='run-current-revision']");
       runCurrent.waitFor();
+      alice.page().waitForCondition(runCurrent::isEnabled);
       assertTrue(runCurrent.isEnabled());
       runCurrent.click();
       awaitServerCapture(alice.page());

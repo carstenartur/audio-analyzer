@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import javax.sound.sampled.AudioFormat;
@@ -17,6 +18,7 @@ import org.hammer.audio.recording.AudioBlockRecordingReader;
 import org.hammer.audio.recording.RecordingIntegrity;
 import org.hammer.audio.recording.runtime.RecordingState;
 import org.hammer.audio.recording.runtime.RecordingStorageLevel;
+import org.hammer.audio.recording.runtime.RecordingStoragePolicy;
 import org.hammer.audio.recording.runtime.RecordingStorageProbe;
 import org.hammer.audio.recording.runtime.RecordingStorageStatus;
 import org.junit.jupiter.api.Test;
@@ -72,6 +74,27 @@ class RecordingTapPipelineTest {
     assertEquals(RecordingState.INCOMPLETE, tap.status().state());
     assertTrue(tap.status().stopReason().contains("filesystem"));
     assertEquals(1L, tap.status().writtenBlocks());
+    assertEquals(
+        "INCOMPLETE",
+        AudioBlockRecordingReader.inspect(tap.file()).integrity().name(),
+        "A low-space recording must remain incomplete after reopening the saved file");
+  }
+
+  @Test
+  void earlyExperimentStopPersistsIncompleteAndRejectsStrictReplay(@TempDir Path directory)
+      throws IOException {
+    FakeAudioService service = new FakeAudioService();
+    RecordingTap tap =
+        RecordingTap.start(
+            service, directory.resolve("early-stop.aarec"), 16, healthyProbe(), START);
+    service.emit(block(0L, 1L));
+    tap.stopIncomplete("Experiment stopped before the intended duration.");
+    tap.stop();
+    assertEquals(RecordingState.INCOMPLETE, tap.status().state());
+    assertFalse(tap.status().completeSoFar());
+    assertEquals(
+        RecordingIntegrity.INCOMPLETE, AudioBlockRecordingReader.inspect(tap.file()).integrity());
+    assertThrows(IOException.class, () -> AudioBlockRecordingReader.readAll(tap.file()));
   }
 
   @Test
@@ -94,7 +117,10 @@ class RecordingTapPipelineTest {
                 1000L,
                 RecordingStorageLevel.CRITICAL,
                 checkedAt,
-                "read-only");
+                "read-only",
+                RecordingStoragePolicy.configured(),
+                checkedAt,
+                List.of());
 
     assertThrows(IOException.class, () -> RecordingTap.start(service, file, 16, probe, START));
     assertFalse(java.nio.file.Files.exists(file));
@@ -130,7 +156,10 @@ class RecordingTapPipelineTest {
         10_000L,
         level,
         checkedAt,
-        "");
+        "",
+        RecordingStoragePolicy.configured(),
+        checkedAt,
+        List.of());
   }
 
   private static AudioBlock block(long frameIndex, long timestamp) {

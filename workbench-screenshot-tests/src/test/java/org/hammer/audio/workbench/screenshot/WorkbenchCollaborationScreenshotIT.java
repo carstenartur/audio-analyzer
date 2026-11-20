@@ -124,8 +124,9 @@ class WorkbenchCollaborationScreenshotIT {
       assertEquals("SHARED_SESSION_PERSONAL_UNDO", activeMode.getAttribute("data-mode"));
       assertEquals("Shared session · personal undo", activeMode.innerText());
 
+      WorkbenchHealthScreenshots.awaitReadiness(page, 2L);
       WorkbenchBrowserHarness.normalizeIdentityLabels(page);
-      byte[] pngBytes = page.screenshot(new Page.ScreenshotOptions().setFullPage(false));
+      byte[] pngBytes = page.screenshot(WorkbenchHealthScreenshots.options(page));
       ScreenshotPipeline.processScreenshot("collaboration-session.png", pngBytes);
     }
   }

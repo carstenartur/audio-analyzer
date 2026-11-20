@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 
 import { IndexedWorkflowHistoryPanel } from './IndexedWorkflowHistoryPanel';
 import WorkflowEditorApp from './WorkflowEditorApp';
+import { ExperimentOperationsPanel } from './ExperimentOperationsPanel';
 import { WorkflowMergePanel } from './WorkflowMergePanel';
 import './styles.css';
 import './experiment-document.css';
@@ -43,8 +44,10 @@ if (rootElement === null) {
 
 createRoot(rootElement).render(
   <StrictMode>
-    <WorkflowEditorApp />
-    <IndexedWorkflowHistoryPanel />
-    <WorkflowMergePanel />
+    {window.location.pathname === '/workbench/experiment' ? <ExperimentOperationsPanel /> : <>
+      <WorkflowEditorApp />
+      <IndexedWorkflowHistoryPanel />
+      <WorkflowMergePanel />
+    </>}
   </StrictMode>,
 );

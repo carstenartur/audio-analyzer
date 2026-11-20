@@ -22,6 +22,8 @@ import org.hammer.audio.workflow.execution.WorkflowRunModels.Violation;
 import org.hammer.audio.workflow.store.VersionedWorkflowStore;
 
 /** Process-local orchestration service for immutable workflow runs. */
+// This coordinator intentionally joins source capture, preflight, backend and lifecycle contracts.
+@SuppressWarnings("PMD.CouplingBetweenObjects")
 public final class WorkflowRunService {
 
   private static final String UNSUPPORTED_NODE_CODE = "UNSUPPORTED_NODE";
@@ -57,6 +59,26 @@ public final class WorkflowRunService {
     this.inputFactory = new WorkflowRunInputFactory(resolver, clock, runIdSupplier);
   }
 
+  /**
+   * Validate one exact source and backend capability without dispatching or retaining a run.
+   * Starting still performs a fresh capture and rejects a changed semantic revision.
+   */
+  public WorkflowRunModels.Preflight preflight(Command command) {
+    Input input = inputFactory.capture(command);
+    requireReviewedFingerprint(command, input);
+    validateBackend(input);
+    return new WorkflowRunModels.Preflight(input, executionBackend.mode());
+  }
+
+  /** Validate the immutable graph captured atomically with the caller's membership check. */
+  public WorkflowRunModels.Preflight preflight(
+      Command command, WorkflowSessionRegistry.SessionWorkflowSnapshot captured) {
+    Input input = inputFactory.capture(command, captured);
+    requireReviewedFingerprint(command, input);
+    validateBackend(input);
+    return new WorkflowRunModels.Preflight(input, executionBackend.mode());
+  }
+
   /** Starts or idempotently returns the run associated with one start command. */
   public Snapshot start(Command command) {
     return startWithInput(command, () -> inputFactory.capture(command));
@@ -78,6 +100,7 @@ public final class WorkflowRunService {
         return handleExistingCommand(command, existing);
       }
       Input input = capture.get();
+      requireReviewedFingerprint(command, input);
       validateBackend(input);
       record = new WorkflowRunRecord(input, executionBackend.mode(), wallClock);
       WorkflowRunRecord duplicateRun = recordsByRunId.putIfAbsent(input.runId(), record);
@@ -124,6 +147,7 @@ public final class WorkflowRunService {
 
   private Snapshot handleExistingCommand(Command command, WorkflowRunRecord existing) {
     if (existing.input().source().equals(command.source())) {
+      requireReviewedFingerprint(command, existing.input());
       return existing.snapshot();
     }
     throw new WorkflowRunException(
@@ -132,6 +156,19 @@ public final class WorkflowRunService {
         existing.input().runId(),
         command.startCommandId(),
         List.of());
+  }
+
+  private static void requireReviewedFingerprint(Command command, Input input) {
+    if (command.expectedFingerprint() != null
+        && !command.expectedFingerprint().equals(input.fingerprint())) {
+      throw new WorkflowRunException(
+          Code.SOURCE_FINGERPRINT_MISMATCH,
+          "Workflow differs from the reviewed readiness fingerprint; review the current source"
+              + " before starting.",
+          input.runId(),
+          command.startCommandId(),
+          List.of());
+    }
   }
 
   private void validateBackend(Input input) {

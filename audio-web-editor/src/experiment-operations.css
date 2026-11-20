@@ -1,0 +1,58 @@
+.experiment-operations { min-height: 100%; overflow: auto; background: #111827; color: #e2e8f0; padding: 28px; font-size: 14px; }
+.experiment-operations__header { display: flex; justify-content: space-between; align-items: center; gap: 24px; margin-bottom: 20px; }
+.experiment-operations__header h1 { margin: 12px 0 8px; font-size: 30px; }
+.experiment-operations a { color: #93c5fd; }
+.experiment-operations p { line-height: 1.55; }
+.experiment-operations__grid { display: grid; grid-template-columns: minmax(340px, 0.9fr) minmax(450px, 1.25fr); gap: 22px; align-items: start; }
+.experiment-results { display: grid; gap: 20px; }
+.experiment-card { background: #1e293b; border: 1px solid #475569; border-radius: 12px; padding: 22px; min-width: 0; }
+.experiment-card h2 { margin: 0 0 18px; font-size: 20px; }
+.experiment-card h3 { margin-top: 24px; font-size: 16px; }
+.experiment-card fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+.experiment-card label { display: grid; gap: 7px; margin: 14px 0; line-height: 1.4; }
+.experiment-card input, .experiment-card select, .experiment-card textarea { box-sizing: border-box; width: 100%; min-width: 0; border: 1px solid #64748b; border-radius: 6px; background: #0f172a; color: #e2e8f0; padding: 9px; }
+.experiment-card input[type=checkbox] { width: 18px; }
+.experiment-card textarea { font-family: ui-monospace, monospace; font-size: 12px; resize: vertical; }
+.experiment-checkbox { display: flex !important; align-items: center; }
+.experiment-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.experiment-operations button, .experiment-link-button { border: 1px solid #64748b; border-radius: 6px; padding: 9px 12px; background: #334155; color: #f1f5f9; cursor: pointer; line-height: 1.35; }
+.experiment-operations button:focus-visible, .experiment-operations a:focus-visible, .experiment-operations input:focus-visible, .experiment-operations summary:focus-visible { outline: 3px solid #93c5fd; outline-offset: 3px; }
+.experiment-operations button:disabled { cursor: not-allowed; opacity: 0.5; }
+.experiment-operations .experiment-primary { background: #2563eb; border-color: #60a5fa; font-weight: 600; }
+.experiment-actions { display: flex; gap: 10px; flex-wrap: wrap; margin: 18px 0; }
+.experiment-health-badge { display: inline-block; border: 1px solid #94a3b8; padding: 10px 16px; border-radius: 30px; font-weight: 700; white-space: nowrap; }
+.experiment-health-badge--ready, .experiment-health-badge--completed { color: #bbf7d0; border-color: #4ade80; }
+.experiment-health-badge--blocked, .experiment-health-badge--failed, .experiment-health-badge--incomplete { color: #fecaca; border-color: #f87171; }
+.experiment-health-badge--degraded, .experiment-health-badge--ready_with_warnings { color: #fde68a; border-color: #fbbf24; }
+.experiment-strip { position: sticky; top: 0; z-index: 5; display: flex; gap: 16px; flex-wrap: wrap; align-items: center; padding: 15px 18px; background: #0f172a; border: 1px solid #64748b; border-radius: 10px; margin-bottom: 22px; font-variant-numeric: tabular-nums; }
+.experiment-strip span { min-width: 110px; }
+.experiment-strip strong { min-width: 130px; }
+.experiment-recording { color: #f87171; }
+.experiment-error, .experiment-warning { background: #3c2730; color: #fecaca; padding: 12px; border-radius: 6px; }
+.experiment-ready { color: #bbf7d0; }
+.experiment-help, .experiment-card small { color: #cbd5e1; font-size: 12px; }
+.experiment-findings { padding: 0; list-style: none; display: grid; gap: 12px; }
+.experiment-findings li { border-left: 4px solid #fbbf24; padding: 12px 14px; background: #293447; line-height: 1.5; }
+.experiment-findings .experiment-finding--blocking, .experiment-findings .experiment-finding--error { border-color: #f87171; }
+.experiment-findings button { margin-top: 8px; }
+.experiment-operations details { margin: 14px 0; }
+.experiment-operations summary { cursor: pointer; line-height: 1.5; color: #bfdbfe; }
+.experiment-metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 18px 0; font-variant-numeric: tabular-nums; }
+.experiment-metrics dt { color: #cbd5e1; font-size: 12px; margin-bottom: 5px; }
+.experiment-metrics dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+.experiment-facts div { display: grid; grid-template-columns: 160px 1fr; gap: 12px; margin: 8px 0; }
+.experiment-facts dd { margin: 0; overflow-wrap: anywhere; }
+.experiment-map { width: 100%; display: block; border: 1px solid #475569; border-radius: 8px; background: #0f172a; }
+.experiment-tracks { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+.experiment-tracks caption { margin: 16px 0 8px; text-align: left; font-weight: 600; }
+.experiment-tracks th, .experiment-tracks td { padding: 8px; text-align: right; border-bottom: 1px solid #475569; }
+.experiment-tracks th:first-child { text-align: left; }
+.experiment-tracks tbody th { color: #bbf7d0; }
+.experiment-profile-editor { padding: 12px; border: 1px solid #64748b; border-radius: 7px; }
+.experiment-profile-editor table { width: 100%; border-collapse: collapse; }
+.experiment-profile-editor th, .experiment-profile-editor td { padding: 5px; text-align: left; }
+.experiment-profile-editor caption { text-align: left; margin: 14px 0; }
+.experiment-profile-editor td input { padding: 6px; }
+.experiment-hash { font-family: ui-monospace, monospace; font-size: 12px; overflow-wrap: anywhere; }
+.experiment-hardware { padding: 12px; border-left: 3px solid #fbbf24; }
+@media (max-width: 950px) { .experiment-operations { padding: 16px; } .experiment-operations__grid { grid-template-columns: 1fr; } .experiment-operations__header { align-items: flex-start; flex-direction: column; } }

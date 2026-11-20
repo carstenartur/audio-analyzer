@@ -35,6 +35,9 @@ public final class AudioBlockRecordingFormat {
   /** Negative record marker introducing the version-2 completion footer. */
   static final int FOOTER_MARKER = -1;
 
+  /** Checksum-covered marker for a finalized recording known to be incomplete. */
+  static final int INCOMPLETE_FOOTER_MARKER = -2;
+
   /** Footer magic ({@code 'E','N','D','2'}). */
   static final int FOOTER_MAGIC = 0x454e4432;
 

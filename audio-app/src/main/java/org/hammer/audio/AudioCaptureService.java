@@ -81,6 +81,12 @@ public interface AudioCaptureService {
     return null;
   }
 
+  /** Configured block size for recording capacity estimates, conservatively one when unknown. */
+  default int getExpectedBlockFrames() {
+    AudioBlock latest = getLatestBlock();
+    return latest == null ? 1 : Math.max(1, latest.frames());
+  }
+
   /**
    * Subscribe to every block published after registration.
    *

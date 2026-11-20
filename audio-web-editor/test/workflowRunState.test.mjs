@@ -80,6 +80,21 @@ test('uncertain start keeps the same command for an idempotent retry', () => {
   assert.equal(state.run?.runId, 'run-1');
 });
 
+test('reviewed fingerprint is retained in source commands and unchanged transport retries', () => {
+  const fingerprint = 'c'.repeat(64);
+  const live = createLiveRunCommand('reviewed-live', 'same-session', 0, fingerprint);
+  const stored = createStoredRunCommand('reviewed-commit', 'commit-1', fingerprint);
+  assert.equal(runStartRequest(live).expectedFingerprint, fingerprint);
+  assert.equal(runStartRequest(stored).expectedFingerprint, fingerprint);
+  const uncertain = reduceWorkflowRunState(
+    reduceWorkflowRunState(emptyWorkflowRunState(), { type: 'START_SUBMITTED', command: live }),
+    { type: 'START_UNCERTAIN', problem: { detail: 'response lost' } },
+  );
+  assert.equal(runStartRequest(uncertain.command).expectedFingerprint, fingerprint);
+  assert.throws(() => createLiveRunCommand('invalid', 'session', 0, 'not-a-digest'));
+  assert.throws(() => createStoredRunCommand('invalid', 'commit', ''));
+});
+
 test('out-of-order polling cannot regress state or progress', () => {
   const current = snapshot({ state: 'CANCEL_REQUESTED', progressPercent: 70 });
 

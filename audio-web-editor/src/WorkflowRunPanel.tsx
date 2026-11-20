@@ -9,6 +9,9 @@ import {
 } from 'react';
 
 import { ApiError, getJson, type ApiProblem } from './api';
+import { ExperimentHealthView } from './ExperimentHealthView';
+import { useExperimentHealth } from './useExperimentHealth';
+import { canRunWorkflowSource } from './workflowExperimentHealth.mjs';
 import {
   cancelWorkflowRun,
   inspectWorkflowRun,
@@ -148,6 +151,14 @@ export function WorkflowRunPanel({ currentSource }: WorkflowRunPanelProps) {
     [history, selectedCommitId],
   );
 
+  const busy = state.phase === 'starting' || state.phase === 'active';
+  const currentHealth = useExperimentHealth(currentSource === null || busy ? null
+    : `/workflow/experiment-health?sessionId=${encodeURIComponent(currentSource.sessionId)}&revision=${currentSource.revision}`);
+  const historicalHealth = useExperimentHealth(selectedCommit === null || busy ? null
+    : `/workflow/experiment-health?commitId=${encodeURIComponent(selectedCommit.commitId)}`);
+  const runtimeHealth = useExperimentHealth(state.run === null ? null
+    : `/workflow/experiment-health?runId=${encodeURIComponent(state.run.runId)}`);
+
   const submitCommand = useCallback(async (command: WorkflowRunCommand, retry: boolean) => {
     if (!retry) {
       dispatch({ type: 'START_SUBMITTED', command });
@@ -172,24 +183,28 @@ export function WorkflowRunPanel({ currentSource }: WorkflowRunPanelProps) {
   }, []);
 
   const startCurrent = useCallback(() => {
-    if (currentSource === null) {
+    if (currentSource === null || currentHealth.health === null
+        || !canRunWorkflowSource(currentHealth.health, currentSource)) {
       return;
     }
     const command = createLiveRunCommand(
       commandId(),
       currentSource.sessionId,
       currentSource.revision,
+      currentHealth.health.facts['workflow.sha256'],
     ) as WorkflowRunCommand;
     void submitCommand(command, false);
-  }, [currentSource, submitCommand]);
+  }, [currentSource, currentHealth.health, submitCommand]);
 
   const startHistorical = useCallback(() => {
-    if (selectedCommit === null) {
+    if (selectedCommit === null || historicalHealth.health === null
+        || !canRunWorkflowSource(historicalHealth.health, selectedCommit)) {
       return;
     }
-    const command = createStoredRunCommand(commandId(), selectedCommit.commitId) as WorkflowRunCommand;
+    const command = createStoredRunCommand(commandId(), selectedCommit.commitId,
+      historicalHealth.health.facts['workflow.sha256']) as WorkflowRunCommand;
     void submitCommand(command, false);
-  }, [selectedCommit, submitCommand]);
+  }, [selectedCommit, historicalHealth.health, submitCommand]);
 
   const retryStart = useCallback(() => {
     if (state.command !== null) {
@@ -286,7 +301,6 @@ export function WorkflowRunPanel({ currentSource }: WorkflowRunPanelProps) {
     setHistoryMessage('Refresh to load exact stored commits.');
   }, []);
 
-  const busy = state.phase === 'starting' || state.phase === 'active';
   const problemMessages = runProblemMessages(state.problem);
 
   return (
@@ -317,13 +331,14 @@ export function WorkflowRunPanel({ currentSource }: WorkflowRunPanelProps) {
         <button
           className="action-button"
           data-testid="run-current-revision"
-          disabled={currentSource === null || busy}
+          disabled={currentSource === null || busy || !canRunWorkflowSource(currentHealth.health, currentSource)}
           onClick={startCurrent}
           type="button"
         >
           Run current revision
         </button>
       </div>
+      {currentSource !== null && !busy && <ExperimentHealthView title="Selected workflow readiness" health={currentHealth.displayHealth} error={currentHealth.error} />}
 
       <label className="field">
         History branch
@@ -365,12 +380,13 @@ export function WorkflowRunPanel({ currentSource }: WorkflowRunPanelProps) {
       <button
         className="action-button"
         data-testid="run-selected-commit"
-        disabled={selectedCommit === null || busy}
+        disabled={selectedCommit === null || busy || !canRunWorkflowSource(historicalHealth.health, selectedCommit)}
         onClick={startHistorical}
         type="button"
       >
         Run selected commit
       </button>
+      {selectedCommit !== null && !busy && <ExperimentHealthView title="Stored commit readiness" health={historicalHealth.displayHealth} error={historicalHealth.error} />}
 
       {state.phase === 'uncertain' ? (
         <button className="action-button" data-testid="run-retry-start" onClick={retryStart} type="button">
@@ -438,6 +454,7 @@ export function WorkflowRunPanel({ currentSource }: WorkflowRunPanelProps) {
           )}
         </div>
       )}
+      {state.run !== null && <ExperimentHealthView title="Workflow runtime and evidence" health={runtimeHealth.displayHealth} error={runtimeHealth.error} />}
 
       {problemMessages.length === 0 ? null : (
         <ul className="validation-list" data-testid="run-problem">

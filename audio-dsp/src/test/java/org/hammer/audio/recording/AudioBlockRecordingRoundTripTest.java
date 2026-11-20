@@ -53,6 +53,30 @@ class AudioBlockRecordingRoundTripTest {
   }
 
   @Test
+  void explicitIncompleteFooterIsVerifiedAndRecoveredWithoutChangingSource(@TempDir Path directory)
+      throws IOException {
+    Path incomplete = directory.resolve("incomplete.aarec");
+    try (AudioBlockRecordingWriter writer = AudioBlockRecordingWriter.open(incomplete)) {
+      writer.write(block(0L, 100L, new float[] {0.1f, 0.2f}));
+      writer.finishIncomplete();
+    }
+    RecordingInspection inspection = AudioBlockRecordingReader.inspect(incomplete);
+    assertEquals(RecordingIntegrity.INCOMPLETE, inspection.integrity());
+    assertEquals(64, inspection.sha256().length());
+    assertThrows(IOException.class, () -> AudioBlockRecordingReader.readAll(incomplete));
+    byte[] original = Files.readAllBytes(incomplete);
+    Path recovered = directory.resolve("recovered-explicit-incomplete.aarec");
+    assertEquals(
+        RecordingIntegrity.COMPLETE,
+        AudioBlockRecordingReader.recover(incomplete, recovered).integrity());
+    assertArrayEquals(original, Files.readAllBytes(incomplete));
+    assertArrayEquals(
+        new float[] {0.1f, 0.2f},
+        AudioBlockRecordingReader.readAll(recovered).getFirst().channelView(0),
+        1.0e-6f);
+  }
+
+  @Test
   void importsLegacyV1ButMarksItUnverified(@TempDir Path directory) throws IOException {
     Path file = directory.resolve("legacy.aar");
     writeLegacyV1(file, block(0L, 123L, new float[] {0.25f, 0.5f}));

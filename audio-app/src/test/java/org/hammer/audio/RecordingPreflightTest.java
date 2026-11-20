@@ -8,9 +8,11 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.util.List;
 import javax.sound.sampled.AudioFormat;
 import org.hammer.audio.core.AudioFormatDescriptor;
 import org.hammer.audio.recording.runtime.RecordingStorageLevel;
+import org.hammer.audio.recording.runtime.RecordingStoragePolicy;
 import org.hammer.audio.recording.runtime.RecordingStorageProbe;
 import org.hammer.audio.recording.runtime.RecordingStorageStatus;
 import org.junit.jupiter.api.Test;
@@ -40,7 +42,10 @@ class RecordingPreflightTest {
                 240L,
                 RecordingStorageLevel.WARNING,
                 checkedAt,
-                "");
+                "",
+                RecordingStoragePolicy.configured(),
+                checkedAt,
+                List.of());
 
     RecordingStorageStatus result =
         RecordingPreflight.inspect(new FakeAudioService(FORMAT), target, probe, CHECKED_AT);

@@ -73,8 +73,9 @@ class WorkbenchHistoryScreenshotIT {
       normalizeHistoryTimestamps(page);
 
       disableAnimations(page);
+      WorkbenchHealthScreenshots.awaitReadiness(page, 2L);
       WorkbenchBrowserHarness.normalizeIdentityLabels(page);
-      byte[] pngBytes = page.screenshot(new Page.ScreenshotOptions().setFullPage(false));
+      byte[] pngBytes = page.screenshot(WorkbenchHealthScreenshots.options(page));
       ScreenshotPipeline.processScreenshot("collaboration-personal-undo-preview.png", pngBytes);
     } catch (Throwable failure) {
       harness.captureFailure(scenario, failure);
@@ -118,11 +119,12 @@ class WorkbenchHistoryScreenshotIT {
       assertFalse(acknowledgement.isChecked());
       assertFalse(reviewer.page().locator("[data-testid='history-confirm-button']").isEnabled());
       assertTrue(dialog.innerText().contains("Workflow Owner"));
-      normalizeHistoryTimestamps(reviewer.page());
 
       disableAnimations(reviewer.page());
-      WorkbenchBrowserHarness.normalizeIdentityLabels(reviewer.page());
-      byte[] pngBytes = reviewer.page().screenshot(new Page.ScreenshotOptions().setFullPage(false));
+      WorkbenchHealthScreenshots.awaitReadiness(reviewer.page(), 1L);
+      normalizeAndFrameSharedHistory(reviewer.page());
+      byte[] pngBytes =
+          reviewer.page().screenshot(WorkbenchHealthScreenshots.options(reviewer.page()));
       ScreenshotPipeline.processScreenshot("collaboration-shared-undo-preview.png", pngBytes);
     } catch (Throwable failure) {
       harness.captureFailure(scenario, failure);
@@ -193,6 +195,39 @@ class WorkbenchHistoryScreenshotIT {
         "document.querySelectorAll('time.history-timestamp').forEach(element => "
             + "{ element.textContent = '19 Jul 2026, 12:00 UTC'; });");
     assertTrue(page.locator("time.history-timestamp").count() > 0);
+  }
+
+  private static void normalizeAndFrameSharedHistory(Page page) {
+    Locator sidebar = page.locator("[data-testid='node-palette']");
+    // Earlier checkbox/button actions auto-scroll the sidebar. Text normalization must not leave
+    // the final capture dependent on that position or on browser scroll anchoring.
+    sidebar.evaluate(
+        """
+        element => {
+          element.style.overflowAnchor = 'none';
+          element.style.scrollBehavior = 'auto';
+        }
+        """);
+    normalizeHistoryTimestamps(page);
+    WorkbenchBrowserHarness.normalizeIdentityLabels(page);
+    double offset =
+        ((Number)
+                sidebar.evaluate(
+                    """
+                    async element => {
+                      const history = element.querySelector('[data-testid="semantic-history-panel"]');
+                      const contentTop = () => element.getBoundingClientRect().top + element.clientTop
+                        + parseFloat(getComputedStyle(element).paddingTop);
+                      element.scrollTop += history.getBoundingClientRect().top - contentTop();
+                      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+                      return Math.abs(history.getBoundingClientRect().top - contentTop());
+                    }
+                    """))
+            .doubleValue();
+    assertTrue(
+        offset <= 1.0,
+        "Shared history must align with the sidebar padding (CSS-pixel rounding only); offset="
+            + offset);
   }
 
   private static void disableAnimations(Page page) {

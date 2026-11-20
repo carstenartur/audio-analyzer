@@ -11,22 +11,27 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.concurrent.ExecutionException;
 import java.util.function.Supplier;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.swing.JFileChooser;
+import javax.swing.JFrame;
 import javax.swing.JMenu;
 import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
+import javax.swing.SwingWorker;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import org.hammer.audio.ActiveAudioCaptureRegistry;
 import org.hammer.audio.AudioCaptureService;
 import org.hammer.audio.RecordingPreflight;
 import org.hammer.audio.RecordingTap;
+import org.hammer.audio.experiment.document.ExperimentDocumentPreview;
 import org.hammer.audio.experiment.document.ExperimentDocumentSession;
+import org.hammer.audio.experiment.operations.MicrophoneExperimentService;
 import org.hammer.audio.recording.AudioBlockRecordingFormat;
 import org.hammer.audio.recording.AudioBlockRecordingReader;
 import org.hammer.audio.recording.RecordingInspection;
@@ -41,6 +46,8 @@ import org.hammer.audio.ui.theme.UiTheme;
  * Production desktop host that augments the established analyzer frame with experiment-grade
  * recording controls and persistent recording health.
  */
+// The desktop host intentionally composes document, capture and recording UI services.
+@SuppressWarnings("PMD.CouplingBetweenObjects")
 public final class ExperimentAudioAnalyseFrame extends AudioAnalyseFrame {
 
   private static final long serialVersionUID = 1L;
@@ -49,8 +56,16 @@ public final class ExperimentAudioAnalyseFrame extends AudioAnalyseFrame {
   private static final String RECORDING_DIALOG_TITLE = "Experiment recording";
 
   private final RecordingStatusPanel recordingStatusPanel = new RecordingStatusPanel();
+  private volatile String documentPluginSummary =
+      "Installed plugin catalogue has not been supplied";
+  private final ExperimentDocumentHealthPanel documentHealthPanel =
+      new ExperimentDocumentHealthPanel(this::documentReadinessInput);
   private transient RecordingTap recordingTap;
   private transient volatile Supplier<ExperimentDocumentSession.Context> documentContextSupplier;
+  private transient JFrame microphoneWindow;
+  private volatile boolean recordingStartPending;
+  private volatile boolean closingRequested;
+  private boolean closeInProgress;
 
   /** Attach the same session snapshot provider used by the desktop document actions. */
   public void setDocumentContextSupplier(Supplier<ExperimentDocumentSession.Context> supplier) {
@@ -61,6 +76,29 @@ public final class ExperimentAudioAnalyseFrame extends AudioAnalyseFrame {
   public ExperimentDocumentSession.Context documentContext() {
     Supplier<ExperimentDocumentSession.Context> supplier = documentContextSupplier;
     return supplier == null ? ExperimentDocumentSession.Context.empty() : supplier.get();
+  }
+
+  /** Attach installed package/section versions from the same document service used by Open/Save. */
+  public void setDocumentPluginSummary(String summary) {
+    documentPluginSummary = java.util.Objects.requireNonNull(summary, "summary");
+  }
+
+  private org.hammer.audio.experiment.health.ExperimentDocumentHealthProjector.Input
+      documentReadinessInput() {
+    ExperimentDocumentSession.Context context = documentContext();
+    ExperimentDocumentPreview preview = context.preview();
+    String workflowHash =
+        preview == null ? "Not configured" : preview.document().workflow().sha256();
+    return new org.hammer.audio.experiment.health.ExperimentDocumentHealthProjector.Input(
+        preview,
+        context.status().path(),
+        context.status().dirty(),
+        context.revision(),
+        workflowHash,
+        // The retained session preview passed ExperimentDocumentCodec's WorkflowValidator.
+        // Swing edits cannot replace this snapshot until that same validation succeeds.
+        java.util.List.of(),
+        documentPluginSummary);
   }
 
   /** Launch the experiment-aware desktop workbench. */
@@ -81,15 +119,61 @@ public final class ExperimentAudioAnalyseFrame extends AudioAnalyseFrame {
   public ExperimentAudioAnalyseFrame() {
     super();
     setTitle("AudioAnalyzer — Experiment Workbench");
+    setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
     installStatusStrip();
     replaceRecordingActions();
+    installMicrophoneWorkflow();
     addWindowListener(
         new WindowAdapter() {
           @Override
           public void windowClosing(WindowEvent event) {
-            stopRecordingQuietly();
+            closingRequested = true;
+            closeAfterRecording();
+          }
+
+          @Override
+          public void windowClosed(WindowEvent event) {
+            documentHealthPanel.close();
           }
         });
+  }
+
+  private void installMicrophoneWorkflow() {
+    JMenu experiment = new JMenu("Experiment");
+    JMenuItem microphone = new JMenuItem("Microphone-array workflow…");
+    microphone.setToolTipText(
+        "Define profiles, review readiness, run simulation/replay/live and export evidence.");
+    microphone.addActionListener(
+        event -> {
+          if (microphoneWindow != null && microphoneWindow.isDisplayable()) {
+            microphoneWindow.toFront();
+            return;
+          }
+          String configured = System.getProperty("workbench.experiments.directory", "");
+          Path directory =
+              configured.isBlank()
+                  ? Path.of(System.getProperty("user.home"), ".audio-analyzer", "experiments")
+                  : Path.of(configured);
+          MicrophoneExperimentPanel panel =
+              new MicrophoneExperimentPanel(new MicrophoneExperimentService(directory));
+          JFrame window =
+              new JFrame("Microphone experiment — source, readiness, runtime and evidence");
+          microphoneWindow = window;
+          window.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
+          window.setContentPane(panel);
+          window.setSize(1180, 820);
+          window.setLocationRelativeTo(this);
+          window.addWindowListener(
+              new WindowAdapter() {
+                @Override
+                public void windowClosing(WindowEvent closed) {
+                  panel.closeWhenFinished(window::dispose);
+                }
+              });
+          window.setVisible(true);
+        });
+    experiment.add(microphone);
+    getJMenuBar().add(experiment);
   }
 
   private void installStatusStrip() {
@@ -103,6 +187,7 @@ public final class ExperimentAudioAnalyseFrame extends AudioAnalyseFrame {
       south.add(existingSouth, BorderLayout.NORTH);
     }
     recordingStatusPanel.setStopAction(this::stopExperimentRecording);
+    south.add(documentHealthPanel, BorderLayout.CENTER);
     south.add(recordingStatusPanel, BorderLayout.SOUTH);
     getContentPane().add(south, BorderLayout.SOUTH);
   }
@@ -132,6 +217,9 @@ public final class ExperimentAudioAnalyseFrame extends AudioAnalyseFrame {
   }
 
   private void startExperimentRecording() {
+    if (recordingStartPending) {
+      return;
+    }
     if (recordingTap != null && !recordingTap.isClosed()) {
       JOptionPane.showMessageDialog(
           this,
@@ -162,38 +250,91 @@ public final class ExperimentAudioAnalyseFrame extends AudioAnalyseFrame {
     }
     File selected =
         ensureExtension(chooser.getSelectedFile(), "." + AudioBlockRecordingFormat.FILE_EXTENSION);
-    try {
-      RecordingStorageStatus preflight = RecordingPreflight.inspect(service, selected.toPath());
-      if (!preflight.writable() || preflight.level() == RecordingStorageLevel.CRITICAL) {
-        JOptionPane.showMessageDialog(
-            this,
-            storagePreflightText(preflight),
-            "Recording storage is not ready",
-            JOptionPane.ERROR_MESSAGE);
-        return;
+    recordingStartPending = true;
+    new SwingWorker<RecordingStorageStatus, Void>() {
+      @Override
+      protected RecordingStorageStatus doInBackground() throws IOException {
+        return RecordingPreflight.inspect(service, selected.toPath());
       }
-      if (preflight.level() == RecordingStorageLevel.WARNING && !confirmStorageWarning(preflight)) {
-        return;
+
+      @Override
+      protected void done() {
+        if (closingRequested) {
+          recordingStartPending = false;
+          closeAfterRecording();
+          return;
+        }
+        try {
+          confirmAndStartRecording(service, selected, get());
+        } catch (InterruptedException | ExecutionException | RuntimeException exception) {
+          restoreInterrupt(exception);
+          recordingStartPending = false;
+          JOptionPane.showMessageDialog(
+              ExperimentAudioAnalyseFrame.this,
+              "Recording preflight failed: " + exception.getMessage(),
+              RECORDING_DIALOG_TITLE,
+              JOptionPane.ERROR_MESSAGE);
+        } finally {
+          if (closingRequested) {
+            closeAfterRecording();
+          }
+        }
       }
-      recordingTap = RecordingTap.start(service, selected.toPath());
-      recordingTap.addStatusListener(
-          status -> SwingUtilities.invokeLater(() -> recordingStatusPanel.updateStatus(status)));
-    } catch (IOException exception) {
-      LOGGER.log(Level.SEVERE, "Failed to start experiment recording", exception);
+    }.execute();
+  }
+
+  private void confirmAndStartRecording(
+      AudioCaptureService service, File selected, RecordingStorageStatus preflight) {
+    if (!preflight.writable() || preflight.level() == RecordingStorageLevel.CRITICAL) {
+      recordingStartPending = false;
       JOptionPane.showMessageDialog(
           this,
-          "Recording could not start: " + exception.getMessage(),
-          RECORDING_DIALOG_TITLE,
+          storagePreflightText(preflight),
+          "Recording storage is not ready",
           JOptionPane.ERROR_MESSAGE);
+      return;
     }
+    if (!confirmStorageWarning(preflight)) {
+      recordingStartPending = false;
+      return;
+    }
+    new SwingWorker<RecordingTap, Void>() {
+      @Override
+      protected RecordingTap doInBackground() throws IOException {
+        return RecordingTap.start(service, selected.toPath());
+      }
+
+      @Override
+      protected void done() {
+        recordingStartPending = false;
+        try {
+          recordingTap = get();
+          recordingTap.addStatusListener(
+              status ->
+                  SwingUtilities.invokeLater(() -> recordingStatusPanel.updateStatus(status)));
+        } catch (InterruptedException | ExecutionException | RuntimeException exception) {
+          restoreInterrupt(exception);
+          JOptionPane.showMessageDialog(
+              ExperimentAudioAnalyseFrame.this,
+              "Recording could not start: " + exception.getMessage(),
+              RECORDING_DIALOG_TITLE,
+              JOptionPane.ERROR_MESSAGE);
+        } finally {
+          if (closingRequested) {
+            closeAfterRecording();
+          }
+        }
+      }
+    }.execute();
   }
 
   private boolean confirmStorageWarning(RecordingStorageStatus preflight) {
     int choice =
         JOptionPane.showConfirmDialog(
             this,
-            storagePreflightText(preflight) + "\n\nStart recording despite this warning?",
-            "Recording storage warning",
+            storagePreflightText(preflight)
+                + "\n\nStart recording with this advisory capacity estimate?",
+            "Recording storage preflight",
             JOptionPane.YES_NO_OPTION,
             JOptionPane.WARNING_MESSAGE);
     return choice == JOptionPane.YES_OPTION;
@@ -238,30 +379,45 @@ public final class ExperimentAudioAnalyseFrame extends AudioAnalyseFrame {
     if (tap == null || tap.isClosed()) {
       return;
     }
-    try {
-      tap.stop();
-      showCompletion(tap.status());
-    } catch (IOException exception) {
-      LOGGER.log(Level.SEVERE, "Failed to finalize experiment recording", exception);
-      JOptionPane.showMessageDialog(
-          this,
-          "Recording finalization failed: " + exception.getMessage(),
-          RECORDING_DIALOG_TITLE,
-          JOptionPane.ERROR_MESSAGE);
-    }
+    new SwingWorker<RecordingStatus, Void>() {
+      @Override
+      protected RecordingStatus doInBackground() throws IOException {
+        tap.stop();
+        return tap.status();
+      }
+
+      @Override
+      protected void done() {
+        try {
+          showCompletion(get());
+        } catch (InterruptedException | ExecutionException | RuntimeException exception) {
+          restoreInterrupt(exception);
+          JOptionPane.showMessageDialog(
+              ExperimentAudioAnalyseFrame.this,
+              "Recording finalization failed: " + exception.getMessage(),
+              RECORDING_DIALOG_TITLE,
+              JOptionPane.ERROR_MESSAGE);
+        }
+      }
+    }.execute();
   }
 
   private void showCompletion(RecordingStatus status) {
     String summary =
         String.format(
             Locale.ROOT,
-            "%s%n%d of %d blocks written%n%d dropped blocks%n%d continuity gaps%n%s",
+            "%s%n%d of %d blocks written%n%d dropped blocks%n%d continuity gaps%n%s%nSize:"
+                + " %s%nDuration: %s%nStorage warnings: %s%n%s",
             status.state(),
             status.writtenBlocks(),
             status.receivedBlocks(),
             status.droppedBlocks(),
             status.continuityGapCount(),
-            status.destination());
+            status.destination(),
+            formatBytes(status.bytesWritten()),
+            formatDuration(status.elapsed().toSeconds()),
+            status.storage().warningHistory(),
+            status.stopReason());
     JOptionPane.showMessageDialog(
         this,
         summary,
@@ -305,9 +461,16 @@ public final class ExperimentAudioAnalyseFrame extends AudioAnalyseFrame {
   }
 
   private static boolean recoverable(RecordingIntegrity integrity) {
-    return integrity == RecordingIntegrity.RECOVERABLE_INCOMPLETE
+    return integrity == RecordingIntegrity.INCOMPLETE
+        || integrity == RecordingIntegrity.RECOVERABLE_INCOMPLETE
         || integrity == RecordingIntegrity.TRUNCATED
         || integrity == RecordingIntegrity.CORRUPT;
+  }
+
+  private static void restoreInterrupt(Exception exception) {
+    if (exception instanceof InterruptedException) {
+      Thread.currentThread().interrupt();
+    }
   }
 
   private void offerRecovery(Path source, RecordingInspection inspection) throws IOException {
@@ -363,6 +526,25 @@ public final class ExperimentAudioAnalyseFrame extends AudioAnalyseFrame {
     } catch (IOException exception) {
       LOGGER.log(Level.WARNING, "Failed to finalize recording while closing window", exception);
     }
+  }
+
+  private void closeAfterRecording() {
+    if (recordingStartPending || closeInProgress) {
+      return;
+    }
+    closeInProgress = true;
+    new SwingWorker<Void, Void>() {
+      @Override
+      protected Void doInBackground() {
+        stopRecordingQuietly();
+        return null;
+      }
+
+      @Override
+      protected void done() {
+        dispose();
+      }
+    }.execute();
   }
 
   private JMenu findMenu(String text) {

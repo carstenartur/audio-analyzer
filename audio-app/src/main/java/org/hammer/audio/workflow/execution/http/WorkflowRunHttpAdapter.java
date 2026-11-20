@@ -7,6 +7,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 import org.hammer.audio.workflow.collaboration.OperationActor;
@@ -16,6 +17,7 @@ import org.hammer.audio.workflow.collaboration.WorkflowSessionRegistry.SessionSn
 import org.hammer.audio.workflow.collaboration.WorkflowSessionRegistry.SessionWorkflowSnapshot;
 import org.hammer.audio.workflow.editor.http.CollaborationIdentityException;
 import org.hammer.audio.workflow.editor.http.CollaborationIdentityService;
+import org.hammer.audio.workflow.editor.http.WorkflowSessionApiModels.ActorResponse;
 import org.hammer.audio.workflow.execution.WorkflowRunModels.Command;
 import org.hammer.audio.workflow.execution.WorkflowRunModels.LiveSessionSource;
 import org.hammer.audio.workflow.execution.WorkflowRunModels.Snapshot;
@@ -34,6 +36,8 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.util.UriComponentsBuilder;
 
 /** Spring MVC adapter for immutable workflow-run lifecycle commands and queries. */
+// The HTTP boundary composes immutable execution, retained access and public attribution contracts.
+@SuppressWarnings("PMD.CouplingBetweenObjects")
 @RestController
 @RequestMapping("/workflow/runs")
 public final class WorkflowRunHttpAdapter {
@@ -97,13 +101,39 @@ public final class WorkflowRunHttpAdapter {
     return RunResultResponse.from(snapshot, runs.result(runId));
   }
 
+  /** Return original run attribution under the same retained access rules as result evidence. */
+  public RunAttribution authorizedAttribution(String runId, HttpServletRequest http) {
+    requireAccess(runs.inspect(runId), http);
+    RunAccess retained = retainedAccess.get(runId);
+    return retained == null
+        ? new RunAttribution(null, null)
+        : new RunAttribution(
+            identities.historyActor(retained.creatorActorId()),
+            identities.historyActor(retained.sessionOwnerActorId()));
+  }
+
+  /**
+   * Privacy-policy projections of the original run actors, never the querying user.
+   *
+   * @param creator retained creator, or null when attribution was not recorded
+   * @param owner retained session owner, or null when attribution was not recorded
+   */
+  public record RunAttribution(ActorResponse creator, ActorResponse owner) {
+    // Public identity projections contain no private account subject or credential.
+  }
+
   private Snapshot startAuthorized(Command command, HttpServletRequest http) {
     startGuard.lock();
     try {
-      runs.runs().stream()
-          .filter(run -> run.startCommandId().equals(command.startCommandId()))
-          .findFirst()
-          .ifPresent(run -> requireAccess(run, http));
+      Optional<Snapshot> existing =
+          runs.runs().stream()
+              .filter(run -> run.startCommandId().equals(command.startCommandId()))
+              .findFirst();
+      if (existing.isPresent()) {
+        requireAccess(existing.get(), http);
+        // An idempotent retry belongs to its captured run, even after its source closes/reappears.
+        return runs.start(command);
+      }
       AuthorizedRunSource granted = authorizeSource(command.source(), http);
       Snapshot snapshot =
           granted == null ? runs.start(command) : runs.start(command, granted.captured());

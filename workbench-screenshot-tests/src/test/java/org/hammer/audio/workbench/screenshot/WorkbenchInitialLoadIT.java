@@ -174,7 +174,8 @@ class WorkbenchInitialLoadIT {
           "Status message must indicate successful load, got: " + statusText);
 
       // Capture full-page screenshot
-      byte[] pngBytes = page.screenshot(new Page.ScreenshotOptions().setFullPage(false));
+      WorkbenchHealthScreenshots.awaitReadiness(page, null);
+      byte[] pngBytes = page.screenshot(WorkbenchHealthScreenshots.options(page));
 
       // Process screenshot: write to docs (update mode) or compare against baseline (verify mode)
       ScreenshotPipeline.processScreenshot("initial-load.png", pngBytes);
@@ -211,8 +212,24 @@ class WorkbenchInitialLoadIT {
       String entryText = recordingInputEntry.innerText();
       assertTrue(entryText.contains("Recording Input"), "Entry must show label");
 
-      // Capture palette screenshot
-      Locator palette = page.locator("[data-testid='node-palette']");
+      // Frame the actual catalog, not the document/collaboration controls earlier in the sidebar.
+      Locator palette = page.locator("[data-testid='node-palette-content']");
+      page.setViewportSize(VIEWPORT_WIDTH, 1200);
+      WorkbenchHealthScreenshots.awaitReadiness(page, null);
+      palette.scrollIntoViewIfNeeded();
+      assertTrue(
+          Boolean.TRUE.equals(
+              palette.evaluate(
+                  """
+                  element => {
+                    const bounds = element.getBoundingClientRect();
+                    const panel = element.closest('[data-testid="node-palette"]').getBoundingClientRect();
+                    return bounds.top >= Math.max(0, panel.top)
+                      && bounds.bottom <= Math.min(window.innerHeight, panel.bottom)
+                      && bounds.left >= panel.left && bounds.right <= panel.right;
+                  }
+                  """)),
+          "The complete palette must fit inside the visible sidebar before capture");
       byte[] pngBytes = palette.screenshot();
 
       ScreenshotPipeline.processScreenshot("node-palette.png", pngBytes);
