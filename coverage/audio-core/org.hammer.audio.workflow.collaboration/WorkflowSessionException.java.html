@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WorkflowSessionException.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Core</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.collaboration</a> &gt; <span class="el_source">WorkflowSessionException.java</span></div><h1>WorkflowSessionException.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.collaboration;
+
+import java.io.Serial;
+import java.util.Objects;
+
+/** Typed application error for workflow-session lifecycle and command failures. */
+public class WorkflowSessionException extends RuntimeException {
+
+  @Serial private static final long serialVersionUID = 1L;
+
+  /** Stable error codes independent of HTTP or any other transport. */
+<span class="fc" id="L12">  public enum Code {</span>
+<span class="fc" id="L13">    SESSION_ALREADY_EXISTS,</span>
+<span class="fc" id="L14">    SESSION_NOT_FOUND,</span>
+<span class="fc" id="L15">    PRIVATE_WORKSPACE_ACCESS_DENIED,</span>
+<span class="fc" id="L16">    ACTOR_METADATA_MISMATCH,</span>
+<span class="fc" id="L17">    ACTOR_NOT_JOINED,</span>
+<span class="fc" id="L18">    SESSION_MODE_MISMATCH,</span>
+<span class="fc" id="L19">    SESSION_CLOSE_FORBIDDEN,</span>
+<span class="fc" id="L20">    DUPLICATE_OPERATION_ID,</span>
+<span class="fc" id="L21">    INVALID_OPERATION_AUTHOR,</span>
+<span class="fc" id="L22">    UNDO_TARGET_REQUIRED,</span>
+<span class="fc" id="L23">    UNDO_TARGET_NOT_FOUND,</span>
+<span class="fc" id="L24">    OPERATION_NOT_UNDOABLE,</span>
+<span class="fc" id="L25">    UNDO_PREVIEW_REQUIRED,</span>
+<span class="fc" id="L26">    UNDO_PREVIEW_STALE,</span>
+<span class="fc" id="L27">    UNDO_CONFLICT,</span>
+<span class="fc" id="L28">    REDO_TARGET_NOT_FOUND,</span>
+<span class="fc" id="L29">    REDO_TARGET_INVALID,</span>
+<span class="fc" id="L30">    REDO_ALREADY_APPLIED</span>
+  }
+
+  private final Code errorCode;
+  private final String relatedSessionId;
+
+  /** Creates a typed session exception. */
+  public WorkflowSessionException(Code code, String sessionId, String message) {
+<span class="fc" id="L38">    super(validateBeforeConstruction(code, message));</span>
+<span class="fc" id="L39">    this.errorCode = code;</span>
+<span class="fc" id="L40">    this.relatedSessionId = sessionId;</span>
+<span class="fc" id="L41">  }</span>
+
+  /** Returns the stable transport-independent error code. */
+  public Code code() {
+<span class="fc" id="L45">    return errorCode;</span>
+  }
+
+  /** Returns the related session id, or {@code null} when none is available. */
+  public String sessionId() {
+<span class="nc" id="L50">    return relatedSessionId;</span>
+  }
+
+  private static String validateBeforeConstruction(Code code, String message) {
+<span class="fc" id="L54">    Objects.requireNonNull(code, &quot;code&quot;);</span>
+<span class="fc" id="L55">    return Objects.requireNonNull(message, &quot;message&quot;);</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

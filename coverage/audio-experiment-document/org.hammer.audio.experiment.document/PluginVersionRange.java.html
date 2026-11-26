@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>PluginVersionRange.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experiment Document</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experiment.document</a> &gt; <span class="el_source">PluginVersionRange.java</span></div><h1>PluginVersionRange.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experiment.document;
+
+import java.math.BigInteger;
+import java.util.regex.Pattern;
+
+/** Explicit numeric package intervals; unsupported expressions fail closed. */
+final class PluginVersionRange {
+
+<span class="fc" id="L9">  private static final Pattern NUMERIC_VERSION = Pattern.compile(&quot;[0-9]+(?:\\.[0-9]+)*&quot;);</span>
+
+  private PluginVersionRange() {
+    // utility class
+  }
+
+  static boolean matches(String range, String installed) {
+<span class="fc bfc" id="L16" title="All 4 branches covered.">    if (&quot;*&quot;.equals(range) || installed.equals(range)) {</span>
+<span class="fc" id="L17">      return true;</span>
+    }
+<span class="fc bfc" id="L19" title="All 2 branches covered.">    if (!validInterval(range, installed)) {</span>
+<span class="fc" id="L20">      return false;</span>
+    }
+<span class="fc" id="L22">    String[] ends = range.substring(1, range.length() - 1).split(&quot;,&quot;, -1);</span>
+<span class="pc bpc" id="L23" title="4 of 6 branches missed.">    if (ends.length != 2 || (ends[0].isBlank() &amp;&amp; ends[1].isBlank())) {</span>
+<span class="nc" id="L24">      return false;</span>
+    }
+<span class="fc" id="L26">    String lower = ends[0].trim();</span>
+<span class="fc" id="L27">    String upper = ends[1].trim();</span>
+<span class="pc bpc" id="L28" title="2 of 4 branches missed.">    return matchesBound(installed, lower, range.charAt(0) == '[', true)</span>
+<span class="pc bpc" id="L29" title="1 of 4 branches missed.">        &amp;&amp; matchesBound(installed, upper, range.charAt(range.length() - 1) == ']', false);</span>
+  }
+
+  private static boolean validInterval(String range, String installed) {
+<span class="pc bpc" id="L33" title="1 of 2 branches missed.">    if (range.length() &lt; 3</span>
+<span class="pc bpc" id="L34" title="1 of 2 branches missed.">        || range.length() &gt; 256</span>
+<span class="pc bpc" id="L35" title="1 of 2 branches missed.">        || installed.length() &gt; 128</span>
+<span class="fc bfc" id="L36" title="All 2 branches covered.">        || !NUMERIC_VERSION.matcher(installed).matches()) {</span>
+<span class="fc" id="L37">      return false;</span>
+    }
+<span class="fc" id="L39">    char first = range.charAt(0);</span>
+<span class="fc" id="L40">    char last = range.charAt(range.length() - 1);</span>
+<span class="pc bpc" id="L41" title="3 of 8 branches missed.">    return (first == '[' || first == '(') &amp;&amp; (last == ']' || last == ')');</span>
+  }
+
+  private static boolean matchesBound(
+      String installed, String bound, boolean inclusive, boolean lower) {
+<span class="pc bpc" id="L46" title="1 of 2 branches missed.">    if (bound.isEmpty()) {</span>
+<span class="nc" id="L47">      return true;</span>
+    }
+<span class="pc bpc" id="L49" title="1 of 2 branches missed.">    if (!NUMERIC_VERSION.matcher(bound).matches()) {</span>
+<span class="nc" id="L50">      return false;</span>
+    }
+<span class="fc" id="L52">    int comparison = compare(installed, bound);</span>
+<span class="fc bfc" id="L53" title="All 2 branches covered.">    if (comparison == 0) {</span>
+<span class="fc" id="L54">      return inclusive;</span>
+    }
+<span class="pc bpc" id="L56" title="2 of 6 branches missed.">    return lower ? comparison &gt; 0 : comparison &lt; 0;</span>
+  }
+
+  private static int compare(String left, String right) {
+<span class="fc" id="L60">    String[] leftParts = left.split(&quot;\\.&quot;);</span>
+<span class="fc" id="L61">    String[] rightParts = right.split(&quot;\\.&quot;);</span>
+<span class="fc bfc" id="L62" title="All 2 branches covered.">    for (int index = 0; index &lt; Math.max(leftParts.length, rightParts.length); index++) {</span>
+<span class="pc bpc" id="L63" title="1 of 2 branches missed.">      BigInteger a = index &lt; leftParts.length ? new BigInteger(leftParts[index]) : BigInteger.ZERO;</span>
+      BigInteger b =
+<span class="fc bfc" id="L65" title="All 2 branches covered.">          index &lt; rightParts.length ? new BigInteger(rightParts[index]) : BigInteger.ZERO;</span>
+<span class="fc" id="L66">      int comparison = a.compareTo(b);</span>
+<span class="fc bfc" id="L67" title="All 2 branches covered.">      if (comparison != 0) {</span>
+<span class="fc" id="L68">        return comparison;</span>
+      }
+    }
+<span class="fc" id="L71">    return 0;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

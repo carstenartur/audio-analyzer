@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ExperimentDocumentFileChooser.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer</a> &gt; <span class="el_source">ExperimentDocumentFileChooser.java</span></div><h1>ExperimentDocumentFileChooser.java</h1><pre class="source lang-java linenums">package org.hammer;
+
+import java.awt.Component;
+import java.io.File;
+import java.nio.file.Path;
+import java.util.Locale;
+import javax.swing.JFileChooser;
+import javax.swing.filechooser.FileNameExtensionFilter;
+import org.hammer.audio.experiment.document.ExperimentDocumentFormat;
+
+/** Shared, extension-safe file chooser operations for portable experiment documents. */
+final class ExperimentDocumentFileChooser {
+
+  private ExperimentDocumentFileChooser() {
+    // utility class
+  }
+
+  /** Select one existing experiment document, or return {@code null} when cancelled. */
+  static Path chooseOpen(Component owner) {
+<span class="nc" id="L20">    JFileChooser chooser = configuredChooser(&quot;Inspect portable experiment document&quot;);</span>
+<span class="nc bnc" id="L21" title="All 2 branches missed.">    return chooser.showOpenDialog(owner) == JFileChooser.APPROVE_OPTION</span>
+<span class="nc" id="L22">        ? chooser.getSelectedFile().toPath()</span>
+<span class="nc" id="L23">        : null;</span>
+  }
+
+  /** Select a distinct normalized-copy destination, or return {@code null} when cancelled. */
+  static Path chooseSave(Component owner) {
+<span class="nc" id="L28">    JFileChooser chooser = configuredChooser(&quot;Save normalized experiment document&quot;);</span>
+<span class="nc" id="L29">    chooser.setSelectedFile(new File(&quot;normalized.&quot; + ExperimentDocumentFormat.FILE_EXTENSION));</span>
+<span class="nc bnc" id="L30" title="All 2 branches missed.">    return chooser.showSaveDialog(owner) == JFileChooser.APPROVE_OPTION</span>
+<span class="nc" id="L31">        ? ensureExtension(chooser.getSelectedFile()).toPath()</span>
+<span class="nc" id="L32">        : null;</span>
+  }
+
+  private static JFileChooser configuredChooser(String title) {
+<span class="nc" id="L36">    JFileChooser chooser = new JFileChooser();</span>
+<span class="nc" id="L37">    chooser.setDialogTitle(title);</span>
+<span class="nc" id="L38">    chooser.setFileFilter(</span>
+        new FileNameExtensionFilter(
+            &quot;Audio Analyzer experiment (*.&quot; + ExperimentDocumentFormat.FILE_EXTENSION + &quot;)&quot;,
+            ExperimentDocumentFormat.FILE_EXTENSION));
+<span class="nc" id="L42">    return chooser;</span>
+  }
+
+  private static File ensureExtension(File file) {
+<span class="nc" id="L46">    String extension = &quot;.&quot; + ExperimentDocumentFormat.FILE_EXTENSION;</span>
+<span class="nc bnc" id="L47" title="All 2 branches missed.">    return file.getName().toLowerCase(Locale.ROOT).endsWith(extension)</span>
+<span class="nc" id="L48">        ? file</span>
+<span class="nc" id="L49">        : new File(file.getParentFile(), file.getName() + extension);</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

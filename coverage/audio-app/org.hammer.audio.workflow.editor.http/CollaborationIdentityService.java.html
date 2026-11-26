@@ -1,0 +1,228 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>CollaborationIdentityService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.editor.http</a> &gt; <span class="el_source">CollaborationIdentityService.java</span></div><h1>CollaborationIdentityService.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.editor.http;
+
+import jakarta.servlet.http.Cookie;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.security.Principal;
+import java.security.SecureRandom;
+import java.time.Clock;
+import java.time.Instant;
+import java.util.Base64;
+import java.util.HexFormat;
+import java.util.Map;
+import java.util.Objects;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import org.hammer.audio.workflow.collaboration.OperationActor;
+import org.hammer.audio.workflow.collaboration.identity.CollaborationIdentity;
+import org.hammer.audio.workflow.collaboration.identity.CollaborationIdentityStore;
+import org.hammer.audio.workflow.editor.http.WorkflowSessionApiModels.ActorResponse;
+
+/** Resolves all collaboration authority from server-issued cookies and servlet principals. */
+public final class CollaborationIdentityService {
+  public static final String ACTOR_HEADER = &quot;X-Workflow-Actor&quot;;
+  private static final String COOKIE_PREFIX = &quot;aa_collab_&quot;;
+  private static final String AUTHENTICATED = &quot;AUTHENTICATED&quot;;
+  private static final int COOKIE_MAX_AGE = 30 * 24 * 60 * 60;
+  private final CollaborationIdentityStore store;
+  private final boolean discloseHandles;
+  private final Clock clock;
+<span class="fc" id="L33">  private final SecureRandom random = new SecureRandom();</span>
+<span class="fc" id="L34">  private final Map&lt;String, Instant&gt; activity = new ConcurrentHashMap&lt;&gt;();</span>
+
+  public CollaborationIdentityService(
+<span class="fc" id="L37">      CollaborationIdentityStore store, boolean discloseHandles, Clock clock) {</span>
+<span class="fc" id="L38">    this.store = Objects.requireNonNull(store, &quot;store&quot;);</span>
+<span class="fc" id="L39">    this.discloseHandles = discloseHandles;</span>
+<span class="fc" id="L40">    this.clock = Objects.requireNonNull(clock, &quot;clock&quot;);</span>
+<span class="fc" id="L41">  }</span>
+
+  /** Issues a new client credential or resumes the exact existing immutable identity. */
+  public ActorResponse issue(
+      HttpServletRequest request,
+      HttpServletResponse response,
+      String actorId,
+      String displayName) {
+<span class="pc bpc" id="L49" title="1 of 4 branches missed.">    if (actorId != null &amp;&amp; !actorId.isBlank()) {</span>
+<span class="fc" id="L50">      OperationActor actor = requireActor(request, actorId);</span>
+<span class="fc" id="L51">      return project(actor, &quot;EDITOR&quot;);</span>
+    }
+<span class="fc" id="L53">    String id = &quot;actor.&quot; + UUID.randomUUID();</span>
+<span class="fc" id="L54">    Principal principal = request.getUserPrincipal();</span>
+<span class="fc bfc" id="L55" title="All 2 branches covered.">    String subject = principal == null ? &quot;anonymous-&quot; + UUID.randomUUID() : subject(principal);</span>
+<span class="fc bfc" id="L56" title="All 2 branches covered.">    String name = displayName == null ? &quot;&quot; : displayName.trim();</span>
+<span class="pc bpc" id="L57" title="2 of 4 branches missed.">    if (name.length() &gt; 120 || name.codePoints().anyMatch(Character::isISOControl)) {</span>
+<span class="nc" id="L58">      throw new IllegalArgumentException(</span>
+          &quot;Display name must contain at most 120 printable characters&quot;);
+    }
+    String provenance =
+<span class="pc bpc" id="L62" title="1 of 4 branches missed.">        principal == null ? (name.isEmpty() ? &quot;ANONYMOUS&quot; : &quot;SELF_ASSERTED&quot;) : AUTHENTICATED;</span>
+<span class="fc bfc" id="L63" title="All 2 branches covered.">    if (name.isEmpty()) {</span>
+<span class="pc bpc" id="L64" title="1 of 2 branches missed.">      name = (principal == null ? &quot;Guest &quot; : &quot;Participant &quot;) + participantCode(id);</span>
+    }
+<span class="fc" id="L66">    byte[] secret = new byte[32];</span>
+<span class="fc" id="L67">    random.nextBytes(secret);</span>
+<span class="fc" id="L68">    String credential = Base64.getUrlEncoder().withoutPadding().encodeToString(secret);</span>
+<span class="fc" id="L69">    CollaborationIdentity identity =</span>
+        new CollaborationIdentity(
+            new OperationActor(id, subject, name),
+            provenance,
+<span class="fc bfc" id="L73" title="All 2 branches covered.">            principal == null ? null : accountHandle(principal),</span>
+<span class="fc" id="L74">            hash(credential),</span>
+<span class="fc" id="L75">            clock.instant());</span>
+<span class="fc" id="L76">    store.insert(identity);</span>
+<span class="fc" id="L77">    Cookie cookie = new Cookie(cookieName(id), credential);</span>
+<span class="fc" id="L78">    cookie.setHttpOnly(true);</span>
+<span class="fc" id="L79">    cookie.setSecure(request.isSecure());</span>
+<span class="fc" id="L80">    cookie.setAttribute(&quot;SameSite&quot;, &quot;Strict&quot;);</span>
+<span class="fc" id="L81">    cookie.setPath(request.getContextPath() + &quot;/workflow&quot;);</span>
+<span class="fc" id="L82">    cookie.setMaxAge(COOKIE_MAX_AGE);</span>
+<span class="fc" id="L83">    response.addCookie(cookie);</span>
+<span class="fc" id="L84">    activity.put(id, clock.instant());</span>
+<span class="fc" id="L85">    return project(identity.actor(), &quot;EDITOR&quot;);</span>
+  }
+
+  /** Verifies proof of possession and account binding before returning server-owned attribution. */
+  public OperationActor requireActor(HttpServletRequest request, String requestedActorId) {
+<span class="fc" id="L90">    String actorId = selectActorId(request, requestedActorId);</span>
+<span class="fc" id="L91">    CollaborationIdentity identity =</span>
+<span class="fc" id="L92">        store.find(actorId).orElseThrow(CollaborationIdentityException::new);</span>
+<span class="fc bfc" id="L93" title="All 2 branches covered.">    if (!unexpired(identity)) {</span>
+<span class="fc" id="L94">      throw new CollaborationIdentityException();</span>
+    }
+<span class="fc" id="L96">    String credential = credential(request, actorId);</span>
+<span class="fc bfc" id="L97" title="All 2 branches covered.">    if (credential == null</span>
+<span class="pc bpc" id="L98" title="1 of 2 branches missed.">        || credential.length() &gt; 128</span>
+<span class="pc bpc" id="L99" title="1 of 2 branches missed.">        || !MessageDigest.isEqual(</span>
+<span class="fc" id="L100">            identity.credentialHash().getBytes(StandardCharsets.US_ASCII),</span>
+<span class="fc" id="L101">            hash(credential).getBytes(StandardCharsets.US_ASCII))) {</span>
+<span class="fc" id="L102">      throw new CollaborationIdentityException();</span>
+    }
+<span class="fc" id="L104">    Principal principal = request.getUserPrincipal();</span>
+<span class="fc" id="L105">    boolean authenticated = AUTHENTICATED.equals(identity.provenance());</span>
+<span class="fc bfc" id="L106" title="All 6 branches covered.">    if (authenticated != (principal != null)</span>
+<span class="fc bfc" id="L107" title="All 2 branches covered.">        || authenticated &amp;&amp; !identity.actor().userId().equals(subject(principal))) {</span>
+<span class="fc" id="L108">      throw new CollaborationIdentityException();</span>
+    }
+<span class="fc" id="L110">    activity.put(actorId, clock.instant());</span>
+<span class="fc" id="L111">    return identity.actor();</span>
+  }
+
+  private static String selectActorId(HttpServletRequest request, String requestedActorId) {
+<span class="fc" id="L115">    String header = request.getHeader(ACTOR_HEADER);</span>
+<span class="pc bpc" id="L116" title="3 of 6 branches missed.">    if (header != null &amp;&amp; requestedActorId != null &amp;&amp; !header.equals(requestedActorId)) {</span>
+<span class="nc" id="L117">      throw new CollaborationIdentityException();</span>
+    }
+<span class="fc bfc" id="L119" title="All 2 branches covered.">    String actorId = requestedActorId != null ? requestedActorId : header;</span>
+<span class="fc bfc" id="L120" title="All 2 branches covered.">    if (actorId == null) {</span>
+<span class="fc" id="L121">      actorId = request.getParameter(&quot;actorId&quot;);</span>
+    }
+<span class="fc bfc" id="L123" title="All 2 branches covered.">    if (actorId == null) {</span>
+<span class="fc" id="L124">      actorId = onlyActorCookie(request);</span>
+    }
+<span class="pc bpc" id="L126" title="1 of 4 branches missed.">    if (actorId == null || !actorId.matches(&quot;[A-Za-z0-9._-]{1,255}&quot;)) {</span>
+<span class="fc" id="L127">      throw new CollaborationIdentityException();</span>
+    }
+<span class="fc" id="L129">    return actorId;</span>
+  }
+
+  /** Checks the lifetime of an already authenticated stream without recording receive activity. */
+  boolean isActive(OperationActor actor) {
+<span class="fc" id="L134">    return store</span>
+<span class="fc" id="L135">        .find(actor.actorId())</span>
+<span class="fc" id="L136">        .filter(identity -&gt; identity.actor().equals(actor))</span>
+<span class="fc" id="L137">        .filter(this::unexpired)</span>
+<span class="fc" id="L138">        .isPresent();</span>
+  }
+
+  private boolean unexpired(CollaborationIdentity identity) {
+<span class="fc" id="L142">    return clock.instant().isBefore(identity.createdAt().plusSeconds(COOKIE_MAX_AGE));</span>
+  }
+
+  /** Projects public attribution without exposing subjects or credential material. */
+  public ActorResponse project(OperationActor actor, String role) {
+<span class="fc" id="L147">    CollaborationIdentity identity = store.find(actor.actorId()).orElse(null);</span>
+<span class="pc bpc" id="L148" title="1 of 2 branches missed.">    String provenance = identity == null ? &quot;SELF_ASSERTED&quot; : identity.provenance();</span>
+<span class="fc" id="L149">    boolean verified = AUTHENTICATED.equals(provenance);</span>
+<span class="fc" id="L150">    return new ActorResponse(</span>
+<span class="fc" id="L151">        actor.actorId(),</span>
+<span class="fc" id="L152">        actor.displayName(),</span>
+        provenance,
+        verified,
+<span class="fc bfc" id="L155" title="All 4 branches covered.">        verified &amp;&amp; discloseHandles ? identity.accountHandle() : null,</span>
+        role,
+<span class="fc" id="L157">        participantCode(actor.actorId()),</span>
+<span class="fc" id="L158">        activity.get(actor.actorId()));</span>
+  }
+
+  /** Returns durable public attribution for a history actor, including after restart. */
+  public ActorResponse historyActor(String actorId) {
+<span class="fc" id="L163">    return store.find(actorId).map(identity -&gt; project(identity.actor(), &quot;EDITOR&quot;)).orElse(null);</span>
+  }
+
+  /** Hashes credential material; the original credential is never retained by the server. */
+  public static String hash(String value) {
+    try {
+<span class="fc" id="L169">      return HexFormat.of()</span>
+<span class="fc" id="L170">          .formatHex(</span>
+<span class="fc" id="L171">              MessageDigest.getInstance(&quot;SHA-256&quot;).digest(value.getBytes(StandardCharsets.UTF_8)));</span>
+<span class="nc" id="L172">    } catch (NoSuchAlgorithmException exception) {</span>
+<span class="nc" id="L173">      throw new IllegalStateException(&quot;SHA-256 is unavailable&quot;, exception);</span>
+    }
+  }
+
+  /** Cookie names distinguish concurrent tabs without replacing any other client's credential. */
+  public static String cookieName(String actorId) {
+<span class="fc" id="L179">    return COOKIE_PREFIX + actorId;</span>
+  }
+
+  private static String subject(Principal principal) {
+<span class="fc" id="L183">    return &quot;account-&quot; + hash(accountHandle(principal));</span>
+  }
+
+  private static String accountHandle(Principal principal) {
+<span class="fc" id="L187">    String name = principal.getName();</span>
+<span class="pc bpc" id="L188" title="3 of 6 branches missed.">    if (name == null || name.isBlank() || name.length() &gt; 255) {</span>
+<span class="nc" id="L189">      throw new CollaborationIdentityException();</span>
+    }
+<span class="fc" id="L191">    return name;</span>
+  }
+
+  private static String participantCode(String actorId) {
+<span class="fc" id="L195">    return hash(actorId).substring(0, 6).toUpperCase(java.util.Locale.ROOT);</span>
+  }
+
+  private static String onlyActorCookie(HttpServletRequest request) {
+<span class="fc" id="L199">    Cookie[] cookies = request.getCookies();</span>
+<span class="fc bfc" id="L200" title="All 2 branches covered.">    if (cookies == null) {</span>
+<span class="fc" id="L201">      return null;</span>
+    }
+<span class="fc" id="L203">    String selected = null;</span>
+<span class="fc bfc" id="L204" title="All 2 branches covered.">    for (Cookie cookie : cookies) {</span>
+<span class="pc bpc" id="L205" title="1 of 2 branches missed.">      if (!cookie.getName().startsWith(COOKIE_PREFIX)) {</span>
+<span class="nc" id="L206">        continue;</span>
+      }
+<span class="pc bpc" id="L208" title="1 of 2 branches missed.">      if (selected != null) {</span>
+<span class="nc" id="L209">        return null;</span>
+      }
+<span class="fc" id="L211">      selected = cookie.getName().substring(COOKIE_PREFIX.length());</span>
+    }
+<span class="fc" id="L213">    return selected;</span>
+  }
+
+  private static String credential(HttpServletRequest request, String actorId) {
+<span class="fc" id="L217">    Cookie[] cookies = request.getCookies();</span>
+<span class="fc bfc" id="L218" title="All 2 branches covered.">    if (cookies != null) {</span>
+<span class="fc bfc" id="L219" title="All 2 branches covered.">      for (Cookie cookie : cookies) {</span>
+<span class="fc bfc" id="L220" title="All 2 branches covered.">        if (cookieName(actorId).equals(cookie.getName())) {</span>
+<span class="fc" id="L221">          return cookie.getValue();</span>
+        }
+      }
+    }
+<span class="fc" id="L225">    return null;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

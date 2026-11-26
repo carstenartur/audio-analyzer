@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>RecordingStatusText.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer</a> &gt; <span class="el_source">RecordingStatusText.java</span></div><h1>RecordingStatusText.java</h1><pre class="source lang-java linenums">package org.hammer;
+
+import java.nio.file.Path;
+import java.util.Locale;
+import org.hammer.audio.recording.runtime.RecordingState;
+import org.hammer.audio.recording.runtime.RecordingStatus;
+import org.hammer.audio.recording.runtime.RecordingStorageStatus;
+
+/** Readable Swing projection of the actual recorder snapshot, including terminal loss evidence. */
+final class RecordingStatusText {
+
+  private static final String COUNT_SEPARATOR = &quot; / &quot;;
+
+  private RecordingStatusText() {
+    // Shared text projection, with no filesystem access or derived recorder state.
+  }
+
+  static String summary(RecordingStatus recording) {
+<span class="fc bfc" id="L19" title="All 2 branches covered.">    if (recording == null) {</span>
+<span class="fc" id="L20">      return &quot;Recording: not active&quot;;</span>
+    }
+<span class="fc" id="L22">    Path filename = recording.destination().getFileName();</span>
+<span class="fc bfc" id="L23" title="All 2 branches covered.">    return (recording.state() == RecordingState.RECORDING ? &quot;● &quot; : &quot;&quot;)</span>
+        + &quot;Recording: &quot;
+<span class="fc" id="L25">        + recording.state()</span>
+        + &quot; · File: &quot;
+<span class="pc bpc" id="L27" title="1 of 2 branches missed.">        + (filename == null ? recording.destination() : filename)</span>
+        + &quot; · Elapsed: &quot;
+<span class="fc" id="L29">        + duration(recording.elapsed().toSeconds())</span>
+        + &quot;\nWritten: &quot;
+<span class="fc" id="L31">        + bytes(recording.bytesWritten())</span>
+        + &quot; · Rate: &quot;
+<span class="fc" id="L33">        + rate(recording.measuredBytesPerSecond())</span>
+        + &quot; · Usable: &quot;
+<span class="fc" id="L35">        + bytes(recording.storage().usableBytes())</span>
+        + &quot; · Safe time: &quot;
+<span class="fc" id="L37">        + duration(recording.storage().estimatedSafeSecondsRemaining())</span>
+        + &quot;\nWritten / received: &quot;
+<span class="fc" id="L39">        + recording.writtenFrames()</span>
+        + COUNT_SEPARATOR
+<span class="fc" id="L41">        + recording.receivedFrames()</span>
+        + &quot; frames · &quot;
+<span class="fc" id="L43">        + recording.writtenBlocks()</span>
+        + COUNT_SEPARATOR
+<span class="fc" id="L45">        + recording.receivedBlocks()</span>
+        + &quot; blocks&quot;
+        + &quot;\nQueue: &quot;
+<span class="fc" id="L48">        + recording.queueDepth()</span>
+        + COUNT_SEPARATOR
+<span class="fc" id="L50">        + recording.queueCapacity()</span>
+        + &quot; · Dropped blocks / frames: &quot;
+<span class="fc" id="L52">        + recording.droppedBlocks()</span>
+        + COUNT_SEPARATOR
+<span class="fc" id="L54">        + recording.droppedFrames()</span>
+        + &quot; · Continuity gaps: &quot;
+<span class="fc" id="L56">        + recording.continuityGapCount()</span>
+        + &quot;\nStorage: &quot;
+<span class="fc" id="L58">        + recording.storage().level()</span>
+        + &quot; · Capacity warnings: &quot;
+<span class="fc" id="L60">        + recording.storage().warningHistory().size()</span>
+        + &quot; · Loss: &quot;
+<span class="fc bfc" id="L62" title="All 2 branches covered.">        + (recording.completeSoFar() ? &quot;none observed&quot; : &quot;incomplete or failed&quot;)</span>
+<span class="fc bfc" id="L63" title="All 2 branches covered.">        + (recording.stopReason().isBlank() ? &quot;&quot; : &quot;\nStop reason: &quot; + recording.stopReason())</span>
+<span class="pc bpc" id="L64" title="1 of 2 branches missed.">        + (recording.errorMessage().isBlank() ? &quot;&quot; : &quot;\nError: &quot; + recording.errorMessage());</span>
+  }
+
+  static String details(RecordingStatus recording) {
+<span class="fc bfc" id="L68" title="All 2 branches covered.">    if (recording == null) {</span>
+<span class="fc" id="L69">      return &quot;Recording: not active&quot;;</span>
+    }
+<span class="fc" id="L71">    RecordingStorageStatus storage = recording.storage();</span>
+<span class="fc" id="L72">    return summary(recording)</span>
+        + &quot;\nDestination: &quot;
+<span class="fc" id="L74">        + recording.destination()</span>
+        + &quot;\nRecorder started: &quot;
+<span class="fc" id="L76">        + recording.startedAt()</span>
+        + &quot;\nRecorder observed: &quot;
+<span class="fc" id="L78">        + recording.updatedAt()</span>
+        + &quot;\nSerialized bytes: &quot;
+<span class="fc" id="L80">        + recording.bytesWritten()</span>
+        + &quot;\nMaximum queue depth: &quot;
+<span class="fc" id="L82">        + recording.maximumQueueDepth()</span>
+        + &quot;\nBacking store: &quot;
+<span class="fc" id="L84">        + storage.storeName()</span>
+        + &quot; (&quot;
+<span class="fc" id="L86">        + storage.storeType()</span>
+        + &quot;)&quot;
+        + &quot;\nWritable: &quot;
+<span class="fc" id="L89">        + storage.writable()</span>
+        + &quot;\nCapacity bytes (usable / unallocated / total): &quot;
+<span class="fc" id="L91">        + storage.usableBytes()</span>
+        + COUNT_SEPARATOR
+<span class="fc" id="L93">        + storage.unallocatedBytes()</span>
+        + COUNT_SEPARATOR
+<span class="fc" id="L95">        + storage.totalBytes()</span>
+        + &quot;\nExpected write rate: &quot;
+<span class="fc" id="L97">        + rate(storage.expectedBytesPerSecond())</span>
+        + &quot;\nLast successful capacity check: &quot;
+<span class="fc" id="L99">        + storage.lastSuccessfulCheck()</span>
+        + &quot;\nCapacity observed: &quot;
+<span class="fc" id="L101">        + storage.checkedAt()</span>
+        + &quot;\nCapacity query error: &quot;
+<span class="fc" id="L103">        + storage.errorMessage()</span>
+        + &quot;\nCapacity policy: &quot;
+<span class="fc" id="L105">        + storage.policy()</span>
+        + &quot;\nCapacity warning history: &quot;
+<span class="fc" id="L107">        + storage.warningHistory();</span>
+  }
+
+  private static String rate(double value) {
+<span class="pc bpc" id="L111" title="2 of 4 branches missed.">    return Double.isFinite(value) &amp;&amp; value &gt;= 0.0 ? bytes(Math.round(value)) + &quot;/s&quot; : &quot;unknown&quot;;</span>
+  }
+
+  private static String duration(long seconds) {
+<span class="pc bpc" id="L115" title="1 of 2 branches missed.">    if (seconds &lt; 0L) {</span>
+<span class="nc" id="L116">      return &quot;unknown&quot;;</span>
+    }
+<span class="fc" id="L118">    return String.format(</span>
+<span class="fc" id="L119">        Locale.ROOT, &quot;%02d:%02d:%02d&quot;, seconds / 3600L, seconds / 60L % 60L, seconds % 60L);</span>
+  }
+
+  private static String bytes(long bytes) {
+<span class="pc bpc" id="L123" title="1 of 2 branches missed.">    if (bytes &lt; 0L) {</span>
+<span class="nc" id="L124">      return &quot;unknown&quot;;</span>
+    }
+<span class="pc bpc" id="L126" title="1 of 2 branches missed.">    if (bytes &lt; 1024L) {</span>
+<span class="nc" id="L127">      return bytes + &quot; B&quot;;</span>
+    }
+<span class="fc" id="L129">    double value = bytes;</span>
+<span class="fc" id="L130">    String[] units = {&quot;KiB&quot;, &quot;MiB&quot;, &quot;GiB&quot;, &quot;TiB&quot;};</span>
+<span class="fc" id="L131">    int unit = -1;</span>
+    do {
+<span class="fc" id="L133">      value /= 1024.0;</span>
+<span class="fc" id="L134">      unit++;</span>
+<span class="pc bpc" id="L135" title="1 of 4 branches missed.">    } while (value &gt;= 1024.0 &amp;&amp; unit + 1 &lt; units.length);</span>
+<span class="fc" id="L136">    return String.format(Locale.ROOT, &quot;%.1f %s&quot;, value, units[unit]);</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

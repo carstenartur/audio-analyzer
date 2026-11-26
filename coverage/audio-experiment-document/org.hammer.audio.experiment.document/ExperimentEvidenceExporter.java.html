@@ -1,0 +1,243 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ExperimentEvidenceExporter.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experiment Document</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experiment.document</a> &gt; <span class="el_source">ExperimentEvidenceExporter.java</span></div><h1>ExperimentEvidenceExporter.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experiment.document;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.nio.file.Files;
+import java.nio.file.LinkOption;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
+import org.hammer.audio.plugin.document.DocumentDiagnostic;
+
+/**
+ * Separate, streamed evidence packages containing a setup and explicitly selected local evidence.
+ */
+<span class="fc" id="L23">public final class ExperimentEvidenceExporter {</span>
+  private static final long MAX_PACKAGE_BYTES = 2L * 1024 * 1024 * 1024;
+  private static final String DOCUMENT_ENTRY = &quot;experiment.audioexp&quot;;
+  private static final String MANIFEST_ENTRY = &quot;evidence-manifest.json&quot;;
+
+  /**
+   * Validate selected evidence before opening any output. Compatibility/read-only status remains
+   * inspectable.
+   */
+  public void validate(ExperimentDocumentPreview preview, ExperimentLocalBindings bindings)
+      throws IOException {
+<span class="pc bpc" id="L34" title="1 of 2 branches missed.">    if (preview.document().assets().size() &gt; 64) {</span>
+<span class="nc" id="L35">      throw new IOException(&quot;Evidence packages support at most 64 assets&quot;);</span>
+    }
+<span class="fc" id="L37">    long declared = 0;</span>
+<span class="fc" id="L38">    java.util.Set&lt;String&gt; entryNames = new java.util.HashSet&lt;&gt;();</span>
+<span class="fc bfc" id="L39" title="All 2 branches covered.">    for (ExperimentDocument.AssetReference asset : preview.document().assets()) {</span>
+<span class="pc bpc" id="L40" title="1 of 2 branches missed.">      if (!entryNames.add(asset.relativePath())</span>
+<span class="pc bpc" id="L41" title="1 of 2 branches missed.">          || DOCUMENT_ENTRY.equals(asset.relativePath())</span>
+<span class="pc bpc" id="L42" title="1 of 2 branches missed.">          || MANIFEST_ENTRY.equals(asset.relativePath())</span>
+<span class="pc bpc" id="L43" title="1 of 2 branches missed.">          || asset.relativePath().startsWith(&quot;results/&quot;)) {</span>
+<span class="nc" id="L44">        throw new ExperimentDocumentException(</span>
+            &quot;/assets&quot;,
+            &quot;evidence-path-conflict&quot;,
+            &quot;Asset path conflicts with a package-reserved entry&quot;);
+      }
+<span class="pc bpc" id="L49" title="1 of 2 branches missed.">      if (asset.sizeBytes() &gt; MAX_PACKAGE_BYTES - declared) {</span>
+<span class="nc" id="L50">        throw new IOException(&quot;Evidence package exceeds the 2 GiB limit&quot;);</span>
+      }
+<span class="fc" id="L52">      declared += asset.sizeBytes();</span>
+<span class="fc" id="L53">    }</span>
+<span class="fc bfc" id="L54" title="All 2 branches covered.">    for (ExperimentDocument.OutputRequest requested : preview.document().outputs()) {</span>
+<span class="pc bpc" id="L55" title="1 of 2 branches missed.">      if (!entryNames.add(&quot;results/&quot; + requested.baseName())) {</span>
+<span class="nc" id="L56">        throw new ExperimentDocumentException(</span>
+            &quot;/outputs&quot;,
+            &quot;evidence-path-conflict&quot;,
+            &quot;Requested outputs must have distinct package entry names&quot;);
+      }
+<span class="fc" id="L61">    }</span>
+<span class="fc" id="L62">    List&lt;DocumentDiagnostic&gt; diagnostics =</span>
+<span class="fc" id="L63">        new ExperimentLocalBindingService().inspect(preview, bindings).diagnostics();</span>
+<span class="fc bfc" id="L64" title="All 2 branches covered.">    for (DocumentDiagnostic diagnostic : diagnostics) {</span>
+<span class="pc bpc" id="L65" title="1 of 2 branches missed.">      if (diagnostic.severity() == DocumentDiagnostic.Severity.ERROR</span>
+<span class="fc bfc" id="L66" title="All 2 branches covered.">          &amp;&amp; diagnostic.pointer().startsWith(&quot;/assets/&quot;)) {</span>
+<span class="fc" id="L67">        throw new ExperimentDocumentException(</span>
+<span class="fc" id="L68">            diagnostic.pointer(), diagnostic.code(), diagnostic.message());</span>
+      }
+<span class="fc" id="L70">    }</span>
+<span class="fc" id="L71">  }</span>
+
+  /**
+   * Atomically save a package to an explicitly selected destination, preserving original and
+   * evidence files.
+   */
+  public void save(
+      Path target,
+      Path importedOriginal,
+      ExperimentDocumentPreview preview,
+      ExperimentLocalBindings bindings)
+      throws IOException {
+<span class="fc" id="L83">    validate(preview, bindings);</span>
+<span class="fc" id="L84">    Path destination = target.toAbsolutePath().normalize();</span>
+<span class="fc" id="L85">    List&lt;Path&gt; protectedPaths = new ArrayList&lt;&gt;(bindings.assetPaths().values());</span>
+<span class="pc bpc" id="L86" title="1 of 2 branches missed.">    if (importedOriginal != null) {</span>
+<span class="fc" id="L87">      protectedPaths.add(importedOriginal);</span>
+    }
+<span class="pc bpc" id="L89" title="1 of 2 branches missed.">    if (bindings.outputDirectory() != null) {</span>
+<span class="nc bnc" id="L90" title="All 2 branches missed.">      for (ExperimentDocument.OutputRequest requested : preview.document().outputs()) {</span>
+<span class="nc" id="L91">        Path source = bindings.outputDirectory().resolve(requested.baseName());</span>
+<span class="nc bnc" id="L92" title="All 2 branches missed.">        if (Files.exists(source)) {</span>
+<span class="nc" id="L93">          protectedPaths.add(source);</span>
+        }
+<span class="nc" id="L95">      }</span>
+    }
+<span class="fc bfc" id="L97" title="All 2 branches covered.">    for (Path source : protectedPaths) {</span>
+<span class="pc bpc" id="L98" title="1 of 2 branches missed.">      if (destination.equals(source.toAbsolutePath().normalize())</span>
+<span class="pc bpc" id="L99" title="3 of 4 branches missed.">          || Files.exists(destination) &amp;&amp; Files.isSameFile(destination, source)) {</span>
+<span class="nc" id="L100">        throw new IOException(</span>
+            &quot;Evidence destination must differ from imported source and selected assets&quot;);
+      }
+<span class="fc" id="L103">    }</span>
+<span class="fc" id="L104">    Path parent = destination.getParent();</span>
+<span class="pc bpc" id="L105" title="1 of 2 branches missed.">    if (parent == null) {</span>
+<span class="nc" id="L106">      throw new IOException(&quot;Evidence destination requires a parent directory&quot;);</span>
+    }
+<span class="fc" id="L108">    Files.createDirectories(parent);</span>
+<span class="fc" id="L109">    Path temporary = Files.createTempFile(parent, &quot;.audio-evidence-&quot;, &quot;.partial&quot;);</span>
+    try {
+<span class="fc" id="L111">      try (OutputStream output = Files.newOutputStream(temporary)) {</span>
+<span class="fc" id="L112">        write(output, preview, bindings);</span>
+      }
+<span class="pc bpc" id="L114" title="1 of 2 branches missed.">      if (Thread.currentThread().isInterrupted()) {</span>
+<span class="nc" id="L115">        throw new java.io.InterruptedIOException(</span>
+            &quot;Evidence export cancelled before atomic replacement&quot;);
+      }
+<span class="fc" id="L118">      Files.move(</span>
+          temporary,
+          destination,
+          StandardCopyOption.ATOMIC_MOVE,
+          StandardCopyOption.REPLACE_EXISTING);
+    } finally {
+<span class="fc" id="L124">      Files.deleteIfExists(temporary);</span>
+    }
+<span class="fc" id="L126">  }</span>
+
+  /** Stream an evidence ZIP and close its output; no local files are created by this method. */
+  // The sorted manifest is local to one export and must preserve reproducible key ordering.
+  @SuppressWarnings(&quot;PMD.UseConcurrentHashMap&quot;)
+  public void write(
+      OutputStream output, ExperimentDocumentPreview preview, ExperimentLocalBindings bindings)
+      throws IOException {
+<span class="fc" id="L134">    validate(preview, bindings);</span>
+<span class="fc" id="L135">    List&lt;Map&lt;String, Object&gt;&gt; entries = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L136">    long[] total = {0};</span>
+<span class="fc" id="L137">    try (ZipOutputStream zip = new ZipOutputStream(output)) {</span>
+<span class="fc" id="L138">      byte[] document = new ExperimentDocumentCodec().encode(preview.document());</span>
+<span class="fc" id="L139">      put(zip, DOCUMENT_ENTRY);</span>
+<span class="fc" id="L140">      zip.write(document);</span>
+<span class="fc" id="L141">      zip.closeEntry();</span>
+<span class="fc" id="L142">      total[0] += document.length;</span>
+<span class="fc" id="L143">      List&lt;ExperimentDocument.AssetReference&gt; sortedAssets =</span>
+<span class="fc" id="L144">          preview.document().assets().stream()</span>
+<span class="fc" id="L145">              .sorted(Comparator.comparing(ExperimentDocument.AssetReference::relativePath))</span>
+<span class="fc" id="L146">              .toList();</span>
+<span class="fc bfc" id="L147" title="All 2 branches covered.">      for (ExperimentDocument.AssetReference asset : sortedAssets) {</span>
+<span class="fc" id="L148">        Path source = bindings.assetPath(asset.id()).orElseThrow();</span>
+<span class="fc" id="L149">        String hash = copy(zip, asset.relativePath(), source, asset.sizeBytes(), total);</span>
+<span class="pc bpc" id="L150" title="1 of 2 branches missed.">        if (!hash.equals(asset.sha256())) {</span>
+<span class="nc" id="L151">          throw new IOException(&quot;Selected evidence changed while being packaged: &quot; + asset.id());</span>
+        }
+<span class="fc" id="L153">        entries.add(</span>
+<span class="fc" id="L154">            Map.of(</span>
+                &quot;path&quot;,
+<span class="fc" id="L156">                asset.relativePath(),</span>
+                &quot;sha256&quot;,
+                hash,
+                &quot;sizeBytes&quot;,
+<span class="fc" id="L160">                asset.sizeBytes(),</span>
+                &quot;mediaType&quot;,
+<span class="fc" id="L162">                asset.mediaType()));</span>
+<span class="fc" id="L163">      }</span>
+<span class="fc" id="L164">      List&lt;String&gt; unavailable = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L165" title="All 2 branches covered.">      for (ExperimentDocument.OutputRequest requested : preview.document().outputs()) {</span>
+<span class="fc" id="L166">        Path directory = bindings.outputDirectory();</span>
+<span class="pc bpc" id="L167" title="1 of 2 branches missed.">        Path result = directory == null ? null : directory.resolve(requested.baseName());</span>
+<span class="pc bpc" id="L168" title="3 of 4 branches missed.">        if (result == null || !Files.isRegularFile(result, LinkOption.NOFOLLOW_LINKS)) {</span>
+<span class="fc" id="L169">          unavailable.add(requested.id());</span>
+<span class="fc" id="L170">          continue;</span>
+        }
+<span class="nc" id="L172">        long size = Files.size(result);</span>
+<span class="nc" id="L173">        String name = &quot;results/&quot; + requested.baseName();</span>
+<span class="nc" id="L174">        String hash = copy(zip, name, result, size, total);</span>
+<span class="nc" id="L175">        entries.add(</span>
+<span class="nc" id="L176">            Map.of(</span>
+                &quot;path&quot;,
+                name,
+                &quot;sha256&quot;,
+                hash,
+                &quot;sizeBytes&quot;,
+<span class="nc" id="L182">                size,</span>
+                &quot;mediaType&quot;,
+<span class="nc" id="L184">                requested.mediaType()));</span>
+<span class="nc" id="L185">      }</span>
+<span class="fc" id="L186">      Map&lt;String, Object&gt; manifest = new TreeMap&lt;&gt;();</span>
+<span class="fc" id="L187">      manifest.put(&quot;format&quot;, &quot;io.github.carstenartur.audio-analyzer.evidence&quot;);</span>
+<span class="fc" id="L188">      manifest.put(&quot;formatVersion&quot;, 1);</span>
+<span class="fc" id="L189">      manifest.put(&quot;documentCanonicalSha256&quot;, preview.canonicalSha256());</span>
+<span class="fc" id="L190">      manifest.put(&quot;entries&quot;, entries);</span>
+<span class="fc" id="L191">      manifest.put(&quot;unavailableOutputs&quot;, unavailable);</span>
+<span class="fc" id="L192">      put(zip, MANIFEST_ENTRY);</span>
+<span class="fc" id="L193">      zip.write(new ObjectMapper().writeValueAsBytes(manifest));</span>
+<span class="fc" id="L194">      zip.closeEntry();</span>
+    }
+<span class="fc" id="L196">  }</span>
+
+  private static String copy(
+      ZipOutputStream zip, String name, Path source, long expected, long[] total)
+      throws IOException {
+<span class="pc bpc" id="L201" title="1 of 2 branches missed.">    if (expected &gt; MAX_PACKAGE_BYTES - total[0]) {</span>
+<span class="nc" id="L202">      throw new IOException(&quot;Evidence package exceeds the 2 GiB limit&quot;);</span>
+    }
+<span class="fc" id="L204">    put(zip, name);</span>
+    java.security.MessageDigest digest;
+    try {
+<span class="fc" id="L207">      digest = java.security.MessageDigest.getInstance(&quot;SHA-256&quot;);</span>
+<span class="nc" id="L208">    } catch (java.security.NoSuchAlgorithmException exception) {</span>
+<span class="nc" id="L209">      throw new IllegalStateException(exception);</span>
+<span class="fc" id="L210">    }</span>
+<span class="fc" id="L211">    long count = 0;</span>
+<span class="fc" id="L212">    byte[] buffer = new byte[8192];</span>
+<span class="fc" id="L213">    try (InputStream input = Files.newInputStream(source, LinkOption.NOFOLLOW_LINKS)) {</span>
+<span class="fc" id="L214">      int read = input.read(buffer);</span>
+<span class="fc bfc" id="L215" title="All 2 branches covered.">      while (read &gt;= 0) {</span>
+<span class="pc bpc" id="L216" title="1 of 2 branches missed.">        if (Thread.currentThread().isInterrupted()) {</span>
+<span class="nc" id="L217">          throw new java.io.InterruptedIOException(&quot;Evidence export cancelled&quot;);</span>
+        }
+<span class="fc" id="L219">        count += read;</span>
+<span class="pc bpc" id="L220" title="1 of 2 branches missed.">        if (count &gt; expected) {</span>
+<span class="nc" id="L221">          throw new IOException(&quot;Selected evidence grew during export&quot;);</span>
+        }
+<span class="fc" id="L223">        digest.update(buffer, 0, read);</span>
+<span class="fc" id="L224">        zip.write(buffer, 0, read);</span>
+<span class="fc" id="L225">        read = input.read(buffer);</span>
+      }
+    }
+<span class="pc bpc" id="L228" title="1 of 2 branches missed.">    if (count != expected) {</span>
+<span class="nc" id="L229">      throw new IOException(&quot;Selected evidence changed size during export&quot;);</span>
+    }
+<span class="fc" id="L231">    total[0] += count;</span>
+<span class="fc" id="L232">    zip.closeEntry();</span>
+<span class="fc" id="L233">    return java.util.HexFormat.of().formatHex(digest.digest());</span>
+  }
+
+  private static void put(ZipOutputStream zip, String name) throws IOException {
+<span class="fc" id="L237">    PortableNames.requireRelativePath(name);</span>
+<span class="fc" id="L238">    ZipEntry entry = new ZipEntry(name);</span>
+<span class="fc" id="L239">    entry.setTime(0);</span>
+<span class="fc" id="L240">    zip.putNextEntry(entry);</span>
+<span class="fc" id="L241">  }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

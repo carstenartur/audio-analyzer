@@ -1,0 +1,162 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>FeatureHistogram.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.dataset</a> &gt; <span class="el_source">FeatureHistogram.java</span></div><h1>FeatureHistogram.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.dataset;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import java.util.Objects;
+
+/**
+ * Histogram of a single numeric feature computed from a collection of recordings.
+ *
+ * &lt;p&gt;Bucket boundaries are determined automatically from the value range using Sturges' rule when
+ * no explicit bucket count is supplied. All bucket counts are non-negative integers and the buckets
+ * partition the observed range without overlap.
+ *
+ * &lt;p&gt;An empty histogram (no values) has an empty bucket list and is a valid representation of a
+ * feature for which no data is available. Use {@link #toMarkdown()} to render a human-readable
+ * table for inclusion in evaluation reports.
+ *
+ * @param featureName human-readable name of the feature; must not be blank
+ * @param buckets ordered list of histogram buckets; may be empty when the input is empty
+ */
+@SuppressWarnings(&quot;PMD.DanglingJavadoc&quot;)
+public record FeatureHistogram(String featureName, List&lt;Bucket&gt; buckets) {
+
+  /** Validate and defensively copy fields. */
+<span class="fc" id="L26">  public FeatureHistogram {</span>
+<span class="fc" id="L27">    Objects.requireNonNull(featureName, &quot;featureName&quot;);</span>
+<span class="fc" id="L28">    Objects.requireNonNull(buckets, &quot;buckets&quot;);</span>
+<span class="fc bfc" id="L29" title="All 2 branches covered.">    if (featureName.isBlank()) {</span>
+<span class="fc" id="L30">      throw new IllegalArgumentException(&quot;featureName must not be blank&quot;);</span>
+    }
+<span class="fc" id="L32">    buckets = List.copyOf(buckets);</span>
+<span class="fc" id="L33">  }</span>
+
+  /**
+   * Build a histogram from an array of values using an automatically determined bucket count.
+   *
+   * &lt;p&gt;The bucket count is chosen with Sturges' rule: {@code ceil(log2(n)) + 1}, clamped to at
+   * least {@code 1}. When all values are identical, a single bucket is returned.
+   *
+   * @param featureName human-readable feature name; must not be blank
+   * @param values array of observed values; must not be {@code null}; may be empty
+   * @return histogram; never {@code null}
+   */
+  public static FeatureHistogram of(String featureName, double[] values) {
+<span class="fc" id="L46">    Objects.requireNonNull(values, &quot;values&quot;);</span>
+<span class="fc" id="L47">    return of(featureName, values, optimalBucketCount(values.length));</span>
+  }
+
+  /**
+   * Build a histogram from an array of values with a specified bucket count.
+   *
+   * @param featureName human-readable feature name; must not be blank
+   * @param values array of observed values; must not be {@code null}; may be empty
+   * @param bucketCount desired number of buckets; must be {@code &gt;= 1}
+   * @return histogram; never {@code null}
+   */
+  public static FeatureHistogram of(String featureName, double[] values, int bucketCount) {
+<span class="fc" id="L59">    Objects.requireNonNull(featureName, &quot;featureName&quot;);</span>
+<span class="fc" id="L60">    Objects.requireNonNull(values, &quot;values&quot;);</span>
+<span class="fc bfc" id="L61" title="All 2 branches covered.">    if (bucketCount &lt; 1) {</span>
+<span class="fc" id="L62">      throw new IllegalArgumentException(&quot;bucketCount must be &gt;= 1&quot;);</span>
+    }
+<span class="fc bfc" id="L64" title="All 2 branches covered.">    if (values.length == 0) {</span>
+<span class="fc" id="L65">      return new FeatureHistogram(featureName, List.of());</span>
+    }
+<span class="fc" id="L67">    double min = values[0];</span>
+<span class="fc" id="L68">    double max = values[0];</span>
+<span class="fc bfc" id="L69" title="All 2 branches covered.">    for (double v : values) {</span>
+<span class="fc bfc" id="L70" title="All 2 branches covered.">      if (v &lt; min) {</span>
+<span class="fc" id="L71">        min = v;</span>
+      }
+<span class="fc bfc" id="L73" title="All 2 branches covered.">      if (v &gt; max) {</span>
+<span class="fc" id="L74">        max = v;</span>
+      }
+    }
+<span class="fc bfc" id="L77" title="All 2 branches covered.">    if (Double.doubleToLongBits(min) == Double.doubleToLongBits(max)) {</span>
+<span class="fc" id="L78">      return new FeatureHistogram(featureName, List.of(new Bucket(min, max, values.length)));</span>
+    }
+<span class="fc" id="L80">    double range = max - min;</span>
+<span class="fc" id="L81">    double bucketWidth = range / bucketCount;</span>
+<span class="fc" id="L82">    int[] counts = new int[bucketCount];</span>
+<span class="fc bfc" id="L83" title="All 2 branches covered.">    for (double v : values) {</span>
+<span class="fc" id="L84">      int idx = (int) ((v - min) / bucketWidth);</span>
+<span class="fc bfc" id="L85" title="All 2 branches covered.">      if (idx &gt;= bucketCount) {</span>
+<span class="fc" id="L86">        idx = bucketCount - 1;</span>
+      }
+<span class="fc" id="L88">      counts[idx]++;</span>
+    }
+<span class="fc" id="L90">    List&lt;Bucket&gt; buckets = new ArrayList&lt;&gt;(bucketCount);</span>
+<span class="fc bfc" id="L91" title="All 2 branches covered.">    for (int i = 0; i &lt; bucketCount; i++) {</span>
+<span class="fc" id="L92">      double lower = min + i * bucketWidth;</span>
+<span class="fc" id="L93">      double upper = min + (i + 1) * bucketWidth;</span>
+<span class="fc" id="L94">      buckets.add(new Bucket(lower, upper, counts[i]));</span>
+    }
+<span class="fc" id="L96">    return new FeatureHistogram(featureName, buckets);</span>
+  }
+
+  /**
+   * Render this histogram as a Markdown table section.
+   *
+   * @return Markdown snippet; never {@code null}
+   */
+  @SuppressWarnings(&quot;PMD.ConsecutiveLiteralAppends&quot;)
+  public String toMarkdown() {
+<span class="fc bfc" id="L106" title="All 2 branches covered.">    if (buckets.isEmpty()) {</span>
+<span class="fc" id="L107">      return &quot;### &quot; + featureName + &quot;\n\n- No data\n\n&quot;;</span>
+    }
+<span class="fc" id="L109">    StringBuilder sb = new StringBuilder(256);</span>
+<span class="fc" id="L110">    sb.append(&quot;### &quot;).append(featureName).append(&quot;\n\n&quot;).append(&quot;| Range | Count |\n|---|---:|\n&quot;);</span>
+<span class="fc bfc" id="L111" title="All 2 branches covered.">    for (Bucket b : buckets) {</span>
+<span class="fc" id="L112">      sb.append(&quot;| [&quot;)</span>
+<span class="fc" id="L113">          .append(String.format(Locale.ROOT, &quot;%.3f&quot;, b.lowerBound()))</span>
+<span class="fc" id="L114">          .append(&quot;, &quot;)</span>
+<span class="fc" id="L115">          .append(String.format(Locale.ROOT, &quot;%.3f&quot;, b.upperBound()))</span>
+<span class="fc" id="L116">          .append(&quot;) | &quot;)</span>
+<span class="fc" id="L117">          .append(b.count())</span>
+<span class="fc" id="L118">          .append(&quot; |\n&quot;);</span>
+<span class="fc" id="L119">    }</span>
+<span class="fc" id="L120">    sb.append('\n');</span>
+<span class="fc" id="L121">    return sb.toString();</span>
+  }
+
+  /**
+   * Compute the optimal bucket count for {@code n} observations using Sturges' rule.
+   *
+   * @param n number of observations
+   * @return number of buckets, always {@code &gt;= 1}
+   */
+  static int optimalBucketCount(int n) {
+<span class="fc bfc" id="L131" title="All 2 branches covered.">    if (n &lt;= 1) {</span>
+<span class="fc" id="L132">      return 1;</span>
+    }
+<span class="fc" id="L134">    return Math.max(1, (int) Math.ceil(Math.log(n) / Math.log(2.0)) + 1);</span>
+  }
+
+  /**
+   * One bucket of a {@link FeatureHistogram}.
+   *
+   * @param lowerBound inclusive lower boundary of the bucket
+   * @param upperBound exclusive upper boundary of the bucket (except for the last bucket, which is
+   *     inclusive)
+   * @param count number of observations falling into this bucket; must be {@code &gt;= 0}
+   */
+  @SuppressWarnings(&quot;PMD.DanglingJavadoc&quot;)
+  public record Bucket(double lowerBound, double upperBound, int count) {
+
+    /** Validate bucket fields. */
+<span class="fc" id="L149">    public Bucket {</span>
+<span class="fc bfc" id="L150" title="All 2 branches covered.">      if (!Double.isFinite(lowerBound)) {</span>
+<span class="fc" id="L151">        throw new IllegalArgumentException(&quot;lowerBound must be finite&quot;);</span>
+      }
+<span class="pc bpc" id="L153" title="1 of 2 branches missed.">      if (!Double.isFinite(upperBound)) {</span>
+<span class="nc" id="L154">        throw new IllegalArgumentException(&quot;upperBound must be finite&quot;);</span>
+      }
+<span class="fc bfc" id="L156" title="All 2 branches covered.">      if (count &lt; 0) {</span>
+<span class="fc" id="L157">        throw new IllegalArgumentException(&quot;count must be &gt;= 0&quot;);</span>
+      }
+<span class="fc" id="L159">    }</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

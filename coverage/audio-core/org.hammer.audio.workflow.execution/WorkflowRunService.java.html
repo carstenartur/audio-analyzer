@@ -1,0 +1,227 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WorkflowRunService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Core</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.execution</a> &gt; <span class="el_source">WorkflowRunService.java</span></div><h1>WorkflowRunService.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.execution;
+
+import java.time.Clock;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executor;
+import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Supplier;
+import org.hammer.audio.workflow.collaboration.WorkflowSessionRegistry;
+import org.hammer.audio.workflow.collaboration.WorkflowSessionRegistry.SessionWorkflowSnapshot;
+import org.hammer.audio.workflow.execution.WorkflowRunException.Code;
+import org.hammer.audio.workflow.execution.WorkflowRunModels.Command;
+import org.hammer.audio.workflow.execution.WorkflowRunModels.ExecutionBackend;
+import org.hammer.audio.workflow.execution.WorkflowRunModels.Input;
+import org.hammer.audio.workflow.execution.WorkflowRunModels.Result;
+import org.hammer.audio.workflow.execution.WorkflowRunModels.Snapshot;
+import org.hammer.audio.workflow.execution.WorkflowRunModels.Violation;
+import org.hammer.audio.workflow.store.VersionedWorkflowStore;
+
+/** Process-local orchestration service for immutable workflow runs. */
+// This coordinator intentionally joins source capture, preflight, backend and lifecycle contracts.
+@SuppressWarnings(&quot;PMD.CouplingBetweenObjects&quot;)
+public final class WorkflowRunService {
+
+  private static final String UNSUPPORTED_NODE_CODE = &quot;UNSUPPORTED_NODE&quot;;
+
+  private final WorkflowRunInputFactory inputFactory;
+  private final ExecutionBackend executionBackend;
+  private final Executor dispatchExecutor;
+  private final Clock wallClock;
+<span class="fc" id="L35">  private final ReentrantLock startGuard = new ReentrantLock();</span>
+<span class="fc" id="L36">  private final Map&lt;String, WorkflowRunRecord&gt; recordsByRunId = new ConcurrentHashMap&lt;&gt;();</span>
+<span class="fc" id="L37">  private final Map&lt;String, WorkflowRunRecord&gt; recordsByCommandId = new ConcurrentHashMap&lt;&gt;();</span>
+
+  /** Creates production orchestration with a process-local registry and generated run ids. */
+  public WorkflowRunService(
+      WorkflowSessionRegistry sessions,
+      VersionedWorkflowStore store,
+      ExecutionBackend backend,
+      Executor executor) {
+<span class="nc" id="L45">    this(sessions, store, backend, executor, Clock.systemUTC(), () -&gt; &quot;run-&quot; + UUID.randomUUID());</span>
+<span class="nc" id="L46">  }</span>
+
+  WorkflowRunService(
+      WorkflowSessionRegistry sessions,
+      VersionedWorkflowStore store,
+      ExecutionBackend backend,
+      Executor executor,
+      Clock clock,
+<span class="fc" id="L54">      Supplier&lt;String&gt; runIdSupplier) {</span>
+<span class="fc" id="L55">    this.wallClock = Objects.requireNonNull(clock, &quot;clock&quot;);</span>
+<span class="fc" id="L56">    this.executionBackend = Objects.requireNonNull(backend, &quot;backend&quot;);</span>
+<span class="fc" id="L57">    this.dispatchExecutor = Objects.requireNonNull(executor, &quot;executor&quot;);</span>
+<span class="fc" id="L58">    WorkflowRunSourceResolver resolver = new WorkflowRunSourceResolver(sessions, store);</span>
+<span class="fc" id="L59">    this.inputFactory = new WorkflowRunInputFactory(resolver, clock, runIdSupplier);</span>
+<span class="fc" id="L60">  }</span>
+
+  /**
+   * Validate one exact source and backend capability without dispatching or retaining a run.
+   * Starting still performs a fresh capture and rejects a changed semantic revision.
+   */
+  public WorkflowRunModels.Preflight preflight(Command command) {
+<span class="fc" id="L67">    Input input = inputFactory.capture(command);</span>
+<span class="fc" id="L68">    requireReviewedFingerprint(command, input);</span>
+<span class="fc" id="L69">    validateBackend(input);</span>
+<span class="fc" id="L70">    return new WorkflowRunModels.Preflight(input, executionBackend.mode());</span>
+  }
+
+  /** Validate the immutable graph captured atomically with the caller's membership check. */
+  public WorkflowRunModels.Preflight preflight(
+      Command command, WorkflowSessionRegistry.SessionWorkflowSnapshot captured) {
+<span class="nc" id="L76">    Input input = inputFactory.capture(command, captured);</span>
+<span class="nc" id="L77">    requireReviewedFingerprint(command, input);</span>
+<span class="nc" id="L78">    validateBackend(input);</span>
+<span class="nc" id="L79">    return new WorkflowRunModels.Preflight(input, executionBackend.mode());</span>
+  }
+
+  /** Starts or idempotently returns the run associated with one start command. */
+  public Snapshot start(Command command) {
+<span class="fc" id="L84">    return startWithInput(command, () -&gt; inputFactory.capture(command));</span>
+  }
+
+  /** Starts from an already authorized immutable live capture without resolving its id again. */
+  public Snapshot start(Command command, SessionWorkflowSnapshot captured) {
+<span class="fc" id="L89">    Objects.requireNonNull(captured, &quot;captured&quot;);</span>
+<span class="nc" id="L90">    return startWithInput(command, () -&gt; inputFactory.capture(command, captured));</span>
+  }
+
+  private Snapshot startWithInput(Command command, Supplier&lt;Input&gt; capture) {
+<span class="fc" id="L94">    Objects.requireNonNull(command, &quot;command&quot;);</span>
+    WorkflowRunRecord record;
+<span class="fc" id="L96">    startGuard.lock();</span>
+    try {
+<span class="fc" id="L98">      WorkflowRunRecord existing = recordsByCommandId.get(command.startCommandId());</span>
+<span class="fc bfc" id="L99" title="All 2 branches covered.">      if (existing != null) {</span>
+<span class="fc" id="L100">        return handleExistingCommand(command, existing);</span>
+      }
+<span class="fc" id="L102">      Input input = capture.get();</span>
+<span class="fc" id="L103">      requireReviewedFingerprint(command, input);</span>
+<span class="fc" id="L104">      validateBackend(input);</span>
+<span class="fc" id="L105">      record = new WorkflowRunRecord(input, executionBackend.mode(), wallClock);</span>
+<span class="fc" id="L106">      WorkflowRunRecord duplicateRun = recordsByRunId.putIfAbsent(input.runId(), record);</span>
+<span class="pc bpc" id="L107" title="1 of 2 branches missed.">      if (duplicateRun != null) {</span>
+<span class="nc" id="L108">        throw new WorkflowRunException(</span>
+            Code.DUPLICATE_START_COMMAND,
+<span class="nc" id="L110">            &quot;Generated run id already exists: &quot; + input.runId(),</span>
+<span class="nc" id="L111">            input.runId(),</span>
+<span class="nc" id="L112">            command.startCommandId(),</span>
+<span class="nc" id="L113">            List.of());</span>
+      }
+<span class="fc" id="L115">      recordsByCommandId.put(command.startCommandId(), record);</span>
+    } finally {
+<span class="fc" id="L117">      startGuard.unlock();</span>
+    }
+<span class="fc" id="L119">    dispatch(record);</span>
+<span class="fc" id="L120">    return record.snapshot();</span>
+  }
+
+  /** Returns all process-local runs in stable capture order. */
+  public List&lt;Snapshot&gt; runs() {
+<span class="fc" id="L125">    return recordsByRunId.values().stream()</span>
+<span class="fc" id="L126">        .map(WorkflowRunRecord::snapshot)</span>
+<span class="fc" id="L127">        .sorted(Comparator.comparing(Snapshot::capturedAt).thenComparing(Snapshot::runId))</span>
+<span class="fc" id="L128">        .toList();</span>
+  }
+
+  /** Returns one current run snapshot. */
+  public Snapshot inspect(String runId) {
+<span class="fc" id="L133">    return requireRun(runId).snapshot();</span>
+  }
+
+  /** Requests cooperative cancellation and returns the resulting state. */
+  public Snapshot cancel(String runId) {
+<span class="fc" id="L138">    WorkflowRunRecord record = requireRun(runId);</span>
+<span class="fc" id="L139">    record.requestCancellation();</span>
+<span class="fc" id="L140">    return record.snapshot();</span>
+  }
+
+  /** Returns terminal result evidence or a typed not-ready error. */
+  public Result result(String runId) {
+<span class="fc" id="L145">    return requireRun(runId).result();</span>
+  }
+
+  private Snapshot handleExistingCommand(Command command, WorkflowRunRecord existing) {
+<span class="fc bfc" id="L149" title="All 2 branches covered.">    if (existing.input().source().equals(command.source())) {</span>
+<span class="fc" id="L150">      requireReviewedFingerprint(command, existing.input());</span>
+<span class="fc" id="L151">      return existing.snapshot();</span>
+    }
+<span class="fc" id="L153">    throw new WorkflowRunException(</span>
+        Code.DUPLICATE_START_COMMAND,
+        &quot;Start command already targets a different workflow source&quot;,
+<span class="fc" id="L156">        existing.input().runId(),</span>
+<span class="fc" id="L157">        command.startCommandId(),</span>
+<span class="fc" id="L158">        List.of());</span>
+  }
+
+  private static void requireReviewedFingerprint(Command command, Input input) {
+<span class="fc bfc" id="L162" title="All 2 branches covered.">    if (command.expectedFingerprint() != null</span>
+<span class="fc bfc" id="L163" title="All 2 branches covered.">        &amp;&amp; !command.expectedFingerprint().equals(input.fingerprint())) {</span>
+<span class="fc" id="L164">      throw new WorkflowRunException(</span>
+          Code.SOURCE_FINGERPRINT_MISMATCH,
+          &quot;Workflow differs from the reviewed readiness fingerprint; review the current source&quot;
+              + &quot; before starting.&quot;,
+<span class="fc" id="L168">          input.runId(),</span>
+<span class="fc" id="L169">          command.startCommandId(),</span>
+<span class="fc" id="L170">          List.of());</span>
+    }
+<span class="fc" id="L172">  }</span>
+
+  private void validateBackend(Input input) {
+<span class="fc" id="L175">    List&lt;Violation&gt; violations =</span>
+<span class="fc" id="L176">        List.copyOf(Objects.requireNonNull(executionBackend.validate(input), &quot;backend violations&quot;));</span>
+<span class="fc bfc" id="L177" title="All 2 branches covered.">    if (violations.isEmpty()) {</span>
+<span class="fc" id="L178">      return;</span>
+    }
+    Code code =
+<span class="pc bpc" id="L181" title="1 of 2 branches missed.">        violations.stream().anyMatch(item -&gt; UNSUPPORTED_NODE_CODE.equals(item.code()))</span>
+<span class="fc" id="L182">            ? Code.UNSUPPORTED_NODE</span>
+<span class="pc" id="L183">            : Code.VALIDATION_FAILED;</span>
+<span class="fc" id="L184">    throw new WorkflowRunException(</span>
+        code,
+<span class="fc" id="L186">        &quot;Workflow run preflight rejected &quot; + violations.size() + &quot; violation(s)&quot;,</span>
+<span class="fc" id="L187">        input.runId(),</span>
+<span class="fc" id="L188">        input.startCommandId(),</span>
+        violations);
+  }
+
+  private void dispatch(WorkflowRunRecord record) {
+    try {
+<span class="fc" id="L194">      dispatchExecutor.execute(() -&gt; execute(record));</span>
+<span class="nc" id="L195">    } catch (RuntimeException exception) {</span>
+<span class="nc" id="L196">      record.fail(exception);</span>
+<span class="fc" id="L197">    }</span>
+<span class="fc" id="L198">  }</span>
+
+  private void execute(WorkflowRunRecord record) {
+<span class="fc bfc" id="L201" title="All 2 branches covered.">    if (!record.startRunning()) {</span>
+<span class="fc" id="L202">      return;</span>
+    }
+    try {
+<span class="fc" id="L205">      Result backendResult = executionBackend.execute(record.input(), record.control());</span>
+<span class="fc" id="L206">      record.complete(Objects.requireNonNull(backendResult, &quot;backendResult&quot;));</span>
+<span class="nc" id="L207">    } catch (InterruptedException exception) {</span>
+<span class="nc" id="L208">      Thread.currentThread().interrupt();</span>
+<span class="nc" id="L209">      record.fail(exception);</span>
+<span class="nc" id="L210">    } catch (WorkflowExecutionBackendException | RuntimeException exception) {</span>
+<span class="nc" id="L211">      record.fail(exception);</span>
+<span class="pc" id="L212">    }</span>
+<span class="fc" id="L213">  }</span>
+
+  private WorkflowRunRecord requireRun(String runId) {
+<span class="pc bpc" id="L216" title="2 of 4 branches missed.">    if (runId == null || runId.isBlank()) {</span>
+<span class="nc" id="L217">      throw new IllegalArgumentException(&quot;runId must not be blank&quot;);</span>
+    }
+<span class="fc" id="L219">    WorkflowRunRecord record = recordsByRunId.get(runId);</span>
+<span class="fc bfc" id="L220" title="All 2 branches covered.">    if (record == null) {</span>
+<span class="fc" id="L221">      throw new WorkflowRunException(</span>
+<span class="fc" id="L222">          Code.UNKNOWN_RUN, &quot;Unknown workflow run: &quot; + runId, runId, null, List.of());</span>
+    }
+<span class="fc" id="L224">    return record;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

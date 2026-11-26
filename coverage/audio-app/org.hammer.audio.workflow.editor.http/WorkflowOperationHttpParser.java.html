@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WorkflowOperationHttpParser.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.editor.http</a> &gt; <span class="el_source">WorkflowOperationHttpParser.java</span></div><h1>WorkflowOperationHttpParser.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.editor.http;
+
+import java.time.Instant;
+import java.util.Arrays;
+import org.hammer.audio.workflow.Edge;
+import org.hammer.audio.workflow.Node;
+import org.hammer.audio.workflow.WorkflowOperation;
+import org.hammer.audio.workflow.catalog.ExperimentNodeCatalog;
+import tools.jackson.databind.JsonNode;
+
+/** Parses transport JSON into semantic workflow operations shared by editor/session endpoints. */
+final class WorkflowOperationHttpParser {
+
+  private static final String JSON_FIELD_TIMESTAMP = &quot;timestamp&quot;;
+
+<span class="nc" id="L16">  private WorkflowOperationHttpParser() {</span>
+<span class="nc" id="L17">    throw new AssertionError(&quot;No instances&quot;);</span>
+  }
+
+  static WorkflowOperation parse(JsonNode json, String defaultAuthor) {
+<span class="fc" id="L21">    String type = requiredText(json, &quot;type&quot;);</span>
+<span class="fc" id="L22">    String operationId = requiredText(json, &quot;operationId&quot;);</span>
+<span class="pc bpc" id="L23" title="1 of 2 branches missed.">    String author = json.has(&quot;author&quot;) ? json.get(&quot;author&quot;).asText() : defaultAuthor;</span>
+    Instant timestamp =
+<span class="pc bpc" id="L25" title="1 of 2 branches missed.">        json.has(JSON_FIELD_TIMESTAMP)</span>
+<span class="nc" id="L26">            ? Instant.parse(json.get(JSON_FIELD_TIMESTAMP).asText())</span>
+<span class="fc" id="L27">            : Instant.now();</span>
+<span class="pc bpc" id="L28" title="2 of 5 branches missed.">    return switch (type) {</span>
+      case &quot;CreateNode&quot; -&gt; {
+<span class="fc" id="L30">        String nodeId = requiredText(json, &quot;nodeId&quot;);</span>
+<span class="fc" id="L31">        String catalogType = requiredText(json, &quot;catalogType&quot;);</span>
+<span class="fc" id="L32">        Node node = createCatalogNode(catalogType, nodeId);</span>
+<span class="fc" id="L33">        yield new WorkflowOperation.CreateNode(operationId, timestamp, author, node);</span>
+      }
+      case &quot;ConnectPorts&quot; -&gt; {
+<span class="fc" id="L36">        JsonNode edgeJson = requireObject(json, &quot;edge&quot;);</span>
+<span class="fc" id="L37">        Edge edge = edge(edgeJson);</span>
+<span class="fc" id="L38">        yield new WorkflowOperation.ConnectPorts(operationId, timestamp, author, edge);</span>
+      }
+      case &quot;DisconnectPorts&quot; -&gt; {
+<span class="nc" id="L41">        String edgeId = requiredText(json, &quot;edgeId&quot;);</span>
+<span class="nc" id="L42">        Edge disconnectedEdge = edge(requireObject(json, &quot;disconnectedEdge&quot;));</span>
+<span class="nc" id="L43">        yield new WorkflowOperation.DisconnectPorts(</span>
+            operationId, timestamp, author, edgeId, disconnectedEdge);
+      }
+      case &quot;UpdateProperty&quot; -&gt; {
+<span class="fc" id="L47">        String target = requiredText(json, &quot;target&quot;);</span>
+<span class="fc" id="L48">        String targetId = requiredText(json, &quot;targetId&quot;);</span>
+<span class="fc" id="L49">        String propertyKey = requiredText(json, &quot;propertyKey&quot;);</span>
+<span class="pc bpc" id="L50" title="1 of 2 branches missed.">        String newValue = json.has(&quot;newValue&quot;) ? json.get(&quot;newValue&quot;).asText() : null;</span>
+        String previousValue =
+<span class="pc bpc" id="L52" title="1 of 2 branches missed.">            json.has(&quot;previousValue&quot;) ? json.get(&quot;previousValue&quot;).asText() : null;</span>
+<span class="fc" id="L53">        WorkflowOperation.PropertyTarget propertyTarget = parsePropertyTarget(target);</span>
+<span class="fc" id="L54">        yield new WorkflowOperation.UpdateProperty(</span>
+            operationId,
+            timestamp,
+            author,
+            propertyTarget,
+            targetId,
+            propertyKey,
+            previousValue,
+            newValue);
+      }
+<span class="nc" id="L64">      default -&gt; throw new IllegalArgumentException(&quot;Unknown operation type: &quot; + type);</span>
+    };
+  }
+
+  private static Edge edge(JsonNode edgeJson) {
+<span class="fc" id="L69">    return new Edge(</span>
+<span class="fc" id="L70">        requiredText(edgeJson, &quot;id&quot;),</span>
+<span class="fc" id="L71">        requiredText(edgeJson, &quot;sourceNodeId&quot;),</span>
+<span class="fc" id="L72">        requiredText(edgeJson, &quot;sourcePortId&quot;),</span>
+<span class="fc" id="L73">        requiredText(edgeJson, &quot;targetNodeId&quot;),</span>
+<span class="fc" id="L74">        requiredText(edgeJson, &quot;targetPortId&quot;));</span>
+  }
+
+  private static WorkflowOperation.PropertyTarget parsePropertyTarget(String target) {
+<span class="fc" id="L78">    return Arrays.stream(WorkflowOperation.PropertyTarget.values())</span>
+<span class="fc" id="L79">        .filter(value -&gt; value.name().equals(target))</span>
+<span class="fc" id="L80">        .findFirst()</span>
+<span class="pc" id="L81">        .orElseThrow(() -&gt; new IllegalArgumentException(&quot;Unknown PropertyTarget: &quot; + target));</span>
+  }
+
+  private static Node createCatalogNode(String catalogType, String nodeId) {
+<span class="pc bpc" id="L85" title="12 of 13 branches missed.">    return switch (catalogType) {</span>
+<span class="fc" id="L86">      case &quot;recording-input&quot; -&gt; ExperimentNodeCatalog.recordingInput(nodeId);</span>
+<span class="nc" id="L87">      case &quot;synthetic-signal-generator&quot; -&gt; ExperimentNodeCatalog.syntheticSignalGenerator(nodeId);</span>
+<span class="nc" id="L88">      case &quot;humbug-db-import&quot; -&gt; ExperimentNodeCatalog.humBugDbImport(nodeId);</span>
+<span class="nc" id="L89">      case &quot;gain&quot; -&gt; ExperimentNodeCatalog.gain(nodeId);</span>
+<span class="nc" id="L90">      case &quot;bandpass-filter&quot; -&gt; ExperimentNodeCatalog.bandpassFilter(nodeId);</span>
+<span class="nc" id="L91">      case &quot;fft&quot; -&gt; ExperimentNodeCatalog.fft(nodeId);</span>
+<span class="nc" id="L92">      case &quot;wingbeat-feature-extraction&quot; -&gt; ExperimentNodeCatalog.wingbeatFeatureExtraction(nodeId);</span>
+<span class="nc" id="L93">      case &quot;classifier&quot; -&gt; ExperimentNodeCatalog.classifier(nodeId);</span>
+<span class="nc" id="L94">      case &quot;localization&quot; -&gt; ExperimentNodeCatalog.localization(nodeId);</span>
+<span class="nc" id="L95">      case &quot;benchmark&quot; -&gt; ExperimentNodeCatalog.benchmark(nodeId);</span>
+<span class="nc" id="L96">      case &quot;report&quot; -&gt; ExperimentNodeCatalog.report(nodeId);</span>
+<span class="nc" id="L97">      case &quot;evidence-export&quot; -&gt; ExperimentNodeCatalog.evidenceExport(nodeId);</span>
+<span class="nc" id="L98">      default -&gt; throw new IllegalArgumentException(&quot;Unknown catalog node type: &quot; + catalogType);</span>
+    };
+  }
+
+  private static JsonNode requireObject(JsonNode node, String field) {
+<span class="fc" id="L103">    JsonNode value = node.get(field);</span>
+<span class="pc bpc" id="L104" title="2 of 4 branches missed.">    if (value == null || !value.isObject()) {</span>
+<span class="nc" id="L105">      throw new IllegalArgumentException(&quot;Missing required object field: &quot; + field);</span>
+    }
+<span class="fc" id="L107">    return value;</span>
+  }
+
+  private static String requiredText(JsonNode node, String field) {
+<span class="fc" id="L111">    JsonNode value = node.get(field);</span>
+<span class="pc bpc" id="L112" title="3 of 6 branches missed.">    if (value == null || value.isNull() || value.asText().isBlank()) {</span>
+<span class="nc" id="L113">      throw new IllegalArgumentException(&quot;Missing required field: &quot; + field);</span>
+    }
+<span class="fc" id="L115">    return value.asText();</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

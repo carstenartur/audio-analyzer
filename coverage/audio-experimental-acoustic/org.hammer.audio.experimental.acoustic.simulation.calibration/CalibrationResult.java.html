@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>CalibrationResult.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.simulation.calibration</a> &gt; <span class="el_source">CalibrationResult.java</span></div><h1>CalibrationResult.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.simulation.calibration;
+
+import java.util.Objects;
+import org.hammer.audio.experimental.acoustic.feature.comparison.FeatureDifference;
+import org.hammer.audio.experimental.acoustic.feature.comparison.SyntheticRealComparisonReport;
+import org.hammer.audio.experimental.acoustic.simulation.WingbeatSignalParameters;
+
+/**
+ * Immutable result of a generator calibration run.
+ *
+ * &lt;p&gt;Produced by {@link GeneratorCalibrationService}. Contains the baseline and calibrated
+ * parameters, the {@link SyntheticRealComparisonReport} before calibration (measuring how far the
+ * baseline generator deviates from real data) and the equivalent report after calibration.
+ *
+ * @param baselineParameters the original generator parameters before calibration; must not be
+ *     {@code null}
+ * @param calibratedParameters the estimated parameters derived from real recordings; must not be
+ *     {@code null}
+ * @param beforeCalibration comparison report for the baseline generator; must not be {@code null}
+ * @param afterCalibration comparison report for the calibrated generator; must not be {@code null}
+ */
+public record CalibrationResult(
+    WingbeatSignalParameters baselineParameters,
+    WingbeatSignalParameters calibratedParameters,
+    SyntheticRealComparisonReport beforeCalibration,
+    SyntheticRealComparisonReport afterCalibration) {
+
+  // Validate all fields.
+<span class="fc" id="L29">  public CalibrationResult {</span>
+<span class="fc" id="L30">    Objects.requireNonNull(baselineParameters, &quot;baselineParameters&quot;);</span>
+<span class="fc" id="L31">    Objects.requireNonNull(calibratedParameters, &quot;calibratedParameters&quot;);</span>
+<span class="fc" id="L32">    Objects.requireNonNull(beforeCalibration, &quot;beforeCalibration&quot;);</span>
+<span class="fc" id="L33">    Objects.requireNonNull(afterCalibration, &quot;afterCalibration&quot;);</span>
+<span class="fc" id="L34">  }</span>
+
+  /**
+   * Return the mean relative difference across all features before calibration.
+   *
+   * @return mean relative difference in {@code [0, ∞)}
+   */
+  public double meanRelativeDifferenceBefore() {
+<span class="fc" id="L42">    return beforeCalibration.differences().stream()</span>
+<span class="fc" id="L43">        .mapToDouble(FeatureDifference::relativeDifference)</span>
+<span class="fc" id="L44">        .average()</span>
+<span class="fc" id="L45">        .orElse(0.0);</span>
+  }
+
+  /**
+   * Return the mean relative difference across all features after calibration.
+   *
+   * @return mean relative difference in {@code [0, ∞)}
+   */
+  public double meanRelativeDifferenceAfter() {
+<span class="fc" id="L54">    return afterCalibration.differences().stream()</span>
+<span class="fc" id="L55">        .mapToDouble(FeatureDifference::relativeDifference)</span>
+<span class="fc" id="L56">        .average()</span>
+<span class="fc" id="L57">        .orElse(0.0);</span>
+  }
+
+  /**
+   * Return the overall improvement as a fraction: {@code (before − after) / before}.
+   *
+   * &lt;p&gt;A positive value indicates that the calibrated generator is closer to real data. Returns
+   * {@code 0} when the before-calibration mean difference is zero.
+   *
+   * @return improvement fraction; positive means better, negative means worse
+   */
+  public double improvement() {
+<span class="fc" id="L69">    double before = meanRelativeDifferenceBefore();</span>
+<span class="pc bpc" id="L70" title="1 of 2 branches missed.">    if (before == 0.0) {</span>
+<span class="nc" id="L71">      return 0.0;</span>
+    }
+<span class="fc" id="L73">    return (before - meanRelativeDifferenceAfter()) / before;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

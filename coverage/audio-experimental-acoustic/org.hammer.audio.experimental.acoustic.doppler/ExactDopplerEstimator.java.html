@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ExactDopplerEstimator.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.doppler</a> &gt; <span class="el_source">ExactDopplerEstimator.java</span></div><h1>ExactDopplerEstimator.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.doppler;
+
+/** Exact source-motion Doppler estimator for a stationary microphone and moving source. */
+public final class ExactDopplerEstimator implements DopplerEstimator {
+
+  private final double speedOfSoundMetersPerSecond;
+
+  /** Create an estimator with the default speed of sound. */
+  public ExactDopplerEstimator() {
+<span class="nc" id="L10">    this(SimpleDopplerEstimator.DEFAULT_SPEED_OF_SOUND_METERS_PER_SECOND);</span>
+<span class="nc" id="L11">  }</span>
+
+  /** Create an estimator with a configurable speed of sound. */
+<span class="fc" id="L14">  public ExactDopplerEstimator(double speedOfSoundMetersPerSecond) {</span>
+<span class="pc bpc" id="L15" title="2 of 4 branches missed.">    if (!(speedOfSoundMetersPerSecond &gt; 0.0) || !Double.isFinite(speedOfSoundMetersPerSecond)) {</span>
+<span class="nc" id="L16">      throw new IllegalArgumentException(&quot;speedOfSoundMetersPerSecond must be finite and &gt; 0&quot;);</span>
+    }
+<span class="fc" id="L18">    this.speedOfSoundMetersPerSecond = speedOfSoundMetersPerSecond;</span>
+<span class="fc" id="L19">  }</span>
+
+  @Override
+  public double estimateRadialVelocity(double observedFrequencyHz, double referenceFrequencyHz) {
+<span class="pc bpc" id="L23" title="2 of 4 branches missed.">    if (!(observedFrequencyHz &gt; 0.0) || !Double.isFinite(observedFrequencyHz)) {</span>
+<span class="nc" id="L24">      throw new IllegalArgumentException(&quot;observedFrequencyHz must be finite and &gt; 0&quot;);</span>
+    }
+<span class="pc bpc" id="L26" title="2 of 4 branches missed.">    if (!(referenceFrequencyHz &gt; 0.0) || !Double.isFinite(referenceFrequencyHz)) {</span>
+<span class="nc" id="L27">      throw new IllegalArgumentException(&quot;referenceFrequencyHz must be finite and &gt; 0&quot;);</span>
+    }
+<span class="fc" id="L29">    return speedOfSoundMetersPerSecond * (1.0 - referenceFrequencyHz / observedFrequencyHz);</span>
+  }
+
+  /** Configured speed of sound in m/s. */
+  public double speedOfSoundMetersPerSecond() {
+<span class="nc" id="L34">    return speedOfSoundMetersPerSecond;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

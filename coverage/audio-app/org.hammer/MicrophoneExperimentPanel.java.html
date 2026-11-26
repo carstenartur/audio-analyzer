@@ -1,0 +1,558 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>MicrophoneExperimentPanel.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer</a> &gt; <span class="el_source">MicrophoneExperimentPanel.java</span></div><h1>MicrophoneExperimentPanel.java</h1><pre class="source lang-java linenums">package org.hammer;
+
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.FlowLayout;
+import java.awt.GridLayout;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.function.Consumer;
+import javax.swing.BorderFactory;
+import javax.swing.JButton;
+import javax.swing.JCheckBox;
+import javax.swing.JComboBox;
+import javax.swing.JFileChooser;
+import javax.swing.JLabel;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JScrollPane;
+import javax.swing.JSpinner;
+import javax.swing.JSplitPane;
+import javax.swing.JTabbedPane;
+import javax.swing.JTable;
+import javax.swing.JTextArea;
+import javax.swing.JTextField;
+import javax.swing.SpinnerNumberModel;
+import javax.swing.SwingWorker;
+import javax.swing.Timer;
+import javax.swing.table.DefaultTableModel;
+import org.hammer.audio.acquisition.health.ExperimentHealthFinding;
+import org.hammer.audio.experiment.operations.ExperimentOperationsModels.Catalogue;
+import org.hammer.audio.experiment.operations.ExperimentOperationsModels.Configuration;
+import org.hammer.audio.experiment.operations.ExperimentOperationsModels.Preflight;
+import org.hammer.audio.experiment.operations.ExperimentOperationsModels.ProfileView;
+import org.hammer.audio.experiment.operations.ExperimentOperationsModels.RunView;
+import org.hammer.audio.experiment.operations.MicrophoneExperimentService;
+
+/**
+ * Desktop projection of the same profile, readiness, runtime and evidence service as the browser.
+ */
+// This view composes Swing controls and immutable domain projections, without its own backend.
+@SuppressWarnings(&quot;PMD.CouplingBetweenObjects&quot;)
+public final class MicrophoneExperimentPanel extends JPanel implements AutoCloseable {
+
+  private static final long serialVersionUID = 1L;
+  private final transient MicrophoneExperimentService service;
+<span class="fc" id="L49">  private final JTextField name = new JTextField(&quot;Microphone-array experiment&quot;, 24);</span>
+<span class="fc" id="L50">  private final JComboBox&lt;String&gt; mode =</span>
+      new JComboBox&lt;&gt;(new String[] {&quot;SIMULATION&quot;, &quot;REPLAY&quot;, &quot;LIVE&quot;});
+<span class="fc" id="L52">  private final JComboBox&lt;String&gt; profile = new JComboBox&lt;&gt;();</span>
+<span class="fc" id="L53">  private final JComboBox&lt;String&gt; scenario = new JComboBox&lt;&gt;();</span>
+<span class="fc" id="L54">  private final JComboBox&lt;String&gt; replay = new JComboBox&lt;&gt;();</span>
+<span class="fc" id="L55">  private final JSpinner duration = new JSpinner(new SpinnerNumberModel(5, 1, 3600, 1));</span>
+<span class="fc" id="L56">  private final JTextField filename = new JTextField(&quot;capture.aarec&quot;, 16);</span>
+<span class="fc" id="L57">  private final JCheckBox record = new JCheckBox(&quot;Record all consumed blocks&quot;, true);</span>
+<span class="fc" id="L58">  private final JTextArea definition = new JTextArea(18, 64);</span>
+<span class="fc" id="L59">  private final JTextArea health = readOnlyArea();</span>
+<span class="fc" id="L60">  private final JTextArea evidence = readOnlyArea();</span>
+<span class="fc" id="L61">  private final JTextArea status = runtimeStatusArea();</span>
+<span class="fc" id="L62">  private final JButton check = new JButton(&quot;Check readiness&quot;);</span>
+<span class="fc" id="L63">  private final JButton startButton = new JButton(&quot;Start experiment&quot;);</span>
+<span class="fc" id="L64">  private final JButton stop = new JButton(&quot;Stop &amp; finalize&quot;);</span>
+<span class="fc" id="L65">  private final JButton export = new JButton(&quot;Export evidence ZIP&quot;);</span>
+<span class="fc" id="L66">  private final JButton acknowledge = new JButton(&quot;Acknowledge alert…&quot;);</span>
+<span class="fc" id="L67">  private final DefaultTableModel trackModel =</span>
+      new DefaultTableModel(new String[] {&quot;Track&quot;, &quot;X (m)&quot;, &quot;Y (m)&quot;, &quot;Confidence&quot;}, 0);
+  private final Timer timer;
+  private transient Catalogue catalogue;
+  private transient Preflight preflight;
+  private transient Configuration reviewedConfiguration;
+<span class="fc" id="L73">  private String savedDefinition = &quot;&quot;;</span>
+  private boolean busy;
+
+  /**
+   * Construct a view; filesystem and device work is always dispatched away from the event thread.
+   */
+  public MicrophoneExperimentPanel(MicrophoneExperimentService service) {
+<span class="fc" id="L80">    super(new BorderLayout(10, 10));</span>
+<span class="fc" id="L81">    this.service = service;</span>
+<span class="fc" id="L82">    setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));</span>
+<span class="fc" id="L83">    getAccessibleContext().setAccessibleName(&quot;Microphone experiment workflow&quot;);</span>
+<span class="fc" id="L84">    add(</span>
+        new JScrollPane(
+            status,
+            JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED,
+            JScrollPane.HORIZONTAL_SCROLLBAR_NEVER),
+        BorderLayout.NORTH);
+<span class="fc" id="L90">    JTabbedPane tabs = new JTabbedPane();</span>
+<span class="fc" id="L91">    tabs.addTab(&quot;1. Source and profile&quot;, setupPanel());</span>
+<span class="fc" id="L92">    tabs.addTab(</span>
+        &quot;2. Readiness and runtime&quot;,
+        new JSplitPane(
+            JSplitPane.VERTICAL_SPLIT,
+            new JScrollPane(health),
+            new JScrollPane(new JTable(trackModel))));
+<span class="fc" id="L98">    tabs.addTab(&quot;3. Evidence and history&quot;, new JScrollPane(evidence));</span>
+<span class="fc" id="L99">    add(tabs, BorderLayout.CENTER);</span>
+<span class="fc" id="L100">    JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEADING));</span>
+<span class="fc" id="L101">    actions.add(check);</span>
+<span class="fc" id="L102">    actions.add(startButton);</span>
+<span class="fc" id="L103">    actions.add(stop);</span>
+<span class="fc" id="L104">    actions.add(export);</span>
+<span class="fc" id="L105">    actions.add(acknowledge);</span>
+<span class="fc" id="L106">    add(actions, BorderLayout.SOUTH);</span>
+<span class="pc" id="L107">    check.addActionListener(event -&gt; inspect());</span>
+<span class="pc" id="L108">    startButton.addActionListener(event -&gt; start());</span>
+<span class="fc" id="L109">    stop.addActionListener(</span>
+        event -&gt;
+<span class="nc" id="L111">            background(</span>
+                () -&gt; {
+<span class="nc" id="L113">                  service.stop();</span>
+<span class="nc" id="L114">                  return service.snapshot();</span>
+                },
+                this::display));
+<span class="pc" id="L117">    export.addActionListener(event -&gt; exportEvidence());</span>
+<span class="pc" id="L118">    acknowledge.addActionListener(event -&gt; acknowledgeAlert());</span>
+<span class="fc" id="L119">    acknowledge.setToolTipText(</span>
+        &quot;Records an unattributed local acknowledgement; source conditions and history remain&quot;
+            + &quot; visible.&quot;);
+<span class="pc" id="L122">    profile.addActionListener(event -&gt; selectProfile());</span>
+<span class="fc" id="L123">    startButton.setEnabled(false);</span>
+<span class="fc" id="L124">    stop.setEnabled(false);</span>
+<span class="fc" id="L125">    export.setEnabled(false);</span>
+<span class="fc" id="L126">    acknowledge.setEnabled(false);</span>
+<span class="fc" id="L127">    timer = new Timer(500, event -&gt; display(service.snapshot()));</span>
+<span class="fc" id="L128">    timer.start();</span>
+<span class="fc" id="L129">    refreshCatalogue();</span>
+<span class="fc" id="L130">  }</span>
+
+  private JPanel setupPanel() {
+<span class="fc" id="L133">    JPanel panel = new JPanel(new BorderLayout(8, 8));</span>
+<span class="fc" id="L134">    JPanel choices = new JPanel(new GridLayout(0, 2, 8, 6));</span>
+<span class="fc" id="L135">    addField(choices, &quot;Experiment name&quot;, name);</span>
+<span class="fc" id="L136">    addField(choices, &quot;Source mode&quot;, mode);</span>
+<span class="fc" id="L137">    addField(choices, &quot;Saved microphone profile&quot;, profile);</span>
+<span class="fc" id="L138">    addField(choices, &quot;Deterministic simulation&quot;, scenario);</span>
+<span class="fc" id="L139">    addField(choices, &quot;Managed replay input&quot;, replay);</span>
+<span class="fc" id="L140">    addField(choices, &quot;Intended duration (seconds)&quot;, duration);</span>
+<span class="fc" id="L141">    addField(choices, &quot;Recording filename&quot;, filename);</span>
+<span class="fc" id="L142">    choices.add(record);</span>
+<span class="fc" id="L143">    JButton importRecording = new JButton(&quot;Import recording / recovery input&quot;);</span>
+<span class="pc" id="L144">    importRecording.addActionListener(event -&gt; importRecording());</span>
+<span class="fc" id="L145">    choices.add(importRecording);</span>
+<span class="fc" id="L146">    panel.add(choices, BorderLayout.NORTH);</span>
+<span class="fc" id="L147">    JPanel profilePanel = new JPanel(new BorderLayout(6, 6));</span>
+<span class="fc" id="L148">    profilePanel.setBorder(</span>
+<span class="fc" id="L149">        BorderFactory.createTitledBorder(&quot;Geometry, device and measured calibration&quot;));</span>
+<span class="fc" id="L150">    definition.getAccessibleContext().setAccessibleName(&quot;Complete portable microphone profile&quot;);</span>
+<span class="fc" id="L151">    profilePanel.add(new JScrollPane(definition), BorderLayout.CENTER);</span>
+<span class="fc" id="L152">    JPanel profileActions = new JPanel(new FlowLayout(FlowLayout.LEADING));</span>
+<span class="fc" id="L153">    JButton edit = new JButton(&quot;Edit profile settings…&quot;);</span>
+<span class="pc" id="L154">    edit.addActionListener(event -&gt; editProfile());</span>
+<span class="fc" id="L155">    JButton save = new JButton(&quot;Validate &amp; save profile&quot;);</span>
+<span class="fc" id="L156">    save.addActionListener(</span>
+        event -&gt; {
+<span class="nc" id="L158">          String draft = definition.getText();</span>
+<span class="nc" id="L159">          background(</span>
+<span class="nc" id="L160">              () -&gt; service.saveProfile(draft),</span>
+              result -&gt; {
+<span class="nc" id="L162">                savedDefinition = result.definition();</span>
+<span class="nc" id="L163">                definition.setText(savedDefinition);</span>
+<span class="nc" id="L164">                preflight = null;</span>
+<span class="nc" id="L165">                reviewedConfiguration = null;</span>
+<span class="nc" id="L166">                refreshCatalogue(result.id());</span>
+<span class="nc" id="L167">              });</span>
+<span class="nc" id="L168">        });</span>
+<span class="fc" id="L169">    JButton recover = new JButton(&quot;Recover selected input to new file&quot;);</span>
+<span class="fc" id="L170">    recover.addActionListener(</span>
+        event -&gt; {
+<span class="nc" id="L172">          String id = (String) replay.getSelectedItem();</span>
+<span class="nc" id="L173">          background(() -&gt; service.recoverRecording(id), result -&gt; refreshCatalogue());</span>
+<span class="nc" id="L174">        });</span>
+<span class="fc" id="L175">    profileActions.add(edit);</span>
+<span class="fc" id="L176">    profileActions.add(save);</span>
+<span class="fc" id="L177">    profileActions.add(recover);</span>
+<span class="fc" id="L178">    profilePanel.add(profileActions, BorderLayout.SOUTH);</span>
+<span class="fc" id="L179">    panel.add(profilePanel, BorderLayout.CENTER);</span>
+<span class="fc" id="L180">    return panel;</span>
+  }
+
+  private void editProfile() {
+<span class="nc bnc" id="L184" title="All 2 branches missed.">    if (catalogue == null) {</span>
+<span class="nc" id="L185">      return;</span>
+    }
+    try {
+<span class="nc" id="L188">      MicrophoneProfileEditorPanel editor =</span>
+<span class="nc" id="L189">          new MicrophoneProfileEditorPanel(definition.getText(), catalogue.devices());</span>
+<span class="nc bnc" id="L190" title="All 2 branches missed.">      if (JOptionPane.showConfirmDialog(</span>
+              this,
+              editor,
+              &quot;Microphone profile and measured calibration&quot;,
+              JOptionPane.OK_CANCEL_OPTION,
+              JOptionPane.PLAIN_MESSAGE)
+          == JOptionPane.OK_OPTION) {
+<span class="nc" id="L197">        definition.setText(editor.definition());</span>
+<span class="nc" id="L198">        preflight = null;</span>
+      }
+<span class="nc" id="L200">    } catch (RuntimeException exception) {</span>
+<span class="nc" id="L201">      showFailure(exception);</span>
+<span class="nc" id="L202">    }</span>
+<span class="nc" id="L203">  }</span>
+
+  private void inspect() {
+<span class="nc bnc" id="L206" title="All 2 branches missed.">    if (!definition.getText().equals(savedDefinition)) {</span>
+<span class="nc" id="L207">      showFailure(</span>
+          new IllegalStateException(&quot;Validate and save the edited profile before preflight.&quot;));
+<span class="nc" id="L209">      return;</span>
+    }
+    Configuration configuration;
+    try {
+<span class="nc" id="L213">      configuration = configuration();</span>
+<span class="nc" id="L214">    } catch (IllegalArgumentException exception) {</span>
+<span class="nc" id="L215">      showFailure(exception);</span>
+<span class="nc" id="L216">      return;</span>
+<span class="nc" id="L217">    }</span>
+<span class="nc" id="L218">    background(</span>
+<span class="nc" id="L219">        () -&gt; service.preflight(configuration),</span>
+        result -&gt; {
+<span class="nc" id="L221">          reviewedConfiguration = configuration;</span>
+<span class="nc" id="L222">          preflight = result;</span>
+<span class="nc" id="L223">          health.setText(describe(result.health()));</span>
+<span class="nc" id="L224">          status.setText(result.health().state() + &quot; — &quot; + result.health().stage());</span>
+<span class="nc" id="L225">          startButton.setEnabled(result.health().startAllowed());</span>
+<span class="nc" id="L226">        });</span>
+<span class="nc" id="L227">  }</span>
+
+  private void start() {
+    Configuration configuration;
+    try {
+<span class="nc" id="L232">      configuration = configuration();</span>
+<span class="nc" id="L233">    } catch (IllegalArgumentException exception) {</span>
+<span class="nc" id="L234">      showFailure(exception);</span>
+<span class="nc" id="L235">      return;</span>
+<span class="nc" id="L236">    }</span>
+<span class="nc bnc" id="L237" title="All 2 branches missed.">    if (preflight == null</span>
+<span class="nc bnc" id="L238" title="All 2 branches missed.">        || !configuration.equals(reviewedConfiguration)</span>
+<span class="nc bnc" id="L239" title="All 2 branches missed.">        || !definition.getText().equals(savedDefinition)) {</span>
+<span class="nc" id="L240">      showFailure(new IllegalStateException(&quot;Choices changed; review a fresh preflight.&quot;));</span>
+<span class="nc" id="L241">      return;</span>
+    }
+<span class="nc" id="L243">    boolean warning =</span>
+<span class="nc" id="L244">        preflight.health().findings().stream()</span>
+<span class="nc" id="L245">            .anyMatch(finding -&gt; &quot;storage.margin&quot;.equals(finding.code()));</span>
+<span class="nc bnc" id="L246" title="All 2 branches missed.">    if (warning</span>
+<span class="nc bnc" id="L247" title="All 2 branches missed.">        &amp;&amp; JOptionPane.showConfirmDialog(</span>
+                this,
+                &quot;The displayed storage margin is below the planned duration. Continue?&quot;,
+                &quot;Recording storage warning&quot;,
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.WARNING_MESSAGE)
+            != JOptionPane.YES_OPTION) {
+<span class="nc" id="L254">      return;</span>
+    }
+<span class="nc" id="L256">    String token = preflight.token();</span>
+<span class="nc" id="L257">    background(</span>
+<span class="nc" id="L258">        () -&gt; service.start(configuration, token, warning),</span>
+        result -&gt; {
+<span class="nc" id="L260">          preflight = null;</span>
+<span class="nc" id="L261">          reviewedConfiguration = null;</span>
+<span class="nc" id="L262">          startButton.setEnabled(false);</span>
+<span class="nc" id="L263">          display(service.snapshot());</span>
+<span class="nc" id="L264">        });</span>
+<span class="nc" id="L265">  }</span>
+
+  private void display(RunView snapshot) {
+<span class="fc" id="L268">    boolean running = updateControls(snapshot);</span>
+<span class="pc bpc" id="L269" title="3 of 4 branches missed.">    if (preflight != null &amp;&amp; !running) {</span>
+<span class="nc" id="L270">      return;</span>
+    }
+<span class="fc" id="L272">    status.setText(</span>
+<span class="fc" id="L273">        snapshot.health().experimentName()</span>
+            + &quot; · &quot;
+<span class="fc" id="L275">            + snapshot.health().state()</span>
+            + &quot; · &quot;
+<span class="fc" id="L277">            + snapshot.health().stage()</span>
+            + &quot; · Intended: &quot;
+<span class="fc" id="L279">            + snapshot.health().facts().getOrDefault(&quot;intended.seconds&quot;, &quot;unknown&quot;)</span>
+            + &quot; s\n&quot;
+<span class="fc" id="L281">            + RecordingStatusText.summary(snapshot.recording()));</span>
+<span class="fc" id="L282">    status.setCaretPosition(0);</span>
+<span class="fc" id="L283">    status.setForeground(</span>
+<span class="fc bfc" id="L284" title="All 2 branches covered.">        snapshot.recording() != null</span>
+<span class="fc bfc" id="L285" title="All 2 branches covered.">                &amp;&amp; snapshot.recording().state()</span>
+                    == org.hammer.audio.recording.runtime.RecordingState.RECORDING
+<span class="fc" id="L287">            ? new Color(255, 160, 160)</span>
+<span class="fc" id="L288">            : javax.swing.UIManager.getColor(&quot;Label.foreground&quot;));</span>
+<span class="fc" id="L289">    health.setText(</span>
+<span class="fc" id="L290">        describe(snapshot.health())</span>
+            + &quot;\n\nRecording runtime:\n&quot;
+<span class="fc" id="L292">            + RecordingStatusText.details(snapshot.recording()));</span>
+<span class="fc" id="L293">    trackModel.setRowCount(0);</span>
+<span class="fc" id="L294">    snapshot</span>
+<span class="fc" id="L295">        .tracks()</span>
+<span class="fc" id="L296">        .forEach(</span>
+            track -&gt;
+<span class="nc" id="L298">                trackModel.addRow(</span>
+<span class="nc" id="L299">                    new Object[] {track.id(), track.x(), track.y(), track.confidence()}));</span>
+<span class="fc" id="L300">    evidence.setText(</span>
+        &quot;Evidence complete: &quot;
+<span class="fc" id="L302">            + snapshot.health().facts().getOrDefault(&quot;evidence.complete&quot;, &quot;Pending&quot;)</span>
+            + &quot;\nBenchmark: &quot;
+<span class="fc" id="L304">            + snapshot.health().facts().getOrDefault(&quot;benchmark.status&quot;, &quot;Pending&quot;)</span>
+            + &quot;\nRecording SHA-256: &quot;
+<span class="fc" id="L306">            + snapshot.health().facts().getOrDefault(&quot;recording.sha256&quot;, &quot;Pending&quot;)</span>
+            + &quot;\n\n&quot;
+            + &quot;Pause is unavailable for continuous synchronized capture. An early stop remains&quot;
+            + &quot; incomplete.\n\n&quot;
+<span class="fc" id="L310">            + snapshot.health().history()</span>
+            + &quot;\n\nManaged recordings:\n&quot;
+<span class="pc bpc" id="L312" title="1 of 2 branches missed.">            + (catalogue == null ? &quot;Loading&quot; : catalogue.recordings()));</span>
+<span class="fc" id="L313">  }</span>
+
+  private boolean updateControls(RunView snapshot) {
+<span class="fc" id="L316">    boolean running =</span>
+<span class="fc bfc" id="L317" title="All 2 branches covered.">        switch (snapshot.health().state()) {</span>
+<span class="fc" id="L318">          case RUNNING, DEGRADED, STOPPING -&gt; true;</span>
+<span class="fc" id="L319">          default -&gt; false;</span>
+        };
+<span class="pc bpc" id="L321" title="1 of 4 branches missed.">    stop.setEnabled(running &amp;&amp; !busy);</span>
+<span class="pc bpc" id="L322" title="1 of 4 branches missed.">    export.setEnabled(snapshot.exportAvailable() &amp;&amp; !busy);</span>
+<span class="fc" id="L323">    acknowledge.setEnabled(acknowledgementAvailable(snapshot));</span>
+<span class="pc bpc" id="L324" title="1 of 4 branches missed.">    boolean editable = !running &amp;&amp; !busy;</span>
+<span class="pc bpc" id="L325" title="1 of 4 branches missed.">    check.setEnabled(editable &amp;&amp; catalogue != null);</span>
+<span class="pc bpc" id="L326" title="1 of 4 branches missed.">    startButton.setEnabled(editable &amp;&amp; reviewedChoicesReady());</span>
+<span class="fc" id="L327">    return running;</span>
+  }
+
+  private boolean reviewedChoicesReady() {
+<span class="pc bpc" id="L331" title="1 of 2 branches missed.">    return preflight != null</span>
+<span class="nc bnc" id="L332" title="All 2 branches missed.">        &amp;&amp; preflight.health().startAllowed()</span>
+<span class="nc bnc" id="L333" title="All 2 branches missed.">        &amp;&amp; definition.getText().equals(savedDefinition)</span>
+<span class="pc bnc" id="L334" title="All 2 branches missed.">        &amp;&amp; sameChoices();</span>
+  }
+
+  private boolean acknowledgementAvailable(RunView snapshot) {
+<span class="pc bpc" id="L338" title="3 of 6 branches missed.">    return !busy &amp;&amp; preflight == null &amp;&amp; !acknowledgeableFindings(snapshot).isEmpty();</span>
+  }
+
+  private static List&lt;ExperimentHealthFinding&gt; acknowledgeableFindings(RunView snapshot) {
+<span class="fc bfc" id="L342" title="All 2 branches covered.">    if (snapshot.runId().isEmpty()) {</span>
+<span class="fc" id="L343">      return List.of();</span>
+    }
+<span class="fc" id="L345">    return snapshot.health().findings().stream()</span>
+<span class="fc" id="L346">        .filter(</span>
+            finding -&gt;
+<span class="nc bnc" id="L348" title="All 2 branches missed.">                finding.acknowledgeable()</span>
+<span class="nc bnc" id="L349" title="All 2 branches missed.">                    &amp;&amp; !finding.acknowledged()</span>
+<span class="nc bnc" id="L350" title="All 2 branches missed.">                    &amp;&amp; finding.severity() != ExperimentHealthFinding.Severity.BLOCKING)</span>
+<span class="fc" id="L351">        .toList();</span>
+  }
+
+  private void acknowledgeAlert() {
+<span class="nc" id="L355">    RunView snapshot = service.snapshot();</span>
+<span class="nc bnc" id="L356" title="All 2 branches missed.">    if (!acknowledgementAvailable(snapshot)) {</span>
+<span class="nc" id="L357">      return;</span>
+    }
+<span class="nc" id="L359">    List&lt;ExperimentHealthFinding&gt; findings = acknowledgeableFindings(snapshot);</span>
+<span class="nc" id="L360">    List&lt;String&gt; choices =</span>
+<span class="nc" id="L361">        findings.stream().map(finding -&gt; finding.message() + &quot; [&quot; + finding.code() + &quot;]&quot;).toList();</span>
+<span class="nc" id="L362">    Object selected =</span>
+<span class="nc" id="L363">        JOptionPane.showInputDialog(</span>
+            this,
+            &quot;Acknowledge one alert as an unattributed local operator. The condition and history&quot;
+                + &quot; remain visible.&quot;,
+            &quot;Acknowledge experiment alert&quot;,
+            JOptionPane.QUESTION_MESSAGE,
+            null,
+<span class="nc" id="L370">            choices.toArray(String[]::new),</span>
+<span class="nc" id="L371">            choices.getFirst());</span>
+<span class="nc" id="L372">    int index = choices.indexOf(selected);</span>
+<span class="nc bnc" id="L373" title="All 2 branches missed.">    if (index &lt; 0) {</span>
+<span class="nc" id="L374">      return;</span>
+    }
+<span class="nc" id="L376">    String code = findings.get(index).code();</span>
+<span class="nc" id="L377">    background(</span>
+        () -&gt; {
+<span class="nc" id="L379">          service.acknowledge(code, &quot;Unattributed local operator&quot;);</span>
+<span class="nc" id="L380">          return service.snapshot();</span>
+        },
+        this::display);
+<span class="nc" id="L383">  }</span>
+
+  private boolean sameChoices() {
+    try {
+<span class="nc" id="L387">      return configuration().equals(reviewedConfiguration);</span>
+<span class="nc" id="L388">    } catch (IllegalArgumentException exception) {</span>
+<span class="nc" id="L389">      return false;</span>
+    }
+  }
+
+  private Configuration configuration() {
+<span class="nc" id="L394">    return new Configuration(</span>
+<span class="nc" id="L395">        name.getText(),</span>
+<span class="nc" id="L396">        (String) mode.getSelectedItem(),</span>
+<span class="nc" id="L397">        (String) profile.getSelectedItem(),</span>
+<span class="nc" id="L398">        (String) scenario.getSelectedItem(),</span>
+<span class="nc" id="L399">        (String) replay.getSelectedItem(),</span>
+<span class="nc" id="L400">        ((Number) duration.getValue()).intValue(),</span>
+<span class="nc" id="L401">        record.isSelected(),</span>
+<span class="nc" id="L402">        filename.getText());</span>
+  }
+
+  private void selectProfile() {
+<span class="pc bpc" id="L406" title="1 of 2 branches missed.">    if (catalogue == null) {</span>
+<span class="nc" id="L407">      return;</span>
+    }
+<span class="fc" id="L409">    catalogue.profiles().stream()</span>
+<span class="pc" id="L410">        .filter(item -&gt; item.id().equals(profile.getSelectedItem()))</span>
+<span class="fc" id="L411">        .findFirst()</span>
+<span class="fc" id="L412">        .ifPresent(</span>
+            item -&gt; {
+<span class="nc" id="L414">              savedDefinition = item.definition();</span>
+<span class="nc" id="L415">              definition.setText(savedDefinition);</span>
+<span class="nc" id="L416">              preflight = null;</span>
+<span class="nc" id="L417">            });</span>
+<span class="fc" id="L418">  }</span>
+
+  private void refreshCatalogue() {
+<span class="fc" id="L421">    refreshCatalogue((String) profile.getSelectedItem());</span>
+<span class="fc" id="L422">  }</span>
+
+  private void refreshCatalogue(String selected) {
+<span class="fc" id="L425">    background(</span>
+<span class="fc" id="L426">        service::catalogue,</span>
+        result -&gt; {
+<span class="fc" id="L428">          catalogue = result;</span>
+<span class="fc" id="L429">          profile.removeAllItems();</span>
+<span class="fc" id="L430">          result.profiles().stream().map(ProfileView::id).forEach(profile::addItem);</span>
+<span class="pc bpc" id="L431" title="1 of 2 branches missed.">          if (selected != null) {</span>
+<span class="nc" id="L432">            profile.setSelectedItem(selected);</span>
+          }
+<span class="fc" id="L434">          scenario.removeAllItems();</span>
+<span class="fc" id="L435">          result.scenarios().forEach(scenario::addItem);</span>
+<span class="fc" id="L436">          replay.removeAllItems();</span>
+<span class="pc" id="L437">          result.recordings().forEach(item -&gt; replay.addItem(item.id()));</span>
+<span class="fc" id="L438">          selectProfile();</span>
+<span class="fc" id="L439">        });</span>
+<span class="fc" id="L440">  }</span>
+
+  private void importRecording() {
+<span class="nc" id="L443">    JFileChooser chooser = new JFileChooser();</span>
+<span class="nc bnc" id="L444" title="All 2 branches missed.">    if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) {</span>
+<span class="nc" id="L445">      return;</span>
+    }
+<span class="nc" id="L447">    Path path = chooser.getSelectedFile().toPath();</span>
+<span class="nc" id="L448">    background(</span>
+        () -&gt; {
+<span class="nc" id="L450">          try (InputStream input = Files.newInputStream(path)) {</span>
+<span class="nc" id="L451">            return service.importRecording(input);</span>
+          }
+        },
+<span class="nc" id="L454">        result -&gt; refreshCatalogue());</span>
+<span class="nc" id="L455">  }</span>
+
+  private void exportEvidence() {
+<span class="nc" id="L458">    JFileChooser chooser = new JFileChooser();</span>
+<span class="nc" id="L459">    chooser.setSelectedFile(new java.io.File(&quot;experiment-evidence.zip&quot;));</span>
+<span class="nc bnc" id="L460" title="All 2 branches missed.">    if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) {</span>
+<span class="nc" id="L461">      return;</span>
+    }
+<span class="nc" id="L463">    Path path = chooser.getSelectedFile().toPath();</span>
+<span class="nc" id="L464">    background(</span>
+<span class="nc" id="L465">        () -&gt; Files.exists(path),</span>
+        exists -&gt; {
+<span class="nc bnc" id="L467" title="All 2 branches missed.">          if (!exists</span>
+<span class="nc bnc" id="L468" title="All 2 branches missed.">              || JOptionPane.showConfirmDialog(</span>
+                      this, &quot;Replace &quot; + path + &quot;?&quot;, &quot;Export evidence&quot;, JOptionPane.YES_NO_OPTION)
+                  == JOptionPane.YES_OPTION) {
+<span class="nc" id="L471">            writeEvidence(path);</span>
+          }
+<span class="nc" id="L473">        });</span>
+<span class="nc" id="L474">  }</span>
+
+  private void writeEvidence(Path path) {
+<span class="nc" id="L477">    background(</span>
+        () -&gt; {
+<span class="nc" id="L479">          service.exportEvidence(path);</span>
+<span class="nc" id="L480">          return path;</span>
+        },
+<span class="nc" id="L482">        result -&gt; JOptionPane.showMessageDialog(this, &quot;Evidence saved to &quot; + result));</span>
+<span class="nc" id="L483">  }</span>
+
+  private &lt;T&gt; void background(Callable&lt;T&gt; task, Consumer&lt;T&gt; success) {
+<span class="fc" id="L486">    busy = true;</span>
+<span class="fc" id="L487">    new SwingWorker&lt;T, Void&gt;() {</span>
+      @Override
+      protected T doInBackground() throws Exception {
+<span class="fc" id="L490">        return task.call();</span>
+      }
+
+      @Override
+      protected void done() {
+<span class="fc" id="L495">        busy = false;</span>
+        try {
+<span class="fc" id="L497">          success.accept(get());</span>
+<span class="nc" id="L498">        } catch (Exception exception) {</span>
+<span class="nc" id="L499">          showFailure(exception);</span>
+<span class="fc" id="L500">        }</span>
+<span class="fc" id="L501">      }</span>
+<span class="fc" id="L502">    }.execute();</span>
+<span class="fc" id="L503">  }</span>
+
+  private void showFailure(Exception exception) {
+<span class="nc" id="L506">    JOptionPane.showMessageDialog(</span>
+<span class="nc" id="L507">        this, exception.getMessage(), &quot;Experiment operation&quot;, JOptionPane.ERROR_MESSAGE);</span>
+<span class="nc" id="L508">  }</span>
+
+  private static String describe(
+      org.hammer.audio.acquisition.health.ExperimentHealthSnapshot snapshot) {
+<span class="fc" id="L512">    return ExperimentHealthText.describe(snapshot);</span>
+  }
+
+  private static JTextArea readOnlyArea() {
+<span class="fc" id="L516">    JTextArea area = new JTextArea(14, 64);</span>
+<span class="fc" id="L517">    area.setEditable(false);</span>
+<span class="fc" id="L518">    area.setLineWrap(true);</span>
+<span class="fc" id="L519">    area.setWrapStyleWord(true);</span>
+<span class="fc" id="L520">    return area;</span>
+  }
+
+  private static JTextArea runtimeStatusArea() {
+<span class="fc" id="L524">    JTextArea area = new JTextArea(&quot;NOT CONFIGURED — choose a source and review readiness&quot;, 8, 0);</span>
+<span class="fc" id="L525">    area.setEditable(false);</span>
+<span class="fc" id="L526">    area.setLineWrap(true);</span>
+<span class="fc" id="L527">    area.setWrapStyleWord(true);</span>
+<span class="fc" id="L528">    area.getAccessibleContext().setAccessibleName(&quot;Experiment runtime status&quot;);</span>
+<span class="fc" id="L529">    return area;</span>
+  }
+
+  private static void addField(JPanel panel, String label, javax.swing.JComponent field) {
+<span class="fc" id="L533">    JLabel caption = new JLabel(label);</span>
+<span class="fc" id="L534">    caption.setLabelFor(field);</span>
+<span class="fc" id="L535">    panel.add(caption);</span>
+<span class="fc" id="L536">    panel.add(field);</span>
+<span class="fc" id="L537">  }</span>
+
+  @Override
+  public void close() {
+<span class="fc" id="L541">    closeWhenFinished(</span>
+        () -&gt; {
+          /* No window is owned by this reusable panel. */
+<span class="fc" id="L544">        });</span>
+<span class="fc" id="L545">  }</span>
+
+  /** Keep the host window available until background recording/evidence finalization completes. */
+  public void closeWhenFinished(Runnable completed) {
+<span class="fc" id="L549">    timer.stop();</span>
+<span class="fc" id="L550">    background(</span>
+        () -&gt; {
+<span class="fc" id="L552">          service.close();</span>
+<span class="fc" id="L553">          return null;</span>
+        },
+<span class="fc" id="L555">        ignored -&gt; completed.run());</span>
+<span class="fc" id="L556">  }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

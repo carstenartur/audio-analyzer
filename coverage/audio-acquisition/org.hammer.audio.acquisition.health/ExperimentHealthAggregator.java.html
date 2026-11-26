@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ExperimentHealthAggregator.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Acquisition</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.acquisition.health</a> &gt; <span class="el_source">ExperimentHealthAggregator.java</span></div><h1>ExperimentHealthAggregator.java</h1><pre class="source lang-java linenums">package org.hammer.audio.acquisition.health;
+
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import org.hammer.audio.acquisition.health.ExperimentHealthFinding.Severity;
+import org.hammer.audio.acquisition.health.ExperimentHealthSnapshot.Event;
+
+/** Thread-safe aggregator for typed component findings and immutable health projections. */
+// One monitor protects the compound state/history projection; independent concurrent maps would
+// not.
+@SuppressWarnings({&quot;PMD.UseConcurrentHashMap&quot;, &quot;PMD.AvoidSynchronizedAtMethodLevel&quot;})
+<span class="fc" id="L17">public final class ExperimentHealthAggregator {</span>
+
+<span class="fc" id="L19">  private final Map&lt;String, ExperimentHealthFinding&gt; active = new HashMap&lt;&gt;();</span>
+<span class="fc" id="L20">  private final Map&lt;String, ExperimentHealthFinding&gt; latched = new HashMap&lt;&gt;();</span>
+<span class="fc" id="L21">  private final List&lt;Event&gt; history = new ArrayList&lt;&gt;();</span>
+  private ExperimentHealthState lastState;
+
+  /** Replace one component's current observations while preserving significant alert history. */
+  public synchronized void update(
+      String component, List&lt;ExperimentHealthFinding&gt; findings, Instant now) {
+<span class="fc" id="L27">    Objects.requireNonNull(component, &quot;component&quot;);</span>
+<span class="fc" id="L28">    Map&lt;String, ExperimentHealthFinding&gt; previous = new HashMap&lt;&gt;(active);</span>
+<span class="fc" id="L29">    active.values().removeIf(finding -&gt; finding.component().equals(component));</span>
+<span class="fc bfc" id="L30" title="All 2 branches covered.">    for (ExperimentHealthFinding finding : findings) {</span>
+<span class="fc" id="L31">      ExperimentHealthFinding old = previous.get(finding.code());</span>
+<span class="fc" id="L32">      boolean changed = conditionChanged(old, finding);</span>
+<span class="fc" id="L33">      active.put(</span>
+<span class="fc" id="L34">          finding.code(),</span>
+<span class="pc bpc" id="L35" title="2 of 6 branches missed.">          !changed &amp;&amp; old.acknowledged() &amp;&amp; finding.acknowledgeable()</span>
+<span class="fc" id="L36">              ? finding.acknowledge()</span>
+<span class="fc" id="L37">              : finding);</span>
+<span class="pc bpc" id="L38" title="1 of 4 branches missed.">      if (finding.severity() == Severity.WARNING || finding.severity() == Severity.ERROR) {</span>
+<span class="fc" id="L39">        ExperimentHealthFinding priorAlert = latched.get(finding.code());</span>
+<span class="pc bpc" id="L40" title="1 of 4 branches missed.">        if (changed || priorAlert == null) {</span>
+<span class="fc" id="L41">          latched.put(finding.code(), finding);</span>
+        }
+      }
+<span class="fc bfc" id="L44" title="All 4 branches covered.">      if (changed &amp;&amp; finding.severity() != Severity.INFO) {</span>
+<span class="fc" id="L45">        history.add(new Event(now, finding.code(), finding.severity().name(), finding.message()));</span>
+      }
+<span class="fc" id="L47">    }</span>
+<span class="fc" id="L48">  }</span>
+
+  private static boolean conditionChanged(
+      ExperimentHealthFinding old, ExperimentHealthFinding current) {
+<span class="fc bfc" id="L52" title="All 2 branches covered.">    return old == null</span>
+<span class="pc bpc" id="L53" title="1 of 2 branches missed.">        || old.severity() != current.severity()</span>
+<span class="pc bpc" id="L54" title="1 of 2 branches missed.">        || !old.message().equals(current.message());</span>
+  }
+
+  /** Record explicit acknowledgement; an active blocker always requires remediation. */
+  public synchronized void acknowledge(String code, String operator, Instant now) {
+<span class="fc" id="L59">    ExperimentHealthFinding finding = active.getOrDefault(code, latched.get(code));</span>
+<span class="pc bpc" id="L60" title="1 of 2 branches missed.">    if (finding == null) {</span>
+<span class="nc" id="L61">      throw new IllegalArgumentException(&quot;Unknown finding: &quot; + code);</span>
+    }
+<span class="fc" id="L63">    ExperimentHealthFinding acknowledged = finding.acknowledge();</span>
+<span class="fc" id="L64">    latched.put(code, acknowledged);</span>
+<span class="fc bfc" id="L65" title="All 2 branches covered.">    if (active.containsKey(code)) {</span>
+<span class="fc" id="L66">      active.put(code, acknowledged);</span>
+    }
+<span class="fc" id="L68">    history.add(</span>
+        new Event(
+            now,
+            code,
+            &quot;ACKNOWLEDGED&quot;,
+<span class="pc bpc" id="L73" title="2 of 4 branches missed.">            operator == null || operator.isBlank() ? &quot;Unattributed operator&quot; : operator));</span>
+<span class="fc" id="L74">  }</span>
+
+  /** Project freshness, blocking reasons and latched alerts over an explicit lifecycle decision. */
+  public synchronized ExperimentHealthSnapshot snapshot(
+      String id,
+      String name,
+      ExperimentHealthState requested,
+      String stage,
+      Map&lt;String, String&gt; facts,
+      Instant now) {
+<span class="fc" id="L84">    Map&lt;String, ExperimentHealthFinding&gt; displayed = new HashMap&lt;&gt;(latched);</span>
+<span class="fc" id="L85">    displayed.putAll(active);</span>
+<span class="fc bfc" id="L86" title="All 2 branches covered.">    for (ExperimentHealthFinding finding : active.values()) {</span>
+<span class="fc bfc" id="L87" title="All 2 branches covered.">      if (finding.stale(now)) {</span>
+<span class="fc" id="L88">        displayed.put(</span>
+<span class="fc" id="L89">            finding.code() + &quot;.stale&quot;,</span>
+            new ExperimentHealthFinding(
+<span class="fc" id="L91">                finding.code() + &quot;.stale&quot;,</span>
+                Severity.WARNING,
+<span class="fc" id="L93">                &quot;Stale: &quot; + finding.message(),</span>
+<span class="fc" id="L94">                &quot;Last successful observation: &quot; + finding.observedAt(),</span>
+<span class="fc" id="L95">                finding.component(),</span>
+<span class="fc" id="L96">                finding.observedAt(),</span>
+                0L,
+<span class="fc" id="L98">                finding.remediationAction(),</span>
+                false,
+                false));
+      }
+<span class="fc" id="L102">    }</span>
+<span class="fc" id="L103">    List&lt;ExperimentHealthFinding&gt; findings =</span>
+<span class="fc" id="L104">        displayed.values().stream()</span>
+<span class="fc" id="L105">            .sorted(Comparator.comparing(ExperimentHealthFinding::code))</span>
+<span class="fc" id="L106">            .toList();</span>
+<span class="fc" id="L107">    ExperimentHealthState state = resolveState(requested, findings, facts);</span>
+<span class="pc bpc" id="L108" title="1 of 2 branches missed.">    if (state != lastState) {</span>
+<span class="fc" id="L109">      history.add(new Event(now, &quot;experiment.state&quot;, state.name(), stage));</span>
+<span class="fc" id="L110">      lastState = state;</span>
+    }
+<span class="fc" id="L112">    return new ExperimentHealthSnapshot(id, name, state, stage, now, findings, facts, history);</span>
+  }
+
+  private static ExperimentHealthState resolveState(
+      ExperimentHealthState requested,
+      List&lt;ExperimentHealthFinding&gt; findings,
+      Map&lt;String, String&gt; facts) {
+<span class="fc" id="L119">    boolean blocked =</span>
+<span class="fc bfc" id="L120" title="All 2 branches covered.">        findings.stream().anyMatch(finding -&gt; finding.severity() == Severity.BLOCKING);</span>
+<span class="fc" id="L121">    boolean warned =</span>
+<span class="fc" id="L122">        findings.stream()</span>
+<span class="fc" id="L123">            .anyMatch(</span>
+                finding -&gt;
+<span class="fc bfc" id="L125" title="All 2 branches covered.">                    !finding.acknowledged()</span>
+<span class="fc bfc" id="L126" title="All 2 branches covered.">                        &amp;&amp; finding.severity() != Severity.INFO</span>
+<span class="fc bfc" id="L127" title="All 2 branches covered.">                        &amp;&amp; finding.severity() != Severity.BLOCKING);</span>
+<span class="fc bfc" id="L128" title="All 4 branches covered.">    if (requested == ExperimentHealthState.READY</span>
+        || requested == ExperimentHealthState.READY_WITH_WARNINGS) {
+<span class="fc bfc" id="L130" title="All 2 branches covered.">      if (blocked) {</span>
+<span class="fc" id="L131">        return ExperimentHealthState.BLOCKED;</span>
+      }
+<span class="pc bpc" id="L133" title="1 of 2 branches missed.">      return warned ? ExperimentHealthState.READY_WITH_WARNINGS : requested;</span>
+    }
+<span class="pc bpc" id="L135" title="1 of 6 branches missed.">    if (requested == ExperimentHealthState.RUNNING &amp;&amp; (blocked || warned)) {</span>
+<span class="fc" id="L136">      return ExperimentHealthState.DEGRADED;</span>
+    }
+<span class="fc bfc" id="L138" title="All 2 branches covered.">    if (requested == ExperimentHealthState.COMPLETED</span>
+<span class="fc bfc" id="L139" title="All 2 branches covered.">        &amp;&amp; &quot;false&quot;.equals(facts.get(&quot;evidence.complete&quot;))) {</span>
+<span class="fc" id="L140">      return ExperimentHealthState.INCOMPLETE;</span>
+    }
+<span class="fc" id="L142">    return requested;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

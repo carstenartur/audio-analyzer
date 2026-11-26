@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>DiagnosticTdoaEstimator.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic</a> &gt; <span class="el_source">DiagnosticTdoaEstimator.java</span></div><h1>DiagnosticTdoaEstimator.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic;
+
+import org.hammer.audio.acquisition.MicrophoneArray;
+import org.hammer.audio.core.AudioBlock;
+
+/** TDOA strategy that exposes peak evidence in addition to the compatibility estimate. */
+@FunctionalInterface
+public interface DiagnosticTdoaEstimator extends TdoaEstimator {
+
+  /** Estimates TDOA and returns the peak evidence used to derive confidence. */
+  DiagnosticTdoaEstimate estimateDetailed(
+      AudioBlock block, MicrophoneArray array, int firstChannel, int secondChannel);
+
+  @Override
+  default TdoaEstimate estimate(
+      AudioBlock block, MicrophoneArray array, int firstChannel, int secondChannel) {
+<span class="fc" id="L17">    return estimateDetailed(block, array, firstChannel, secondChannel).estimate();</span>
+  }
+
+  /** Returns an estimate only when its configured ambiguity policy accepts the selected peak. */
+  default TdoaEstimate estimateReliable(
+      AudioBlock block, MicrophoneArray array, int firstChannel, int secondChannel) {
+<span class="fc" id="L23">    DiagnosticTdoaEstimate detailed = estimateDetailed(block, array, firstChannel, secondChannel);</span>
+<span class="pc bpc" id="L24" title="1 of 2 branches missed.">    if (detailed.diagnostics().ambiguous()) {</span>
+<span class="fc" id="L25">      throw new AmbiguousTdoaEstimateException(</span>
+          &quot;Ambiguous TDOA peak: ratio=&quot;
+<span class="fc" id="L27">              + detailed.diagnostics().peakRatio()</span>
+              + &quot;, curvature=&quot;
+<span class="fc" id="L29">              + detailed.diagnostics().normalizedCurvature());</span>
+    }
+<span class="nc" id="L31">    return detailed.estimate();</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

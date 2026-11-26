@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>LocalizationEngine.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Acquisition</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.acquisition</a> &gt; <span class="el_source">LocalizationEngine.java</span></div><h1>LocalizationEngine.java</h1><pre class="source lang-java linenums">package org.hammer.audio.acquisition;
+
+import java.io.IOException;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.function.Consumer;
+
+/**
+ * ServiceLoader boundary for a localization implementation. Hosts consume acquisition values, never
+ * concrete plugin classes; implementations reuse their established processing pipeline.
+ */
+public interface LocalizationEngine {
+
+  /** Algorithm/plugin identity recorded with every run. */
+  String id();
+
+  /** Version actually supplied by this implementation. */
+  String version();
+
+  /** Supported deterministic simulation names. */
+  List&lt;String&gt; scenarios();
+
+  /** Example geometry for a reusable starter profile. */
+  MicrophoneArray exampleArray();
+
+  /** Nominal sample rate for one deterministic simulator. */
+  float simulationSampleRate(String scenario);
+
+  /** Create simulated samples using the selected persisted array geometry. */
+  MultiChannelAudioSource simulate(String scenario, MicrophoneArray array, int durationSeconds);
+
+  /** Run any source through one implementation and close it deterministically. */
+  Result run(
+      MultiChannelAudioSource source,
+      LocalizationExperiment experiment,
+      Options options,
+      Consumer&lt;Frame&gt; progress)
+      throws IOException;
+
+  /**
+   * Bounded execution choices shared across source modes.
+   *
+   * @param scenario simulation/environment reference
+   * @param blockFrames requested processing block size
+   * @param durationSeconds maximum experiment duration
+   */
+<span class="nc" id="L48">  record Options(String scenario, int blockFrames, int durationSeconds) {</span>
+    // Immutable transport value.
+  }
+
+  /**
+   * One localization position in metres.
+   *
+   * @param id track identity
+   * @param x horizontal metres
+   * @param y vertical metres
+   * @param confidence tracker confidence
+   */
+<span class="nc" id="L60">  record Track(int id, double x, double y, double confidence) {</span>
+    // Immutable transport value.
+  }
+
+  /**
+   * Typed progress without exposing plugin snapshot classes.
+   *
+   * @param index zero-based processed block index
+   * @param processingNanos processing duration
+   * @param processingBudgetNanos actual processing deadline used by the implementation
+   * @param synchronization actual calibration/timing assessment
+   * @param reliableTdoa whether physical delay consistency passed
+   * @param tracks latest estimated positions
+   */
+  record Frame(
+      int index,
+      long processingNanos,
+      long processingBudgetNanos,
+      SynchronizationAssessment synchronization,
+      boolean reliableTdoa,
+      List&lt;Track&gt; tracks) {
+    // Preserve immutable source evidence.
+<span class="nc" id="L82">    public Frame {</span>
+<span class="nc" id="L83">      tracks = List.copyOf(tracks);</span>
+<span class="nc" id="L84">    }</span>
+  }
+
+  /**
+   * Final compute evidence with an honest benchmark-availability flag.
+   *
+   * &lt;p&gt;Declare required reports independently of the reports successfully generated. Hosts use this
+   * declaration to distinguish complete evidence from missing output; an empty declaration cannot
+   * establish complete standalone localization evidence. Each declared name must be a portable
+   * filename. Providers may choose their own report names and formats.
+   *
+   * @param experiment experiment/profile/calibration identity actually used
+   * @param blocks processed blocks
+   * @param overruns blocks exceeding the real-time budget
+   * @param benchmarkAvailable whether reference ground truth permitted benchmarking
+   * @param requiredArtifacts reports required for complete evidence, independent of generated keys
+   * @param artifacts generated UTF-8 reports keyed by portable filename
+   */
+  record Result(
+      LocalizationExperiment experiment,
+      long blocks,
+      long overruns,
+      boolean benchmarkAvailable,
+      Set&lt;String&gt; requiredArtifacts,
+      Map&lt;String, String&gt; artifacts) {
+    // Preserve the expected-output contract even when a provider omits a report or later mutates
+    // inputs.
+<span class="nc" id="L111">    public Result {</span>
+<span class="nc" id="L112">      requiredArtifacts = Set.copyOf(requiredArtifacts);</span>
+<span class="nc" id="L113">      artifacts = Map.copyOf(artifacts);</span>
+<span class="nc" id="L114">    }</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

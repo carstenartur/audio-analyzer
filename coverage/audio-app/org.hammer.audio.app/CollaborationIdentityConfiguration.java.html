@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>CollaborationIdentityConfiguration.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.app</a> &gt; <span class="el_source">CollaborationIdentityConfiguration.java</span></div><h1>CollaborationIdentityConfiguration.java</h1><pre class="source lang-java linenums">package org.hammer.audio.app;
+
+import java.time.Clock;
+import org.hammer.audio.infrastructure.workflow.collaboration.store.HibernateCollaborationIdentityStore;
+import org.hammer.audio.workflow.collaboration.identity.CollaborationIdentityStore;
+import org.hammer.audio.workflow.collaboration.identity.InMemoryCollaborationIdentityStore;
+import org.hammer.audio.workflow.editor.http.CollaborationIdentityService;
+import org.hibernate.SessionFactory;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+/** Chooses durable identity storage whenever durable collaboration is selected. */
+@Configuration
+<span class="fc" id="L17">public class CollaborationIdentityConfiguration {</span>
+  /** Uses the shared SessionFactory; non-durable collaboration keeps identities in memory. */
+  @Bean
+  public CollaborationIdentityStore collaborationIdentityStore(
+      @Qualifier(&quot;workflowPersistenceSessionFactory&quot;) ObjectProvider&lt;SessionFactory&gt; factories) {
+<span class="fc" id="L22">    SessionFactory factory = factories.getIfAvailable();</span>
+<span class="pc bpc" id="L23" title="1 of 2 branches missed.">    return factory == null</span>
+<span class="fc" id="L24">        ? new InMemoryCollaborationIdentityStore()</span>
+<span class="nc" id="L25">        : new HibernateCollaborationIdentityStore(factory);</span>
+  }
+
+  /** Account-handle disclosure is opt-in and cannot be changed by a browser request. */
+  @Bean
+  public CollaborationIdentityService collaborationIdentityService(
+      CollaborationIdentityStore store,
+      @Value(&quot;${workbench.collaboration.identity.show-account-handles:false}&quot;) boolean handles) {
+<span class="fc" id="L33">    return new CollaborationIdentityService(store, handles, Clock.systemUTC());</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

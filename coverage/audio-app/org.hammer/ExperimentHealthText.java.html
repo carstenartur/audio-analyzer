@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ExperimentHealthText.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer</a> &gt; <span class="el_source">ExperimentHealthText.java</span></div><h1>ExperimentHealthText.java</h1><pre class="source lang-java linenums">package org.hammer;
+
+import java.util.TreeMap;
+import org.hammer.audio.acquisition.health.ExperimentHealthSnapshot;
+
+/** Plain-text projection of every shared health field for Swing and copyable diagnostics. */
+public final class ExperimentHealthText {
+  private ExperimentHealthText() {
+    // Shared formatting utility.
+  }
+
+  /** Preserve root causes, source timestamps, provenance facts and significant event history. */
+  public static String describe(ExperimentHealthSnapshot snapshot) {
+<span class="fc" id="L14">    StringBuilder text =</span>
+        new StringBuilder(512)
+<span class="fc" id="L16">            .append(snapshot.state())</span>
+<span class="fc" id="L17">            .append(&quot; — &quot;)</span>
+<span class="fc" id="L18">            .append(snapshot.experimentName())</span>
+<span class="fc" id="L19">            .append('\n')</span>
+<span class="fc" id="L20">            .append(snapshot.stage())</span>
+<span class="fc" id="L21">            .append(&quot;\nObserved: &quot;)</span>
+<span class="fc" id="L22">            .append(snapshot.observedAt())</span>
+<span class="fc" id="L23">            .append(&quot;\n\n&quot;);</span>
+<span class="fc" id="L24">    snapshot</span>
+<span class="fc" id="L25">        .findings()</span>
+<span class="fc" id="L26">        .forEach(</span>
+            finding -&gt;
+<span class="nc" id="L28">                text.append(finding.severity())</span>
+<span class="nc" id="L29">                    .append(&quot;: &quot;)</span>
+<span class="nc" id="L30">                    .append(finding.message())</span>
+<span class="nc" id="L31">                    .append('\n')</span>
+<span class="nc" id="L32">                    .append(finding.detail())</span>
+<span class="nc" id="L33">                    .append(&quot;\nComponent: &quot;)</span>
+<span class="nc" id="L34">                    .append(finding.component())</span>
+<span class="nc" id="L35">                    .append(&quot;\nCode: &quot;)</span>
+<span class="nc" id="L36">                    .append(finding.code())</span>
+<span class="nc" id="L37">                    .append(&quot;\nObserved: &quot;)</span>
+<span class="nc" id="L38">                    .append(finding.observedAt())</span>
+<span class="nc" id="L39">                    .append(&quot;\nAcknowledged: &quot;)</span>
+<span class="nc" id="L40">                    .append(finding.acknowledged())</span>
+<span class="nc" id="L41">                    .append(&quot;\n\n&quot;));</span>
+<span class="fc" id="L42">    new TreeMap&lt;&gt;(snapshot.facts())</span>
+<span class="fc" id="L43">        .forEach((key, value) -&gt; text.append(key).append(&quot;: &quot;).append(value).append('\n'));</span>
+<span class="fc" id="L44">    text.append(&quot;\nSignificant history:\n&quot;);</span>
+<span class="fc" id="L45">    snapshot</span>
+<span class="fc" id="L46">        .history()</span>
+<span class="fc" id="L47">        .forEach(</span>
+            event -&gt;
+<span class="nc" id="L49">                text.append(event.observedAt())</span>
+<span class="nc" id="L50">                    .append(&quot; · &quot;)</span>
+<span class="nc" id="L51">                    .append(event.action())</span>
+<span class="nc" id="L52">                    .append(&quot; · &quot;)</span>
+<span class="nc" id="L53">                    .append(event.detail())</span>
+<span class="nc" id="L54">                    .append('\n'));</span>
+<span class="fc" id="L55">    return text.toString();</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

@@ -1,0 +1,176 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WorkflowSessionEventHttpAdapter.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.editor.http</a> &gt; <span class="el_source">WorkflowSessionEventHttpAdapter.java</span></div><h1>WorkflowSessionEventHttpAdapter.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.editor.http;
+
+import jakarta.servlet.http.HttpServletRequest;
+import java.io.IOException;
+import java.util.Objects;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
+import org.hammer.audio.workflow.collaboration.OperationActor;
+import org.hammer.audio.workflow.collaboration.WorkflowSessionEvent;
+import org.hammer.audio.workflow.collaboration.WorkflowSessionEventHub;
+import org.hammer.audio.workflow.collaboration.WorkflowSessionRegistry;
+import org.hammer.audio.workflow.editor.http.WorkflowSessionApiModels.SessionEventResponse;
+import org.springframework.http.MediaType;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+
+/** Spring MVC SSE adapter for ordered collaboration-session events and bounded replay. */
+@RestController
+@RequestMapping(&quot;/workflow/sessions&quot;)
+public final class WorkflowSessionEventHttpAdapter {
+
+  private static final long EMITTER_TIMEOUT_MILLIS = 30L * 60L * 1000L;
+  private static final String CONNECTED_COMMENT = &quot;connected&quot;;
+
+  private final WorkflowSessionRegistry registry;
+  private final CollaborationIdentityService identities;
+
+  /** Creates the SSE adapter with the shared registry and transport-neutral event hub. */
+  public WorkflowSessionEventHttpAdapter(
+<span class="fc" id="L35">      WorkflowSessionRegistry registry, CollaborationIdentityService identities) {</span>
+<span class="fc" id="L36">    this.registry = Objects.requireNonNull(registry, &quot;registry&quot;);</span>
+<span class="fc" id="L37">    this.identities = Objects.requireNonNull(identities, &quot;identities&quot;);</span>
+<span class="fc" id="L38">  }</span>
+
+  /**
+   * Streams retained and future events after a reconnect cursor.
+   *
+   * &lt;p&gt;The explicit {@code afterSequence} query parameter takes precedence over {@code
+   * Last-Event-ID}. A replay gap is represented by one canonical {@code SNAPSHOT} event. A
+   * transport comment is written after subscription so an empty replay still flushes the HTTP
+   * response and allows the browser's {@code EventSource} to become open without inventing a domain
+   * event.
+   */
+  @SuppressWarnings(&quot;PMD.CloseResource&quot;)
+  @GetMapping(path = &quot;/{sessionId}/events&quot;, produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+  public SseEmitter events(
+      @PathVariable(&quot;sessionId&quot;) String sessionId,
+      @RequestHeader(name = &quot;Last-Event-ID&quot;, required = false) String lastEventId,
+      @RequestParam(name = &quot;afterSequence&quot;, required = false) Long afterSequence,
+      HttpServletRequest http) {
+<span class="fc" id="L56">    OperationActor actor = identities.requireActor(http, null);</span>
+<span class="fc" id="L57">    long cursor = resolveCursor(afterSequence, lastEventId);</span>
+<span class="fc" id="L58">    SseEmitter emitter = new SseEmitter(EMITTER_TIMEOUT_MILLIS);</span>
+<span class="fc" id="L59">    SubscriptionHolder holder = new SubscriptionHolder();</span>
+<span class="fc" id="L60">    emitter.onCompletion(holder::close);</span>
+<span class="fc" id="L61">    emitter.onTimeout(holder::close);</span>
+<span class="pc" id="L62">    emitter.onError(ignored -&gt; holder.close());</span>
+<span class="fc" id="L63">    WorkflowSessionEventHub.Subscription subscription =</span>
+<span class="fc" id="L64">        registry.subscribe(</span>
+            sessionId,
+            actor,
+            cursor,
+            (snapshot, event) -&gt;
+<span class="fc" id="L69">                send(</span>
+                    emitter,
+                    holder,
+                    event,
+<span class="fc" id="L73">                    snapshot.owner().actorId(),</span>
+                    actor,
+<span class="fc" id="L75">                    snapshot.sequence()));</span>
+<span class="fc" id="L76">    holder.attach(subscription);</span>
+<span class="fc" id="L77">    flushConnection(emitter, holder);</span>
+<span class="fc" id="L78">    return emitter;</span>
+  }
+
+  private static void flushConnection(SseEmitter emitter, SubscriptionHolder holder) {
+    try {
+<span class="fc" id="L83">      emitter.send(SseEmitter.event().comment(CONNECTED_COMMENT));</span>
+<span class="nc" id="L84">    } catch (IOException | IllegalStateException exception) {</span>
+<span class="nc" id="L85">      holder.close();</span>
+<span class="nc" id="L86">      emitter.completeWithError(exception);</span>
+<span class="fc" id="L87">    }</span>
+<span class="fc" id="L88">  }</span>
+
+  private void send(
+      SseEmitter emitter,
+      SubscriptionHolder holder,
+      WorkflowSessionEvent event,
+      String ownerId,
+      OperationActor subscriber,
+      long subscriptionSequence) {
+    try {
+<span class="fc bfc" id="L98" title="All 2 branches covered.">      if (!identities.isActive(subscriber)) {</span>
+<span class="fc" id="L99">        holder.close();</span>
+<span class="fc" id="L100">        emitter.complete();</span>
+<span class="fc" id="L101">        return;</span>
+      }
+<span class="fc" id="L103">      emitter.send(</span>
+<span class="fc" id="L104">          SseEmitter.event()</span>
+<span class="fc" id="L105">              .id(Long.toString(event.sequence()))</span>
+<span class="fc" id="L106">              .name(event.type().name())</span>
+<span class="fc" id="L107">              .data(SessionEventResponse.from(event, identities, ownerId)));</span>
+<span class="fc" id="L108">      boolean departed =</span>
+<span class="fc bfc" id="L109" title="All 2 branches covered.">          event.type() == WorkflowSessionEvent.Type.PRESENCE_LEFT</span>
+<span class="pc bpc" id="L110" title="1 of 2 branches missed.">              &amp;&amp; event.sequence() &gt; subscriptionSequence</span>
+<span class="pc bpc" id="L111" title="1 of 2 branches missed.">              &amp;&amp; event.actor().actorId().equals(subscriber.actorId());</span>
+<span class="fc bfc" id="L112" title="All 4 branches covered.">      if (departed || event.type() == WorkflowSessionEvent.Type.SESSION_CLOSED) {</span>
+<span class="fc" id="L113">        holder.close();</span>
+<span class="fc" id="L114">        emitter.complete();</span>
+      }
+<span class="fc" id="L116">    } catch (IOException | IllegalStateException exception) {</span>
+<span class="fc" id="L117">      holder.close();</span>
+<span class="fc" id="L118">      emitter.completeWithError(exception);</span>
+<span class="fc" id="L119">    }</span>
+<span class="fc" id="L120">  }</span>
+
+  private static long resolveCursor(Long afterSequence, String lastEventId) {
+<span class="fc bfc" id="L123" title="All 2 branches covered.">    if (afterSequence != null) {</span>
+<span class="pc bpc" id="L124" title="1 of 2 branches missed.">      if (afterSequence &lt; 0) {</span>
+<span class="nc" id="L125">        throw new IllegalArgumentException(&quot;afterSequence must be &gt;= 0&quot;);</span>
+      }
+<span class="fc" id="L127">      return afterSequence;</span>
+    }
+<span class="pc bpc" id="L129" title="1 of 4 branches missed.">    if (lastEventId == null || lastEventId.isBlank()) {</span>
+<span class="fc" id="L130">      return 0;</span>
+    }
+    String numericId =
+<span class="pc bpc" id="L133" title="1 of 2 branches missed.">        lastEventId.contains(&quot;:&quot;)</span>
+<span class="nc" id="L134">            ? lastEventId.substring(lastEventId.lastIndexOf(':') + 1)</span>
+<span class="fc" id="L135">            : lastEventId;</span>
+    try {
+<span class="fc" id="L137">      long parsed = Long.parseLong(numericId);</span>
+<span class="pc bpc" id="L138" title="1 of 2 branches missed.">      if (parsed &lt; 0) {</span>
+<span class="nc" id="L139">        throw new IllegalArgumentException(&quot;Last-Event-ID must be &gt;= 0&quot;);</span>
+      }
+<span class="fc" id="L141">      return parsed;</span>
+<span class="nc" id="L142">    } catch (NumberFormatException exception) {</span>
+<span class="nc" id="L143">      throw new IllegalArgumentException(</span>
+          &quot;Last-Event-ID must contain a numeric sequence&quot;, exception);
+    }
+  }
+
+  // The holder owns the subscription until an emitter completion callback closes it.
+  @SuppressWarnings(&quot;PMD.CloseResource&quot;)
+<span class="fc" id="L150">  private static final class SubscriptionHolder {</span>
+<span class="fc" id="L151">    private final AtomicReference&lt;WorkflowSessionEventHub.Subscription&gt; subscription =</span>
+        new AtomicReference&lt;&gt;();
+<span class="fc" id="L153">    private final AtomicBoolean closed = new AtomicBoolean();</span>
+
+    void attach(WorkflowSessionEventHub.Subscription attachedSubscription) {
+<span class="fc" id="L156">      Objects.requireNonNull(attachedSubscription, &quot;attachedSubscription&quot;);</span>
+<span class="pc bpc" id="L157" title="1 of 2 branches missed.">      if (!subscription.compareAndSet(null, attachedSubscription)) {</span>
+<span class="nc" id="L158">        attachedSubscription.close();</span>
+<span class="nc" id="L159">        throw new IllegalStateException(&quot;SSE subscription already attached&quot;);</span>
+      }
+<span class="pc bpc" id="L161" title="1 of 2 branches missed.">      if (closed.get()) {</span>
+<span class="nc" id="L162">        attachedSubscription.close();</span>
+      }
+<span class="fc" id="L164">    }</span>
+
+    void close() {
+<span class="fc bfc" id="L167" title="All 2 branches covered.">      if (closed.compareAndSet(false, true)) {</span>
+<span class="fc" id="L168">        WorkflowSessionEventHub.Subscription attachedSubscription = subscription.getAndSet(null);</span>
+<span class="pc bpc" id="L169" title="1 of 2 branches missed.">        if (attachedSubscription != null) {</span>
+<span class="fc" id="L170">          attachedSubscription.close();</span>
+        }
+      }
+<span class="fc" id="L173">    }</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

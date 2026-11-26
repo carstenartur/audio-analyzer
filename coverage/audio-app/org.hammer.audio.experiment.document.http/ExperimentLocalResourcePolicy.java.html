@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ExperimentLocalResourcePolicy.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experiment.document.http</a> &gt; <span class="el_source">ExperimentLocalResourcePolicy.java</span></div><h1>ExperimentLocalResourcePolicy.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experiment.document.http;
+
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.LinkOption;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
+import java.util.regex.Pattern;
+
+/** Host-authorized roots for HTTP resource access, checked before file metadata or contents. */
+final class ExperimentLocalResourcePolicy {
+  private static final String REJECTION =
+      &quot;The host has not approved this path for document bindings. Configure&quot;
+          + &quot; audio.experiment-document.local-roots on the Audio Analyzer host and select a path&quot;
+          + &quot; within an approved directory.&quot;;
+  private final List&lt;Path&gt; roots;
+
+<span class="fc" id="L22">  ExperimentLocalResourcePolicy(List&lt;Path&gt; approvedRoots) {</span>
+<span class="fc" id="L23">    List&lt;Path&gt; resolved = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L24" title="All 2 branches covered.">    for (Path root : approvedRoots) {</span>
+      try {
+<span class="fc" id="L26">        Path canonical = root.toRealPath();</span>
+<span class="pc bpc" id="L27" title="1 of 2 branches missed.">        if (!Files.isDirectory(canonical)) {</span>
+<span class="nc" id="L28">          throw new IllegalArgumentException(</span>
+              &quot;An approved document resource root must be a directory&quot;);
+        }
+<span class="fc" id="L31">        resolved.add(canonical);</span>
+<span class="nc" id="L32">      } catch (IOException exception) {</span>
+<span class="nc" id="L33">        throw new IllegalArgumentException(</span>
+            &quot;An approved document resource root is unavailable&quot;, exception);
+<span class="fc" id="L35">      }</span>
+<span class="fc" id="L36">    }</span>
+<span class="fc" id="L37">    roots = List.copyOf(resolved);</span>
+<span class="fc" id="L38">  }</span>
+
+  static ExperimentLocalResourcePolicy fromConfiguration(String configuration) {
+<span class="pc bpc" id="L41" title="2 of 4 branches missed.">    if (configuration == null || configuration.isBlank()) {</span>
+<span class="fc" id="L42">      return new ExperimentLocalResourcePolicy(List.of());</span>
+    }
+<span class="nc" id="L44">    return new ExperimentLocalResourcePolicy(</span>
+<span class="nc" id="L45">        java.util.Arrays.stream(configuration.split(Pattern.quote(File.pathSeparator)))</span>
+<span class="nc bnc" id="L46" title="All 2 branches missed.">            .filter(value -&gt; !value.isBlank())</span>
+<span class="nc" id="L47">            .map(Path::of)</span>
+<span class="nc" id="L48">            .toList());</span>
+  }
+
+  // Resolution builds one request-local sorted result and publishes only its immutable copy.
+  @SuppressWarnings(&quot;PMD.UseConcurrentHashMap&quot;)
+  Map&lt;String, Path&gt; assets(Map&lt;String, Path&gt; paths) throws IOException {
+<span class="fc" id="L54">    Map&lt;String, Path&gt; approved = new TreeMap&lt;&gt;();</span>
+<span class="fc bfc" id="L55" title="All 2 branches covered.">    for (Map.Entry&lt;String, Path&gt; entry : paths.entrySet()) {</span>
+<span class="fc" id="L56">      approved.put(entry.getKey(), resolve(entry.getValue()));</span>
+<span class="fc" id="L57">    }</span>
+<span class="fc" id="L58">    return Map.copyOf(approved);</span>
+  }
+
+  Path outputDirectory(Path path) throws IOException {
+<span class="fc bfc" id="L62" title="All 2 branches covered.">    return path == null ? null : resolve(path);</span>
+  }
+
+  private Path resolve(Path path) throws IOException {
+<span class="fc" id="L66">    Path normalized = path.toAbsolutePath().normalize();</span>
+<span class="fc bfc" id="L67" title="All 2 branches covered.">    if (roots.stream().noneMatch(normalized::startsWith)) {</span>
+<span class="fc" id="L68">      throw new SecurityException(REJECTION);</span>
+    }
+<span class="fc" id="L70">    Path ancestor = normalized;</span>
+<span class="pc bpc" id="L71" title="1 of 4 branches missed.">    while (ancestor != null &amp;&amp; !Files.exists(ancestor, LinkOption.NOFOLLOW_LINKS)) {</span>
+<span class="fc" id="L72">      ancestor = ancestor.getParent();</span>
+    }
+<span class="pc bpc" id="L74" title="1 of 2 branches missed.">    if (ancestor == null) {</span>
+<span class="nc" id="L75">      throw new SecurityException(REJECTION);</span>
+    }
+<span class="fc" id="L77">    Path canonical = ancestor.toRealPath().resolve(ancestor.relativize(normalized)).normalize();</span>
+<span class="fc bfc" id="L78" title="All 2 branches covered.">    if (roots.stream().noneMatch(canonical::startsWith)) {</span>
+<span class="fc" id="L79">      throw new SecurityException(REJECTION);</span>
+    }
+<span class="fc" id="L81">    return canonical;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

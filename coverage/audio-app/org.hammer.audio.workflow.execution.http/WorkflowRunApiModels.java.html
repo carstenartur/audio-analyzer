@@ -1,0 +1,219 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WorkflowRunApiModels.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.execution.http</a> &gt; <span class="el_source">WorkflowRunApiModels.java</span></div><h1>WorkflowRunApiModels.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.execution.http;
+
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.PositiveOrZero;
+import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import org.hammer.audio.workflow.execution.ExecutionResult;
+import org.hammer.audio.workflow.execution.ExecutionStatus;
+import org.hammer.audio.workflow.execution.WorkflowRunModels.Command;
+import org.hammer.audio.workflow.execution.WorkflowRunModels.LiveSessionSource;
+import org.hammer.audio.workflow.execution.WorkflowRunModels.Result;
+import org.hammer.audio.workflow.execution.WorkflowRunModels.Snapshot;
+import org.hammer.audio.workflow.execution.WorkflowRunModels.Source;
+import org.hammer.audio.workflow.execution.WorkflowRunModels.SourceKind;
+import org.hammer.audio.workflow.execution.WorkflowRunModels.StoredCommitSource;
+import org.hammer.audio.workflow.execution.WorkflowRunModels.Violation;
+import org.hammer.audio.workflow.store.CommitId;
+
+/** Request and response values for the immutable workflow-run REST API. */
+public interface WorkflowRunApiModels {
+
+  /**
+   * Request selecting either an exact session revision or stored commit.
+   *
+   * @param startCommandId stable idempotency identity supplied by the client
+   * @param sourceKind discriminator for live-session or stored-commit execution
+   * @param sessionId live collaboration-session identifier, otherwise {@code null}
+   * @param expectedRevision exact live semantic revision, otherwise {@code null}
+   * @param commitId exact stored workflow commit, otherwise {@code null}
+   * @param expectedFingerprint reviewed canonical SHA-256, or null for legacy callers
+   */
+<span class="fc" id="L36">  record StartRunRequest(</span>
+      @NotBlank String startCommandId,
+      @NotNull SourceKind sourceKind,
+      String sessionId,
+      @PositiveOrZero Long expectedRevision,
+      String commitId,
+      @Pattern(regexp = &quot;[0-9a-f]{64}&quot;) String expectedFingerprint) {
+
+    /** Preserve existing callers that have not supplied a reviewed fingerprint. */
+    public StartRunRequest(
+        String startCommandId,
+        SourceKind sourceKind,
+        String sessionId,
+        Long expectedRevision,
+        String commitId) {
+<span class="fc" id="L51">      this(startCommandId, sourceKind, sessionId, expectedRevision, commitId, null);</span>
+<span class="fc" id="L52">    }</span>
+
+    Command toCommand() {
+<span class="fc" id="L55">      Objects.requireNonNull(sourceKind, &quot;sourceKind&quot;);</span>
+<span class="fc" id="L56">      Source source =</span>
+<span class="fc bfc" id="L57" title="All 2 branches covered.">          switch (sourceKind) {</span>
+<span class="fc" id="L58">            case LIVE_SESSION -&gt; liveSource();</span>
+<span class="fc" id="L59">            case STORED_COMMIT -&gt; storedSource();</span>
+          };
+<span class="fc" id="L61">      return new Command(startCommandId, source, expectedFingerprint);</span>
+    }
+
+    private LiveSessionSource liveSource() {
+<span class="pc bpc" id="L65" title="3 of 6 branches missed.">      if (sessionId == null || sessionId.isBlank() || expectedRevision == null) {</span>
+<span class="nc" id="L66">        throw new IllegalArgumentException(&quot;LIVE_SESSION requires sessionId and expectedRevision&quot;);</span>
+      }
+<span class="pc bpc" id="L68" title="3 of 4 branches missed.">      if (commitId != null &amp;&amp; !commitId.isBlank()) {</span>
+<span class="nc" id="L69">        throw new IllegalArgumentException(&quot;LIVE_SESSION must not include commitId&quot;);</span>
+      }
+<span class="fc" id="L71">      return new LiveSessionSource(sessionId, expectedRevision);</span>
+    }
+
+    private StoredCommitSource storedSource() {
+<span class="pc bpc" id="L75" title="1 of 4 branches missed.">      if (commitId == null || commitId.isBlank()) {</span>
+<span class="fc" id="L76">        throw new IllegalArgumentException(&quot;STORED_COMMIT requires commitId&quot;);</span>
+      }
+<span class="pc bpc" id="L78" title="4 of 6 branches missed.">      if ((sessionId != null &amp;&amp; !sessionId.isBlank()) || expectedRevision != null) {</span>
+<span class="nc" id="L79">        throw new IllegalArgumentException(</span>
+            &quot;STORED_COMMIT must not include sessionId or expectedRevision&quot;);
+      }
+<span class="fc" id="L82">      return new StoredCommitSource(new CommitId(commitId));</span>
+    }
+  }
+
+  /**
+   * Stable transport representation of one workflow-run source.
+   *
+   * @param kind source discriminator
+   * @param sessionId live collaboration-session identifier, otherwise {@code null}
+   * @param semanticRevision captured live semantic revision, otherwise {@code null}
+   * @param commitId captured stored commit identifier, otherwise {@code null}
+   */
+<span class="fc" id="L94">  record RunSourceResponse(</span>
+      SourceKind kind, String sessionId, Long semanticRevision, String commitId) {
+
+    static RunSourceResponse from(Snapshot snapshot) {
+<span class="fc bfc" id="L98" title="All 2 branches covered.">      if (snapshot.source() instanceof LiveSessionSource live) {</span>
+<span class="fc" id="L99">        return new RunSourceResponse(</span>
+<span class="fc" id="L100">            SourceKind.LIVE_SESSION, live.sessionId(), snapshot.semanticRevision(), null);</span>
+      }
+<span class="fc" id="L102">      return new RunSourceResponse(</span>
+<span class="fc" id="L103">          SourceKind.STORED_COMMIT, null, null, snapshot.commitId().value());</span>
+    }
+  }
+
+  /**
+   * Stable run lifecycle response without executor or persistence implementation types.
+   *
+   * @param runId stable run identifier
+   * @param startCommandId client idempotency identity
+   * @param state current lifecycle state
+   * @param mode truthful backend capability mode
+   * @param source exact immutable source provenance
+   * @param workflowId stable workflow identifier
+   * @param snapshotId immutable snapshot identifier
+   * @param planId immutable execution-plan identifier
+   * @param fingerprint SHA-256 fingerprint of the captured canonical DSL
+   * @param capturedAt source capture instant
+   * @param startedAt backend start instant, if started
+   * @param finishedAt terminal instant, if finished
+   * @param progressPercent bounded progress percentage
+   * @param statusMessage current human-readable status
+   * @param violations machine-readable diagnostics
+   */
+  record RunResponse(
+      String runId,
+      String startCommandId,
+      String state,
+      String mode,
+      RunSourceResponse source,
+      String workflowId,
+      String snapshotId,
+      String planId,
+      String fingerprint,
+      Instant capturedAt,
+      Instant startedAt,
+      Instant finishedAt,
+      int progressPercent,
+      String statusMessage,
+      List&lt;ViolationResponse&gt; violations) {
+
+<span class="fc" id="L143">    public RunResponse {</span>
+<span class="fc" id="L144">      violations = List.copyOf(Objects.requireNonNull(violations, &quot;violations&quot;));</span>
+<span class="fc" id="L145">    }</span>
+
+    static RunResponse from(Snapshot snapshot) {
+<span class="fc" id="L148">      return new RunResponse(</span>
+<span class="fc" id="L149">          snapshot.runId(),</span>
+<span class="fc" id="L150">          snapshot.startCommandId(),</span>
+<span class="fc" id="L151">          snapshot.state().name(),</span>
+<span class="fc" id="L152">          snapshot.mode().name(),</span>
+<span class="fc" id="L153">          RunSourceResponse.from(snapshot),</span>
+<span class="fc" id="L154">          snapshot.workflowId(),</span>
+<span class="fc" id="L155">          snapshot.snapshotId(),</span>
+<span class="fc" id="L156">          snapshot.planId(),</span>
+<span class="fc" id="L157">          snapshot.fingerprint(),</span>
+<span class="fc" id="L158">          snapshot.capturedAt(),</span>
+<span class="fc" id="L159">          snapshot.startedAt(),</span>
+<span class="fc" id="L160">          snapshot.finishedAt(),</span>
+<span class="fc" id="L161">          snapshot.progressPercent(),</span>
+<span class="fc" id="L162">          snapshot.statusMessage(),</span>
+<span class="fc" id="L163">          snapshot.violations().stream().map(ViolationResponse::from).toList());</span>
+    }
+  }
+
+  /**
+   * Machine-readable validation or backend failure detail.
+   *
+   * @param code stable diagnostic code
+   * @param message human-readable detail
+   * @param nodeId optional affected workflow node
+   */
+<span class="nc" id="L174">  record ViolationResponse(String code, String message, String nodeId) {</span>
+    static ViolationResponse from(Violation violation) {
+<span class="nc" id="L176">      return new ViolationResponse(violation.code(), violation.message(), violation.nodeId());</span>
+    }
+  }
+
+  /**
+   * Terminal result with reproducibility provenance and backend artifacts.
+   *
+   * @param run terminal run metadata
+   * @param overallStatus aggregate execution status
+   * @param nodeStatuses terminal status by node identifier
+   * @param executionStartedAt execution start instant
+   * @param executionCompletedAt execution completion instant
+   * @param commitId stored source commit, if applicable
+   * @param artifacts backend-specific immutable textual artifacts
+   */
+  record RunResultResponse(
+      RunResponse run,
+      String overallStatus,
+      Map&lt;String, ExecutionStatus&gt; nodeStatuses,
+      Instant executionStartedAt,
+      Instant executionCompletedAt,
+      String commitId,
+      Map&lt;String, String&gt; artifacts) {
+
+<span class="fc" id="L200">    public RunResultResponse {</span>
+<span class="fc" id="L201">      nodeStatuses = Map.copyOf(Objects.requireNonNull(nodeStatuses, &quot;nodeStatuses&quot;));</span>
+<span class="fc" id="L202">      artifacts = Map.copyOf(Objects.requireNonNull(artifacts, &quot;artifacts&quot;));</span>
+<span class="fc" id="L203">    }</span>
+
+    static RunResultResponse from(Snapshot snapshot, Result result) {
+<span class="fc" id="L206">      ExecutionResult executionResult = result.reproducibilityBundle().result();</span>
+<span class="fc" id="L207">      CommitId commitId = result.reproducibilityBundle().commitId();</span>
+<span class="fc" id="L208">      return new RunResultResponse(</span>
+<span class="fc" id="L209">          RunResponse.from(snapshot),</span>
+<span class="fc" id="L210">          executionResult.overallStatus().name(),</span>
+<span class="fc" id="L211">          executionResult.nodeStatuses(),</span>
+<span class="fc" id="L212">          executionResult.startedAt(),</span>
+<span class="fc" id="L213">          executionResult.completedAt(),</span>
+<span class="fc bfc" id="L214" title="All 2 branches covered.">          commitId == null ? null : commitId.value(),</span>
+<span class="fc" id="L215">          result.artifacts());</span>
+    }
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

@@ -1,0 +1,166 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ExperimentOperationsHttpAdapter.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.app</a> &gt; <span class="el_source">ExperimentOperationsHttpAdapter.java</span></div><h1>ExperimentOperationsHttpAdapter.java</h1><pre class="source lang-java linenums">package org.hammer.audio.app;
+
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
+import java.util.List;
+import java.util.Map;
+import org.hammer.audio.acquisition.CaptureDeviceDescriptor;
+import org.hammer.audio.experiment.operations.ExperimentOperationsModels.Catalogue;
+import org.hammer.audio.experiment.operations.ExperimentOperationsModels.Configuration;
+import org.hammer.audio.experiment.operations.ExperimentOperationsModels.Preflight;
+import org.hammer.audio.experiment.operations.ExperimentOperationsModels.ProfileView;
+import org.hammer.audio.experiment.operations.ExperimentOperationsModels.RecordingView;
+import org.hammer.audio.experiment.operations.ExperimentOperationsModels.RunView;
+import org.hammer.audio.experiment.operations.MicrophoneExperimentService;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+/** Thin HTTP projection over the same microphone operations used by the desktop. */
+@RestController
+@RequestMapping(&quot;/experiment-operations&quot;)
+public final class ExperimentOperationsHttpAdapter {
+
+  private final MicrophoneExperimentService service;
+
+  /** Use the host's shared operations service. */
+<span class="fc" id="L32">  public ExperimentOperationsHttpAdapter(MicrophoneExperimentService service) {</span>
+<span class="fc" id="L33">    this.service = service;</span>
+<span class="fc" id="L34">  }</span>
+
+  /** Read selectable real inputs and saved profiles. */
+  @GetMapping(&quot;/catalogue&quot;)
+  public Catalogue catalogue() throws IOException {
+<span class="fc" id="L39">    return service.catalogue();</span>
+  }
+
+  /** Read real capture descriptors for profile editors and local document bindings. */
+  @GetMapping(&quot;/devices&quot;)
+  public List&lt;CaptureDeviceDescriptor&gt; devices() {
+<span class="fc" id="L45">    return service.devices();</span>
+  }
+
+  /** Validate a complete profile before persisting it. */
+  @PostMapping(&quot;/profiles&quot;)
+  public ProfileView saveProfile(@RequestBody ProfileCommand command) throws IOException {
+<span class="nc" id="L51">    return service.saveProfile(command.definition());</span>
+  }
+
+  /** Show readiness before opening devices or output recordings. */
+  @PostMapping(&quot;/preflight&quot;)
+  public Preflight preflight(@RequestBody Configuration configuration) throws IOException {
+<span class="fc" id="L57">    return service.preflight(configuration);</span>
+  }
+
+  /** Run the exact preflighted configuration after a fresh server-side check. */
+  @PostMapping(&quot;/start&quot;)
+  public RunView start(@RequestBody StartCommand command) throws IOException {
+<span class="nc" id="L63">    service.start(command.configuration(), command.token(), command.acknowledgeStorageWarning());</span>
+<span class="nc" id="L64">    return service.snapshot();</span>
+  }
+
+  /** Read immutable current/final status without running disk probes. */
+  @GetMapping(&quot;/status&quot;)
+  public RunView status() {
+<span class="nc" id="L70">    return service.snapshot();</span>
+  }
+
+  /** Stop acquisition and finalize captured data, preserving an incomplete experiment state. */
+  @PostMapping(&quot;/stop&quot;)
+  public RunView stop() throws IOException {
+<span class="nc" id="L76">    service.stop();</span>
+<span class="nc" id="L77">    return service.snapshot();</span>
+  }
+
+  /** Acknowledge an allowed warning without exporting private authenticated account handles. */
+  @PostMapping(&quot;/acknowledge&quot;)
+  public RunView acknowledge(@RequestBody AcknowledgeCommand command, HttpServletRequest request)
+      throws IOException {
+    String operator =
+<span class="pc bpc" id="L85" title="1 of 2 branches missed.">        request.getUserPrincipal() == null</span>
+<span class="nc" id="L86">            ? &quot;Unattributed local operator&quot;</span>
+<span class="fc" id="L87">            : &quot;Authenticated operator (identity withheld)&quot;;</span>
+<span class="fc" id="L88">    service.acknowledge(command.code(), operator);</span>
+<span class="fc" id="L89">    return service.snapshot();</span>
+  }
+
+  /** Import recording bytes with bounded streaming and structural inspection. */
+  @PostMapping(path = &quot;/recordings&quot;, consumes = &quot;application/octet-stream&quot;)
+  public RecordingView importRecording(HttpServletRequest request) throws IOException {
+<span class="nc" id="L95">    return service.importRecording(request.getInputStream());</span>
+  }
+
+  /** Preserve an incomplete input and create a separate recoverable-block recording. */
+  @PostMapping(&quot;/recover&quot;)
+  public RecordingView recover(@RequestBody RecoverCommand command) throws IOException {
+<span class="nc" id="L101">    return service.recoverRecording(command.recordingId());</span>
+  }
+
+  /** Export actual artifacts and hashes; incomplete evidence remains explicitly labelled. */
+  @GetMapping(&quot;/evidence&quot;)
+  public void evidence(HttpServletResponse response) throws IOException {
+<span class="pc bpc" id="L107" title="1 of 2 branches missed.">    if (!service.snapshot().exportAvailable()) {</span>
+<span class="fc" id="L108">      throw new IllegalStateException(&quot;Finalize the experiment before exporting evidence.&quot;);</span>
+    }
+<span class="nc" id="L110">    response.setContentType(&quot;application/zip&quot;);</span>
+<span class="nc" id="L111">    response.setHeader(&quot;Content-Disposition&quot;, &quot;attachment; filename=\&quot;experiment-evidence.zip\&quot;&quot;);</span>
+<span class="nc" id="L112">    service.exportEvidence(response.getOutputStream());</span>
+<span class="nc" id="L113">  }</span>
+
+  /**
+   * Report a concrete preflight or lifecycle reason without silently accepting a failed command.
+   */
+  @ExceptionHandler({
+    IllegalArgumentException.class,
+    IllegalStateException.class,
+    IOException.class
+  })
+  public ResponseEntity&lt;Map&lt;String, String&gt;&gt; failure(Exception exception) {
+<span class="fc" id="L124">    return ResponseEntity.badRequest()</span>
+<span class="fc" id="L125">        .body(</span>
+<span class="fc" id="L126">            Map.of(</span>
+                &quot;code&quot;,
+                &quot;experiment-operation&quot;,
+                &quot;detail&quot;,
+<span class="pc bpc" id="L130" title="1 of 2 branches missed.">                exception.getMessage() == null</span>
+<span class="nc" id="L131">                    ? exception.getClass().getSimpleName()</span>
+<span class="fc" id="L132">                    : exception.getMessage()));</span>
+  }
+
+  /**
+   * @param definition complete editable profile text
+   */
+<span class="nc" id="L138">  public record ProfileCommand(String definition) {</span>
+    // Immutable transport value.
+  }
+
+  /**
+   * @param configuration reviewed experiment choices
+   * @param token exact preflight configuration fingerprint
+   * @param acknowledgeStorageWarning explicit advisory-margin acknowledgement
+   */
+<span class="nc" id="L147">  public record StartCommand(</span>
+      Configuration configuration, String token, boolean acknowledgeStorageWarning) {
+    // Immutable transport value.
+  }
+
+  /**
+   * @param code stable warning identifier
+   */
+<span class="fc" id="L155">  public record AcknowledgeCommand(String code) {</span>
+    // Immutable transport value.
+  }
+
+  /**
+   * @param recordingId managed incomplete recording identity
+   */
+<span class="nc" id="L162">  public record RecoverCommand(String recordingId) {</span>
+    // Immutable transport value.
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

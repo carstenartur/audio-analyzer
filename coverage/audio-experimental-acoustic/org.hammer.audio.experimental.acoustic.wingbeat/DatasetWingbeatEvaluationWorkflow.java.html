@@ -1,0 +1,552 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>DatasetWingbeatEvaluationWorkflow.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experimental Acoustic</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experimental.acoustic.wingbeat</a> &gt; <span class="el_source">DatasetWingbeatEvaluationWorkflow.java</span></div><h1>DatasetWingbeatEvaluationWorkflow.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experimental.acoustic.wingbeat;
+
+import java.io.IOException;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+import org.hammer.audio.core.AudioBlock;
+import org.hammer.audio.experimental.acoustic.FrequencyBand;
+import org.hammer.audio.experimental.acoustic.SpectralPeak;
+import org.hammer.audio.experimental.acoustic.WingbeatFrequencyTracker;
+import org.hammer.audio.experimental.acoustic.dataset.DatasetAnalytics;
+import org.hammer.audio.experimental.acoustic.dataset.DatasetAudioLoader;
+import org.hammer.audio.experimental.acoustic.dataset.DatasetManifest;
+import org.hammer.audio.experimental.acoustic.dataset.DatasetRecording;
+import org.hammer.audio.experimental.acoustic.dataset.FeatureHistogram;
+import org.hammer.audio.experimental.acoustic.tracking.TrackedSource;
+import org.hammer.audio.geometry.Vector2;
+import org.hammer.audio.geometry.Vector3;
+
+/**
+ * End-to-end workflow for evaluating imported dataset recordings with the wingbeat classifier
+ * pipeline.
+ */
+@SuppressWarnings(&quot;PMD.CouplingBetweenObjects&quot;)
+public final class DatasetWingbeatEvaluationWorkflow {
+
+  private static final int DEFAULT_FFT_SIZE = 2048;
+<span class="fc" id="L31">  private static final FrequencyBand DEFAULT_BAND = new FrequencyBand(300.0, 800.0);</span>
+
+  private final DatasetAudioLoader audioLoader;
+  private final WingbeatFrequencyTracker frequencyTracker;
+  private final WingbeatFeatureExtractor featureExtractor;
+  private final GroundTruthLabelResolver labelResolver;
+
+  /** Create a workflow using default HumBugDB-friendly analysis parameters. */
+  public DatasetWingbeatEvaluationWorkflow() {
+<span class="fc" id="L40">    this(</span>
+        new DatasetAudioLoader(),
+        new WingbeatFrequencyTracker(DEFAULT_FFT_SIZE, DEFAULT_BAND),
+        new WingbeatFeatureExtractor(DEFAULT_FFT_SIZE, DEFAULT_BAND),
+        DatasetWingbeatEvaluationWorkflow::defaultGroundTruthLabel);
+<span class="fc" id="L45">  }</span>
+
+  DatasetWingbeatEvaluationWorkflow(
+      DatasetAudioLoader audioLoader,
+      WingbeatFrequencyTracker frequencyTracker,
+      WingbeatFeatureExtractor featureExtractor,
+<span class="fc" id="L51">      GroundTruthLabelResolver labelResolver) {</span>
+<span class="fc" id="L52">    this.audioLoader = Objects.requireNonNull(audioLoader, &quot;audioLoader&quot;);</span>
+<span class="fc" id="L53">    this.frequencyTracker = Objects.requireNonNull(frequencyTracker, &quot;frequencyTracker&quot;);</span>
+<span class="fc" id="L54">    this.featureExtractor = Objects.requireNonNull(featureExtractor, &quot;featureExtractor&quot;);</span>
+<span class="fc" id="L55">    this.labelResolver = Objects.requireNonNull(labelResolver, &quot;labelResolver&quot;);</span>
+<span class="fc" id="L56">  }</span>
+
+  /**
+   * Return deterministic provenance text for the default feature-extraction configuration used by
+   * this workflow.
+   */
+  public static String defaultFeatureExtractionProvenance() {
+<span class="fc" id="L63">    return String.format(</span>
+        Locale.ROOT,
+        &quot;WingbeatFrequencyTracker fft=%d band=[%.1f, %.1f] Hz; WingbeatFeatureExtractor fft=%d&quot;
+            + &quot; band=[%.1f, %.1f] Hz&quot;,
+<span class="fc" id="L67">        DEFAULT_FFT_SIZE,</span>
+<span class="fc" id="L68">        DEFAULT_BAND.lowHz(),</span>
+<span class="fc" id="L69">        DEFAULT_BAND.highHz(),</span>
+<span class="fc" id="L70">        DEFAULT_FFT_SIZE,</span>
+<span class="fc" id="L71">        DEFAULT_BAND.lowHz(),</span>
+<span class="fc" id="L72">        DEFAULT_BAND.highHz());</span>
+  }
+
+  /**
+   * Build a wingbeat evaluation dataset from an imported manifest.
+   *
+   * @param manifest imported dataset manifest
+   * @return wingbeat dataset for classifier evaluation
+   * @throws IOException when audio files cannot be loaded
+   */
+  public WingbeatDataset buildDataset(DatasetManifest manifest) throws IOException {
+<span class="fc" id="L83">    Objects.requireNonNull(manifest, &quot;manifest&quot;);</span>
+<span class="pc bpc" id="L84" title="1 of 2 branches missed.">    if (manifest.recordings().isEmpty()) {</span>
+<span class="nc" id="L85">      throw new IllegalArgumentException(</span>
+          &quot;manifest must contain at least one recording to build a dataset&quot;);
+    }
+<span class="fc" id="L88">    List&lt;LabelledRecording&gt; entries = new ArrayList&lt;&gt;(manifest.recordings().size());</span>
+<span class="fc bfc" id="L89" title="All 2 branches covered.">    for (DatasetRecording recording : manifest.recordings()) {</span>
+<span class="fc" id="L90">      RecordingAnalysis analysis = analyzeRecording(manifest, recording, null);</span>
+<span class="fc" id="L91">      entries.add(</span>
+          new LabelledRecording(
+<span class="fc" id="L93">              recording.recordingId(),</span>
+<span class="fc" id="L94">              describe(recording),</span>
+<span class="fc" id="L95">              analysis.groundTruthLabel(),</span>
+<span class="fc" id="L96">              analysis.features()));</span>
+<span class="fc" id="L97">    }</span>
+<span class="fc" id="L98">    return new WingbeatDataset(manifest.descriptor().name(), entries);</span>
+  }
+
+  /**
+   * Evaluate a classifier against all recordings in the imported manifest.
+   *
+   * @param manifest imported dataset manifest
+   * @param classifier classifier to evaluate
+   * @return evaluation summary
+   * @throws IOException when audio files cannot be loaded
+   */
+  public WingbeatDataset.Evaluation evaluate(
+      DatasetManifest manifest, WingbeatClassifier classifier) throws IOException {
+<span class="fc" id="L111">    return buildDataset(manifest).evaluate(classifier);</span>
+  }
+
+  /**
+   * Analyze all recordings in the manifest and return a list of per-recording results.
+   *
+   * &lt;p&gt;This is useful for computing feature distribution statistics across the full dataset.
+   *
+   * @param manifest imported dataset manifest
+   * @param classifier optional classifier; may be {@code null}
+   * @return list of recording analyses in manifest order; never {@code null}
+   * @throws IOException when any audio file cannot be loaded
+   */
+  public List&lt;RecordingAnalysis&gt; analyzeAll(DatasetManifest manifest, WingbeatClassifier classifier)
+      throws IOException {
+<span class="fc" id="L126">    Objects.requireNonNull(manifest, &quot;manifest&quot;);</span>
+<span class="fc" id="L127">    List&lt;RecordingAnalysis&gt; results = new ArrayList&lt;&gt;(manifest.recordings().size());</span>
+<span class="fc bfc" id="L128" title="All 2 branches covered.">    for (DatasetRecording recording : manifest.recordings()) {</span>
+<span class="fc" id="L129">      results.add(analyzeRecording(manifest, recording, classifier));</span>
+<span class="fc" id="L130">    }</span>
+<span class="fc" id="L131">    return results;</span>
+  }
+
+  /**
+   * Render a Markdown report summarising dominant-frequency and harmonic distributions across all
+   * analyzed recordings.
+   *
+   * @param analyses list of recording analyses; must not be {@code null}
+   * @return Markdown feature distribution summary
+   */
+  @SuppressWarnings({&quot;PMD.ConsecutiveAppendsShouldReuse&quot;, &quot;PMD.ConsecutiveLiteralAppends&quot;})
+  public static String toFeatureDistributionMarkdown(List&lt;RecordingAnalysis&gt; analyses) {
+<span class="nc" id="L143">    Objects.requireNonNull(analyses, &quot;analyses&quot;);</span>
+<span class="nc bnc" id="L144" title="All 2 branches missed.">    if (analyses.isEmpty()) {</span>
+<span class="nc" id="L145">      return &quot;# Feature Distribution\n\n*No recordings to analyze.*\n&quot;;</span>
+    }
+<span class="nc" id="L147">    double[] freqs =</span>
+<span class="nc" id="L148">        analyses.stream().mapToDouble(a -&gt; a.features().fundamentalFrequencyHz()).toArray();</span>
+<span class="nc" id="L149">    double[] snrs = analyses.stream().mapToDouble(a -&gt; a.features().signalToNoiseRatio()).toArray();</span>
+<span class="nc" id="L150">    List&lt;Double&gt; h2ratios = new ArrayList&lt;&gt;();</span>
+<span class="nc bnc" id="L151" title="All 2 branches missed.">    for (RecordingAnalysis a : analyses) {</span>
+<span class="nc" id="L152">      List&lt;Double&gt; ratios = a.features().harmonicRatios();</span>
+<span class="nc bnc" id="L153" title="All 2 branches missed.">      if (!ratios.isEmpty()) {</span>
+<span class="nc" id="L154">        h2ratios.add(ratios.get(0));</span>
+      }
+<span class="nc" id="L156">    }</span>
+<span class="nc" id="L157">    StringBuilder sb = new StringBuilder(512);</span>
+<span class="nc" id="L158">    sb.append(&quot;# Feature Distribution\n\n&quot;);</span>
+<span class="nc" id="L159">    sb.append(&quot;- Recordings analysed: &quot;).append(analyses.size()).append('\n');</span>
+<span class="nc" id="L160">    sb.append('\n');</span>
+<span class="nc" id="L161">    sb.append(&quot;## Dominant Frequency (Hz)\n\n&quot;);</span>
+<span class="nc" id="L162">    appendStats(sb, freqs);</span>
+<span class="nc" id="L163">    sb.append(&quot;\n## Signal-to-Noise Ratio\n\n&quot;);</span>
+<span class="nc" id="L164">    appendStats(sb, snrs);</span>
+<span class="nc bnc" id="L165" title="All 2 branches missed.">    if (!h2ratios.isEmpty()) {</span>
+<span class="nc" id="L166">      sb.append(&quot;\n## 2nd Harmonic / Fundamental Ratio\n\n&quot;);</span>
+<span class="nc" id="L167">      appendStats(sb, h2ratios.stream().mapToDouble(Double::doubleValue).toArray());</span>
+    }
+<span class="nc" id="L169">    return sb.toString();</span>
+  }
+
+  /**
+   * Compute histograms for the dominant frequency, SNR, 2nd-harmonic ratio and duration
+   * distributions across all analyzed recordings.
+   *
+   * &lt;p&gt;Bucket boundaries are determined automatically from the observed value range (Sturges'
+   * rule). An empty list of analyses yields histograms with no buckets. Harmonic-ratio histogram is
+   * omitted when no recording provides harmonic data.
+   *
+   * @param analyses list of recording analyses; must not be {@code null}
+   * @return list of four histograms in order: dominant frequency, SNR, 2nd harmonic ratio,
+   *     duration; never {@code null}
+   */
+  public static List&lt;FeatureHistogram&gt; computeHistograms(List&lt;RecordingAnalysis&gt; analyses) {
+<span class="fc" id="L185">    Objects.requireNonNull(analyses, &quot;analyses&quot;);</span>
+<span class="fc" id="L186">    double[] freqs =</span>
+<span class="fc" id="L187">        analyses.stream().mapToDouble(a -&gt; a.features().fundamentalFrequencyHz()).toArray();</span>
+<span class="fc" id="L188">    double[] snrs = analyses.stream().mapToDouble(a -&gt; a.features().signalToNoiseRatio()).toArray();</span>
+<span class="fc" id="L189">    double[] durations =</span>
+<span class="fc" id="L190">        analyses.stream().mapToDouble(a -&gt; a.features().trackDurationSeconds()).toArray();</span>
+<span class="fc" id="L191">    double[] h2ratios =</span>
+<span class="fc" id="L192">        analyses.stream()</span>
+<span class="pc bpc" id="L193" title="1 of 2 branches missed.">            .filter(a -&gt; !a.features().harmonicRatios().isEmpty())</span>
+<span class="fc" id="L194">            .mapToDouble(a -&gt; a.features().harmonicRatios().get(0))</span>
+<span class="fc" id="L195">            .toArray();</span>
+<span class="fc" id="L196">    return List.of(</span>
+<span class="fc" id="L197">        FeatureHistogram.of(&quot;Dominant Frequency (Hz)&quot;, freqs),</span>
+<span class="fc" id="L198">        FeatureHistogram.of(&quot;Signal-to-Noise Ratio&quot;, snrs),</span>
+<span class="fc" id="L199">        FeatureHistogram.of(&quot;2nd Harmonic Ratio&quot;, h2ratios),</span>
+<span class="fc" id="L200">        FeatureHistogram.of(&quot;Duration (s)&quot;, durations));</span>
+  }
+
+  /**
+   * Render a Markdown section containing all feature histograms.
+   *
+   * @param histograms histograms to render; must not be {@code null}
+   * @return Markdown text; never {@code null}
+   */
+  public static String toHistogramMarkdown(List&lt;FeatureHistogram&gt; histograms) {
+<span class="fc" id="L210">    Objects.requireNonNull(histograms, &quot;histograms&quot;);</span>
+<span class="fc" id="L211">    StringBuilder sb = new StringBuilder(512);</span>
+<span class="fc" id="L212">    sb.append(&quot;# Feature Histograms\n\n&quot;);</span>
+<span class="fc bfc" id="L213" title="All 2 branches covered.">    for (FeatureHistogram h : histograms) {</span>
+<span class="fc" id="L214">      sb.append(h.toMarkdown());</span>
+<span class="fc" id="L215">    }</span>
+<span class="fc" id="L216">    return sb.toString();</span>
+  }
+
+  /**
+   * Compare feature distributions between a synthetic corpus and a real-recording corpus.
+   *
+   * &lt;p&gt;For each of the key features — dominant frequency, SNR, 2nd-harmonic ratio and duration —
+   * this method computes descriptive statistics for both corpora and returns a comparison record
+   * that quantifies the absolute and relative differences between the two means.
+   *
+   * &lt;p&gt;Either list may be empty; in that case the corresponding statistics will have {@code count =
+   * 0} and all numeric fields equal to {@code 0}.
+   *
+   * @param syntheticAnalyses analyses of synthetic recordings; must not be {@code null}
+   * @param realAnalyses analyses of real recordings; must not be {@code null}
+   * @return list of four comparisons in order: dominant frequency, SNR, 2nd harmonic ratio,
+   *     duration; never {@code null}
+   */
+  public static List&lt;FeatureDistributionComparison&gt; compareDatasets(
+      List&lt;RecordingAnalysis&gt; syntheticAnalyses, List&lt;RecordingAnalysis&gt; realAnalyses) {
+<span class="fc" id="L236">    Objects.requireNonNull(syntheticAnalyses, &quot;syntheticAnalyses&quot;);</span>
+<span class="fc" id="L237">    Objects.requireNonNull(realAnalyses, &quot;realAnalyses&quot;);</span>
+<span class="fc" id="L238">    return List.of(</span>
+<span class="fc" id="L239">        buildComparison(</span>
+            &quot;Dominant Frequency (Hz)&quot;,
+<span class="fc" id="L241">            syntheticAnalyses.stream()</span>
+<span class="pc" id="L242">                .map(a -&gt; a.features().fundamentalFrequencyHz())</span>
+<span class="fc" id="L243">                .collect(java.util.stream.Collectors.toList()),</span>
+<span class="fc" id="L244">            realAnalyses.stream()</span>
+<span class="pc" id="L245">                .map(a -&gt; a.features().fundamentalFrequencyHz())</span>
+<span class="fc" id="L246">                .collect(java.util.stream.Collectors.toList())),</span>
+<span class="fc" id="L247">        buildComparison(</span>
+            &quot;Signal-to-Noise Ratio&quot;,
+<span class="fc" id="L249">            syntheticAnalyses.stream()</span>
+<span class="pc" id="L250">                .map(a -&gt; a.features().signalToNoiseRatio())</span>
+<span class="fc" id="L251">                .collect(java.util.stream.Collectors.toList()),</span>
+<span class="fc" id="L252">            realAnalyses.stream()</span>
+<span class="pc" id="L253">                .map(a -&gt; a.features().signalToNoiseRatio())</span>
+<span class="fc" id="L254">                .collect(java.util.stream.Collectors.toList())),</span>
+<span class="fc" id="L255">        buildComparison(</span>
+            &quot;2nd Harmonic Ratio&quot;,
+<span class="fc" id="L257">            syntheticAnalyses.stream()</span>
+<span class="pc bnc" id="L258" title="All 2 branches missed.">                .filter(a -&gt; !a.features().harmonicRatios().isEmpty())</span>
+<span class="pc" id="L259">                .map(a -&gt; a.features().harmonicRatios().get(0))</span>
+<span class="fc" id="L260">                .collect(java.util.stream.Collectors.toList()),</span>
+<span class="fc" id="L261">            realAnalyses.stream()</span>
+<span class="pc bnc" id="L262" title="All 2 branches missed.">                .filter(a -&gt; !a.features().harmonicRatios().isEmpty())</span>
+<span class="pc" id="L263">                .map(a -&gt; a.features().harmonicRatios().get(0))</span>
+<span class="fc" id="L264">                .collect(java.util.stream.Collectors.toList())),</span>
+<span class="fc" id="L265">        buildComparison(</span>
+            &quot;Duration (s)&quot;,
+<span class="fc" id="L267">            syntheticAnalyses.stream()</span>
+<span class="pc" id="L268">                .map(a -&gt; a.features().trackDurationSeconds())</span>
+<span class="fc" id="L269">                .collect(java.util.stream.Collectors.toList()),</span>
+<span class="fc" id="L270">            realAnalyses.stream()</span>
+<span class="pc" id="L271">                .map(a -&gt; a.features().trackDurationSeconds())</span>
+<span class="fc" id="L272">                .collect(java.util.stream.Collectors.toList())));</span>
+  }
+
+  private static FeatureDistributionComparison buildComparison(
+      String featureName, List&lt;Double&gt; syntheticValues, List&lt;Double&gt; realValues) {
+<span class="fc" id="L277">    return FeatureDistributionComparison.of(</span>
+        featureName,
+<span class="fc" id="L279">        DatasetAnalytics.DistributionStats.of(syntheticValues),</span>
+<span class="fc" id="L280">        DatasetAnalytics.DistributionStats.of(realValues));</span>
+  }
+
+  /**
+   * Render a Markdown comparison report from a list of per-feature comparisons.
+   *
+   * @param comparisons list of comparisons to render; must not be {@code null}
+   * @return Markdown text; never {@code null}
+   */
+  public static String toComparisonMarkdown(List&lt;FeatureDistributionComparison&gt; comparisons) {
+<span class="fc" id="L290">    Objects.requireNonNull(comparisons, &quot;comparisons&quot;);</span>
+<span class="fc" id="L291">    StringBuilder sb = new StringBuilder(512);</span>
+<span class="fc" id="L292">    sb.append(&quot;# Synthetic vs Real Dataset Comparison\n\n&quot;);</span>
+<span class="fc bfc" id="L293" title="All 2 branches covered.">    if (comparisons.isEmpty()) {</span>
+<span class="fc" id="L294">      sb.append(&quot;*No features to compare.*\n&quot;);</span>
+<span class="fc" id="L295">      return sb.toString();</span>
+    }
+<span class="fc" id="L297">    sb.append(</span>
+        &quot;Differences are computed as |realMean − syntheticMean|.&quot;
+            + &quot; Relative difference is normalised to the synthetic mean.\n\n&quot;);
+<span class="fc bfc" id="L300" title="All 2 branches covered.">    for (FeatureDistributionComparison c : comparisons) {</span>
+<span class="fc" id="L301">      sb.append(c.toMarkdown());</span>
+<span class="fc" id="L302">    }</span>
+<span class="fc" id="L303">    return sb.toString();</span>
+  }
+
+  @SuppressWarnings(&quot;PMD.ConsecutiveAppendsShouldReuse&quot;)
+  private static void appendStats(StringBuilder sb, double[] values) {
+<span class="nc bnc" id="L308" title="All 2 branches missed.">    if (values.length == 0) {</span>
+<span class="nc" id="L309">      sb.append(&quot;- No data\n&quot;);</span>
+<span class="nc" id="L310">      return;</span>
+    }
+<span class="nc" id="L312">    double min = values[0];</span>
+<span class="nc" id="L313">    double max = values[0];</span>
+<span class="nc" id="L314">    double sum = 0.0;</span>
+<span class="nc bnc" id="L315" title="All 2 branches missed.">    for (double v : values) {</span>
+<span class="nc bnc" id="L316" title="All 2 branches missed.">      if (v &lt; min) {</span>
+<span class="nc" id="L317">        min = v;</span>
+      }
+<span class="nc bnc" id="L319" title="All 2 branches missed.">      if (v &gt; max) {</span>
+<span class="nc" id="L320">        max = v;</span>
+      }
+<span class="nc" id="L322">      sum += v;</span>
+    }
+<span class="nc" id="L324">    double mean = sum / values.length;</span>
+<span class="nc" id="L325">    double variance = 0.0;</span>
+<span class="nc bnc" id="L326" title="All 2 branches missed.">    for (double v : values) {</span>
+<span class="nc" id="L327">      double diff = v - mean;</span>
+<span class="nc" id="L328">      variance += diff * diff;</span>
+    }
+<span class="nc" id="L330">    double stddev = Math.sqrt(variance / values.length);</span>
+<span class="nc" id="L331">    sb.append(String.format(Locale.ROOT, &quot;- Min: %.2f%n&quot;, min));</span>
+<span class="nc" id="L332">    sb.append(String.format(Locale.ROOT, &quot;- Max: %.2f%n&quot;, max));</span>
+<span class="nc" id="L333">    sb.append(String.format(Locale.ROOT, &quot;- Mean: %.2f%n&quot;, mean));</span>
+<span class="nc" id="L334">    sb.append(String.format(Locale.ROOT, &quot;- Std dev: %.2f%n&quot;, stddev));</span>
+<span class="nc" id="L335">  }</span>
+
+  /**
+   * Analyze one imported recording by loading audio, extracting a dominant frequency, deriving a
+   * feature vector and optionally classifying it.
+   *
+   * @param manifest imported dataset manifest
+   * @param recording recording entry to analyze
+   * @param classifier optional classifier; may be {@code null}
+   * @return per-recording analysis
+   * @throws IOException when the audio file cannot be loaded
+   */
+  public RecordingAnalysis analyzeRecording(
+      DatasetManifest manifest, DatasetRecording recording, WingbeatClassifier classifier)
+      throws IOException {
+<span class="fc" id="L350">    Objects.requireNonNull(manifest, &quot;manifest&quot;);</span>
+<span class="fc" id="L351">    Objects.requireNonNull(recording, &quot;recording&quot;);</span>
+<span class="fc" id="L352">    Path audioPath = resolveAudioPath(manifest, recording);</span>
+<span class="fc" id="L353">    AudioBlock block = audioLoader.load(audioPath);</span>
+<span class="fc" id="L354">    SpectralPeak peak = frequencyTracker.track(block, 0);</span>
+<span class="fc" id="L355">    TrackedSource source =</span>
+        new TrackedSource(
+            0,
+<span class="fc" id="L358">            peak.frequencyHz(),</span>
+<span class="fc" id="L359">            peak.frequencyHz(),</span>
+            Vector2.ZERO,
+            Vector2.ZERO,
+            Vector3.ZERO,
+            0.0,
+            0.0,
+<span class="fc" id="L365">            peak.confidence(),</span>
+            0L,
+            1);
+<span class="fc" id="L368">    double decodedDurationSeconds = block.frames() / block.format().sampleRate();</span>
+<span class="fc" id="L369">    WingbeatFeatureVector features =</span>
+<span class="fc" id="L370">        featureExtractor.extract(</span>
+            source,
+            block,
+            0,
+<span class="pc bpc" id="L374" title="1 of 2 branches missed.">            decodedDurationSeconds &gt; 0.0 ? decodedDurationSeconds : recording.durationSeconds());</span>
+<span class="fc" id="L375">    String groundTruthLabel = labelResolver.resolve(recording);</span>
+    ClassificationResult classificationResult =
+<span class="fc bfc" id="L377" title="All 2 branches covered.">        classifier == null ? null : classifier.classify(features);</span>
+<span class="fc" id="L378">    return new RecordingAnalysis(</span>
+        recording, audioPath, block, groundTruthLabel, features, classificationResult);
+  }
+
+  /**
+   * Render a compact Markdown report for one dataset evaluation run.
+   *
+   * &lt;p&gt;The report includes overall accuracy, per-label precision/recall, and a confusion matrix.
+   *
+   * @param evaluation evaluation summary
+   * @return Markdown summary
+   */
+  @SuppressWarnings({
+    &quot;PMD.ConsecutiveAppendsShouldReuse&quot;,
+    &quot;PMD.ConsecutiveLiteralAppends&quot;,
+    &quot;PMD.AvoidDuplicateLiterals&quot;,
+    &quot;PMD.NPathComplexity&quot;
+  })
+  public static String toMarkdownReport(WingbeatDataset.Evaluation evaluation) {
+<span class="fc" id="L397">    Objects.requireNonNull(evaluation, &quot;evaluation&quot;);</span>
+<span class="fc" id="L398">    StringBuilder sb = new StringBuilder(512);</span>
+<span class="fc" id="L399">    sb.append(&quot;# Imported Dataset Evaluation\n\n&quot;);</span>
+<span class="fc" id="L400">    sb.append(&quot;- Dataset: &quot;).append(evaluation.datasetName()).append('\n');</span>
+<span class="fc" id="L401">    sb.append(&quot;- Samples: &quot;).append(evaluation.sampleCount()).append('\n');</span>
+<span class="fc" id="L402">    sb.append(&quot;- Evaluated (known GT): &quot;).append(evaluation.evaluatedSampleCount()).append('\n');</span>
+<span class="fc" id="L403">    sb.append(&quot;- GT unknown: &quot;).append(evaluation.groundTruthUnknownCount()).append('\n');</span>
+<span class="fc" id="L404">    sb.append(&quot;- Predicted unknown: &quot;).append(evaluation.predictionUnknownCount()).append('\n');</span>
+<span class="fc" id="L405">    sb.append(&quot;- Correct: &quot;).append(evaluation.correctCount()).append('\n');</span>
+<span class="fc" id="L406">    sb.append(&quot;- Accuracy: &quot;);</span>
+<span class="pc bpc" id="L407" title="1 of 2 branches missed.">    if (evaluation.accuracy() == null) {</span>
+<span class="nc" id="L408">      sb.append(&quot;n/a\n&quot;);</span>
+    } else {
+<span class="fc" id="L410">      sb.append(String.format(Locale.ROOT, &quot;%.3f&quot;, evaluation.accuracy())).append('\n');</span>
+    }
+<span class="fc" id="L412">    sb.append(&quot;- Evaluated accuracy (excl. unknown GT): &quot;);</span>
+<span class="pc bpc" id="L413" title="1 of 2 branches missed.">    if (evaluation.evaluatedAccuracy() == null) {</span>
+<span class="nc" id="L414">      sb.append(&quot;n/a\n\n&quot;);</span>
+    } else {
+<span class="fc" id="L416">      sb.append(String.format(Locale.ROOT, &quot;%.3f&quot;, evaluation.evaluatedAccuracy())).append(&quot;\n\n&quot;);</span>
+    }
+<span class="fc" id="L418">    sb.append(&quot;## Per-Label Statistics\n\n&quot;);</span>
+<span class="fc" id="L419">    sb.append(&quot;| Ground truth | Samples | Correct | Recall | Precision |\n&quot;);</span>
+<span class="fc" id="L420">    sb.append(&quot;|---|---:|---:|---:|---:|\n&quot;);</span>
+<span class="fc bfc" id="L421" title="All 2 branches covered.">    for (Map.Entry&lt;String, Integer&gt; entry : evaluation.labelSampleCounts().entrySet()) {</span>
+<span class="fc" id="L422">      String label = entry.getKey();</span>
+<span class="fc" id="L423">      Double recall = evaluation.recall(label);</span>
+<span class="fc" id="L424">      Double precision = evaluation.precision(label);</span>
+<span class="fc" id="L425">      sb.append(&quot;| &quot;)</span>
+<span class="fc" id="L426">          .append(label)</span>
+<span class="fc" id="L427">          .append(&quot; | &quot;)</span>
+<span class="fc" id="L428">          .append(entry.getValue())</span>
+<span class="fc" id="L429">          .append(&quot; | &quot;)</span>
+<span class="fc" id="L430">          .append(evaluation.labelCorrectCounts().getOrDefault(label, 0))</span>
+<span class="fc" id="L431">          .append(&quot; | &quot;)</span>
+<span class="pc bpc" id="L432" title="1 of 2 branches missed.">          .append(recall == null ? &quot;n/a&quot; : String.format(Locale.ROOT, &quot;%.3f&quot;, recall))</span>
+<span class="fc" id="L433">          .append(&quot; | &quot;)</span>
+<span class="fc bfc" id="L434" title="All 2 branches covered.">          .append(precision == null ? &quot;n/a&quot; : String.format(Locale.ROOT, &quot;%.3f&quot;, precision))</span>
+<span class="fc" id="L435">          .append(&quot; |\n&quot;);</span>
+<span class="fc" id="L436">    }</span>
+<span class="fc" id="L437">    sb.append(&quot;\n## Confusion Matrix\n\n&quot;);</span>
+<span class="fc" id="L438">    java.util.Set&lt;String&gt; allLabels = evaluation.allLabels();</span>
+<span class="fc" id="L439">    sb.append(&quot;| Actual \\ Predicted |&quot;);</span>
+<span class="fc bfc" id="L440" title="All 2 branches covered.">    for (String predicted : allLabels) {</span>
+<span class="fc" id="L441">      sb.append(' ').append(predicted).append(&quot; |&quot;);</span>
+<span class="fc" id="L442">    }</span>
+<span class="fc" id="L443">    sb.append('\n');</span>
+<span class="fc" id="L444">    sb.append(&quot;|---|&quot;);</span>
+<span class="fc bfc" id="L445" title="All 2 branches covered.">    for (int i = 0; i &lt; allLabels.size(); i++) {</span>
+<span class="fc" id="L446">      sb.append(&quot;---:|&quot;);</span>
+    }
+<span class="fc" id="L448">    sb.append('\n');</span>
+<span class="fc bfc" id="L449" title="All 2 branches covered.">    for (String actual : evaluation.labelSampleCounts().keySet()) {</span>
+<span class="fc" id="L450">      Map&lt;String, Integer&gt; row = evaluation.confusionMatrix().getOrDefault(actual, Map.of());</span>
+<span class="fc" id="L451">      sb.append(&quot;| &quot;).append(actual).append(&quot; |&quot;);</span>
+<span class="fc bfc" id="L452" title="All 2 branches covered.">      for (String predicted : allLabels) {</span>
+<span class="fc" id="L453">        sb.append(' ').append(row.getOrDefault(predicted, 0)).append(&quot; |&quot;);</span>
+<span class="fc" id="L454">      }</span>
+<span class="fc" id="L455">      sb.append('\n');</span>
+<span class="fc" id="L456">    }</span>
+<span class="fc" id="L457">    return sb.toString();</span>
+  }
+
+  private static Path resolveAudioPath(DatasetManifest manifest, DatasetRecording recording) {
+<span class="fc" id="L461">    Path audioPath = recording.audioPath();</span>
+<span class="pc bpc" id="L462" title="1 of 2 branches missed.">    if (audioPath.isAbsolute()) {</span>
+<span class="nc" id="L463">      return audioPath;</span>
+    }
+<span class="fc" id="L465">    return manifest.descriptor().localRootPath().resolve(audioPath).normalize();</span>
+  }
+
+  private static String describe(DatasetRecording recording) {
+<span class="fc" id="L469">    String species = recording.labels().get(&quot;species&quot;);</span>
+<span class="fc" id="L470">    String gender = recording.labels().get(&quot;gender&quot;);</span>
+<span class="fc" id="L471">    String soundType = recording.labels().get(&quot;sound_type&quot;);</span>
+<span class="fc" id="L472">    StringBuilder description = new StringBuilder(recording.recordingId());</span>
+<span class="pc bpc" id="L473" title="1 of 4 branches missed.">    if (species != null &amp;&amp; !species.isBlank()) {</span>
+<span class="fc" id="L474">      description.append(&quot; / species=&quot;).append(species);</span>
+    }
+<span class="pc bpc" id="L476" title="1 of 4 branches missed.">    if (gender != null &amp;&amp; !gender.isBlank()) {</span>
+<span class="fc" id="L477">      description.append(&quot; / gender=&quot;).append(gender);</span>
+    }
+<span class="pc bpc" id="L479" title="1 of 4 branches missed.">    if (soundType != null &amp;&amp; !soundType.isBlank()) {</span>
+<span class="fc" id="L480">      description.append(&quot; / sound_type=&quot;).append(soundType);</span>
+    }
+<span class="fc" id="L482">    return description.toString();</span>
+  }
+
+  private static String defaultGroundTruthLabel(DatasetRecording recording) {
+<span class="fc" id="L486">    String soundType = normalized(recording.labels().get(&quot;sound_type&quot;));</span>
+<span class="fc" id="L487">    String gender = normalized(recording.labels().get(&quot;gender&quot;));</span>
+<span class="fc" id="L488">    String fed = normalized(recording.labels().get(&quot;fed&quot;));</span>
+<span class="fc bfc" id="L489" title="All 2 branches covered.">    if (&quot;female&quot;.equals(gender)) {</span>
+<span class="pc bpc" id="L490" title="1 of 2 branches missed.">      if (isTruthy(fed)) {</span>
+<span class="nc" id="L491">        return WingbeatLabel.POSSIBLY_BLOOD_FED_FEMALE;</span>
+      }
+<span class="fc" id="L493">      return WingbeatLabel.FEMALE_LIKELY;</span>
+    }
+<span class="fc bfc" id="L495" title="All 2 branches covered.">    if (&quot;male&quot;.equals(gender)) {</span>
+<span class="fc" id="L496">      return WingbeatLabel.MALE_LIKELY;</span>
+    }
+<span class="pc bpc" id="L498" title="2 of 4 branches missed.">    if (soundType.contains(&quot;background&quot;) || soundType.contains(&quot;noise&quot;)) {</span>
+<span class="nc" id="L499">      return WingbeatLabel.UNKNOWN;</span>
+    }
+<span class="pc bpc" id="L501" title="3 of 4 branches missed.">    if (soundType.contains(&quot;mosquito&quot;) || recording.labels().containsKey(&quot;species&quot;)) {</span>
+<span class="fc" id="L502">      return WingbeatLabel.MOSQUITO_LIKE;</span>
+    }
+<span class="nc" id="L504">    return WingbeatLabel.UNKNOWN;</span>
+  }
+
+  private static boolean isTruthy(String value) {
+<span class="pc bpc" id="L508" title="1 of 2 branches missed.">    return &quot;1&quot;.equals(value)</span>
+<span class="pc bpc" id="L509" title="1 of 2 branches missed.">        || &quot;true&quot;.equals(value)</span>
+<span class="pc bpc" id="L510" title="1 of 2 branches missed.">        || &quot;yes&quot;.equals(value)</span>
+<span class="pc bpc" id="L511" title="1 of 2 branches missed.">        || &quot;y&quot;.equals(value)</span>
+<span class="pc bpc" id="L512" title="1 of 2 branches missed.">        || &quot;fed&quot;.equals(value)</span>
+<span class="pc bpc" id="L513" title="1 of 2 branches missed.">        || &quot;blood-fed&quot;.equals(value);</span>
+  }
+
+  private static String normalized(String value) {
+<span class="fc bfc" id="L517" title="All 2 branches covered.">    return value == null ? &quot;&quot; : value.trim().toLowerCase(Locale.ROOT);</span>
+  }
+
+  @FunctionalInterface
+  interface GroundTruthLabelResolver {
+    String resolve(DatasetRecording recording);
+  }
+
+  /**
+   * Result of analyzing one imported recording.
+   *
+   * @param recording imported recording metadata entry
+   * @param resolvedAudioPath resolved absolute audio path
+   * @param audioBlock decoded audio block used for analysis
+   * @param groundTruthLabel derived classifier ground-truth label
+   * @param features extracted wingbeat feature vector
+   * @param classificationResult classifier output, or {@code null} when no classifier was supplied
+   */
+  public record RecordingAnalysis(
+      DatasetRecording recording,
+      Path resolvedAudioPath,
+      AudioBlock audioBlock,
+      String groundTruthLabel,
+      WingbeatFeatureVector features,
+      ClassificationResult classificationResult) {
+
+<span class="fc" id="L543">    public RecordingAnalysis {</span>
+<span class="fc" id="L544">      Objects.requireNonNull(recording, &quot;recording&quot;);</span>
+<span class="fc" id="L545">      Objects.requireNonNull(resolvedAudioPath, &quot;resolvedAudioPath&quot;);</span>
+<span class="fc" id="L546">      Objects.requireNonNull(audioBlock, &quot;audioBlock&quot;);</span>
+<span class="fc" id="L547">      Objects.requireNonNull(groundTruthLabel, &quot;groundTruthLabel&quot;);</span>
+<span class="fc" id="L548">      Objects.requireNonNull(features, &quot;features&quot;);</span>
+<span class="fc" id="L549">    }</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

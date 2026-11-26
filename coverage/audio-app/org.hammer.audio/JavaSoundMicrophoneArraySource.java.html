@@ -1,0 +1,160 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>JavaSoundMicrophoneArraySource.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio</a> &gt; <span class="el_source">JavaSoundMicrophoneArraySource.java</span></div><h1>JavaSoundMicrophoneArraySource.java</h1><pre class="source lang-java linenums">package org.hammer.audio;
+
+import java.io.IOException;
+import java.time.Instant;
+import java.util.Objects;
+import java.util.Optional;
+import javax.sound.sampled.AudioFormat;
+import javax.sound.sampled.TargetDataLine;
+import org.hammer.audio.acquisition.CaptureDeviceConfiguration;
+import org.hammer.audio.acquisition.LocalizationInputMode;
+import org.hammer.audio.acquisition.MicrophoneArray;
+import org.hammer.audio.acquisition.MicrophoneArrayProfile;
+import org.hammer.audio.acquisition.MicrophoneArrayReadiness;
+import org.hammer.audio.acquisition.MultiChannelAudioSource;
+import org.hammer.audio.capture.SampleDecoder;
+import org.hammer.audio.core.AudioBlock;
+import org.hammer.audio.core.AudioFormatDescriptor;
+
+/** Live JavaSound adapter for the common synchronized multichannel source contract. */
+// Device open/close must be mutually exclusive, including when Stop interrupts a blocked read.
+@SuppressWarnings(&quot;PMD.AvoidSynchronizedAtMethodLevel&quot;)
+public final class JavaSoundMicrophoneArraySource implements MultiChannelAudioSource {
+
+  private final MicrophoneArrayProfile profile;
+  private final CaptureDeviceConfiguration configuration;
+  private final SampleDecoder decoder;
+  private final AudioLineProvider lineProvider;
+
+  private volatile TargetDataLine line;
+  private long nextFrameIndex;
+  private volatile boolean closed;
+
+  /**
+   * Open a live source for the device selected in the profile.
+   *
+   * @param profile reusable live array profile
+   * @param maximumTimingErrorSamples accepted one-sigma timing error budget
+   */
+  public JavaSoundMicrophoneArraySource(
+      MicrophoneArrayProfile profile, double maximumTimingErrorSamples) {
+<span class="nc" id="L41">    this(profile, provider(profile), maximumTimingErrorSamples, Instant.now());</span>
+<span class="nc" id="L42">  }</span>
+
+  JavaSoundMicrophoneArraySource(
+      MicrophoneArrayProfile profile,
+      AudioLineProvider lineProvider,
+      double maximumTimingErrorSamples,
+<span class="fc" id="L48">      Instant observationTime) {</span>
+<span class="fc" id="L49">    this.profile = Objects.requireNonNull(profile, &quot;profile&quot;);</span>
+<span class="fc" id="L50">    this.lineProvider = Objects.requireNonNull(lineProvider, &quot;lineProvider&quot;);</span>
+<span class="fc" id="L51">    MicrophoneArrayReadiness readiness =</span>
+<span class="fc" id="L52">        MicrophoneArrayReadiness.assess(</span>
+            profile,
+            LocalizationInputMode.LIVE,
+<span class="fc" id="L55">            Objects.requireNonNull(observationTime, &quot;observationTime&quot;),</span>
+            maximumTimingErrorSamples);
+<span class="fc bfc" id="L57" title="All 2 branches covered.">    if (!readiness.ready()) {</span>
+<span class="fc" id="L58">      throw new IllegalArgumentException(</span>
+          &quot;microphone-array profile is not ready for live localization: &quot;
+<span class="fc" id="L60">              + String.join(&quot; &quot;, readiness.diagnostics()));</span>
+    }
+<span class="fc" id="L62">    this.configuration = profile.liveCaptureConfiguration().orElseThrow();</span>
+<span class="fc" id="L63">    this.decoder =</span>
+        new SampleDecoder(
+<span class="fc" id="L65">            configuration.format(), configuration.signed(), configuration.bigEndian());</span>
+<span class="fc" id="L66">  }</span>
+
+  @Override
+  public AudioFormatDescriptor format() {
+<span class="fc" id="L70">    return configuration.format();</span>
+  }
+
+  @Override
+  public MicrophoneArray microphoneArray() {
+<span class="nc" id="L75">    return profile.array();</span>
+  }
+
+  @Override
+  @SuppressWarnings(&quot;PMD.CloseResource&quot;) // Borrowed field; close() owns and releases the line.
+  public Optional&lt;AudioBlock&gt; readBlock(int frames) throws IOException {
+<span class="pc bpc" id="L81" title="1 of 2 branches missed.">    if (frames &lt;= 0) {</span>
+<span class="nc" id="L82">      throw new IllegalArgumentException(&quot;frames must be &gt; 0&quot;);</span>
+    }
+<span class="pc bpc" id="L84" title="1 of 2 branches missed.">    if (closed) {</span>
+<span class="nc" id="L85">      return Optional.empty();</span>
+    }
+<span class="fc" id="L87">    ensureOpen();</span>
+<span class="fc" id="L88">    TargetDataLine currentLine = line;</span>
+<span class="pc bpc" id="L89" title="2 of 4 branches missed.">    if (currentLine == null || closed) {</span>
+<span class="nc" id="L90">      return Optional.empty();</span>
+    }
+<span class="fc" id="L92">    byte[] data = new byte[Math.multiplyExact(frames, decoder.frameSize())];</span>
+<span class="fc" id="L93">    int byteCount = readUpTo(data, currentLine);</span>
+<span class="fc" id="L94">    int decodedFrames = decoder.framesIn(byteCount);</span>
+<span class="pc bpc" id="L95" title="1 of 2 branches missed.">    if (decodedFrames == 0) {</span>
+<span class="nc" id="L96">      return Optional.empty();</span>
+    }
+<span class="fc" id="L98">    float[][] samples = new float[format().channels()][decodedFrames];</span>
+<span class="fc" id="L99">    decoder.decode(data, decodedFrames * decoder.frameSize(), samples);</span>
+<span class="fc" id="L100">    AudioBlock block = AudioBlock.wrap(format(), samples, nextFrameIndex, System.nanoTime());</span>
+<span class="fc" id="L101">    nextFrameIndex += decodedFrames;</span>
+<span class="fc" id="L102">    return Optional.of(block);</span>
+  }
+
+  @Override
+  public synchronized void close() {
+<span class="fc" id="L107">    closed = true;</span>
+<span class="pc bpc" id="L108" title="1 of 2 branches missed.">    if (line == null) {</span>
+<span class="nc" id="L109">      return;</span>
+    }
+<span class="fc" id="L111">    line.stop();</span>
+<span class="fc" id="L112">    line.flush();</span>
+<span class="fc" id="L113">    line.close();</span>
+<span class="fc" id="L114">    line = null;</span>
+<span class="fc" id="L115">  }</span>
+
+  private synchronized void ensureOpen() {
+<span class="pc bpc" id="L118" title="2 of 4 branches missed.">    if (line != null || closed) {</span>
+<span class="nc" id="L119">      return;</span>
+    }
+<span class="fc" id="L121">    AudioFormatDescriptor format = configuration.format();</span>
+<span class="fc" id="L122">    AudioFormat javaSoundFormat =</span>
+        new AudioFormat(
+<span class="fc" id="L124">            format.sampleRate(),</span>
+<span class="fc" id="L125">            format.sourceSampleSizeInBits(),</span>
+<span class="fc" id="L126">            format.channels(),</span>
+<span class="fc" id="L127">            configuration.signed(),</span>
+<span class="fc" id="L128">            configuration.bigEndian());</span>
+<span class="fc" id="L129">    line = lineProvider.acquireLine(javaSoundFormat);</span>
+<span class="fc" id="L130">    line.start();</span>
+<span class="fc" id="L131">  }</span>
+
+  private int readUpTo(byte[] data, TargetDataLine currentLine) throws IOException {
+<span class="fc" id="L134">    int total = 0;</span>
+<span class="pc bpc" id="L135" title="1 of 4 branches missed.">    while (total &lt; data.length &amp;&amp; !closed) {</span>
+<span class="fc" id="L136">      int count = currentLine.read(data, total, data.length - total);</span>
+<span class="pc bpc" id="L137" title="1 of 2 branches missed.">      if (count &lt; 0) {</span>
+<span class="nc" id="L138">        break;</span>
+      }
+<span class="pc bpc" id="L140" title="1 of 2 branches missed.">      if (count == 0) {</span>
+<span class="nc" id="L141">        return total;</span>
+      }
+<span class="fc" id="L143">      total += count;</span>
+<span class="fc" id="L144">    }</span>
+<span class="fc" id="L145">    return total;</span>
+  }
+
+  private static AudioLineProvider provider(MicrophoneArrayProfile profile) {
+<span class="nc" id="L149">    Objects.requireNonNull(profile, &quot;profile&quot;);</span>
+<span class="nc" id="L150">    String deviceId = profile.liveCaptureConfiguration().orElseThrow().device().deviceId();</span>
+<span class="nc" id="L151">    JavaSoundCaptureDeviceDiscovery discovery = new JavaSoundCaptureDeviceDiscovery();</span>
+<span class="nc" id="L152">    return new DefaultAudioLineProvider(</span>
+        discovery
+<span class="nc" id="L154">            .findMixerInfo(deviceId)</span>
+<span class="nc" id="L155">            .orElseThrow(</span>
+                () -&gt;
+<span class="nc" id="L157">                    new IllegalArgumentException(&quot;capture device is not available: &quot; + deviceId)));</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>GenericWorkflowHistoryProjection.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.infrastructure.workflow.store</a> &gt; <span class="el_source">GenericWorkflowHistoryProjection.java</span></div><h1>GenericWorkflowHistoryProjection.java</h1><pre class="source lang-java linenums">package org.hammer.audio.infrastructure.workflow.store;
+
+import io.github.carstenartur.jgit.storage.hibernate.search.entity.GitCommitIndex;
+import io.github.carstenartur.jgit.storage.hibernate.search.service.CommitHistoryQuery;
+import io.github.carstenartur.jgit.storage.hibernate.search.service.CommitIndexer;
+import io.github.carstenartur.jgit.storage.hibernate.search.service.GitHistorySearchService;
+import java.io.IOException;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.List;
+import java.util.NoSuchElementException;
+import java.util.Objects;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import org.eclipse.jgit.lib.Constants;
+import org.eclipse.jgit.lib.ObjectId;
+import org.eclipse.jgit.lib.Repository;
+import org.hammer.audio.workflow.history.WorkflowHistoryTextQuery;
+import org.hammer.audio.workflow.history.WorkflowHistoryTextResult;
+import org.hammer.audio.workflow.store.CommitId;
+import org.hibernate.SessionFactory;
+
+/** Maintains the generic, rebuildable Git-history projection for one workflow repository. */
+final class GenericWorkflowHistoryProjection {
+
+<span class="fc" id="L26">  private static final Logger LOGGER =</span>
+<span class="fc" id="L27">      Logger.getLogger(GenericWorkflowHistoryProjection.class.getName());</span>
+
+  private final Repository repository;
+  private final String repositoryName;
+  private final CommitIndexer commitIndexer;
+  private final GitHistorySearchService searchService;
+
+  GenericWorkflowHistoryProjection(
+<span class="fc" id="L35">      Repository repository, SessionFactory sessionFactory, String repositoryName) {</span>
+<span class="fc" id="L36">    this.repository = Objects.requireNonNull(repository, &quot;repository&quot;);</span>
+<span class="fc" id="L37">    this.repositoryName = requireNotBlank(repositoryName, &quot;repositoryName&quot;);</span>
+<span class="fc" id="L38">    SessionFactory requiredSessionFactory =</span>
+<span class="fc" id="L39">        Objects.requireNonNull(sessionFactory, &quot;sessionFactory&quot;);</span>
+<span class="fc" id="L40">    this.commitIndexer = new CommitIndexer(requiredSessionFactory, this.repositoryName);</span>
+<span class="fc" id="L41">    this.searchService = new GitHistorySearchService(requiredSessionFactory);</span>
+<span class="fc" id="L42">  }</span>
+
+  List&lt;WorkflowHistoryTextResult&gt; search(WorkflowHistoryTextQuery query) {
+<span class="fc" id="L45">    return search(query, null);</span>
+  }
+
+  List&lt;WorkflowHistoryTextResult&gt; searchWithinCandidates(
+      WorkflowHistoryTextQuery query, Collection&lt;CommitId&gt; candidates) {
+<span class="fc" id="L50">    return search(query, Objects.requireNonNull(candidates, &quot;candidates&quot;));</span>
+  }
+
+  private List&lt;WorkflowHistoryTextResult&gt; search(
+      WorkflowHistoryTextQuery query, Collection&lt;CommitId&gt; candidates) {
+<span class="fc" id="L55">    Objects.requireNonNull(query, &quot;query&quot;);</span>
+<span class="fc" id="L56">    CommitHistoryQuery.Builder sharedQuery =</span>
+<span class="fc" id="L57">        CommitHistoryQuery.forRepository(repositoryName)</span>
+<span class="fc" id="L58">            .matchingText(query.text())</span>
+<span class="fc" id="L59">            .authoredBy(query.authorEmail())</span>
+<span class="fc" id="L60">            .touchingPath(query.pathText())</span>
+<span class="fc" id="L61">            .limit(query.limit());</span>
+<span class="fc bfc" id="L62" title="All 2 branches covered.">    if (candidates != null) {</span>
+<span class="fc" id="L63">      sharedQuery.restrictedToObjectIds(candidates.stream().map(CommitId::value).toList());</span>
+    }
+<span class="fc bfc" id="L65" title="All 2 branches covered.">    if (query.from() != null) {</span>
+<span class="fc" id="L66">      sharedQuery.from(query.from());</span>
+    }
+<span class="fc bfc" id="L68" title="All 2 branches covered.">    if (query.to() != null) {</span>
+<span class="fc" id="L69">      sharedQuery.to(query.to());</span>
+    }
+<span class="fc" id="L71">    return searchService.findChanges(sharedQuery.build()).stream()</span>
+<span class="fc" id="L72">        .map(GenericWorkflowHistoryProjection::toResult)</span>
+<span class="fc" id="L73">        .toList();</span>
+  }
+
+  int rebuild(String branch, int limit) {
+<span class="fc" id="L77">    String requiredBranch = requireNotBlank(branch, &quot;branch&quot;);</span>
+    try {
+<span class="fc" id="L79">      ObjectId head = repository.resolve(requiredBranch);</span>
+<span class="pc bpc" id="L80" title="1 of 2 branches missed.">      if (head == null) {</span>
+<span class="nc" id="L81">        head = repository.resolve(Constants.R_HEADS + requiredBranch);</span>
+      }
+<span class="pc bpc" id="L83" title="1 of 2 branches missed.">      if (head == null) {</span>
+<span class="nc" id="L84">        throw new NoSuchElementException(&quot;Unknown workflow branch: &quot; + requiredBranch);</span>
+      }
+<span class="fc" id="L86">      return commitIndexer.indexCommitsFrom(repository, head, limit);</span>
+<span class="nc" id="L87">    } catch (IOException failure) {</span>
+<span class="nc" id="L88">      throw new IllegalStateException(</span>
+          &quot;Could not rebuild workflow history search for branch &quot; + requiredBranch, failure);
+    }
+  }
+
+  void indexBestEffort(CommitId commitId) {
+    try {
+<span class="fc" id="L95">      commitIndexer.indexCommit(repository, ObjectId.fromString(commitId.value()));</span>
+<span class="nc" id="L96">    } catch (IOException | RuntimeException failure) {</span>
+<span class="nc" id="L97">      LOGGER.log(</span>
+          Level.WARNING,
+          &quot;Workflow commit &quot;
+<span class="nc" id="L100">              + commitId.value()</span>
+              + &quot; remains authoritative but its generic search projection is stale&quot;,
+          failure);
+<span class="fc" id="L103">    }</span>
+<span class="fc" id="L104">  }</span>
+
+  private static WorkflowHistoryTextResult toResult(GitCommitIndex hit) {
+    List&lt;String&gt; changedPaths =
+<span class="pc bpc" id="L108" title="2 of 4 branches missed.">        hit.getChangedPaths() == null || hit.getChangedPaths().isBlank()</span>
+<span class="nc" id="L109">            ? List.of()</span>
+<span class="fc" id="L110">            : Arrays.stream(hit.getChangedPaths().split(&quot;\\R&quot;))</span>
+<span class="pc bpc" id="L111" title="1 of 2 branches missed.">                .filter(value -&gt; !value.isBlank())</span>
+<span class="fc" id="L112">                .toList();</span>
+<span class="fc" id="L113">    return new WorkflowHistoryTextResult(</span>
+<span class="fc" id="L114">        new CommitId(hit.getObjectId()),</span>
+<span class="fc" id="L115">        hit.getShortMessage(),</span>
+<span class="fc" id="L116">        hit.getAuthorName(),</span>
+<span class="fc" id="L117">        hit.getAuthorEmail(),</span>
+<span class="fc" id="L118">        hit.getCommitTime(),</span>
+        changedPaths);
+  }
+
+  private static String requireNotBlank(String value, String name) {
+<span class="fc" id="L123">    Objects.requireNonNull(value, name);</span>
+<span class="pc bpc" id="L124" title="1 of 2 branches missed.">    if (value.isBlank()) {</span>
+<span class="nc" id="L125">      throw new IllegalArgumentException(name + &quot; must not be blank&quot;);</span>
+    }
+<span class="fc" id="L127">    return value;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

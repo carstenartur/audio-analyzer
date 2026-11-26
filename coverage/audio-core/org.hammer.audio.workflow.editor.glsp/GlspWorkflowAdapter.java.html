@@ -1,0 +1,309 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>GlspWorkflowAdapter.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Core</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.editor.glsp</a> &gt; <span class="el_source">GlspWorkflowAdapter.java</span></div><h1>GlspWorkflowAdapter.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.editor.glsp;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import org.hammer.audio.workflow.Edge;
+import org.hammer.audio.workflow.WorkflowOperation;
+import org.hammer.audio.workflow.editor.WorkflowEditorService;
+import org.hammer.audio.workflow.editor.WorkflowProjection;
+
+/**
+ * Executable protocol-level GLSP spike adapter for issue #219.
+ *
+ * &lt;p&gt;The adapter deliberately does not own workflow state. It derives a small GModel-shaped
+ * projection from {@link WorkflowProjection}, translates GLSP-style actions into semantic {@link
+ * WorkflowOperation}s and delegates validation and mutation to {@link WorkflowEditorService}.
+ */
+public final class GlspWorkflowAdapter {
+
+  private final WorkflowEditorService editorService;
+
+<span class="fc" id="L23">  public GlspWorkflowAdapter(WorkflowEditorService editorService) {</span>
+<span class="fc" id="L24">    this.editorService = Objects.requireNonNull(editorService, &quot;editorService&quot;);</span>
+<span class="fc" id="L25">  }</span>
+
+  /** Returns the current server-authoritative graph as a GLSP-shaped immutable projection. */
+  public GGraph currentGraph() {
+<span class="fc" id="L29">    return toGGraph(editorService.currentProjection());</span>
+  }
+
+  /** Applies one GLSP-style action and returns the rebuilt graph projection. */
+  public GGraph apply(Action action) {
+<span class="fc" id="L34">    Objects.requireNonNull(action, &quot;action&quot;);</span>
+<span class="fc" id="L35">    WorkflowProjection current = editorService.currentProjection();</span>
+<span class="fc" id="L36">    WorkflowOperation operation = toWorkflowOperation(action, current);</span>
+<span class="fc" id="L37">    return toGGraph(editorService.applyOperation(operation));</span>
+  }
+
+  private static WorkflowOperation toWorkflowOperation(
+      Action action, WorkflowProjection currentProjection) {
+<span class="fc bfc" id="L42" title="All 3 branches covered.">    return switch (action) {</span>
+<span class="fc" id="L43">      case CreateEdgeAction create -&gt;</span>
+<span class="fc" id="L44">          new WorkflowOperation.ConnectPorts(</span>
+<span class="fc" id="L45">              create.operationId(),</span>
+<span class="fc" id="L46">              create.timestamp(),</span>
+<span class="fc" id="L47">              create.author(),</span>
+              new Edge(
+<span class="fc" id="L49">                  create.edgeId(),</span>
+<span class="fc" id="L50">                  create.sourceNodeId(),</span>
+<span class="fc" id="L51">                  create.sourcePortId(),</span>
+<span class="fc" id="L52">                  create.targetNodeId(),</span>
+<span class="fc" id="L53">                  create.targetPortId()));</span>
+<span class="fc" id="L54">      case DeleteEdgeAction delete -&gt; {</span>
+<span class="fc" id="L55">        WorkflowProjection.EdgeProjection edge =</span>
+<span class="fc" id="L56">            currentProjection.edges().stream()</span>
+<span class="fc" id="L57">                .filter(candidate -&gt; candidate.id().equals(delete.edgeId()))</span>
+<span class="fc" id="L58">                .findFirst()</span>
+<span class="fc" id="L59">                .orElseThrow(</span>
+<span class="nc" id="L60">                    () -&gt; new IllegalArgumentException(&quot;GLSP edge not found: &quot; + delete.edgeId()));</span>
+<span class="fc" id="L61">        Edge snapshot =</span>
+            new Edge(
+<span class="fc" id="L63">                edge.id(), edge.source(), edge.sourceHandle(), edge.target(), edge.targetHandle());</span>
+<span class="fc" id="L64">        yield new WorkflowOperation.DisconnectPorts(</span>
+<span class="fc" id="L65">            delete.operationId(), delete.timestamp(), delete.author(), delete.edgeId(), snapshot);</span>
+      }
+<span class="fc" id="L67">      case ChangePropertyAction change -&gt; {</span>
+<span class="fc" id="L68">        WorkflowProjection.NodeProjection node =</span>
+<span class="fc" id="L69">            currentProjection.nodes().stream()</span>
+<span class="fc" id="L70">                .filter(candidate -&gt; candidate.id().equals(change.nodeId()))</span>
+<span class="fc" id="L71">                .findFirst()</span>
+<span class="fc" id="L72">                .orElseThrow(</span>
+<span class="nc" id="L73">                    () -&gt; new IllegalArgumentException(&quot;GLSP node not found: &quot; + change.nodeId()));</span>
+<span class="fc" id="L74">        yield new WorkflowOperation.UpdateProperty(</span>
+<span class="fc" id="L75">            change.operationId(),</span>
+<span class="fc" id="L76">            change.timestamp(),</span>
+<span class="fc" id="L77">            change.author(),</span>
+            WorkflowOperation.PropertyTarget.NODE,
+<span class="fc" id="L79">            change.nodeId(),</span>
+<span class="fc" id="L80">            change.propertyKey(),</span>
+<span class="fc" id="L81">            node.properties().get(change.propertyKey()),</span>
+<span class="fc" id="L82">            change.newValue());</span>
+      }
+    };
+  }
+
+  private static GGraph toGGraph(WorkflowProjection projection) {
+<span class="fc" id="L88">    List&lt;GNode&gt; nodes =</span>
+<span class="fc" id="L89">        projection.nodes().stream()</span>
+<span class="fc" id="L90">            .map(</span>
+                node -&gt;
+<span class="fc" id="L92">                    new GNode(</span>
+<span class="fc" id="L93">                        node.id(),</span>
+<span class="fc" id="L94">                        node.label(),</span>
+<span class="fc" id="L95">                        node.type(),</span>
+<span class="fc" id="L96">                        node.inputHandles().stream()</span>
+<span class="fc" id="L97">                            .map(</span>
+                                port -&gt;
+<span class="fc" id="L99">                                    new GPort(</span>
+<span class="fc" id="L100">                                        node.id() + &quot;::&quot; + port.id(),</span>
+<span class="fc" id="L101">                                        port.id(),</span>
+<span class="fc" id="L102">                                        port.name(),</span>
+<span class="fc" id="L103">                                        port.dataType(),</span>
+                                        PortKind.INPUT))
+<span class="fc" id="L105">                            .toList(),</span>
+<span class="fc" id="L106">                        node.outputHandles().stream()</span>
+<span class="fc" id="L107">                            .map(</span>
+                                port -&gt;
+<span class="fc" id="L109">                                    new GPort(</span>
+<span class="fc" id="L110">                                        node.id() + &quot;::&quot; + port.id(),</span>
+<span class="fc" id="L111">                                        port.id(),</span>
+<span class="fc" id="L112">                                        port.name(),</span>
+<span class="fc" id="L113">                                        port.dataType(),</span>
+                                        PortKind.OUTPUT))
+<span class="fc" id="L115">                            .toList(),</span>
+<span class="fc" id="L116">                        node.properties()))</span>
+<span class="fc" id="L117">            .toList();</span>
+<span class="fc" id="L118">    List&lt;GEdge&gt; edges =</span>
+<span class="fc" id="L119">        projection.edges().stream()</span>
+<span class="fc" id="L120">            .map(</span>
+                edge -&gt;
+<span class="fc" id="L122">                    new GEdge(</span>
+<span class="fc" id="L123">                        edge.id(),</span>
+<span class="fc" id="L124">                        edge.source() + &quot;::&quot; + edge.sourceHandle(),</span>
+<span class="fc" id="L125">                        edge.target() + &quot;::&quot; + edge.targetHandle()))</span>
+<span class="fc" id="L126">            .toList();</span>
+<span class="fc" id="L127">    return new GGraph(projection.workflowId(), projection.workflowName(), nodes, edges);</span>
+  }
+
+  /** Common metadata carried by every GLSP action translated by this adapter. */
+  public sealed interface Action permits CreateEdgeAction, DeleteEdgeAction, ChangePropertyAction {
+    String operationId();
+
+    Instant timestamp();
+
+    String author();
+  }
+
+  /**
+   * GLSP-style request to create a typed connection between two semantic workflow ports.
+   *
+   * @param operationId stable semantic operation identifier
+   * @param timestamp operation timestamp
+   * @param author operation author
+   * @param edgeId stable edge identifier
+   * @param sourceNodeId source node identifier
+   * @param sourcePortId source output-port identifier
+   * @param targetNodeId target node identifier
+   * @param targetPortId target input-port identifier
+   */
+  public record CreateEdgeAction(
+      String operationId,
+      Instant timestamp,
+      String author,
+      String edgeId,
+      String sourceNodeId,
+      String sourcePortId,
+      String targetNodeId,
+      String targetPortId)
+      implements Action {
+<span class="fc" id="L161">    public CreateEdgeAction {</span>
+<span class="fc" id="L162">      Objects.requireNonNull(operationId, &quot;operationId&quot;);</span>
+<span class="fc" id="L163">      Objects.requireNonNull(timestamp, &quot;timestamp&quot;);</span>
+<span class="fc" id="L164">      Objects.requireNonNull(author, &quot;author&quot;);</span>
+<span class="fc" id="L165">      Objects.requireNonNull(edgeId, &quot;edgeId&quot;);</span>
+<span class="fc" id="L166">      Objects.requireNonNull(sourceNodeId, &quot;sourceNodeId&quot;);</span>
+<span class="fc" id="L167">      Objects.requireNonNull(sourcePortId, &quot;sourcePortId&quot;);</span>
+<span class="fc" id="L168">      Objects.requireNonNull(targetNodeId, &quot;targetNodeId&quot;);</span>
+<span class="fc" id="L169">      Objects.requireNonNull(targetPortId, &quot;targetPortId&quot;);</span>
+<span class="fc" id="L170">    }</span>
+  }
+
+  /**
+   * GLSP-style request to remove an existing semantic workflow edge.
+   *
+   * @param operationId stable semantic operation identifier
+   * @param timestamp operation timestamp
+   * @param author operation author
+   * @param edgeId identifier of the edge to remove
+   */
+  public record DeleteEdgeAction(
+      String operationId, Instant timestamp, String author, String edgeId) implements Action {
+<span class="fc" id="L183">    public DeleteEdgeAction {</span>
+<span class="fc" id="L184">      Objects.requireNonNull(operationId, &quot;operationId&quot;);</span>
+<span class="fc" id="L185">      Objects.requireNonNull(timestamp, &quot;timestamp&quot;);</span>
+<span class="fc" id="L186">      Objects.requireNonNull(author, &quot;author&quot;);</span>
+<span class="fc" id="L187">      Objects.requireNonNull(edgeId, &quot;edgeId&quot;);</span>
+<span class="fc" id="L188">    }</span>
+  }
+
+  /**
+   * GLSP-style request to update one semantic node property.
+   *
+   * @param operationId stable semantic operation identifier
+   * @param timestamp operation timestamp
+   * @param author operation author
+   * @param nodeId target node identifier
+   * @param propertyKey semantic property key
+   * @param newValue replacement property value
+   */
+  public record ChangePropertyAction(
+      String operationId,
+      Instant timestamp,
+      String author,
+      String nodeId,
+      String propertyKey,
+      String newValue)
+      implements Action {
+<span class="fc" id="L209">    public ChangePropertyAction {</span>
+<span class="fc" id="L210">      Objects.requireNonNull(operationId, &quot;operationId&quot;);</span>
+<span class="fc" id="L211">      Objects.requireNonNull(timestamp, &quot;timestamp&quot;);</span>
+<span class="fc" id="L212">      Objects.requireNonNull(author, &quot;author&quot;);</span>
+<span class="fc" id="L213">      Objects.requireNonNull(nodeId, &quot;nodeId&quot;);</span>
+<span class="fc" id="L214">      Objects.requireNonNull(propertyKey, &quot;propertyKey&quot;);</span>
+<span class="fc" id="L215">      Objects.requireNonNull(newValue, &quot;newValue&quot;);</span>
+<span class="fc" id="L216">    }</span>
+  }
+
+  /**
+   * Immutable GLSP-shaped graph projection derived from the canonical workflow model.
+   *
+   * @param id workflow identifier
+   * @param label workflow label
+   * @param nodes projected nodes
+   * @param edges projected edges
+   */
+  public record GGraph(String id, String label, List&lt;GNode&gt; nodes, List&lt;GEdge&gt; edges) {
+<span class="fc" id="L228">    public GGraph {</span>
+<span class="fc" id="L229">      Objects.requireNonNull(id, &quot;id&quot;);</span>
+<span class="fc" id="L230">      Objects.requireNonNull(label, &quot;label&quot;);</span>
+<span class="fc" id="L231">      Objects.requireNonNull(nodes, &quot;nodes&quot;);</span>
+<span class="fc" id="L232">      Objects.requireNonNull(edges, &quot;edges&quot;);</span>
+<span class="fc" id="L233">      nodes = List.copyOf(nodes);</span>
+<span class="fc" id="L234">      edges = List.copyOf(edges);</span>
+<span class="fc" id="L235">    }</span>
+  }
+
+  /**
+   * Immutable GLSP-shaped node projection with typed input and output ports.
+   *
+   * @param id node identifier
+   * @param label node label
+   * @param type semantic node type
+   * @param inputPorts projected input ports
+   * @param outputPorts projected output ports
+   * @param properties projected semantic properties
+   */
+  public record GNode(
+      String id,
+      String label,
+      String type,
+      List&lt;GPort&gt; inputPorts,
+      List&lt;GPort&gt; outputPorts,
+      Map&lt;String, String&gt; properties) {
+<span class="fc" id="L255">    public GNode {</span>
+<span class="fc" id="L256">      Objects.requireNonNull(id, &quot;id&quot;);</span>
+<span class="fc" id="L257">      Objects.requireNonNull(label, &quot;label&quot;);</span>
+<span class="fc" id="L258">      Objects.requireNonNull(type, &quot;type&quot;);</span>
+<span class="fc" id="L259">      Objects.requireNonNull(inputPorts, &quot;inputPorts&quot;);</span>
+<span class="fc" id="L260">      Objects.requireNonNull(outputPorts, &quot;outputPorts&quot;);</span>
+<span class="fc" id="L261">      Objects.requireNonNull(properties, &quot;properties&quot;);</span>
+<span class="fc" id="L262">      inputPorts = List.copyOf(inputPorts);</span>
+<span class="fc" id="L263">      outputPorts = List.copyOf(outputPorts);</span>
+<span class="fc" id="L264">      properties = Map.copyOf(properties);</span>
+<span class="fc" id="L265">    }</span>
+  }
+
+  /**
+   * Immutable typed-port projection used as a GLSP connection endpoint.
+   *
+   * @param id adapter-level globally unique port identifier
+   * @param semanticPortId semantic workflow port identifier
+   * @param label human-readable port label
+   * @param dataType semantic workflow data-type identifier
+   * @param kind input or output direction
+   */
+  public record GPort(
+      String id, String semanticPortId, String label, String dataType, PortKind kind) {
+<span class="fc" id="L279">    public GPort {</span>
+<span class="fc" id="L280">      Objects.requireNonNull(id, &quot;id&quot;);</span>
+<span class="fc" id="L281">      Objects.requireNonNull(semanticPortId, &quot;semanticPortId&quot;);</span>
+<span class="fc" id="L282">      Objects.requireNonNull(label, &quot;label&quot;);</span>
+<span class="fc" id="L283">      Objects.requireNonNull(dataType, &quot;dataType&quot;);</span>
+<span class="fc" id="L284">      Objects.requireNonNull(kind, &quot;kind&quot;);</span>
+<span class="fc" id="L285">    }</span>
+  }
+
+  /**
+   * Immutable GLSP-shaped edge projection between two projected port identifiers.
+   *
+   * @param id edge identifier
+   * @param sourcePortId projected source-port identifier
+   * @param targetPortId projected target-port identifier
+   */
+  public record GEdge(String id, String sourcePortId, String targetPortId) {
+<span class="fc" id="L296">    public GEdge {</span>
+<span class="fc" id="L297">      Objects.requireNonNull(id, &quot;id&quot;);</span>
+<span class="fc" id="L298">      Objects.requireNonNull(sourcePortId, &quot;sourcePortId&quot;);</span>
+<span class="fc" id="L299">      Objects.requireNonNull(targetPortId, &quot;targetPortId&quot;);</span>
+<span class="fc" id="L300">    }</span>
+  }
+
+  /** Direction of a projected GLSP port. */
+<span class="fc" id="L304">  public enum PortKind {</span>
+<span class="fc" id="L305">    INPUT,</span>
+<span class="fc" id="L306">    OUTPUT</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

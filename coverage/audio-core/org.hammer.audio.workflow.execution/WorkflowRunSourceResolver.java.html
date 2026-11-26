@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WorkflowRunSourceResolver.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Core</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.execution</a> &gt; <span class="el_source">WorkflowRunSourceResolver.java</span></div><h1>WorkflowRunSourceResolver.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.execution;
+
+import java.util.List;
+import java.util.NoSuchElementException;
+import java.util.Objects;
+import org.hammer.audio.workflow.Workflow;
+import org.hammer.audio.workflow.collaboration.WorkflowSessionRegistry;
+import org.hammer.audio.workflow.collaboration.WorkflowSessionRegistry.SessionSnapshot;
+import org.hammer.audio.workflow.collaboration.WorkflowSessionRegistry.SessionWorkflowSnapshot;
+import org.hammer.audio.workflow.collaboration.store.WorkflowSessionRevisionConflictException;
+import org.hammer.audio.workflow.dsl.WorkflowDslParser;
+import org.hammer.audio.workflow.dsl.WorkflowDslSerializer;
+import org.hammer.audio.workflow.execution.WorkflowRunException.Code;
+import org.hammer.audio.workflow.execution.WorkflowRunModels.LiveSessionSource;
+import org.hammer.audio.workflow.execution.WorkflowRunModels.Source;
+import org.hammer.audio.workflow.execution.WorkflowRunModels.StoredCommitSource;
+import org.hammer.audio.workflow.store.CommitId;
+import org.hammer.audio.workflow.store.VersionedWorkflowStore;
+import org.hammer.audio.workflow.store.WorkflowSnapshot;
+
+/** Resolves one exact live revision or stored commit into immutable canonical workflow DSL. */
+final class WorkflowRunSourceResolver {
+
+  private final WorkflowSessionRegistry sessionRegistry;
+  private final VersionedWorkflowStore versionStore;
+<span class="fc" id="L26">  private final WorkflowDslParser dslParser = new WorkflowDslParser();</span>
+<span class="fc" id="L27">  private final WorkflowDslSerializer dslSerializer = new WorkflowDslSerializer();</span>
+
+  WorkflowRunSourceResolver(
+<span class="fc" id="L30">      WorkflowSessionRegistry sessionRegistry, VersionedWorkflowStore versionStore) {</span>
+<span class="fc" id="L31">    this.sessionRegistry = Objects.requireNonNull(sessionRegistry, &quot;sessionRegistry&quot;);</span>
+<span class="fc" id="L32">    this.versionStore = versionStore;</span>
+<span class="fc" id="L33">  }</span>
+
+  ResolvedWorkflow resolve(Source source) {
+<span class="fc" id="L36">    Objects.requireNonNull(source, &quot;source&quot;);</span>
+<span class="fc bfc" id="L37" title="All 2 branches covered.">    if (source instanceof LiveSessionSource liveSource) {</span>
+<span class="fc" id="L38">      return resolveLive(liveSource);</span>
+    }
+<span class="pc bpc" id="L40" title="1 of 2 branches missed.">    if (versionStore == null) {</span>
+<span class="nc" id="L41">      throw new WorkflowRunException(</span>
+          Code.SOURCE_UNAVAILABLE,
+          &quot;Stored workflow execution requires a configured VersionedWorkflowStore&quot;,
+          null,
+          null,
+<span class="nc" id="L46">          List.of());</span>
+    }
+<span class="fc" id="L48">    return resolveStored((StoredCommitSource) source);</span>
+  }
+
+  ResolvedWorkflow resolve(Source source, SessionWorkflowSnapshot captured) {
+<span class="fc" id="L52">    Objects.requireNonNull(source, &quot;source&quot;);</span>
+<span class="fc" id="L53">    Objects.requireNonNull(captured, &quot;captured&quot;);</span>
+<span class="pc bpc" id="L54" title="1 of 2 branches missed.">    if (!(source instanceof LiveSessionSource live)</span>
+<span class="pc bpc" id="L55" title="1 of 2 branches missed.">        || !live.sessionId().equals(captured.session().sessionId())) {</span>
+<span class="fc" id="L56">      throw new IllegalArgumentException(&quot;Authorized workflow capture must match the live source&quot;);</span>
+    }
+<span class="nc" id="L58">    requireExpectedRevision(live, captured.session().revision());</span>
+<span class="nc" id="L59">    return canonicalWorkflow(captured.workflow(), captured.session().revision());</span>
+  }
+
+  private ResolvedWorkflow resolveLive(LiveSessionSource source) {
+<span class="fc" id="L63">    SessionSnapshot before = sessionRegistry.inspect(source.sessionId());</span>
+<span class="fc" id="L64">    requireExpectedRevision(source, before.revision());</span>
+<span class="fc" id="L65">    Workflow immutableWorkflow = sessionRegistry.workflow(source.sessionId());</span>
+<span class="fc" id="L66">    SessionSnapshot after = sessionRegistry.inspect(source.sessionId());</span>
+<span class="fc" id="L67">    requireExpectedRevision(source, after.revision());</span>
+<span class="fc" id="L68">    return canonicalWorkflow(immutableWorkflow, after.revision());</span>
+  }
+
+  private ResolvedWorkflow canonicalWorkflow(Workflow workflow, long revision) {
+<span class="fc" id="L72">    String dslText = dslSerializer.serialize(workflow);</span>
+<span class="fc" id="L73">    Workflow parsedWorkflow = dslParser.parse(dslText);</span>
+<span class="fc" id="L74">    return new ResolvedWorkflow(parsedWorkflow.id(), parsedWorkflow, dslText, revision, null);</span>
+  }
+
+  private ResolvedWorkflow resolveStored(StoredCommitSource source) {
+    try {
+<span class="fc" id="L79">      WorkflowSnapshot storedSnapshot = versionStore.loadAtCommit(source.commitId());</span>
+<span class="fc" id="L80">      Workflow parsedWorkflow = dslParser.parse(storedSnapshot.dslText());</span>
+<span class="fc" id="L81">      return new ResolvedWorkflow(</span>
+<span class="fc" id="L82">          storedSnapshot.workflowId(),</span>
+          parsedWorkflow,
+<span class="fc" id="L84">          storedSnapshot.dslText(),</span>
+          null,
+<span class="fc" id="L86">          source.commitId());</span>
+<span class="nc" id="L87">    } catch (NoSuchElementException exception) {</span>
+<span class="nc" id="L88">      throw new WorkflowRunException(</span>
+          Code.SOURCE_UNAVAILABLE,
+<span class="nc" id="L90">          &quot;Unknown workflow commit: &quot; + source.commitId().value(),</span>
+          null,
+          null,
+<span class="nc" id="L93">          List.of(),</span>
+          exception);
+    }
+  }
+
+  private static void requireExpectedRevision(LiveSessionSource source, long actualRevision) {
+<span class="fc bfc" id="L99" title="All 2 branches covered.">    if (source.expectedRevision() != actualRevision) {</span>
+<span class="fc" id="L100">      throw new WorkflowSessionRevisionConflictException(</span>
+<span class="fc" id="L101">          source.sessionId(), source.expectedRevision(), actualRevision);</span>
+    }
+<span class="fc" id="L103">  }</span>
+
+  record ResolvedWorkflow(
+      String workflowId,
+      Workflow workflow,
+      String dslText,
+      Long semanticRevision,
+      CommitId commitId) {
+<span class="fc" id="L111">    ResolvedWorkflow {</span>
+<span class="fc" id="L112">      StableExecutionIds.requireStable(workflowId, &quot;workflowId&quot;);</span>
+<span class="fc" id="L113">      Objects.requireNonNull(workflow, &quot;workflow&quot;);</span>
+<span class="fc" id="L114">      Objects.requireNonNull(dslText, &quot;dslText&quot;);</span>
+<span class="pc bpc" id="L115" title="1 of 4 branches missed.">      if (semanticRevision != null &amp;&amp; semanticRevision &lt; 0) {</span>
+<span class="nc" id="L116">        throw new IllegalArgumentException(&quot;semanticRevision must be null or &gt;= 0&quot;);</span>
+      }
+<span class="pc bpc" id="L118" title="1 of 6 branches missed.">      if ((semanticRevision == null) == (commitId == null)) {</span>
+<span class="nc" id="L119">        throw new IllegalArgumentException(</span>
+            &quot;Resolved workflow requires exactly one of semanticRevision or commitId&quot;);
+      }
+<span class="fc" id="L122">    }</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

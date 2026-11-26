@@ -1,0 +1,193 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>HibernateJGitVersionedWorkflowStore.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer App</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.infrastructure.workflow.store</a> &gt; <span class="el_source">HibernateJGitVersionedWorkflowStore.java</span></div><h1>HibernateJGitVersionedWorkflowStore.java</h1><pre class="source lang-java linenums">package org.hammer.audio.infrastructure.workflow.store;
+
+import io.github.carstenartur.jgit.storage.hibernate.HibernateGitStorage;
+import io.github.carstenartur.jgit.storage.hibernate.HibernateRepositoryFactory;
+import io.github.carstenartur.jgit.storage.hibernate.RepositoryName;
+import java.util.List;
+import java.util.Objects;
+import org.hammer.audio.workflow.history.IndexedWorkflowCombinedHistorySearch;
+import org.hammer.audio.workflow.history.IndexedWorkflowHistorySearch;
+import org.hammer.audio.workflow.history.IndexedWorkflowSemanticHistorySearch;
+import org.hammer.audio.workflow.history.WorkflowCombinedHistoryQuery;
+import org.hammer.audio.workflow.history.WorkflowCombinedHistoryResult;
+import org.hammer.audio.workflow.history.WorkflowHistoryTextQuery;
+import org.hammer.audio.workflow.history.WorkflowHistoryTextResult;
+import org.hammer.audio.workflow.history.WorkflowSemanticHistoryQuery;
+import org.hammer.audio.workflow.history.WorkflowSemanticHistoryResult;
+import org.hammer.audio.workflow.store.CommitId;
+import org.hammer.audio.workflow.store.CommitInfo;
+import org.hammer.audio.workflow.store.CommitMetadata;
+import org.hammer.audio.workflow.store.RefUpdateResult;
+import org.hammer.audio.workflow.store.VersionedWorkflowStore;
+import org.hammer.audio.workflow.store.WorkflowSnapshot;
+import org.hibernate.SessionFactory;
+
+/** Production workflow store and indexed search adapter over one shared Hibernate context. */
+public final class HibernateJGitVersionedWorkflowStore
+    implements VersionedWorkflowStore,
+        IndexedWorkflowHistorySearch,
+        IndexedWorkflowSemanticHistorySearch,
+        IndexedWorkflowCombinedHistorySearch,
+        AutoCloseable {
+
+  private final HibernateGitStorage storage;
+  private final JGitRepositoryVersionedWorkflowStore delegate;
+  private final GenericWorkflowHistoryProjection genericHistoryProjection;
+  private final WorkflowSemanticHistoryProjection semanticHistoryProjection;
+  private final CombinedWorkflowHistorySearch combinedHistorySearch;
+
+  /** Opens a searchable logical repository using the application-managed SessionFactory. */
+  public HibernateJGitVersionedWorkflowStore(SessionFactory sessionFactory, String repositoryName) {
+<span class="fc" id="L41">    this(</span>
+<span class="fc" id="L42">        HibernateWorkflowGitStorage.open(sessionFactory, repositoryName),</span>
+        sessionFactory,
+        repositoryName);
+<span class="fc" id="L45">  }</span>
+
+  /** Opens a storage-only adapter through a supplied shared repository factory. */
+  public HibernateJGitVersionedWorkflowStore(
+      HibernateRepositoryFactory repositoryFactory, RepositoryName repositoryName) {
+<span class="nc" id="L50">    this(</span>
+<span class="nc" id="L51">        Objects.requireNonNull(repositoryFactory, &quot;repositoryFactory&quot;)</span>
+<span class="nc" id="L52">            .open(Objects.requireNonNull(repositoryName, &quot;repositoryName&quot;)));</span>
+<span class="nc" id="L53">  }</span>
+
+<span class="nc" id="L55">  HibernateJGitVersionedWorkflowStore(HibernateGitStorage storage) {</span>
+<span class="nc" id="L56">    this.storage = Objects.requireNonNull(storage, &quot;storage&quot;);</span>
+<span class="nc" id="L57">    this.delegate = new JGitRepositoryVersionedWorkflowStore(storage.repository());</span>
+<span class="nc" id="L58">    this.genericHistoryProjection = null;</span>
+<span class="nc" id="L59">    this.semanticHistoryProjection = null;</span>
+<span class="nc" id="L60">    this.combinedHistorySearch = null;</span>
+<span class="nc" id="L61">  }</span>
+
+  private HibernateJGitVersionedWorkflowStore(
+<span class="fc" id="L64">      HibernateGitStorage storage, SessionFactory sessionFactory, String repositoryName) {</span>
+<span class="fc" id="L65">    this.storage = Objects.requireNonNull(storage, &quot;storage&quot;);</span>
+<span class="fc" id="L66">    this.delegate = new JGitRepositoryVersionedWorkflowStore(storage.repository());</span>
+<span class="fc" id="L67">    String requiredRepositoryName = requireNotBlank(repositoryName, &quot;repositoryName&quot;);</span>
+<span class="fc" id="L68">    SessionFactory requiredSessionFactory =</span>
+<span class="fc" id="L69">        Objects.requireNonNull(sessionFactory, &quot;sessionFactory&quot;);</span>
+<span class="fc" id="L70">    this.genericHistoryProjection =</span>
+        new GenericWorkflowHistoryProjection(
+<span class="fc" id="L72">            storage.repository(), requiredSessionFactory, requiredRepositoryName);</span>
+<span class="fc" id="L73">    this.semanticHistoryProjection =</span>
+        new WorkflowSemanticHistoryProjection(
+            delegate, requiredSessionFactory, requiredRepositoryName);
+<span class="fc" id="L76">    this.combinedHistorySearch =</span>
+        new CombinedWorkflowHistorySearch(genericHistoryProjection, semanticHistoryProjection);
+<span class="fc" id="L78">  }</span>
+
+  @Override
+  public CommitId commit(String branch, WorkflowSnapshot snapshot, CommitMetadata metadata) {
+<span class="fc" id="L82">    CommitId commitId = delegate.commit(branch, snapshot, metadata);</span>
+<span class="fc" id="L83">    indexBestEffort(branch, commitId, snapshot);</span>
+<span class="fc" id="L84">    return commitId;</span>
+  }
+
+  @Override
+  public CommitId commitIfHead(
+      String branch, CommitId expectedHead, WorkflowSnapshot snapshot, CommitMetadata metadata) {
+<span class="fc" id="L90">    CommitId commitId = delegate.commitIfHead(branch, expectedHead, snapshot, metadata);</span>
+<span class="fc" id="L91">    indexBestEffort(branch, commitId, snapshot);</span>
+<span class="fc" id="L92">    return commitId;</span>
+  }
+
+  @Override
+  public WorkflowSnapshot loadAtCommit(CommitId commitId) {
+<span class="fc" id="L97">    return delegate.loadAtCommit(commitId);</span>
+  }
+
+  @Override
+  public WorkflowSnapshot loadHead(String branch) {
+<span class="fc" id="L102">    return delegate.loadHead(branch);</span>
+  }
+
+  @Override
+  public RefUpdateResult updateRef(String refName, CommitId expectedOldCommit, CommitId newCommit) {
+<span class="fc" id="L107">    RefUpdateResult result = delegate.updateRef(refName, expectedOldCommit, newCommit);</span>
+<span class="pc bpc" id="L108" title="2 of 4 branches missed.">    if (result == RefUpdateResult.SUCCESS &amp;&amp; semanticHistoryProjection != null) {</span>
+<span class="fc" id="L109">      semanticHistoryProjection.rebuildBestEffort(refName);</span>
+    }
+<span class="fc" id="L111">    return result;</span>
+  }
+
+  @Override
+  public List&lt;CommitInfo&gt; history(String refName, int limit) {
+<span class="fc" id="L116">    return delegate.history(refName, limit);</span>
+  }
+
+  @Override
+  public List&lt;WorkflowHistoryTextResult&gt; search(WorkflowHistoryTextQuery query) {
+<span class="fc" id="L121">    requireSearchEnabled();</span>
+<span class="fc" id="L122">    return genericHistoryProjection.search(query);</span>
+  }
+
+  @Override
+  public List&lt;WorkflowSemanticHistoryResult&gt; searchSemantic(WorkflowSemanticHistoryQuery query) {
+<span class="fc" id="L127">    requireSemanticSearchEnabled();</span>
+<span class="fc" id="L128">    return semanticHistoryProjection.search(query);</span>
+  }
+
+  @Override
+  public List&lt;WorkflowCombinedHistoryResult&gt; searchCombined(WorkflowCombinedHistoryQuery query) {
+<span class="fc" id="L133">    requireCombinedSearchEnabled();</span>
+<span class="fc" id="L134">    return combinedHistorySearch.search(query);</span>
+  }
+
+  @Override
+  public int rebuild(String branch, int limit) {
+<span class="fc" id="L139">    requireSearchEnabled();</span>
+<span class="fc" id="L140">    requireSemanticSearchEnabled();</span>
+<span class="pc bpc" id="L141" title="1 of 2 branches missed.">    if (limit == 0) {</span>
+<span class="nc" id="L142">      return 0;</span>
+    }
+<span class="fc" id="L144">    int newlyIndexed = genericHistoryProjection.rebuild(branch, limit);</span>
+<span class="fc" id="L145">    semanticHistoryProjection.rebuild(branch, limit);</span>
+<span class="fc" id="L146">    return newlyIndexed;</span>
+  }
+
+  @Override
+  public void close() {
+<span class="fc" id="L151">    storage.close();</span>
+<span class="fc" id="L152">  }</span>
+
+  private void indexBestEffort(
+      String branch, CommitId commitId, WorkflowSnapshot authoritativeSnapshot) {
+<span class="pc bpc" id="L156" title="1 of 2 branches missed.">    if (genericHistoryProjection != null) {</span>
+<span class="fc" id="L157">      genericHistoryProjection.indexBestEffort(commitId);</span>
+    }
+<span class="pc bpc" id="L159" title="1 of 2 branches missed.">    if (semanticHistoryProjection != null) {</span>
+<span class="fc" id="L160">      semanticHistoryProjection.indexBestEffort(branch, commitId, authoritativeSnapshot);</span>
+    }
+<span class="fc" id="L162">  }</span>
+
+  private void requireSearchEnabled() {
+<span class="pc bpc" id="L165" title="1 of 2 branches missed.">    if (genericHistoryProjection == null) {</span>
+<span class="nc" id="L166">      throw new IllegalStateException(</span>
+          &quot;Indexed workflow history search requires the application-managed SessionFactory&quot;);
+    }
+<span class="fc" id="L169">  }</span>
+
+  private void requireSemanticSearchEnabled() {
+<span class="pc bpc" id="L172" title="1 of 2 branches missed.">    if (semanticHistoryProjection == null) {</span>
+<span class="nc" id="L173">      throw new IllegalStateException(</span>
+          &quot;Semantic workflow history search requires the application-managed SessionFactory&quot;);
+    }
+<span class="fc" id="L176">  }</span>
+
+  private void requireCombinedSearchEnabled() {
+<span class="pc bpc" id="L179" title="1 of 2 branches missed.">    if (combinedHistorySearch == null) {</span>
+<span class="nc" id="L180">      throw new IllegalStateException(</span>
+          &quot;Combined workflow history search requires the application-managed SessionFactory&quot;);
+    }
+<span class="fc" id="L183">  }</span>
+
+  private static String requireNotBlank(String value, String name) {
+<span class="fc" id="L186">    Objects.requireNonNull(value, name);</span>
+<span class="pc bpc" id="L187" title="1 of 2 branches missed.">    if (value.isBlank()) {</span>
+<span class="nc" id="L188">      throw new IllegalArgumentException(name + &quot; must not be blank&quot;);</span>
+    }
+<span class="fc" id="L190">    return value;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

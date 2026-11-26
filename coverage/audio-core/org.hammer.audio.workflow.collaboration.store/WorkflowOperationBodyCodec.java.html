@@ -1,0 +1,545 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WorkflowOperationBodyCodec.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Core</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.collaboration.store</a> &gt; <span class="el_source">WorkflowOperationBodyCodec.java</span></div><h1>WorkflowOperationBodyCodec.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.collaboration.store;
+
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.EOFException;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Base64;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import org.hammer.audio.workflow.DataType;
+import org.hammer.audio.workflow.Edge;
+import org.hammer.audio.workflow.Metadata;
+import org.hammer.audio.workflow.Node;
+import org.hammer.audio.workflow.Port;
+import org.hammer.audio.workflow.PortDirection;
+import org.hammer.audio.workflow.PortMultiplicity;
+import org.hammer.audio.workflow.WorkflowOperation;
+import org.hammer.audio.workflow.WorkflowOperation.PropertyTarget;
+
+/**
+ * Versioned deterministic codec for complete semantic workflow operations.
+ *
+ * &lt;p&gt;The existing persistence payload remains the compact idempotency fingerprint. This codec
+ * stores the complete reconstructible operation body required for restart-safe undo and redo. The
+ * format is a length-prefixed binary document transported as unpadded URL-safe Base64. It is not
+ * Java object serialization and has no framework or persistence dependency.
+ */
+public final class WorkflowOperationBodyCodec {
+
+  /** Current durable body format version. */
+  public static final int CURRENT_VERSION = 1;
+
+  private static final int MAGIC = 0x574F5042; // WOPB
+  private static final int MAX_COLLECTION_SIZE = 1_000_000;
+  private static final int MAX_STRING_BYTES = 16 * 1024 * 1024;
+
+  private WorkflowOperationBodyCodec() {
+    // Utility class.
+  }
+
+  /** Encodes a complete operation body for durable storage. */
+  public static EncodedBody encode(WorkflowOperation operation) {
+<span class="fc" id="L50">    WorkflowOperation requiredOperation = Objects.requireNonNull(operation, &quot;operation&quot;);</span>
+    try {
+<span class="fc" id="L52">      ByteArrayOutputStream bytes = new ByteArrayOutputStream();</span>
+<span class="fc" id="L53">      try (DataOutputStream output = new DataOutputStream(bytes)) {</span>
+<span class="fc" id="L54">        output.writeInt(MAGIC);</span>
+<span class="fc" id="L55">        output.writeInt(CURRENT_VERSION);</span>
+<span class="fc" id="L56">        writeString(output, requiredOperation.getClass().getSimpleName());</span>
+<span class="fc" id="L57">        writeCommon(output, requiredOperation);</span>
+<span class="fc" id="L58">        writeSpecific(output, requiredOperation);</span>
+      }
+<span class="fc" id="L60">      return new EncodedBody(</span>
+          CURRENT_VERSION,
+<span class="fc" id="L62">          Base64.getUrlEncoder().withoutPadding().encodeToString(bytes.toByteArray()));</span>
+<span class="nc" id="L63">    } catch (IOException exception) {</span>
+<span class="nc" id="L64">      throw new IllegalStateException(&quot;Failed to encode workflow operation body&quot;, exception);</span>
+    }
+  }
+
+  /**
+   * Decodes a complete operation body previously produced by {@link #encode(WorkflowOperation)}.
+   */
+  public static WorkflowOperation decode(int version, String body) {
+<span class="fc bfc" id="L72" title="All 2 branches covered.">    if (version != CURRENT_VERSION) {</span>
+<span class="fc" id="L73">      throw new IllegalArgumentException(&quot;Unsupported workflow operation body version: &quot; + version);</span>
+    }
+<span class="fc" id="L75">    String requiredBody = requireNotBlank(body, &quot;body&quot;);</span>
+    final byte[] bytes;
+    try {
+<span class="fc" id="L78">      bytes = Base64.getUrlDecoder().decode(requiredBody);</span>
+<span class="fc" id="L79">    } catch (IllegalArgumentException exception) {</span>
+<span class="fc" id="L80">      throw new IllegalArgumentException(&quot;Workflow operation body is not valid Base64&quot;, exception);</span>
+<span class="fc" id="L81">    }</span>
+
+<span class="fc" id="L83">    try (DataInputStream input = new DataInputStream(new ByteArrayInputStream(bytes))) {</span>
+<span class="pc bpc" id="L84" title="1 of 2 branches missed.">      if (input.readInt() != MAGIC) {</span>
+<span class="nc" id="L85">        throw new IllegalArgumentException(&quot;Workflow operation body has an invalid magic header&quot;);</span>
+      }
+<span class="fc" id="L87">      int embeddedVersion = input.readInt();</span>
+<span class="pc bpc" id="L88" title="1 of 2 branches missed.">      if (embeddedVersion != version) {</span>
+<span class="nc" id="L89">        throw new IllegalArgumentException(</span>
+            &quot;Workflow operation body version mismatch: &quot; + version + &quot;/&quot; + embeddedVersion);
+      }
+<span class="fc" id="L92">      String type = readString(input);</span>
+<span class="fc" id="L93">      CommonFields common = readCommon(input);</span>
+<span class="fc" id="L94">      WorkflowOperation operation = readSpecific(input, type, common);</span>
+<span class="pc bpc" id="L95" title="1 of 2 branches missed.">      if (input.available() != 0) {</span>
+<span class="nc" id="L96">        throw new IllegalArgumentException(&quot;Workflow operation body contains trailing data&quot;);</span>
+      }
+<span class="fc" id="L98">      return operation;</span>
+<span class="fc" id="L99">    } catch (EOFException exception) {</span>
+<span class="fc" id="L100">      throw new IllegalArgumentException(&quot;Workflow operation body is truncated&quot;, exception);</span>
+<span class="nc" id="L101">    } catch (IOException exception) {</span>
+<span class="nc" id="L102">      throw new IllegalArgumentException(&quot;Failed to decode workflow operation body&quot;, exception);</span>
+    }
+  }
+
+  /**
+   * Recreates an operation with fresh command metadata while preserving its complete semantic body.
+   *
+   * &lt;p&gt;This is used for accepted undo/redo operations. It deliberately does not reuse the fixed
+   * metadata returned by {@link WorkflowOperation#inverseOperation()}.
+   */
+  public static WorkflowOperation reidentify(
+      WorkflowOperation operation, String operationId, Instant timestamp, String author) {
+<span class="fc" id="L114">    Objects.requireNonNull(operation, &quot;operation&quot;);</span>
+<span class="fc" id="L115">    Objects.requireNonNull(timestamp, &quot;timestamp&quot;);</span>
+<span class="pc bpc" id="L116" title="5 of 10 branches missed.">    return switch (operation) {</span>
+<span class="fc" id="L117">      case WorkflowOperation.CreateNode value -&gt;</span>
+<span class="fc" id="L118">          new WorkflowOperation.CreateNode(operationId, timestamp, author, value.node());</span>
+<span class="fc" id="L119">      case WorkflowOperation.DeleteNode value -&gt;</span>
+<span class="fc" id="L120">          new WorkflowOperation.DeleteNode(</span>
+              operationId,
+              timestamp,
+              author,
+<span class="fc" id="L124">              value.deletedNode(),</span>
+<span class="fc" id="L125">              value.deletedEdges(),</span>
+<span class="fc" id="L126">              value.affectedObjectIds());</span>
+<span class="nc" id="L127">      case WorkflowOperation.MoveNode value -&gt;</span>
+<span class="nc" id="L128">          new WorkflowOperation.MoveNode(</span>
+              operationId,
+              timestamp,
+              author,
+<span class="nc" id="L132">              value.nodeId(),</span>
+<span class="nc" id="L133">              value.fromX(),</span>
+<span class="nc" id="L134">              value.fromY(),</span>
+<span class="nc" id="L135">              value.toX(),</span>
+<span class="nc" id="L136">              value.toY());</span>
+<span class="fc" id="L137">      case WorkflowOperation.RenameNode value -&gt;</span>
+<span class="fc" id="L138">          new WorkflowOperation.RenameNode(</span>
+              operationId,
+              timestamp,
+              author,
+<span class="fc" id="L142">              value.nodeId(),</span>
+<span class="fc" id="L143">              value.previousLabel(),</span>
+<span class="fc" id="L144">              value.newLabel());</span>
+<span class="fc" id="L145">      case WorkflowOperation.ConnectPorts value -&gt;</span>
+<span class="fc" id="L146">          new WorkflowOperation.ConnectPorts(operationId, timestamp, author, value.edge());</span>
+<span class="nc" id="L147">      case WorkflowOperation.DisconnectPorts value -&gt;</span>
+<span class="nc" id="L148">          new WorkflowOperation.DisconnectPorts(</span>
+<span class="nc" id="L149">              operationId, timestamp, author, value.edgeId(), value.disconnectedEdge());</span>
+<span class="nc" id="L150">      case WorkflowOperation.UpdateProperty value -&gt;</span>
+<span class="nc" id="L151">          new WorkflowOperation.UpdateProperty(</span>
+              operationId,
+              timestamp,
+              author,
+<span class="nc" id="L155">              value.target(),</span>
+<span class="nc" id="L156">              value.targetId(),</span>
+<span class="nc" id="L157">              value.propertyKey(),</span>
+<span class="nc" id="L158">              value.previousValue(),</span>
+<span class="nc" id="L159">              value.newValue());</span>
+<span class="nc" id="L160">      case WorkflowOperation.GroupNodes value -&gt;</span>
+<span class="nc" id="L161">          new WorkflowOperation.GroupNodes(</span>
+              operationId,
+              timestamp,
+              author,
+<span class="nc" id="L165">              value.groupId(),</span>
+<span class="nc" id="L166">              value.groupLabel(),</span>
+<span class="nc" id="L167">              value.nodeIds(),</span>
+<span class="nc" id="L168">              value.previousGroupIds());</span>
+<span class="nc" id="L169">      case WorkflowOperation.UngroupNodes value -&gt;</span>
+<span class="nc" id="L170">          new WorkflowOperation.UngroupNodes(</span>
+              operationId,
+              timestamp,
+              author,
+<span class="nc" id="L174">              value.groupId(),</span>
+<span class="nc" id="L175">              value.groupLabel(),</span>
+<span class="nc" id="L176">              value.nodeIds(),</span>
+<span class="nc" id="L177">              value.previousGroupIds());</span>
+<span class="fc" id="L178">      case WorkflowOperation.RestoreNode value -&gt;</span>
+<span class="fc" id="L179">          new WorkflowOperation.RestoreNode(</span>
+<span class="fc" id="L180">              operationId, timestamp, author, value.restoredNode(), value.restoredEdges());</span>
+    };
+  }
+
+  private static void writeCommon(DataOutputStream output, WorkflowOperation operation)
+      throws IOException {
+<span class="fc" id="L186">    writeString(output, operation.operationId());</span>
+<span class="fc" id="L187">    writeString(output, operation.timestamp().toString());</span>
+<span class="fc" id="L188">    writeString(output, operation.author());</span>
+<span class="fc" id="L189">  }</span>
+
+  private static CommonFields readCommon(DataInputStream input) throws IOException {
+<span class="fc" id="L192">    return new CommonFields(readString(input), Instant.parse(readString(input)), readString(input));</span>
+  }
+
+  private static void writeSpecific(DataOutputStream output, WorkflowOperation operation)
+      throws IOException {
+<span class="fc bfc" id="L197" title="All 10 branches covered.">    switch (operation) {</span>
+<span class="fc" id="L198">      case WorkflowOperation.CreateNode value -&gt; writeNode(output, value.node());</span>
+<span class="fc" id="L199">      case WorkflowOperation.DeleteNode value -&gt; {</span>
+<span class="fc" id="L200">        writeNode(output, value.deletedNode());</span>
+<span class="fc" id="L201">        writeEdges(output, value.deletedEdges());</span>
+<span class="fc" id="L202">      }</span>
+<span class="fc" id="L203">      case WorkflowOperation.MoveNode value -&gt; {</span>
+<span class="fc" id="L204">        writeString(output, value.nodeId());</span>
+<span class="fc" id="L205">        output.writeDouble(value.fromX());</span>
+<span class="fc" id="L206">        output.writeDouble(value.fromY());</span>
+<span class="fc" id="L207">        output.writeDouble(value.toX());</span>
+<span class="fc" id="L208">        output.writeDouble(value.toY());</span>
+<span class="fc" id="L209">      }</span>
+<span class="fc" id="L210">      case WorkflowOperation.RenameNode value -&gt; {</span>
+<span class="fc" id="L211">        writeString(output, value.nodeId());</span>
+<span class="fc" id="L212">        writeString(output, value.previousLabel());</span>
+<span class="fc" id="L213">        writeString(output, value.newLabel());</span>
+<span class="fc" id="L214">      }</span>
+<span class="fc" id="L215">      case WorkflowOperation.ConnectPorts value -&gt; writeEdge(output, value.edge());</span>
+<span class="fc" id="L216">      case WorkflowOperation.DisconnectPorts value -&gt; {</span>
+<span class="fc" id="L217">        writeString(output, value.edgeId());</span>
+<span class="fc" id="L218">        writeEdge(output, value.disconnectedEdge());</span>
+<span class="fc" id="L219">      }</span>
+<span class="fc" id="L220">      case WorkflowOperation.UpdateProperty value -&gt; {</span>
+<span class="fc" id="L221">        writeString(output, value.target().name());</span>
+<span class="fc" id="L222">        writeString(output, value.targetId());</span>
+<span class="fc" id="L223">        writeString(output, value.propertyKey());</span>
+<span class="fc" id="L224">        writeNullableString(output, value.previousValue());</span>
+<span class="fc" id="L225">        writeNullableString(output, value.newValue());</span>
+<span class="fc" id="L226">      }</span>
+<span class="fc" id="L227">      case WorkflowOperation.GroupNodes value -&gt; {</span>
+<span class="fc" id="L228">        writeString(output, value.groupId());</span>
+<span class="fc" id="L229">        writeString(output, value.groupLabel());</span>
+<span class="fc" id="L230">        writeStrings(output, value.nodeIds());</span>
+<span class="fc" id="L231">        writeMap(output, value.previousGroupIds());</span>
+<span class="fc" id="L232">      }</span>
+<span class="fc" id="L233">      case WorkflowOperation.UngroupNodes value -&gt; {</span>
+<span class="fc" id="L234">        writeString(output, value.groupId());</span>
+<span class="fc" id="L235">        writeString(output, value.groupLabel());</span>
+<span class="fc" id="L236">        writeStrings(output, value.nodeIds());</span>
+<span class="fc" id="L237">        writeMap(output, value.previousGroupIds());</span>
+<span class="fc" id="L238">      }</span>
+<span class="fc" id="L239">      case WorkflowOperation.RestoreNode value -&gt; {</span>
+<span class="fc" id="L240">        writeNode(output, value.restoredNode());</span>
+<span class="fc" id="L241">        writeEdges(output, value.restoredEdges());</span>
+      }
+    }
+<span class="fc" id="L244">  }</span>
+
+  private static WorkflowOperation readSpecific(
+      DataInputStream input, String type, CommonFields common) throws IOException {
+<span class="pc bpc" id="L248" title="1 of 11 branches missed.">    return switch (type) {</span>
+      case &quot;CreateNode&quot; -&gt;
+<span class="fc" id="L250">          new WorkflowOperation.CreateNode(</span>
+<span class="fc" id="L251">              common.operationId(), common.timestamp(), common.author(), readNode(input));</span>
+      case &quot;DeleteNode&quot; -&gt; {
+<span class="fc" id="L253">        Node node = readNode(input);</span>
+<span class="fc" id="L254">        List&lt;Edge&gt; edges = readEdges(input);</span>
+<span class="fc" id="L255">        yield new WorkflowOperation.DeleteNode(</span>
+<span class="fc" id="L256">            common.operationId(), common.timestamp(), common.author(), node, edges, List.of());</span>
+      }
+      case &quot;MoveNode&quot; -&gt;
+<span class="fc" id="L259">          new WorkflowOperation.MoveNode(</span>
+<span class="fc" id="L260">              common.operationId(),</span>
+<span class="fc" id="L261">              common.timestamp(),</span>
+<span class="fc" id="L262">              common.author(),</span>
+<span class="fc" id="L263">              readString(input),</span>
+<span class="fc" id="L264">              input.readDouble(),</span>
+<span class="fc" id="L265">              input.readDouble(),</span>
+<span class="fc" id="L266">              input.readDouble(),</span>
+<span class="fc" id="L267">              input.readDouble());</span>
+      case &quot;RenameNode&quot; -&gt;
+<span class="fc" id="L269">          new WorkflowOperation.RenameNode(</span>
+<span class="fc" id="L270">              common.operationId(),</span>
+<span class="fc" id="L271">              common.timestamp(),</span>
+<span class="fc" id="L272">              common.author(),</span>
+<span class="fc" id="L273">              readString(input),</span>
+<span class="fc" id="L274">              readString(input),</span>
+<span class="fc" id="L275">              readString(input));</span>
+      case &quot;ConnectPorts&quot; -&gt;
+<span class="fc" id="L277">          new WorkflowOperation.ConnectPorts(</span>
+<span class="fc" id="L278">              common.operationId(), common.timestamp(), common.author(), readEdge(input));</span>
+      case &quot;DisconnectPorts&quot; -&gt; {
+<span class="fc" id="L280">        String edgeId = readString(input);</span>
+<span class="fc" id="L281">        yield new WorkflowOperation.DisconnectPorts(</span>
+<span class="fc" id="L282">            common.operationId(), common.timestamp(), common.author(), edgeId, readEdge(input));</span>
+      }
+      case &quot;UpdateProperty&quot; -&gt;
+<span class="fc" id="L285">          new WorkflowOperation.UpdateProperty(</span>
+<span class="fc" id="L286">              common.operationId(),</span>
+<span class="fc" id="L287">              common.timestamp(),</span>
+<span class="fc" id="L288">              common.author(),</span>
+<span class="fc" id="L289">              PropertyTarget.valueOf(readString(input)),</span>
+<span class="fc" id="L290">              readString(input),</span>
+<span class="fc" id="L291">              readString(input),</span>
+<span class="fc" id="L292">              readNullableString(input),</span>
+<span class="fc" id="L293">              readNullableString(input));</span>
+      case &quot;GroupNodes&quot; -&gt;
+<span class="fc" id="L295">          new WorkflowOperation.GroupNodes(</span>
+<span class="fc" id="L296">              common.operationId(),</span>
+<span class="fc" id="L297">              common.timestamp(),</span>
+<span class="fc" id="L298">              common.author(),</span>
+<span class="fc" id="L299">              readString(input),</span>
+<span class="fc" id="L300">              readString(input),</span>
+<span class="fc" id="L301">              readStrings(input),</span>
+<span class="fc" id="L302">              readMap(input));</span>
+      case &quot;UngroupNodes&quot; -&gt;
+<span class="fc" id="L304">          new WorkflowOperation.UngroupNodes(</span>
+<span class="fc" id="L305">              common.operationId(),</span>
+<span class="fc" id="L306">              common.timestamp(),</span>
+<span class="fc" id="L307">              common.author(),</span>
+<span class="fc" id="L308">              readString(input),</span>
+<span class="fc" id="L309">              readString(input),</span>
+<span class="fc" id="L310">              readStrings(input),</span>
+<span class="fc" id="L311">              readMap(input));</span>
+      case &quot;RestoreNode&quot; -&gt;
+<span class="fc" id="L313">          new WorkflowOperation.RestoreNode(</span>
+<span class="fc" id="L314">              common.operationId(),</span>
+<span class="fc" id="L315">              common.timestamp(),</span>
+<span class="fc" id="L316">              common.author(),</span>
+<span class="fc" id="L317">              readNode(input),</span>
+<span class="fc" id="L318">              readEdges(input));</span>
+      default -&gt;
+<span class="nc" id="L320">          throw new IllegalArgumentException(&quot;Unknown workflow operation body type: &quot; + type);</span>
+    };
+  }
+
+  private static void writeNode(DataOutputStream output, Node node) throws IOException {
+<span class="fc" id="L325">    writeString(output, node.id());</span>
+<span class="fc" id="L326">    writeString(output, node.type());</span>
+<span class="fc" id="L327">    writeString(output, node.label());</span>
+<span class="fc" id="L328">    writePorts(output, node.inputPorts());</span>
+<span class="fc" id="L329">    writePorts(output, node.outputPorts());</span>
+<span class="fc" id="L330">    writeMetadata(output, node.metadata());</span>
+<span class="fc" id="L331">  }</span>
+
+  private static Node readNode(DataInputStream input) throws IOException {
+<span class="fc" id="L334">    return new Node(</span>
+<span class="fc" id="L335">        readString(input),</span>
+<span class="fc" id="L336">        readString(input),</span>
+<span class="fc" id="L337">        readString(input),</span>
+<span class="fc" id="L338">        readPorts(input),</span>
+<span class="fc" id="L339">        readPorts(input),</span>
+<span class="fc" id="L340">        readMetadata(input));</span>
+  }
+
+  private static void writePorts(DataOutputStream output, List&lt;Port&gt; ports) throws IOException {
+<span class="fc" id="L344">    writeSize(output, ports.size());</span>
+<span class="fc bfc" id="L345" title="All 2 branches covered.">    for (Port port : ports) {</span>
+<span class="fc" id="L346">      writeString(output, port.id());</span>
+<span class="fc" id="L347">      writeString(output, port.name());</span>
+<span class="fc" id="L348">      writeString(output, port.direction().name());</span>
+<span class="fc" id="L349">      writeString(output, port.dataType().id());</span>
+<span class="fc" id="L350">      output.writeBoolean(port.required());</span>
+<span class="fc" id="L351">      writeString(output, port.multiplicity().name());</span>
+<span class="fc" id="L352">      writeMetadata(output, port.metadata());</span>
+<span class="fc" id="L353">    }</span>
+<span class="fc" id="L354">  }</span>
+
+  private static List&lt;Port&gt; readPorts(DataInputStream input) throws IOException {
+<span class="fc" id="L357">    int size = readSize(input);</span>
+<span class="fc" id="L358">    List&lt;Port&gt; ports = new ArrayList&lt;&gt;(size);</span>
+<span class="fc bfc" id="L359" title="All 2 branches covered.">    for (int index = 0; index &lt; size; index++) {</span>
+<span class="fc" id="L360">      ports.add(</span>
+          new Port(
+<span class="fc" id="L362">              readString(input),</span>
+<span class="fc" id="L363">              readString(input),</span>
+<span class="fc" id="L364">              PortDirection.valueOf(readString(input)),</span>
+<span class="fc" id="L365">              new DataType(readString(input)),</span>
+<span class="fc" id="L366">              input.readBoolean(),</span>
+<span class="fc" id="L367">              PortMultiplicity.valueOf(readString(input)),</span>
+<span class="fc" id="L368">              readMetadata(input)));</span>
+    }
+<span class="fc" id="L370">    return List.copyOf(ports);</span>
+  }
+
+  private static void writeEdges(DataOutputStream output, List&lt;Edge&gt; edges) throws IOException {
+<span class="fc" id="L374">    writeSize(output, edges.size());</span>
+<span class="fc bfc" id="L375" title="All 2 branches covered.">    for (Edge edge : edges) {</span>
+<span class="fc" id="L376">      writeEdge(output, edge);</span>
+<span class="fc" id="L377">    }</span>
+<span class="fc" id="L378">  }</span>
+
+  private static List&lt;Edge&gt; readEdges(DataInputStream input) throws IOException {
+<span class="fc" id="L381">    int size = readSize(input);</span>
+<span class="fc" id="L382">    List&lt;Edge&gt; edges = new ArrayList&lt;&gt;(size);</span>
+<span class="fc bfc" id="L383" title="All 2 branches covered.">    for (int index = 0; index &lt; size; index++) {</span>
+<span class="fc" id="L384">      edges.add(readEdge(input));</span>
+    }
+<span class="fc" id="L386">    return List.copyOf(edges);</span>
+  }
+
+  private static void writeEdge(DataOutputStream output, Edge edge) throws IOException {
+<span class="fc" id="L390">    writeString(output, edge.id());</span>
+<span class="fc" id="L391">    writeString(output, edge.sourceNodeId());</span>
+<span class="fc" id="L392">    writeString(output, edge.sourcePortId());</span>
+<span class="fc" id="L393">    writeString(output, edge.targetNodeId());</span>
+<span class="fc" id="L394">    writeString(output, edge.targetPortId());</span>
+<span class="fc" id="L395">    writeMetadata(output, edge.metadata());</span>
+<span class="fc" id="L396">  }</span>
+
+  private static Edge readEdge(DataInputStream input) throws IOException {
+<span class="fc" id="L399">    return new Edge(</span>
+<span class="fc" id="L400">        readString(input),</span>
+<span class="fc" id="L401">        readString(input),</span>
+<span class="fc" id="L402">        readString(input),</span>
+<span class="fc" id="L403">        readString(input),</span>
+<span class="fc" id="L404">        readString(input),</span>
+<span class="fc" id="L405">        readMetadata(input));</span>
+  }
+
+  private static void writeMetadata(DataOutputStream output, Metadata metadata) throws IOException {
+<span class="fc" id="L409">    writeMap(output, metadata.entries());</span>
+<span class="fc" id="L410">  }</span>
+
+  private static Metadata readMetadata(DataInputStream input) throws IOException {
+<span class="fc" id="L413">    Map&lt;String, String&gt; entries = readMap(input);</span>
+<span class="fc bfc" id="L414" title="All 2 branches covered.">    if (entries.isEmpty()) {</span>
+<span class="fc" id="L415">      return Metadata.empty();</span>
+    }
+<span class="fc" id="L417">    return new Metadata(entries);</span>
+  }
+
+  private static void writeStrings(DataOutputStream output, List&lt;String&gt; values)
+      throws IOException {
+<span class="fc" id="L422">    writeSize(output, values.size());</span>
+<span class="fc bfc" id="L423" title="All 2 branches covered.">    for (String value : values) {</span>
+<span class="fc" id="L424">      writeString(output, value);</span>
+<span class="fc" id="L425">    }</span>
+<span class="fc" id="L426">  }</span>
+
+  private static List&lt;String&gt; readStrings(DataInputStream input) throws IOException {
+<span class="fc" id="L429">    int size = readSize(input);</span>
+<span class="fc" id="L430">    List&lt;String&gt; values = new ArrayList&lt;&gt;(size);</span>
+<span class="fc bfc" id="L431" title="All 2 branches covered.">    for (int index = 0; index &lt; size; index++) {</span>
+<span class="fc" id="L432">      values.add(readString(input));</span>
+    }
+<span class="fc" id="L434">    return List.copyOf(values);</span>
+  }
+
+  private static void writeMap(DataOutputStream output, Map&lt;String, String&gt; values)
+      throws IOException {
+<span class="fc" id="L439">    writeSize(output, values.size());</span>
+<span class="fc" id="L440">    List&lt;Map.Entry&lt;String, String&gt;&gt; entries =</span>
+<span class="fc" id="L441">        values.entrySet().stream().sorted(Map.Entry.comparingByKey()).toList();</span>
+<span class="fc bfc" id="L442" title="All 2 branches covered.">    for (Map.Entry&lt;String, String&gt; entry : entries) {</span>
+<span class="fc" id="L443">      writeString(output, entry.getKey());</span>
+<span class="fc" id="L444">      writeString(output, entry.getValue());</span>
+<span class="fc" id="L445">    }</span>
+<span class="fc" id="L446">  }</span>
+
+  private static Map&lt;String, String&gt; readMap(DataInputStream input) throws IOException {
+<span class="fc" id="L449">    int size = readSize(input);</span>
+<span class="fc" id="L450">    Map&lt;String, String&gt; values = new LinkedHashMap&lt;&gt;();</span>
+<span class="fc bfc" id="L451" title="All 2 branches covered.">    for (int index = 0; index &lt; size; index++) {</span>
+<span class="fc" id="L452">      String key = readString(input);</span>
+<span class="fc" id="L453">      String previous = values.put(key, readString(input));</span>
+<span class="pc bpc" id="L454" title="1 of 2 branches missed.">      if (previous != null) {</span>
+<span class="nc" id="L455">        throw new IllegalArgumentException(</span>
+            &quot;Workflow operation body contains duplicate map key: &quot; + key);
+      }
+    }
+<span class="fc" id="L459">    return Map.copyOf(values);</span>
+  }
+
+  private static void writeNullableString(DataOutputStream output, String value)
+      throws IOException {
+<span class="fc bfc" id="L464" title="All 2 branches covered.">    output.writeBoolean(value != null);</span>
+<span class="fc bfc" id="L465" title="All 2 branches covered.">    if (value != null) {</span>
+<span class="fc" id="L466">      writeString(output, value);</span>
+    }
+<span class="fc" id="L468">  }</span>
+
+  private static String readNullableString(DataInputStream input) throws IOException {
+<span class="fc bfc" id="L471" title="All 2 branches covered.">    if (input.readBoolean()) {</span>
+<span class="fc" id="L472">      return readString(input);</span>
+    }
+<span class="fc" id="L474">    return null;</span>
+  }
+
+  private static void writeString(DataOutputStream output, String value) throws IOException {
+<span class="fc" id="L478">    byte[] bytes = Objects.requireNonNull(value, &quot;value&quot;).getBytes(StandardCharsets.UTF_8);</span>
+<span class="pc bpc" id="L479" title="1 of 2 branches missed.">    if (bytes.length &gt; MAX_STRING_BYTES) {</span>
+<span class="nc" id="L480">      throw new IllegalArgumentException(&quot;Workflow operation body string is too large&quot;);</span>
+    }
+<span class="fc" id="L482">    output.writeInt(bytes.length);</span>
+<span class="fc" id="L483">    output.write(bytes);</span>
+<span class="fc" id="L484">  }</span>
+
+  private static String readString(DataInputStream input) throws IOException {
+<span class="fc" id="L487">    int length = input.readInt();</span>
+<span class="pc bpc" id="L488" title="2 of 4 branches missed.">    if (length &lt; 0 || length &gt; MAX_STRING_BYTES) {</span>
+<span class="nc" id="L489">      throw new IllegalArgumentException(</span>
+          &quot;Invalid workflow operation body string length: &quot; + length);
+    }
+<span class="fc" id="L492">    byte[] bytes = new byte[length];</span>
+<span class="fc" id="L493">    input.readFully(bytes);</span>
+<span class="fc" id="L494">    return new String(bytes, StandardCharsets.UTF_8);</span>
+  }
+
+  private static void writeSize(DataOutputStream output, int size) throws IOException {
+<span class="pc bpc" id="L498" title="2 of 4 branches missed.">    if (size &lt; 0 || size &gt; MAX_COLLECTION_SIZE) {</span>
+<span class="nc" id="L499">      throw new IllegalArgumentException(</span>
+          &quot;Invalid workflow operation body collection size: &quot; + size);
+    }
+<span class="fc" id="L502">    output.writeInt(size);</span>
+<span class="fc" id="L503">  }</span>
+
+  private static int readSize(DataInputStream input) throws IOException {
+<span class="fc" id="L506">    int size = input.readInt();</span>
+<span class="pc bpc" id="L507" title="2 of 4 branches missed.">    if (size &lt; 0 || size &gt; MAX_COLLECTION_SIZE) {</span>
+<span class="nc" id="L508">      throw new IllegalArgumentException(</span>
+          &quot;Invalid workflow operation body collection size: &quot; + size);
+    }
+<span class="fc" id="L511">    return size;</span>
+  }
+
+  private static String requireNotBlank(String value, String name) {
+<span class="fc" id="L515">    Objects.requireNonNull(value, name);</span>
+<span class="pc bpc" id="L516" title="1 of 2 branches missed.">    if (value.isBlank()) {</span>
+<span class="nc" id="L517">      throw new IllegalArgumentException(name + &quot; must not be blank&quot;);</span>
+    }
+<span class="fc" id="L519">    return value;</span>
+  }
+
+  /**
+   * Versioned durable operation body.
+   *
+   * @param version durable format version
+   * @param body encoded operation body
+   */
+  public record EncodedBody(int version, String body) {
+<span class="fc" id="L529">    public EncodedBody {</span>
+<span class="pc bpc" id="L530" title="1 of 2 branches missed.">      if (version &lt;= 0) {</span>
+<span class="nc" id="L531">        throw new IllegalArgumentException(&quot;version must be &gt; 0&quot;);</span>
+      }
+<span class="fc" id="L533">      body = requireNotBlank(body, &quot;body&quot;);</span>
+<span class="fc" id="L534">    }</span>
+  }
+
+  private record CommonFields(String operationId, Instant timestamp, String author) {
+<span class="fc" id="L538">    private CommonFields {</span>
+<span class="fc" id="L539">      Objects.requireNonNull(operationId, &quot;operationId&quot;);</span>
+<span class="fc" id="L540">      Objects.requireNonNull(timestamp, &quot;timestamp&quot;);</span>
+<span class="fc" id="L541">      Objects.requireNonNull(author, &quot;author&quot;);</span>
+<span class="fc" id="L542">    }</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

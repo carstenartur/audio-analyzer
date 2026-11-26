@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>PluginCallbackRunner.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Experiment Document</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.experiment.document</a> &gt; <span class="el_source">PluginCallbackRunner.java</span></div><h1>PluginCallbackRunner.java</h1><pre class="source lang-java linenums">package org.hammer.audio.experiment.document;
+
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.SynchronousQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.function.Supplier;
+
+/** Bounds trusted plugin callbacks without allowing stalled callbacks to accumulate threads. */
+final class PluginCallbackRunner {
+
+  private static final long TIMEOUT_MILLIS = 1000;
+<span class="fc" id="L16">  private static final ThreadPoolExecutor WORKERS =</span>
+      new ThreadPoolExecutor(
+          0,
+          4,
+          30,
+          TimeUnit.SECONDS,
+          new SynchronousQueue&lt;&gt;(),
+<span class="fc" id="L23">          Thread.ofPlatform().daemon(true).name(&quot;experiment-document-plugin-&quot;, 0).factory(),</span>
+          new ThreadPoolExecutor.AbortPolicy());
+
+  private PluginCallbackRunner() {
+    // utility class
+  }
+
+  static &lt;T&gt; T invoke(Supplier&lt;T&gt; callback) {
+    Future&lt;T&gt; task;
+    try {
+<span class="fc" id="L33">      task = WORKERS.submit(callback::get);</span>
+<span class="nc" id="L34">    } catch (RejectedExecutionException exception) {</span>
+<span class="nc" id="L35">      throw new Failure(&quot;plugin-busy&quot;, &quot;Plugin validation capacity is exhausted&quot;, exception);</span>
+<span class="fc" id="L36">    }</span>
+    try {
+<span class="fc" id="L38">      return task.get(TIMEOUT_MILLIS, TimeUnit.MILLISECONDS);</span>
+<span class="fc" id="L39">    } catch (TimeoutException exception) {</span>
+<span class="fc" id="L40">      task.cancel(true);</span>
+<span class="fc" id="L41">      throw new Failure(</span>
+          &quot;plugin-timeout&quot;, &quot;Plugin validation exceeded its one-second deadline&quot;, exception);
+<span class="nc" id="L43">    } catch (InterruptedException exception) {</span>
+<span class="nc" id="L44">      task.cancel(true);</span>
+<span class="nc" id="L45">      Thread.currentThread().interrupt();</span>
+<span class="nc" id="L46">      throw new Failure(&quot;plugin-cancelled&quot;, &quot;Plugin validation was cancelled&quot;, exception);</span>
+<span class="fc" id="L47">    } catch (ExecutionException exception) {</span>
+<span class="fc" id="L48">      throw new Failure(</span>
+          &quot;plugin-validator-failed&quot;,
+<span class="fc" id="L50">          &quot;Plugin callback failed: &quot; + exception.getCause().getClass().getSimpleName(),</span>
+          exception);
+    }
+  }
+
+  static final class Failure extends RuntimeException {
+    private static final long serialVersionUID = 1L;
+    private final String diagnosticCode;
+
+    Failure(String code, String message, Throwable cause) {
+<span class="fc" id="L60">      super(message, cause);</span>
+<span class="fc" id="L61">      this.diagnosticCode = code;</span>
+<span class="fc" id="L62">    }</span>
+
+    String code() {
+<span class="fc" id="L65">      return diagnosticCode;</span>
+    }
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

@@ -1,0 +1,875 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WorkflowSessionEntry.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Audio Analyzer Core</a> &gt; <a href="index.source.html" class="el_package">org.hammer.audio.workflow.collaboration</a> &gt; <span class="el_source">WorkflowSessionEntry.java</span></div><h1>WorkflowSessionEntry.java</h1><pre class="source lang-java linenums">package org.hammer.audio.workflow.collaboration;
+
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.Base64;
+import java.util.Comparator;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Objects;
+import java.util.Set;
+import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.BiConsumer;
+import org.hammer.audio.workflow.Workflow;
+import org.hammer.audio.workflow.WorkflowOperation;
+import org.hammer.audio.workflow.collaboration.WorkflowHistoryCapabilities.Action;
+import org.hammer.audio.workflow.collaboration.WorkflowHistoryCapabilities.ActionStatus;
+import org.hammer.audio.workflow.collaboration.WorkflowHistoryDescriptor.CommandKind;
+import org.hammer.audio.workflow.collaboration.WorkflowSessionException.Code;
+import org.hammer.audio.workflow.collaboration.WorkflowSessionPersistenceCoordinator.AppendOutcome;
+import org.hammer.audio.workflow.collaboration.WorkflowSessionPersistenceCoordinator.OperationIdentity;
+import org.hammer.audio.workflow.collaboration.store.WorkflowOperationBodyCodec;
+import org.hammer.audio.workflow.collaboration.store.WorkflowOperationCommandMetadata;
+import org.hammer.audio.workflow.collaboration.store.WorkflowOperationCommandMetadata.Kind;
+import org.hammer.audio.workflow.collaboration.store.WorkflowOperationPersistenceCodec;
+
+/** Owns the synchronized runtime state for one collaboration session. */
+final class WorkflowSessionEntry {
+
+  private static final int MAX_HISTORY_PAGE_SIZE = 100;
+
+  private final String sessionId;
+  private final CollaborationMode mode;
+  private final OperationActor sessionOwner;
+  private final Instant createdAt;
+  private final WorkflowSessionEventHub eventHub;
+  private final WorkflowSessionPersistenceCoordinator persistence;
+<span class="fc" id="L41">  private final WorkflowSessionIndex&lt;String, OperationActor&gt; participants =</span>
+      new WorkflowSessionIndex&lt;&gt;();
+<span class="fc" id="L43">  private final WorkflowSessionIndex&lt;String, OperationIdentity&gt; operationsById =</span>
+      new WorkflowSessionIndex&lt;&gt;();
+<span class="fc" id="L45">  private final List&lt;OperationIdentity&gt; operationHistory = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L46">  private final ReentrantLock lock = new ReentrantLock();</span>
+  private Workflow currentWorkflow;
+  private int operationCount;
+  private long revision;
+  private long sequence;
+  private volatile boolean closed;
+
+  private WorkflowSessionEntry(
+<span class="fc" id="L54">      SessionDefinition definition, RecoveryState recovery, Services services) {</span>
+<span class="fc" id="L55">    this.sessionId = definition.sessionId();</span>
+<span class="fc" id="L56">    this.mode = definition.mode();</span>
+<span class="fc" id="L57">    this.sessionOwner = definition.owner();</span>
+<span class="fc" id="L58">    this.createdAt = definition.createdAt();</span>
+<span class="fc" id="L59">    this.currentWorkflow = definition.workflow();</span>
+<span class="fc" id="L60">    this.eventHub = services.eventHub();</span>
+<span class="fc" id="L61">    this.persistence = services.persistence();</span>
+<span class="fc" id="L62">    this.revision = recovery.revision();</span>
+<span class="fc" id="L63">    this.sequence = recovery.sequence();</span>
+<span class="fc bfc" id="L64" title="All 2 branches covered.">    for (OperationIdentity operation : recovery.operations()) {</span>
+<span class="fc" id="L65">      OperationIdentity previous = operationsById.putIfAbsent(operation.operationId(), operation);</span>
+<span class="pc bpc" id="L66" title="1 of 2 branches missed.">      if (previous != null) {</span>
+<span class="nc" id="L67">        throw new WorkflowSessionRecoveryException(</span>
+<span class="nc" id="L68">            sessionId, &quot;Duplicate durable operation id: &quot; + operation.operationId());</span>
+      }
+<span class="fc" id="L70">      operationHistory.add(operation);</span>
+<span class="fc" id="L71">    }</span>
+<span class="fc" id="L72">    this.operationCount = recovery.operations().size();</span>
+<span class="fc bfc" id="L73" title="All 2 branches covered.">    if (recovery.ownerConnected()) {</span>
+<span class="fc" id="L74">      participants.put(sessionOwner.actorId(), sessionOwner);</span>
+    }
+<span class="fc" id="L76">  }</span>
+
+  static WorkflowSessionEntry created(
+      String sessionId,
+      CollaborationMode mode,
+      OperationActor owner,
+      Instant createdAt,
+      Workflow workflow,
+      WorkflowSessionEventHub eventHub,
+      WorkflowSessionPersistenceCoordinator persistence) {
+<span class="fc" id="L86">    SessionDefinition definition =</span>
+        new SessionDefinition(sessionId, mode, owner, createdAt, workflow);
+<span class="fc" id="L88">    RecoveryState recovery = new RecoveryState(List.of(), true, 0, 2);</span>
+<span class="fc" id="L89">    return new WorkflowSessionEntry(definition, recovery, new Services(eventHub, persistence));</span>
+  }
+
+  static WorkflowSessionEntry recovered(
+      SessionDefinition definition,
+      RecoveryState recovery,
+      WorkflowSessionEventHub eventHub,
+      WorkflowSessionPersistenceCoordinator persistence) {
+<span class="fc" id="L97">    return new WorkflowSessionEntry(definition, recovery, new Services(eventHub, persistence));</span>
+  }
+
+  void verifyInitialEventStream(long expectedSequence) {
+<span class="fc" id="L101">    lock.lock();</span>
+    try {
+<span class="fc" id="L103">      verifyEventHubState(expectedSequence, 0, &quot;session creation&quot;);</span>
+    } finally {
+<span class="fc" id="L105">      lock.unlock();</span>
+    }
+<span class="fc" id="L107">  }</span>
+
+  WorkflowSessionRegistry.SessionSnapshot join(OperationActor actor) {
+<span class="fc" id="L110">    lock.lock();</span>
+    try {
+<span class="fc" id="L112">      requireOpen();</span>
+<span class="fc bfc" id="L113" title="All 2 branches covered.">      if (mode == CollaborationMode.PRIVATE_WORKSPACE</span>
+<span class="fc bfc" id="L114" title="All 2 branches covered.">          &amp;&amp; !sessionOwner.actorId().equals(actor.actorId())) {</span>
+<span class="fc" id="L115">        throw error(</span>
+            Code.PRIVATE_WORKSPACE_ACCESS_DENIED,
+<span class="fc" id="L117">            &quot;Private workspace can only be joined by its owner: &quot; + sessionOwner.actorId());</span>
+      }
+<span class="fc" id="L119">      OperationActor existing = participants.get(actor.actorId());</span>
+<span class="fc bfc" id="L120" title="All 4 branches covered.">      if (existing != null &amp;&amp; !existing.equals(actor)) {</span>
+<span class="fc" id="L121">        throw error(</span>
+            Code.ACTOR_METADATA_MISMATCH,
+<span class="fc" id="L123">            &quot;Actor metadata mismatch for already joined actor: &quot; + actor.actorId());</span>
+      }
+<span class="fc bfc" id="L125" title="All 2 branches covered.">      if (existing == null) {</span>
+<span class="fc" id="L126">        long nextSequence = reserveNonSemanticEvent();</span>
+<span class="fc" id="L127">        participants.put(actor.actorId(), actor);</span>
+<span class="fc" id="L128">        eventHub.actorJoined(sessionId, actor);</span>
+<span class="fc" id="L129">        confirmNonSemanticEvent(nextSequence, &quot;actor join&quot;);</span>
+      }
+<span class="fc" id="L131">      return snapshotLocked();</span>
+    } finally {
+<span class="fc" id="L133">      lock.unlock();</span>
+    }
+  }
+
+  WorkflowSessionRegistry.SessionSnapshot leave(String actorId) {
+<span class="fc" id="L138">    lock.lock();</span>
+    try {
+<span class="fc" id="L140">      requireOpen();</span>
+<span class="fc" id="L141">      OperationActor actor = participants.get(actorId);</span>
+<span class="pc bpc" id="L142" title="1 of 2 branches missed.">      if (actor == null) {</span>
+<span class="nc" id="L143">        throw error(Code.ACTOR_NOT_JOINED, &quot;Actor is not joined: &quot; + actorId);</span>
+      }
+<span class="fc" id="L145">      long nextSequence = reserveNonSemanticEvent();</span>
+<span class="fc" id="L146">      participants.remove(actorId);</span>
+<span class="fc" id="L147">      eventHub.actorLeft(sessionId, actor);</span>
+<span class="fc" id="L148">      confirmNonSemanticEvent(nextSequence, &quot;actor leave&quot;);</span>
+<span class="fc" id="L149">      return snapshotLocked();</span>
+    } finally {
+<span class="fc" id="L151">      lock.unlock();</span>
+    }
+  }
+
+  Workflow apply(
+      CollaborationMode requestedMode, OperationActor actor, WorkflowOperation operation) {
+<span class="fc" id="L157">    lock.lock();</span>
+    try {
+<span class="fc" id="L159">      return applyLocked(</span>
+              requestedMode,
+              actor,
+              revision,
+              operation,
+<span class="fc" id="L164">              WorkflowOperationCommandMetadata.normal(operation.operationId()))</span>
+<span class="fc" id="L165">          .workflow();</span>
+    } finally {
+<span class="fc" id="L167">      lock.unlock();</span>
+    }
+  }
+
+  Workflow apply(
+      CollaborationMode requestedMode,
+      OperationActor actor,
+      long expectedRevision,
+      WorkflowOperation operation) {
+<span class="fc" id="L176">    lock.lock();</span>
+    try {
+<span class="fc" id="L178">      return applyLocked(</span>
+              requestedMode,
+              actor,
+              expectedRevision,
+              operation,
+<span class="fc" id="L183">              WorkflowOperationCommandMetadata.normal(operation.operationId()))</span>
+<span class="fc" id="L184">          .workflow();</span>
+    } finally {
+<span class="fc" id="L186">      lock.unlock();</span>
+    }
+  }
+
+  WorkflowUndoPreview previewUndo(OperationActor actor, String targetOperationId) {
+<span class="fc" id="L191">    lock.lock();</span>
+    try {
+<span class="fc" id="L193">      requireOpen();</span>
+<span class="fc" id="L194">      assertJoinedActor(actor);</span>
+<span class="fc" id="L195">      return previewUndoLocked(actor, targetOperationId);</span>
+    } finally {
+<span class="fc" id="L197">      lock.unlock();</span>
+    }
+  }
+
+  WorkflowRedoPreview previewRedo(OperationActor actor, String targetUndoOperationId) {
+<span class="fc" id="L202">    lock.lock();</span>
+    try {
+<span class="fc" id="L204">      requireOpen();</span>
+<span class="fc" id="L205">      assertJoinedActor(actor);</span>
+<span class="fc" id="L206">      return previewRedoLocked(actor, targetUndoOperationId);</span>
+    } finally {
+<span class="fc" id="L208">      lock.unlock();</span>
+    }
+  }
+
+  WorkflowHistoryPage history(OperationActor actor, Long beforeRevision, int limit) {
+<span class="fc" id="L213">    lock.lock();</span>
+    try {
+<span class="fc" id="L215">      requireOpen();</span>
+<span class="fc" id="L216">      assertJoinedActor(actor);</span>
+<span class="pc bpc" id="L217" title="2 of 4 branches missed.">      if (limit &lt;= 0 || limit &gt; MAX_HISTORY_PAGE_SIZE) {</span>
+<span class="nc" id="L218">        throw new IllegalArgumentException(</span>
+            &quot;history limit must be between 1 and &quot; + MAX_HISTORY_PAGE_SIZE);
+      }
+<span class="fc bfc" id="L221" title="All 2 branches covered.">      long cursor = beforeRevision == null ? Math.addExact(revision, 1) : beforeRevision;</span>
+<span class="pc bpc" id="L222" title="2 of 4 branches missed.">      if (cursor &lt;= 0 || cursor &gt; Math.addExact(revision, 1)) {</span>
+<span class="nc" id="L223">        throw new IllegalArgumentException(</span>
+            &quot;beforeRevision must be between 1 and current revision plus one&quot;);
+      }
+<span class="fc" id="L226">      List&lt;WorkflowHistoryDescriptor&gt; entries = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L227" title="All 2 branches covered.">      for (int index = operationHistory.size() - 1; index &gt;= 0; index--) {</span>
+<span class="fc" id="L228">        OperationIdentity operation = operationHistory.get(index);</span>
+<span class="fc bfc" id="L229" title="All 2 branches covered.">        if (operation.revision() &gt;= cursor) {</span>
+<span class="fc" id="L230">          continue;</span>
+        }
+<span class="fc" id="L232">        entries.add(describe(operation));</span>
+<span class="fc bfc" id="L233" title="All 2 branches covered.">        if (entries.size() &gt; limit) {</span>
+<span class="fc" id="L234">          break;</span>
+        }
+      }
+<span class="fc" id="L237">      Long nextBeforeRevision = null;</span>
+<span class="fc bfc" id="L238" title="All 2 branches covered.">      if (entries.size() &gt; limit) {</span>
+<span class="fc" id="L239">        entries.remove(entries.size() - 1);</span>
+<span class="fc" id="L240">        nextBeforeRevision = entries.get(entries.size() - 1).revision();</span>
+      }
+<span class="fc" id="L242">      return new WorkflowHistoryPage(entries, nextBeforeRevision, revision);</span>
+    } finally {
+<span class="fc" id="L244">      lock.unlock();</span>
+    }
+  }
+
+  WorkflowHistoryCapabilities capabilities(OperationActor actor) {
+<span class="fc" id="L249">    lock.lock();</span>
+    try {
+<span class="fc" id="L251">      requireOpen();</span>
+<span class="fc" id="L252">      assertJoinedActor(actor);</span>
+<span class="fc bfc" id="L253" title="All 2 branches covered.">      boolean personalUndoPermitted = mode != CollaborationMode.SHARED_SESSION_SHARED_UNDO;</span>
+      OperationIdentity personalUndo =
+<span class="fc bfc" id="L255" title="All 2 branches covered.">          personalUndoPermitted ? findPersonalUndoTarget(actor.actorId()) : null;</span>
+<span class="fc" id="L256">      OperationIdentity redo = findRedoTarget(actor.actorId());</span>
+<span class="fc" id="L257">      return new WorkflowHistoryCapabilities(</span>
+          mode,
+          revision,
+          personalUndoPermitted,
+<span class="fc" id="L261">          historyAction(personalUndo),</span>
+<span class="fc bfc" id="L262" title="All 2 branches covered.">          historyAction(redo),</span>
+          mode == CollaborationMode.SHARED_SESSION_SHARED_UNDO);
+    } finally {
+<span class="fc" id="L265">      lock.unlock();</span>
+    }
+  }
+
+  WorkflowHistoryCommandResult undo(UndoWorkflowCommand command) {
+<span class="fc" id="L270">    lock.lock();</span>
+    try {
+<span class="fc" id="L272">      requireOpen();</span>
+<span class="fc" id="L273">      assertJoinedActor(command.actor());</span>
+<span class="fc" id="L274">      WorkflowHistoryCommandResult retry =</span>
+<span class="fc" id="L275">          historyCommandRetry(</span>
+<span class="fc" id="L276">              command.commandId(),</span>
+              Kind.UNDO,
+<span class="fc" id="L278">              command.targetOperationId(),</span>
+<span class="fc" id="L279">              command.actor().actorId());</span>
+<span class="fc bfc" id="L280" title="All 2 branches covered.">      if (retry != null) {</span>
+<span class="fc" id="L281">        return retry;</span>
+      }
+<span class="fc" id="L283">      persistence.requireExpectedRevision(sessionId, command.expectedRevision(), revision);</span>
+<span class="fc" id="L284">      WorkflowUndoPreview preview = previewUndoLocked(command.actor(), command.targetOperationId());</span>
+<span class="fc bfc" id="L285" title="All 2 branches covered.">      if (mode == CollaborationMode.SHARED_SESSION_SHARED_UNDO) {</span>
+<span class="fc bfc" id="L286" title="All 2 branches covered.">        if (command.previewId() == null) {</span>
+<span class="fc" id="L287">          throw error(Code.UNDO_PREVIEW_REQUIRED, &quot;Shared undo requires a preview id&quot;);</span>
+        }
+<span class="fc bfc" id="L289" title="All 2 branches covered.">        if (!preview.previewId().equals(command.previewId())) {</span>
+<span class="fc" id="L290">          throw error(Code.UNDO_PREVIEW_STALE, &quot;Undo preview no longer matches current history&quot;);</span>
+        }
+      }
+<span class="fc bfc" id="L293" title="All 2 branches covered.">      if (!preview.safe()) {</span>
+<span class="fc" id="L294">        throw new WorkflowUndoConflictException(</span>
+<span class="fc" id="L295">            sessionId, preview.targetOperationId(), preview.blockingOperations());</span>
+      }
+<span class="fc" id="L297">      OperationIdentity target =</span>
+<span class="fc" id="L298">          requireOperation(preview.targetOperationId(), Code.UNDO_TARGET_NOT_FOUND);</span>
+<span class="fc" id="L299">      WorkflowOperation targetOperation = requireUndoableOperation(target);</span>
+<span class="fc" id="L300">      WorkflowOperation inverse =</span>
+          targetOperation
+<span class="fc" id="L302">              .inverseOperation()</span>
+<span class="fc" id="L303">              .orElseThrow(</span>
+                  () -&gt;
+<span class="nc" id="L305">                      error(</span>
+                          Code.OPERATION_NOT_UNDOABLE,
+<span class="nc" id="L307">                          &quot;Operation has no semantic inverse: &quot; + target.operationId()));</span>
+<span class="fc" id="L308">      String operationId = command.commandId() + &quot;:operation&quot;;</span>
+<span class="fc" id="L309">      WorkflowOperation undoOperation =</span>
+<span class="fc" id="L310">          WorkflowOperationBodyCodec.reidentify(</span>
+              inverse,
+              operationId,
+<span class="fc" id="L313">              Instant.now().truncatedTo(ChronoUnit.MICROS),</span>
+<span class="fc" id="L314">              command.actor().actorId());</span>
+<span class="fc" id="L315">      WorkflowOperationCommandMetadata metadata =</span>
+<span class="fc" id="L316">          WorkflowOperationCommandMetadata.undo(command.commandId(), target.operationId());</span>
+<span class="fc" id="L317">      AppendOutcome outcome =</span>
+<span class="fc" id="L318">          applyLocked(mode, command.actor(), command.expectedRevision(), undoOperation, metadata);</span>
+<span class="fc" id="L319">      return result(outcome, metadata, operationId);</span>
+    } finally {
+<span class="fc" id="L321">      lock.unlock();</span>
+    }
+  }
+
+  WorkflowHistoryCommandResult redo(RedoWorkflowCommand command) {
+<span class="fc" id="L326">    lock.lock();</span>
+    try {
+<span class="fc" id="L328">      requireOpen();</span>
+<span class="fc" id="L329">      assertJoinedActor(command.actor());</span>
+<span class="fc" id="L330">      WorkflowHistoryCommandResult retry =</span>
+<span class="fc" id="L331">          historyCommandRetry(</span>
+<span class="fc" id="L332">              command.commandId(),</span>
+              Kind.REDO,
+<span class="fc" id="L334">              command.targetUndoOperationId(),</span>
+<span class="fc" id="L335">              command.actor().actorId());</span>
+<span class="pc bpc" id="L336" title="1 of 2 branches missed.">      if (retry != null) {</span>
+<span class="nc" id="L337">        return retry;</span>
+      }
+<span class="fc" id="L339">      persistence.requireExpectedRevision(sessionId, command.expectedRevision(), revision);</span>
+<span class="fc" id="L340">      WorkflowRedoPreview preview =</span>
+<span class="fc" id="L341">          previewRedoLocked(command.actor(), command.targetUndoOperationId());</span>
+<span class="fc bfc" id="L342" title="All 2 branches covered.">      if (!preview.safe()) {</span>
+<span class="fc" id="L343">        throw new WorkflowUndoConflictException(</span>
+<span class="fc" id="L344">            sessionId, preview.targetUndoOperationId(), preview.blockingOperations());</span>
+      }
+<span class="fc" id="L346">      OperationIdentity targetUndo =</span>
+<span class="fc" id="L347">          requireOperation(preview.targetUndoOperationId(), Code.REDO_TARGET_NOT_FOUND);</span>
+<span class="fc" id="L348">      WorkflowOperation targetOperation = requireUndoableOperation(targetUndo);</span>
+<span class="fc" id="L349">      WorkflowOperation inverse =</span>
+          targetOperation
+<span class="fc" id="L351">              .inverseOperation()</span>
+<span class="fc" id="L352">              .orElseThrow(</span>
+                  () -&gt;
+<span class="nc" id="L354">                      error(</span>
+                          Code.REDO_TARGET_INVALID,
+<span class="nc" id="L356">                          &quot;Undo operation has no semantic inverse: &quot; + targetUndo.operationId()));</span>
+<span class="fc" id="L357">      String operationId = command.commandId() + &quot;:operation&quot;;</span>
+<span class="fc" id="L358">      WorkflowOperation redoOperation =</span>
+<span class="fc" id="L359">          WorkflowOperationBodyCodec.reidentify(</span>
+              inverse,
+              operationId,
+<span class="fc" id="L362">              Instant.now().truncatedTo(ChronoUnit.MICROS),</span>
+<span class="fc" id="L363">              command.actor().actorId());</span>
+<span class="fc" id="L364">      WorkflowOperationCommandMetadata metadata =</span>
+<span class="fc" id="L365">          WorkflowOperationCommandMetadata.redo(command.commandId(), targetUndo.operationId());</span>
+<span class="fc" id="L366">      AppendOutcome outcome =</span>
+<span class="fc" id="L367">          applyLocked(mode, command.actor(), command.expectedRevision(), redoOperation, metadata);</span>
+<span class="fc" id="L368">      return result(outcome, metadata, operationId);</span>
+    } finally {
+<span class="fc" id="L370">      lock.unlock();</span>
+    }
+  }
+
+  PresenceState updatePresence(OperationActor actor, PresenceState presenceState) {
+<span class="fc" id="L375">    lock.lock();</span>
+    try {
+<span class="fc" id="L377">      requireOpen();</span>
+<span class="fc" id="L378">      assertJoinedActor(actor);</span>
+<span class="fc" id="L379">      long nextSequence = reserveNonSemanticEvent();</span>
+<span class="fc" id="L380">      eventHub.presenceUpdated(sessionId, actor, presenceState);</span>
+<span class="fc" id="L381">      confirmNonSemanticEvent(nextSequence, &quot;presence update&quot;);</span>
+<span class="fc" id="L382">      return presenceState;</span>
+    } finally {
+<span class="fc" id="L384">      lock.unlock();</span>
+    }
+  }
+
+  Workflow workflow() {
+<span class="fc" id="L389">    lock.lock();</span>
+    try {
+<span class="fc" id="L391">      requireOpen();</span>
+<span class="fc" id="L392">      return currentWorkflow;</span>
+    } finally {
+<span class="fc" id="L394">      lock.unlock();</span>
+    }
+  }
+
+  WorkflowSessionRegistry.SessionWorkflowSnapshot authorizedWorkflow(OperationActor actor) {
+<span class="fc" id="L399">    lock.lock();</span>
+    try {
+<span class="fc" id="L401">      requireOpen();</span>
+<span class="fc" id="L402">      assertJoinedActor(actor);</span>
+<span class="fc" id="L403">      return new WorkflowSessionRegistry.SessionWorkflowSnapshot(snapshotLocked(), currentWorkflow);</span>
+    } finally {
+<span class="fc" id="L405">      lock.unlock();</span>
+    }
+  }
+
+  WorkflowSessionEventHub.Subscription subscribe(
+      OperationActor actor,
+      long afterSequence,
+      BiConsumer&lt;WorkflowSessionRegistry.SessionSnapshot, WorkflowSessionEvent&gt; listener) {
+<span class="nc" id="L413">    lock.lock();</span>
+    try {
+<span class="nc" id="L415">      requireOpen();</span>
+<span class="nc" id="L416">      assertJoinedActor(actor);</span>
+<span class="nc" id="L417">      WorkflowSessionRegistry.SessionSnapshot captured = snapshotLocked();</span>
+<span class="nc" id="L418">      return eventHub.subscribe(</span>
+<span class="nc" id="L419">          sessionId, afterSequence, event -&gt; listener.accept(captured, event));</span>
+    } finally {
+<span class="nc" id="L421">      lock.unlock();</span>
+    }
+  }
+
+  WorkflowSessionRegistry.SessionSnapshot snapshot() {
+<span class="fc" id="L426">    lock.lock();</span>
+    try {
+<span class="fc" id="L428">      requireOpen();</span>
+<span class="fc" id="L429">      return snapshotLocked();</span>
+    } finally {
+<span class="fc" id="L431">      lock.unlock();</span>
+    }
+  }
+
+  long close(String actorId) {
+<span class="fc" id="L436">    lock.lock();</span>
+    try {
+<span class="fc" id="L438">      requireOpen();</span>
+<span class="fc bfc" id="L439" title="All 2 branches covered.">      if (!sessionOwner.actorId().equals(actorId)) {</span>
+<span class="fc" id="L440">        throw error(</span>
+            Code.SESSION_CLOSE_FORBIDDEN,
+<span class="fc" id="L442">            &quot;Only the session owner may close it: &quot; + sessionOwner.actorId());</span>
+      }
+<span class="fc" id="L444">      sequence = persistence.close(sessionId, revision, sequence);</span>
+<span class="fc" id="L445">      closed = true;</span>
+<span class="fc" id="L446">      return sequence;</span>
+    } finally {
+<span class="fc" id="L448">      lock.unlock();</span>
+    }
+  }
+
+  void verifyClosedEvent(long finalSequence) {
+<span class="fc" id="L453">    lock.lock();</span>
+    try {
+<span class="fc" id="L455">      verifyEventHubState(finalSequence, revision, &quot;session close&quot;);</span>
+    } finally {
+<span class="fc" id="L457">      lock.unlock();</span>
+    }
+<span class="fc" id="L459">  }</span>
+
+  OperationActor owner() {
+<span class="fc" id="L462">    return sessionOwner;</span>
+  }
+
+  private AppendOutcome applyLocked(
+      CollaborationMode requestedMode,
+      OperationActor actor,
+      long expectedRevision,
+      WorkflowOperation operation,
+      WorkflowOperationCommandMetadata command) {
+<span class="fc" id="L471">    requireOpen();</span>
+<span class="fc" id="L472">    assertModeAndActor(requestedMode, actor);</span>
+<span class="fc" id="L473">    OperationIdentity candidate = persistence.identity(operation, command);</span>
+<span class="fc" id="L474">    OperationIdentity previous = operationsById.get(operation.operationId());</span>
+<span class="fc bfc" id="L475" title="All 2 branches covered.">    if (previous != null) {</span>
+<span class="fc bfc" id="L476" title="All 2 branches covered.">      if (previous.matchesRetry(candidate)) {</span>
+<span class="fc" id="L477">        return new AppendOutcome(currentWorkflow, previous, revision, sequence, true);</span>
+      }
+<span class="fc" id="L479">      throw duplicateOperation(operation.operationId());</span>
+    }
+<span class="fc" id="L481">    persistence.requireExpectedRevision(sessionId, expectedRevision, revision);</span>
+
+<span class="fc" id="L483">    Workflow updatedWorkflow = operation.apply(currentWorkflow);</span>
+<span class="fc" id="L484">    AppendOutcome outcome =</span>
+<span class="fc" id="L485">        persistence.append(sessionId, revision, sequence, operation, updatedWorkflow, command);</span>
+<span class="fc" id="L486">    revision = outcome.revision();</span>
+<span class="fc" id="L487">    sequence = outcome.sequence();</span>
+<span class="fc" id="L488">    currentWorkflow = outcome.workflow();</span>
+<span class="pc bpc" id="L489" title="1 of 2 branches missed.">    if (outcome.duplicate()) {</span>
+<span class="nc" id="L490">      operationsById.put(operation.operationId(), outcome.identity());</span>
+<span class="nc" id="L491">      if (operationHistory.stream()</span>
+<span class="nc bnc" id="L492" title="All 2 branches missed.">          .noneMatch(identity -&gt; identity.operationId().equals(operation.operationId()))) {</span>
+<span class="nc" id="L493">        operationHistory.add(outcome.identity());</span>
+      }
+<span class="nc" id="L495">      operationCount = Math.toIntExact(revision);</span>
+<span class="nc" id="L496">      return outcome;</span>
+    }
+
+<span class="pc bpc" id="L499" title="1 of 2 branches missed.">    if (!updatedWorkflow.equals(currentWorkflow)) {</span>
+<span class="nc" id="L500">      throw new IllegalStateException(</span>
+          &quot;Persisted workflow differs from applied workflow for operation &quot;
+<span class="nc" id="L502">              + operation.operationId());</span>
+    }
+<span class="fc" id="L504">    operationsById.put(operation.operationId(), outcome.identity());</span>
+<span class="fc" id="L505">    operationHistory.add(outcome.identity());</span>
+<span class="fc" id="L506">    operationCount++;</span>
+<span class="fc" id="L507">    eventHub.operationAccepted(sessionId, actor, operation, currentWorkflow, command);</span>
+<span class="fc" id="L508">    verifyEventHubState(sequence, revision, &quot;accepted operation&quot;);</span>
+<span class="fc" id="L509">    return outcome;</span>
+  }
+
+  private WorkflowUndoPreview previewUndoLocked(OperationActor actor, String requestedTargetId) {
+<span class="fc" id="L513">    OperationIdentity target = selectUndoTarget(actor, requestedTargetId);</span>
+<span class="fc" id="L514">    WorkflowOperation targetOperation = requireUndoableOperation(target);</span>
+<span class="fc" id="L515">    List&lt;String&gt; affectedObjectIds = sortedAffectedObjectIds(targetOperation);</span>
+<span class="fc" id="L516">    List&lt;WorkflowUndoPreview.BlockingOperation&gt; blockers =</span>
+<span class="fc" id="L517">        blockingOperations(target, affectedObjectIds);</span>
+<span class="fc" id="L518">    return new WorkflowUndoPreview(</span>
+<span class="fc" id="L519">        previewId(target.operationId(), blockers),</span>
+<span class="fc" id="L520">        target.operationId(),</span>
+<span class="fc" id="L521">        target.actorId(),</span>
+<span class="fc" id="L522">        target.operationType(),</span>
+<span class="fc" id="L523">        target.occurredAt(),</span>
+        affectedObjectIds,
+        revision,
+        blockers);
+  }
+
+  private WorkflowRedoPreview previewRedoLocked(
+      OperationActor actor, String targetUndoOperationId) {
+<span class="fc" id="L531">    OperationIdentity targetUndo =</span>
+<span class="fc" id="L532">        requireOperation(targetUndoOperationId, Code.REDO_TARGET_NOT_FOUND);</span>
+<span class="pc bpc" id="L533" title="2 of 4 branches missed.">    if (targetUndo.command().kind() != Kind.UNDO || !targetUndo.actorId().equals(actor.actorId())) {</span>
+<span class="nc" id="L534">      throw error(</span>
+          Code.REDO_TARGET_INVALID,
+          &quot;Redo target is not an undo command owned by the requesting actor: &quot;
+              + targetUndoOperationId);
+    }
+<span class="fc bfc" id="L539" title="All 2 branches covered.">    if (isTargeted(targetUndo.operationId(), Kind.REDO)) {</span>
+<span class="fc" id="L540">      throw error(</span>
+          Code.REDO_ALREADY_APPLIED,
+<span class="fc" id="L542">          &quot;Undo operation has already been redone: &quot; + targetUndo.operationId());</span>
+    }
+<span class="fc" id="L544">    WorkflowOperation targetOperation = requireUndoableOperation(targetUndo);</span>
+<span class="fc" id="L545">    List&lt;String&gt; affectedObjectIds = sortedAffectedObjectIds(targetOperation);</span>
+<span class="fc" id="L546">    List&lt;WorkflowUndoPreview.BlockingOperation&gt; blockers =</span>
+<span class="fc" id="L547">        blockingOperations(targetUndo, affectedObjectIds);</span>
+<span class="fc" id="L548">    return new WorkflowRedoPreview(</span>
+<span class="fc" id="L549">        previewId(targetUndo.operationId(), blockers),</span>
+<span class="fc" id="L550">        targetUndo.operationId(),</span>
+<span class="fc" id="L551">        targetUndo.actorId(),</span>
+<span class="fc" id="L552">        targetUndo.operationType(),</span>
+<span class="fc" id="L553">        targetUndo.occurredAt(),</span>
+        affectedObjectIds,
+        revision,
+        blockers);
+  }
+
+  private OperationIdentity selectUndoTarget(OperationActor actor, String requestedTargetId) {
+<span class="fc bfc" id="L560" title="All 2 branches covered.">    if (mode == CollaborationMode.SHARED_SESSION_SHARED_UNDO) {</span>
+<span class="fc bfc" id="L561" title="All 2 branches covered.">      if (requestedTargetId == null) {</span>
+<span class="fc" id="L562">        throw error(Code.UNDO_TARGET_REQUIRED, &quot;Shared undo requires an explicit target operation&quot;);</span>
+      }
+<span class="fc" id="L564">      return validateForwardUndoTarget(</span>
+<span class="fc" id="L565">          requireOperation(requestedTargetId, Code.UNDO_TARGET_NOT_FOUND), null);</span>
+    }
+<span class="fc bfc" id="L567" title="All 2 branches covered.">    if (requestedTargetId != null) {</span>
+<span class="fc" id="L568">      return validateForwardUndoTarget(</span>
+<span class="fc" id="L569">          requireOperation(requestedTargetId, Code.UNDO_TARGET_NOT_FOUND), actor.actorId());</span>
+    }
+<span class="fc" id="L571">    OperationIdentity target = findPersonalUndoTarget(actor.actorId());</span>
+<span class="pc bpc" id="L572" title="1 of 2 branches missed.">    if (target != null) {</span>
+<span class="fc" id="L573">      return target;</span>
+    }
+<span class="nc" id="L575">    throw error(Code.UNDO_TARGET_NOT_FOUND, &quot;No active operation is available for personal undo&quot;);</span>
+  }
+
+  private OperationIdentity findPersonalUndoTarget(String actorId) {
+<span class="fc bfc" id="L579" title="All 2 branches covered.">    for (int index = operationHistory.size() - 1; index &gt;= 0; index--) {</span>
+<span class="fc" id="L580">      OperationIdentity candidate = operationHistory.get(index);</span>
+<span class="fc bfc" id="L581" title="All 2 branches covered.">      if (candidate.actorId().equals(actorId)</span>
+<span class="fc bfc" id="L582" title="All 2 branches covered.">          &amp;&amp; candidate.command().kind() != Kind.UNDO</span>
+<span class="fc bfc" id="L583" title="All 2 branches covered.">          &amp;&amp; !isTargeted(candidate.operationId(), Kind.UNDO)) {</span>
+<span class="fc" id="L584">        return candidate;</span>
+      }
+    }
+<span class="fc" id="L587">    return null;</span>
+  }
+
+  private OperationIdentity findRedoTarget(String actorId) {
+<span class="fc bfc" id="L591" title="All 2 branches covered.">    for (int index = operationHistory.size() - 1; index &gt;= 0; index--) {</span>
+<span class="fc" id="L592">      OperationIdentity candidate = operationHistory.get(index);</span>
+<span class="fc bfc" id="L593" title="All 2 branches covered.">      if (candidate.actorId().equals(actorId)</span>
+<span class="fc bfc" id="L594" title="All 2 branches covered.">          &amp;&amp; candidate.command().kind() == Kind.UNDO</span>
+<span class="fc bfc" id="L595" title="All 2 branches covered.">          &amp;&amp; !isTargeted(candidate.operationId(), Kind.REDO)) {</span>
+<span class="fc" id="L596">        return candidate;</span>
+      }
+    }
+<span class="fc" id="L599">    return null;</span>
+  }
+
+  private OperationIdentity validateForwardUndoTarget(
+      OperationIdentity target, String requiredActorId) {
+<span class="pc bpc" id="L604" title="1 of 2 branches missed.">    if (target.command().kind() == Kind.UNDO</span>
+<span class="pc bpc" id="L605" title="1 of 4 branches missed.">        || isTargeted(target.operationId(), Kind.UNDO)</span>
+<span class="pc bpc" id="L606" title="1 of 2 branches missed.">        || (requiredActorId != null &amp;&amp; !requiredActorId.equals(target.actorId()))) {</span>
+<span class="nc" id="L607">      throw error(</span>
+          Code.UNDO_TARGET_NOT_FOUND,
+<span class="nc" id="L609">          &quot;Operation is not an active undo target: &quot; + target.operationId());</span>
+    }
+<span class="fc" id="L611">    return target;</span>
+  }
+
+  private OperationIdentity requireOperation(String operationId, Code missingCode) {
+<span class="fc" id="L615">    OperationIdentity operation = operationsById.get(operationId);</span>
+<span class="pc bpc" id="L616" title="1 of 2 branches missed.">    if (operation == null) {</span>
+<span class="nc" id="L617">      throw error(missingCode, &quot;Unknown operation: &quot; + operationId);</span>
+    }
+<span class="fc" id="L619">    return operation;</span>
+  }
+
+  private WorkflowOperation requireUndoableOperation(OperationIdentity identity) {
+<span class="fc" id="L623">    return identity</span>
+<span class="fc" id="L624">        .operation()</span>
+<span class="fc" id="L625">        .orElseThrow(</span>
+            () -&gt;
+<span class="fc" id="L627">                error(</span>
+                    Code.OPERATION_NOT_UNDOABLE,
+<span class="fc" id="L629">                    &quot;Operation predates reconstructible history: &quot; + identity.operationId()));</span>
+  }
+
+  private boolean isTargeted(String operationId, Kind commandKind) {
+<span class="fc" id="L633">    return operationHistory.stream()</span>
+<span class="fc" id="L634">        .anyMatch(</span>
+            operation -&gt;
+<span class="fc bfc" id="L636" title="All 2 branches covered.">                operation.command().kind() == commandKind</span>
+<span class="fc bfc" id="L637" title="All 2 branches covered.">                    &amp;&amp; operationId.equals(operation.command().targetOperationId()));</span>
+  }
+
+  private List&lt;WorkflowUndoPreview.BlockingOperation&gt; blockingOperations(
+      OperationIdentity target, List&lt;String&gt; affectedObjectIds) {
+<span class="fc" id="L642">    int targetIndex = operationHistory.indexOf(target);</span>
+<span class="fc" id="L643">    Set&lt;String&gt; affected = new LinkedHashSet&lt;&gt;(affectedObjectIds);</span>
+<span class="fc" id="L644">    List&lt;WorkflowUndoPreview.BlockingOperation&gt; blockers = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L645" title="All 2 branches covered.">    for (int index = targetIndex + 1; index &lt; operationHistory.size(); index++) {</span>
+<span class="fc" id="L646">      OperationIdentity later = operationHistory.get(index);</span>
+<span class="fc" id="L647">      List&lt;String&gt; intersection = conflictingObjectIds(later, affected);</span>
+<span class="fc bfc" id="L648" title="All 2 branches covered.">      if (!intersection.isEmpty()) {</span>
+<span class="fc" id="L649">        blockers.add(</span>
+            new WorkflowUndoPreview.BlockingOperation(
+<span class="fc" id="L651">                later.operationId(), later.actorId(), intersection));</span>
+      }
+    }
+<span class="fc" id="L654">    return List.copyOf(blockers);</span>
+  }
+
+  private static List&lt;String&gt; conflictingObjectIds(
+      OperationIdentity operation, Set&lt;String&gt; affectedObjectIds) {
+<span class="pc bpc" id="L659" title="1 of 2 branches missed.">    if (!operation.hasOperationBody()) {</span>
+<span class="nc" id="L660">      return affectedObjectIds.stream().sorted().toList();</span>
+    }
+<span class="fc" id="L662">    return operation.operation().orElseThrow().affectedObjectIds().stream()</span>
+<span class="fc" id="L663">        .filter(affectedObjectIds::contains)</span>
+<span class="fc" id="L664">        .distinct()</span>
+<span class="fc" id="L665">        .sorted()</span>
+<span class="fc" id="L666">        .toList();</span>
+  }
+
+  private WorkflowHistoryDescriptor describe(OperationIdentity operation) {
+<span class="fc" id="L670">    List&lt;String&gt; affectedObjectIds =</span>
+        operation
+<span class="fc" id="L672">            .operation()</span>
+<span class="fc" id="L673">            .map(WorkflowSessionEntry::sortedAffectedObjectIds)</span>
+<span class="fc" id="L674">            .orElseGet(</span>
+                () -&gt;
+<span class="fc" id="L676">                    WorkflowOperationPersistenceCodec.decodeAffectedObjectIds(operation.payload()));</span>
+<span class="fc" id="L677">    return new WorkflowHistoryDescriptor(</span>
+<span class="fc" id="L678">        operation.operationId(),</span>
+<span class="fc" id="L679">        operation.operationType(),</span>
+<span class="fc" id="L680">        operation.actorId(),</span>
+<span class="fc" id="L681">        operation.occurredAt(),</span>
+<span class="fc" id="L682">        operation.revision(),</span>
+<span class="fc" id="L683">        operation.sequence(),</span>
+<span class="fc" id="L684">        CommandKind.valueOf(operation.command().kind().name()),</span>
+<span class="fc" id="L685">        operation.command().commandId(),</span>
+<span class="fc" id="L686">        operation.command().targetOperationId(),</span>
+        affectedObjectIds,
+<span class="fc" id="L688">        operation.hasOperationBody(),</span>
+<span class="pc bpc" id="L689" title="1 of 4 branches missed.">        operation.command().kind() != Kind.UNDO &amp;&amp; !isTargeted(operation.operationId(), Kind.UNDO),</span>
+<span class="pc bpc" id="L690" title="1 of 4 branches missed.">        operation.command().kind() == Kind.UNDO &amp;&amp; !isTargeted(operation.operationId(), Kind.REDO));</span>
+  }
+
+  private Action historyAction(OperationIdentity operation) {
+<span class="fc bfc" id="L694" title="All 2 branches covered.">    if (operation == null) {</span>
+<span class="fc" id="L695">      return null;</span>
+    }
+<span class="fc" id="L697">    WorkflowHistoryDescriptor descriptor = describe(operation);</span>
+<span class="fc bfc" id="L698" title="All 2 branches covered.">    if (!operation.hasOperationBody()) {</span>
+<span class="fc" id="L699">      return new Action(descriptor, ActionStatus.NOT_RECONSTRUCTIBLE, List.of());</span>
+    }
+<span class="fc" id="L701">    List&lt;WorkflowUndoPreview.BlockingOperation&gt; blockers =</span>
+<span class="fc" id="L702">        blockingOperations(operation, descriptor.affectedObjectIds());</span>
+<span class="fc bfc" id="L703" title="All 2 branches covered.">    return blockers.isEmpty()</span>
+<span class="fc" id="L704">        ? new Action(descriptor, ActionStatus.AVAILABLE, List.of())</span>
+<span class="fc" id="L705">        : new Action(descriptor, ActionStatus.BLOCKED, blockers);</span>
+  }
+
+  private static List&lt;String&gt; sortedAffectedObjectIds(WorkflowOperation operation) {
+<span class="fc" id="L709">    return operation.affectedObjectIds().stream().distinct().sorted().toList();</span>
+  }
+
+  private String previewId(
+      String targetOperationId, List&lt;WorkflowUndoPreview.BlockingOperation&gt; blockers) {
+<span class="fc" id="L714">    StringBuilder source =</span>
+        new StringBuilder(sessionId)
+<span class="fc" id="L716">            .append('\0')</span>
+<span class="fc" id="L717">            .append(revision)</span>
+<span class="fc" id="L718">            .append('\0')</span>
+<span class="fc" id="L719">            .append(targetOperationId);</span>
+<span class="fc bfc" id="L720" title="All 2 branches covered.">    for (WorkflowUndoPreview.BlockingOperation blocker : blockers) {</span>
+<span class="fc" id="L721">      source.append('\0').append(blocker.operationId());</span>
+<span class="fc" id="L722">      blocker.conflictingObjectIds().forEach(value -&gt; source.append('\0').append(value));</span>
+<span class="fc" id="L723">    }</span>
+    try {
+<span class="fc" id="L725">      byte[] digest =</span>
+<span class="fc" id="L726">          MessageDigest.getInstance(&quot;SHA-256&quot;)</span>
+<span class="fc" id="L727">              .digest(source.toString().getBytes(StandardCharsets.UTF_8));</span>
+<span class="fc" id="L728">      return Base64.getUrlEncoder().withoutPadding().encodeToString(digest);</span>
+<span class="nc" id="L729">    } catch (NoSuchAlgorithmException exception) {</span>
+<span class="nc" id="L730">      throw new IllegalStateException(&quot;SHA-256 is unavailable&quot;, exception);</span>
+    }
+  }
+
+  private WorkflowHistoryCommandResult historyCommandRetry(
+      String commandId, Kind kind, String requestedTargetOperationId, String actorId) {
+<span class="fc bfc" id="L736" title="All 2 branches covered.">    for (OperationIdentity operation : operationHistory) {</span>
+<span class="fc" id="L737">      WorkflowOperationCommandMetadata metadata = operation.command();</span>
+<span class="fc bfc" id="L738" title="All 2 branches covered.">      if (metadata.commandId().equals(commandId)) {</span>
+<span class="fc bfc" id="L739" title="All 2 branches covered.">        if (!operation.actorId().equals(actorId)</span>
+<span class="pc bpc" id="L740" title="2 of 4 branches missed.">            || metadata.kind() != kind</span>
+            || (requestedTargetOperationId != null
+<span class="nc bnc" id="L742" title="All 2 branches missed.">                &amp;&amp; !requestedTargetOperationId.equals(metadata.targetOperationId()))) {</span>
+<span class="fc" id="L743">          throw duplicateOperation(commandId);</span>
+        }
+<span class="fc" id="L745">        return new WorkflowHistoryCommandResult(</span>
+<span class="fc" id="L746">            currentWorkflow, metadata, operation.operationId(), revision, sequence);</span>
+      }
+<span class="fc" id="L748">    }</span>
+<span class="fc" id="L749">    return null;</span>
+  }
+
+  private WorkflowHistoryCommandResult result(
+      AppendOutcome outcome, WorkflowOperationCommandMetadata command, String operationId) {
+<span class="fc" id="L754">    return new WorkflowHistoryCommandResult(</span>
+<span class="fc" id="L755">        outcome.workflow(), command, operationId, outcome.revision(), outcome.sequence());</span>
+  }
+
+  private long reserveNonSemanticEvent() {
+<span class="fc" id="L759">    return persistence.advanceEventSequence(sessionId, revision, sequence);</span>
+  }
+
+  private void confirmNonSemanticEvent(long expectedSequence, String eventDescription) {
+<span class="fc" id="L763">    verifyEventHubState(expectedSequence, revision, eventDescription);</span>
+<span class="fc" id="L764">    sequence = expectedSequence;</span>
+<span class="fc" id="L765">  }</span>
+
+  private void verifyEventHubState(
+      long expectedSequence, long expectedRevision, String eventDescription) {
+<span class="fc" id="L769">    long actualSequence = eventHub.currentSequence(sessionId);</span>
+<span class="fc" id="L770">    long actualRevision = eventHub.currentRevision(sessionId);</span>
+<span class="pc bpc" id="L771" title="2 of 4 branches missed.">    if (actualSequence != expectedSequence || actualRevision != expectedRevision) {</span>
+<span class="nc" id="L772">      throw new IllegalStateException(</span>
+          &quot;Event hub state differs from session state after &quot;
+              + eventDescription
+              + &quot; for session &quot;
+              + sessionId
+              + &quot;: expected sequence/revision &quot;
+              + expectedSequence
+              + &quot;/&quot;
+              + expectedRevision
+              + &quot; but found &quot;
+              + actualSequence
+              + &quot;/&quot;
+              + actualRevision);
+    }
+<span class="fc" id="L786">  }</span>
+
+  private void assertModeAndActor(CollaborationMode requestedMode, OperationActor actor) {
+<span class="fc bfc" id="L789" title="All 2 branches covered.">    if (mode != requestedMode) {</span>
+<span class="fc" id="L790">      throw error(</span>
+          Code.SESSION_MODE_MISMATCH,
+          &quot;Requested mode '&quot; + requestedMode + &quot;' does not match session mode '&quot; + mode + &quot;'&quot;);
+    }
+<span class="fc" id="L794">    assertJoinedActor(actor);</span>
+<span class="fc" id="L795">  }</span>
+
+  private void assertJoinedActor(OperationActor actor) {
+<span class="fc" id="L798">    OperationActor joinedActor = participants.get(actor.actorId());</span>
+<span class="fc bfc" id="L799" title="All 2 branches covered.">    if (joinedActor == null) {</span>
+<span class="fc" id="L800">      throw error(Code.ACTOR_NOT_JOINED, &quot;Actor is not joined: &quot; + actor.actorId());</span>
+    }
+<span class="fc bfc" id="L802" title="All 2 branches covered.">    if (!joinedActor.equals(actor)) {</span>
+<span class="fc" id="L803">      throw error(Code.ACTOR_METADATA_MISMATCH, &quot;Actor metadata mismatch: &quot; + actor.actorId());</span>
+    }
+<span class="fc" id="L805">  }</span>
+
+  private WorkflowSessionException duplicateOperation(String operationId) {
+<span class="fc" id="L808">    return error(</span>
+        Code.DUPLICATE_OPERATION_ID,
+        &quot;Operation or command id is already associated with different content: &quot; + operationId);
+  }
+
+  private WorkflowSessionException error(Code code, String message) {
+<span class="fc" id="L814">    return new WorkflowSessionException(code, sessionId, message);</span>
+  }
+
+  private void requireOpen() {
+<span class="pc bpc" id="L818" title="1 of 2 branches missed.">    if (closed) {</span>
+<span class="nc" id="L819">      throw error(Code.SESSION_NOT_FOUND, &quot;Unknown session: &quot; + sessionId);</span>
+    }
+<span class="fc" id="L821">  }</span>
+
+  private WorkflowSessionRegistry.SessionSnapshot snapshotLocked() {
+<span class="fc" id="L824">    requireOpen();</span>
+<span class="fc" id="L825">    List&lt;OperationActor&gt; actors = new ArrayList&lt;&gt;(participants.values());</span>
+<span class="fc" id="L826">    actors.sort(Comparator.comparing(OperationActor::actorId));</span>
+<span class="fc" id="L827">    return new WorkflowSessionRegistry.SessionSnapshot(</span>
+        sessionId,
+        mode,
+        sessionOwner,
+        createdAt,
+        actors,
+        operationCount,
+<span class="fc" id="L834">        currentWorkflow.id(),</span>
+        revision,
+        sequence);
+  }
+
+  record SessionDefinition(
+      String sessionId,
+      CollaborationMode mode,
+      OperationActor owner,
+      Instant createdAt,
+      Workflow workflow) {
+
+<span class="fc" id="L846">    SessionDefinition {</span>
+<span class="fc" id="L847">      Objects.requireNonNull(sessionId, &quot;sessionId&quot;);</span>
+<span class="fc" id="L848">      Objects.requireNonNull(mode, &quot;mode&quot;);</span>
+<span class="fc" id="L849">      Objects.requireNonNull(owner, &quot;owner&quot;);</span>
+<span class="fc" id="L850">      Objects.requireNonNull(createdAt, &quot;createdAt&quot;);</span>
+<span class="fc" id="L851">      Objects.requireNonNull(workflow, &quot;workflow&quot;);</span>
+<span class="fc" id="L852">    }</span>
+  }
+
+  record RecoveryState(
+      List&lt;OperationIdentity&gt; operations, boolean ownerConnected, long revision, long sequence) {
+
+<span class="fc" id="L858">    RecoveryState {</span>
+<span class="fc" id="L859">      operations = List.copyOf(Objects.requireNonNull(operations, &quot;operations&quot;));</span>
+<span class="pc bpc" id="L860" title="2 of 4 branches missed.">      if (revision &lt; 0 || sequence &lt; revision) {</span>
+<span class="nc" id="L861">        throw new IllegalArgumentException(&quot;Invalid recovery revision/event sequence&quot;);</span>
+      }
+<span class="fc" id="L863">    }</span>
+  }
+
+  private record Services(
+      WorkflowSessionEventHub eventHub, WorkflowSessionPersistenceCoordinator persistence) {
+
+<span class="fc" id="L869">    Services {</span>
+<span class="fc" id="L870">      Objects.requireNonNull(eventHub, &quot;eventHub&quot;);</span>
+<span class="fc" id="L871">      Objects.requireNonNull(persistence, &quot;persistence&quot;);</span>
+<span class="fc" id="L872">    }</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>
